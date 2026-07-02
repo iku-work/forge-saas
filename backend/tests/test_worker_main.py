@@ -118,6 +118,8 @@ async def test_worker_startup_wires_redis_and_starts_scheduler() -> None:
             "cleanup_expired_tokens",
             "sync_expiring_trials",
             "expire_data_export_urls",
+            "notify_expiring_trials",
+            "expire_trials_to_inactive",
         }
     finally:
         await worker_shutdown(ctx)

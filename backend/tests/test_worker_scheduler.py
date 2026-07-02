@@ -399,7 +399,7 @@ async def test_distributed_lock_releases_even_if_func_raises(redis_client: Redis
 # --- create_scheduler ------------------------------------------------------------
 
 
-async def test_create_scheduler_registers_all_four_jobs_in_utc(redis_client: Redis) -> None:
+async def test_create_scheduler_registers_all_jobs_in_utc(redis_client: Redis) -> None:
     scheduler = create_scheduler(redis_client)
 
     jobs_by_id = {job.id: job for job in scheduler.get_jobs()}
@@ -409,9 +409,13 @@ async def test_create_scheduler_registers_all_four_jobs_in_utc(redis_client: Red
         "cleanup_expired_tokens",
         "sync_expiring_trials",
         "expire_data_export_urls",
+        "notify_expiring_trials",
+        "expire_trials_to_inactive",
     }
     assert "hour='*/6'" in repr(jobs_by_id["cleanup_expired_sessions"].trigger)
     assert "hour='8'" in repr(jobs_by_id["sync_expiring_trials"].trigger)
+    assert "hour='9'" in repr(jobs_by_id["notify_expiring_trials"].trigger)
+    assert "hour='10'" in repr(jobs_by_id["expire_trials_to_inactive"].trigger)
     assert "hour=" not in repr(jobs_by_id["cleanup_expired_tokens"].trigger)
     assert "hour=" not in repr(jobs_by_id["expire_data_export_urls"].trigger)
     for job in jobs_by_id.values():

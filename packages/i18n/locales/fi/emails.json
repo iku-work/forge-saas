@@ -11,6 +11,7 @@
     "subscription_expiring": "Tilauksesi on päättymässä",
     "subscription_suspended": "Tilauksesi on keskeytetty",
     "trial_ending": "Kokeilujaksosi on päättymässä",
+    "trial_expired": "Kokeilujaksosi on päättynyt",
     "file_uploaded": "Uusi tiedosto ladattu"
   },
   "footer": {
@@ -93,6 +94,12 @@
     "greeting": "Hei",
     "body": "{org_name}-organisaation kokeilujakso päättyy {trial_end_date}. Päivitä tilaus, jotta tiimisi käyttöoikeus jatkuu.",
     "button": "Päivitä tilaus"
+  },
+  "trial_expired": {
+    "title": "Kokeilujaksosi on päättynyt",
+    "greeting": "Hei",
+    "body": "{org_name}-organisaation kokeilujakso on päättynyt eikä maksutapaa ole tallennettu, joten käyttöoikeus on keskeytetty. Lisää maksutapa jatkaaksesi siitä mihin jäit.",
+    "button": "Lisää maksutapa"
   },
   "file_uploaded": {
     "title": "Uusi tiedosto ladattu",

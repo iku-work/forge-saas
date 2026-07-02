@@ -16,6 +16,7 @@ import {
   subscriptionSuspendedExampleProps,
 } from "./SubscriptionSuspended.js";
 import { TrialEnding, trialEndingExampleProps } from "./TrialEnding.js";
+import { TrialExpired, trialExpiredExampleProps } from "./TrialExpired.js";
 import { VerifyEmail, verifyEmailExampleProps } from "./VerifyEmail.js";
 import { Welcome, welcomeExampleProps } from "./Welcome.js";
 
@@ -65,6 +66,7 @@ export const TEMPLATES = {
     SubscriptionSuspended,
   ),
   trial_ending: defineTemplate(trialEndingExampleProps, TrialEnding),
+  trial_expired: defineTemplate(trialExpiredExampleProps, TrialExpired),
   file_uploaded: defineTemplate(fileUploadedExampleProps, FileUploaded),
 } satisfies Record<string, TemplateEntry>;
 

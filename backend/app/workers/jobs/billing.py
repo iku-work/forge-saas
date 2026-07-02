@@ -29,9 +29,28 @@ doesn't store (only invoice_id) -- fetched from Stripe at send time instead
 of threaded through from the webhook payload, since a background job talking
 to a slow third party is exactly the case app.modules.billing.service's own
 docstring calls out for *not* doing synchronously in the request path.
+
+T-131 adds two more scheduled (APScheduler, not ARQ-deferred) jobs, wired
+into app.workers.scheduler at 09:00 and 10:00 UTC respectively:
+
+- notify_expiring_trials: sends the 3-day and 1-day trial-ending warning to
+  every OWNER, once per subscription per horizon. "Once" is enforced the
+  same way as the dunning steps above -- an audit_event marker
+  (trial.warning_sent_3d / trial.warning_sent_1d) is checked before sending
+  and written after. The 3-day/1-day windows are each a narrow slice (see
+  SubscriptionRepository.list_trialing_with_trial_end_between) so a daily
+  tick catches every trial_end that lands in it exactly once, regardless of
+  what time of day trial_end actually falls at.
+- expire_trials_to_inactive: for trials that have already ended with no
+  Stripe payment method on file, transitions the subscription to "canceled"
+  and sends a "trial expired" email. Whether a payment method exists isn't
+  local state -- Stripe is the source of truth for cards on file -- so this
+  calls the Stripe API per candidate, same trade-off as the day-1 dunning
+  email above.
 """
 
 import logging
+from datetime import timedelta
 from typing import Any, cast
 from uuid import UUID
 
@@ -42,6 +61,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core import jobs
 from app.core.config import get_settings
 from app.core.db import async_session_factory
+from app.models._mixins import utcnow
 from app.modules.audit.service import AuditService
 from app.modules.auth.models import User
 from app.modules.auth.permissions import MemberRole
@@ -161,5 +181,128 @@ async def send_dunning_email(
             if subscription.status == "past_due":
                 subscription.status = "canceled"
             await campaigns.close(campaign, status="completed")
+
+        await session.commit()
+
+
+_TRIAL_WARNING_WINDOW = timedelta(hours=1)
+_TRIAL_WARNING_HORIZONS: tuple[tuple[timedelta, str], ...] = (
+    (timedelta(days=3), "trial.warning_sent_3d"),
+    (timedelta(days=1), "trial.warning_sent_1d"),
+)
+
+
+async def _send_trial_email(
+    session: AsyncSession,
+    *,
+    org: Organization,
+    template: str,
+    context_extra: dict[str, Any],
+) -> None:
+    owners = await _owners_for_org(session, org.id)
+    billing_url = f"https://{get_settings().DOMAIN}/settings/billing"
+    for owner in owners:
+        await jobs.enqueue_job(
+            "send_email",
+            to=owner.email,
+            template=template,
+            locale=owner.locale,
+            context={
+                "user_name": owner.full_name,
+                "org_name": org.name,
+                "billing_url": billing_url,
+                **context_extra,
+            },
+        )
+
+
+async def notify_expiring_trials(
+    ctx: dict[str, Any],  # noqa: ARG001 -- APScheduler calling convention; see app.workers.scheduler
+) -> None:
+    now = utcnow()
+    async with async_session_factory() as session:
+        subscriptions = SubscriptionRepository(session)
+        audit = AuditService(session)
+
+        for horizon, action in _TRIAL_WARNING_HORIZONS:
+            start = now + horizon
+            end = start + _TRIAL_WARNING_WINDOW
+            for subscription in await subscriptions.list_trialing_with_trial_end_between(
+                start, end
+            ):
+                resource_id = str(subscription.id)
+                if await audit.has_logged(action=action, resource_id=resource_id):
+                    continue
+
+                org = await session.get(Organization, subscription.org_id)
+                if org is None or subscription.trial_end is None:
+                    continue
+
+                await _send_trial_email(
+                    session,
+                    org=org,
+                    template="trial_ending",
+                    context_extra={"trial_end_date": subscription.trial_end.date().isoformat()},
+                )
+                await audit.log(
+                    action=action,
+                    resource_type="subscription",
+                    resource_id=resource_id,
+                    org_id=subscription.org_id,
+                )
+
+        await session.commit()
+
+
+def _has_payment_method(customer_id: str | None) -> bool:
+    if not customer_id:
+        return False
+    stripe.api_key = get_settings().STRIPE_SECRET_KEY
+    customer = stripe.Customer.retrieve(customer_id)
+    if getattr(customer, "deleted", False):
+        return False
+    invoice_settings = getattr(customer, "invoice_settings", None)
+    default_payment_method = (
+        getattr(invoice_settings, "default_payment_method", None) if invoice_settings else None
+    )
+    return bool(getattr(customer, "default_source", None)) or bool(default_payment_method)
+
+
+async def expire_trials_to_inactive(
+    ctx: dict[str, Any],  # noqa: ARG001 -- APScheduler calling convention; see app.workers.scheduler
+) -> None:
+    now = utcnow()
+    async with async_session_factory() as session:
+        subscriptions = SubscriptionRepository(session)
+        audit = AuditService(session)
+
+        for subscription in await subscriptions.list_trialing_expired(now):
+            org = await session.get(Organization, subscription.org_id)
+            if org is None:
+                continue
+            if _has_payment_method(org.stripe_customer_id):
+                # Stripe has a card on file -- its own trial-end billing
+                # attempt (and the resulting webhook, T-030) is the
+                # authoritative state transition, not this safety-net job.
+                continue
+
+            resource_id = str(subscription.id)
+            if not await audit.has_logged(
+                action="billing.trial_expired_email_sent", resource_id=resource_id
+            ):
+                await _send_trial_email(
+                    session,
+                    org=org,
+                    template="trial_expired",
+                    context_extra={},
+                )
+                await audit.log(
+                    action="billing.trial_expired_email_sent",
+                    resource_type="subscription",
+                    resource_id=resource_id,
+                    org_id=subscription.org_id,
+                )
+
+            subscription.status = "canceled"
 
         await session.commit()

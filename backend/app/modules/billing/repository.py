@@ -97,6 +97,34 @@ class SubscriptionRepository:
         result = await self.session.execute(stmt)
         return result.scalar_one()
 
+    async def list_trialing_with_trial_end_between(
+        self, start: datetime, end: datetime
+    ) -> list[Subscription]:
+        # T-131's notify_expiring_trials calls this once for the 3-day
+        # window and once for the 1-day window -- each a narrow slice so a
+        # daily cron catches every trial_end that falls inside it exactly
+        # once, regardless of what time of day trial_end is.
+        m = cast("Any", Subscription)
+        stmt = select(Subscription).where(
+            m.status == "trialing",
+            m.trial_end.is_not(None),
+            m.trial_end >= start,
+            m.trial_end < end,
+        )
+        result = await self.session.execute(stmt)
+        return list(result.scalars().all())
+
+    async def list_trialing_expired(self, now: datetime) -> list[Subscription]:
+        # T-131's expire_trials_to_inactive: candidates whose trial has
+        # already ended and are still sitting in "trialing" -- the job
+        # itself decides (via Stripe) whether a payment method saves them.
+        m = cast("Any", Subscription)
+        stmt = select(Subscription).where(
+            m.status == "trialing", m.trial_end.is_not(None), m.trial_end < now
+        )
+        result = await self.session.execute(stmt)
+        return list(result.scalars().all())
+
     async def upsert(  # noqa: PLR0913 -- mirrors Stripe's subscription object fields 1:1
         self,
         *,

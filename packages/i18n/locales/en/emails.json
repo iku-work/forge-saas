@@ -11,6 +11,7 @@
     "subscription_expiring": "Your subscription is expiring soon",
     "subscription_suspended": "Your subscription has been suspended",
     "trial_ending": "Your trial is ending soon",
+    "trial_expired": "Your trial has ended",
     "file_uploaded": "A new file was uploaded"
   },
   "footer": {
@@ -93,6 +94,12 @@
     "greeting": "Hi",
     "body": "{org_name}'s trial ends on {trial_end_date}. Upgrade now to keep your team's access.",
     "button": "Upgrade now"
+  },
+  "trial_expired": {
+    "title": "Your trial has ended",
+    "greeting": "Hi",
+    "body": "{org_name}'s trial has ended and no payment method is on file, so access has been paused. Add a payment method to pick up right where you left off.",
+    "button": "Add payment method"
   },
   "file_uploaded": {
     "title": "New file uploaded",
