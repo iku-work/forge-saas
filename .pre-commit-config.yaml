@@ -1,0 +1,57 @@
+# Local hooks shell into the backend's own pinned virtualenv (ruff, mypy,
+# import-linter) so versions never drift from backend/pyproject.toml, and
+# so ruff.toml / mypy.ini / .importlinter resolve relative paths exactly
+# like the `make lint` / `make migrate` targets do (cwd = backend/).
+repos:
+  - repo: local
+    hooks:
+      - id: ruff-check
+        name: ruff check --fix (backend)
+        # No `cd backend`: pre-commit passes filenames relative to the repo
+        # root, and ruff auto-discovers backend/ruff.toml by walking up from
+        # each target file, so per-file-ignores resolve correctly either way.
+        # Routed through bash because invoking the venv .exe directly from
+        # pre-commit's own subprocess call fails to resolve on Windows.
+        entry: bash -c 'backend/.venv/Scripts/ruff.exe check --fix "$@"' --
+        language: system
+        files: ^backend/.*\.py$
+
+      - id: ruff-format
+        name: ruff format (backend)
+        entry: bash -c 'backend/.venv/Scripts/ruff.exe format "$@"' --
+        language: system
+        files: ^backend/.*\.py$
+
+      - id: mypy-strict
+        name: mypy --strict (backend)
+        entry: bash -c 'cd backend && .venv/Scripts/python.exe -m mypy --strict app'
+        language: system
+        files: ^backend/app/.*\.py$
+        pass_filenames: false
+
+      - id: lint-imports
+        name: import-linter (four-layer rule)
+        entry: bash -c 'cd backend && .venv/Scripts/lint-imports.exe'
+        language: system
+        files: ^backend/app/.*\.py$
+        pass_filenames: false
+
+  - repo: https://github.com/pre-commit/mirrors-prettier
+    rev: v4.0.0-alpha.8
+    hooks:
+      - id: prettier
+        files: ^(apps|packages)/.*\.(ts|tsx|js|jsx|json|css|md|ya?ml)$
+
+  - repo: https://github.com/Yelp/detect-secrets
+    rev: v1.5.0
+    hooks:
+      - id: detect-secrets
+        args: ["--baseline", ".secrets.baseline"]
+        exclude: ^(pnpm-lock\.yaml|\.secrets\.baseline)$
+
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v6.0.0
+    hooks:
+      - id: check-yaml
+      - id: end-of-file-fixer
+      - id: trailing-whitespace

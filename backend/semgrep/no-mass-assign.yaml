@@ -1,0 +1,13 @@
+rules:
+  - id: no-mass-assign
+    languages: [python]
+    severity: ERROR
+    message: >-
+      Mass-assignment via model.update(**request.dict()) is forbidden (§0.4).
+      Map validated fields from the request schema onto the model explicitly,
+      or pass them through the repository's update(**kwargs) method instead
+      of writing to the model object directly.
+    patterns:
+      - pattern-either:
+          - pattern: $MODEL.update(**$REQUEST.dict())
+          - pattern: $MODEL.update(**$REQUEST.model_dump())

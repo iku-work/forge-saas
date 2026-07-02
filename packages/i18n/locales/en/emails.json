@@ -1,0 +1,96 @@
+{
+  "subject": {
+    "verify_email": "Verify your email address",
+    "password_reset": "Reset your password",
+    "magic_link": "Your ForgeSaaS sign-in link",
+    "invitation": "You've been invited to join an organization",
+    "welcome": "Welcome to ForgeSaaS",
+    "download_link": "Your data export is ready",
+    "member_invited": "New team member",
+    "payment_failed": "Your payment didn't go through",
+    "subscription_expiring": "Your subscription is expiring soon",
+    "trial_ending": "Your trial is ending soon",
+    "file_uploaded": "A new file was uploaded"
+  },
+  "footer": {
+    "ignore_notice": "If you didn't request this email, you can safely ignore it."
+  },
+  "verify_email": {
+    "title": "Verify your email",
+    "greeting": "Hi",
+    "body": "Thanks for signing up for ForgeSaaS. Confirm your email address to activate your account.",
+    "button": "Verify email",
+    "paste_link": "Or paste this link into your browser:",
+    "expires": "This link expires in 24 hours."
+  },
+  "password_reset": {
+    "title": "Reset your password",
+    "greeting": "Hi",
+    "body": "We received a request to reset your ForgeSaaS password. Click below to choose a new one.",
+    "button": "Reset password",
+    "paste_link": "Or paste this link into your browser:",
+    "expires": "This link expires in 1 hour. If you didn't request a password reset, your account is still safe — just ignore this email."
+  },
+  "magic_link": {
+    "title": "Your sign-in link",
+    "greeting": "Hi",
+    "body": "Click below to sign in to ForgeSaaS. No password needed.",
+    "button": "Sign in",
+    "paste_link": "Or paste this link into your browser:",
+    "expires": "This link expires in 15 minutes and can only be used once."
+  },
+  "invitation": {
+    "title": "You're invited",
+    "greeting": "Hi,",
+    "body_with_inviter": "{inviter_name} has invited you to join {org_name} on ForgeSaaS.",
+    "body_without_inviter": "You've been invited to join {org_name} on ForgeSaaS.",
+    "button": "Accept invitation",
+    "paste_link": "Or paste this link into your browser:",
+    "expires": "This invitation expires in 72 hours."
+  },
+  "welcome": {
+    "title": "Welcome to ForgeSaaS",
+    "greeting": "Hi",
+    "body": "Your email is verified and your ForgeSaaS account is ready to go.",
+    "button": "Go to dashboard",
+    "closing": "Glad to have you here."
+  },
+  "download_link": {
+    "title": "Your data export is ready",
+    "greeting": "Hi",
+    "body": "The data export you requested is ready to download.",
+    "button": "Download your data",
+    "paste_link": "Or paste this link into your browser:",
+    "expires": "This link expires in 24 hours."
+  },
+  "member_invited": {
+    "title": "New team member",
+    "greeting": "Hi",
+    "body": "{member_name} has joined {org_name} as {role}.",
+    "button": "View team"
+  },
+  "payment_failed": {
+    "title": "Payment failed",
+    "greeting": "Hi",
+    "body": "We couldn't charge your card for {org_name}'s subscription ({amount}). Update your payment method to avoid losing access.",
+    "button": "Update payment method"
+  },
+  "subscription_expiring": {
+    "title": "Your subscription is expiring",
+    "greeting": "Hi",
+    "body": "{org_name}'s {plan_name} plan expires on {expires_at}. Renew now to keep uninterrupted access.",
+    "button": "Manage subscription"
+  },
+  "trial_ending": {
+    "title": "Your trial is ending soon",
+    "greeting": "Hi",
+    "body": "{org_name}'s trial ends on {trial_end_date}. Upgrade now to keep your team's access.",
+    "button": "Upgrade now"
+  },
+  "file_uploaded": {
+    "title": "New file uploaded",
+    "greeting": "Hi",
+    "body": "{uploaded_by} uploaded {filename} to {org_name}.",
+    "button": "View file"
+  }
+}

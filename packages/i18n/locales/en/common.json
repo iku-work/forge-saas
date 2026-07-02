@@ -1,0 +1,60 @@
+{
+  "app": {
+    "name": "ForgeSaaS"
+  },
+  "button": {
+    "save": "Save",
+    "cancel": "Cancel",
+    "submit": "Submit",
+    "load_more": "Load more",
+    "remove": "Remove",
+    "upload": "Upload"
+  },
+  "status": {
+    "loading": "Loading…",
+    "saving": "Saving…",
+    "saved": "Saved.",
+    "logging_out": "Logging out…"
+  },
+  "nav": {
+    "dashboard": "Dashboard",
+    "files": "Files",
+    "files_hint": "Opens your uploaded files",
+    "settings": "Settings",
+    "profile": "Profile",
+    "security": "Security",
+    "organization": "Organization",
+    "members": "Members",
+    "billing": "Billing",
+    "notifications": "Notifications",
+    "notifications_hint": "Opens your notifications list",
+    "logout": "Log out",
+    "logout_hint": "Signs out of this account on this device"
+  },
+  "form": {
+    "enter_value_hint": "Enter your {field}"
+  },
+  "org_switcher": {
+    "label": "Organizations",
+    "select": "Select organization",
+    "create": "Create organization",
+    "loading": "Loading…"
+  },
+  "locale_switcher": {
+    "label": "Language",
+    "select_hint": "Sets this as your app language"
+  },
+  "dashboard": {
+    "empty": "Nothing here yet."
+  },
+  "not_found": {
+    "title": "Page not found",
+    "back": "Back to dashboard"
+  },
+  "error": {
+    "unexpected": "Something went wrong. Please try again.",
+    "permission_denied": "You don't have permission to do this.",
+    "not_a_member": "You're not a member of this organization.",
+    "org_id_required": "An organization must be selected for this action."
+  }
+}

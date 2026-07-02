@@ -1,0 +1,424 @@
+import { useState } from "react";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useForm } from "react-hook-form";
+import { useTranslation } from "react-i18next";
+import { z } from "zod";
+
+import {
+  disable2FaApiV1Auth2FaDisablePost,
+  enable2FaApiV1Auth2FaEnablePost,
+  listSessionsApiV1AuthSessionsGet,
+  listSessionsApiV1AuthSessionsGetQueryKey,
+  revokeSessionApiV1AuthSessionsSessionIdDelete,
+  verify2FaApiV1Auth2FaVerifyPost,
+} from "@forge/api-client";
+import { useAuth, useModules } from "@forge/hooks";
+import {
+  Alert,
+  AlertDescription,
+  Button,
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  Form,
+  FormControl,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+  Input,
+  Skeleton,
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@forge/ui";
+import { formatDate } from "@forge/utils";
+
+import { getErrorMessage } from "../auth/getErrorMessage";
+
+function SessionsCard() {
+  const { t, i18n } = useTranslation();
+  const queryClient = useQueryClient();
+  // Raw SDK calls directly in queryFn/mutationFn rather than the generated
+  // *GetOptions()/*Mutation() helpers, for two compounding reasons: (1)
+  // under this project's exactOptionalPropertyTypes, queryOptions()'s
+  // return type doesn't structurally satisfy useQuery's parameter type, and
+  // (2) @forge/api-client ships a pre-bundled dist build, so those helpers'
+  // internal calls into the SDK are resolved at build time and can't be
+  // intercepted by vi.mock("@forge/api-client", ...) in tests. The query
+  // key function alone has neither problem, so it's still reused here to
+  // keep this in sync with invalidateQueries below.
+  const sessionsQuery = useQuery({
+    queryKey: listSessionsApiV1AuthSessionsGetQueryKey(),
+    queryFn: async () => {
+      const { data } = await listSessionsApiV1AuthSessionsGet({
+        throwOnError: true,
+      });
+      return data;
+    },
+  });
+  const revokeSession = useMutation({
+    mutationFn: async (sessionId: string) => {
+      await revokeSessionApiV1AuthSessionsSessionIdDelete({
+        path: { session_id: sessionId },
+        throwOnError: true,
+      });
+    },
+  });
+  const [revokeError, setRevokeError] = useState<string | null>(null);
+
+  const handleRevoke = async (sessionId: string): Promise<void> => {
+    setRevokeError(null);
+    try {
+      await revokeSession.mutateAsync(sessionId);
+      await queryClient.invalidateQueries({
+        queryKey: listSessionsApiV1AuthSessionsGetQueryKey(),
+      });
+    } catch (error) {
+      setRevokeError(getErrorMessage(error, "auth.sessions.error_revoke"));
+    }
+  };
+
+  const sessions = sessionsQuery.data?.data ?? [];
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardDescription>{t("auth.sessions.description")}</CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        {revokeError ? (
+          <Alert variant="destructive">
+            <AlertDescription>{revokeError}</AlertDescription>
+          </Alert>
+        ) : null}
+
+        {sessionsQuery.isLoading ? (
+          <div className="space-y-2">
+            <Skeleton className="h-8 w-full" />
+            <Skeleton className="h-8 w-full" />
+          </div>
+        ) : sessionsQuery.isError ? (
+          <Alert variant="destructive">
+            <AlertDescription>
+              {getErrorMessage(sessionsQuery.error, "auth.sessions.error_load")}
+            </AlertDescription>
+          </Alert>
+        ) : sessions.length === 0 ? (
+          <p className="text-sm text-muted-foreground">
+            {t("auth.sessions.no_active")}
+          </p>
+        ) : (
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>{t("auth.sessions.device_col")}</TableHead>
+                <TableHead>{t("auth.sessions.last_seen_col")}</TableHead>
+                <TableHead className="text-right">
+                  {t("auth.sessions.action_col")}
+                </TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {sessions.map((session) => (
+                <TableRow key={session.id}>
+                  <TableCell>
+                    <div>
+                      {session.device_label ??
+                        t("auth.sessions.unknown_device")}
+                    </div>
+                    <div className="text-xs text-muted-foreground">
+                      {session.ip_address}
+                    </div>
+                  </TableCell>
+                  <TableCell>
+                    {formatDate(session.last_seen_at, i18n.language)}
+                  </TableCell>
+                  <TableCell className="text-right">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      disabled={revokeSession.isPending}
+                      onClick={() => {
+                        void handleRevoke(session.id);
+                      }}
+                    >
+                      {t("auth.sessions.revoke")}
+                    </Button>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+const verifyCodeSchema = z.object({
+  code: z
+    .string()
+    .length(6, "validation.code_length")
+    .regex(/^\d+$/, "validation.code_digits_only"),
+});
+type VerifyCodeInput = z.infer<typeof verifyCodeSchema>;
+
+const disable2faSchema = z.object({
+  password: z.string().min(1, "validation.required"),
+  code: z
+    .string()
+    .length(6, "validation.code_length")
+    .regex(/^\d+$/, "validation.code_digits_only"),
+});
+type Disable2faInput = z.infer<typeof disable2faSchema>;
+
+function TwoFactorCard() {
+  const { t } = useTranslation();
+  const { user } = useAuth();
+  const [totpEnabled, setTotpEnabled] = useState(user?.totp_enabled ?? false);
+  const [provisioning, setProvisioning] = useState<{
+    provisioningUri: string;
+    secret: string;
+  } | null>(null);
+  const [backupCodes, setBackupCodes] = useState<string[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  // Raw SDK calls rather than the generated *Mutation() helpers -- see the
+  // comment above SessionsCard's sessionsQuery for why.
+  const enable2fa = useMutation({
+    mutationFn: async () => {
+      const { data } = await enable2FaApiV1Auth2FaEnablePost({
+        throwOnError: true,
+      });
+      return data;
+    },
+  });
+  const verify2fa = useMutation({
+    mutationFn: async (code: string) => {
+      const { data } = await verify2FaApiV1Auth2FaVerifyPost({
+        body: { code },
+        throwOnError: true,
+      });
+      return data;
+    },
+  });
+  const disable2fa = useMutation({
+    mutationFn: async (input: Disable2faInput) => {
+      await disable2FaApiV1Auth2FaDisablePost({
+        body: input,
+        throwOnError: true,
+      });
+    },
+  });
+
+  const verifyForm = useForm<VerifyCodeInput>({
+    resolver: zodResolver(verifyCodeSchema),
+    defaultValues: { code: "" },
+  });
+  const disableForm = useForm<Disable2faInput>({
+    resolver: zodResolver(disable2faSchema),
+    defaultValues: { password: "", code: "" },
+  });
+
+  const handleStartEnable = async (): Promise<void> => {
+    setError(null);
+    try {
+      const envelope = await enable2fa.mutateAsync();
+      const data = envelope.data;
+      if (data) {
+        setProvisioning({
+          provisioningUri: data.provisioning_uri,
+          secret: data.secret,
+        });
+      }
+    } catch (caught) {
+      setError(getErrorMessage(caught, "auth.two_factor.error_enable"));
+    }
+  };
+
+  const handleVerify = async (values: VerifyCodeInput): Promise<void> => {
+    setError(null);
+    try {
+      const envelope = await verify2fa.mutateAsync(values.code);
+      setBackupCodes(envelope.data?.backup_codes ?? []);
+      setTotpEnabled(true);
+      setProvisioning(null);
+      verifyForm.reset();
+    } catch (caught) {
+      setError(getErrorMessage(caught, "auth.two_factor.error_verify"));
+    }
+  };
+
+  const handleDisable = async (values: Disable2faInput): Promise<void> => {
+    setError(null);
+    try {
+      await disable2fa.mutateAsync(values);
+      setTotpEnabled(false);
+      setBackupCodes(null);
+      disableForm.reset();
+    } catch (caught) {
+      setError(getErrorMessage(caught, "auth.two_factor.error_disable"));
+    }
+  };
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardDescription>{t("auth.two_factor.description")}</CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        {error ? (
+          <Alert variant="destructive">
+            <AlertDescription>{error}</AlertDescription>
+          </Alert>
+        ) : null}
+
+        {backupCodes ? (
+          <Alert>
+            <AlertDescription>
+              <p className="mb-2 font-medium">
+                {t("auth.two_factor.backup_codes_notice")}
+              </p>
+              <ul className="grid grid-cols-2 gap-1 font-mono text-xs">
+                {backupCodes.map((code) => (
+                  <li key={code}>{code}</li>
+                ))}
+              </ul>
+            </AlertDescription>
+          </Alert>
+        ) : null}
+
+        {totpEnabled ? (
+          <Form {...disableForm}>
+            <form
+              className="space-y-3"
+              onSubmit={(event) => {
+                void disableForm.handleSubmit(handleDisable)(event);
+              }}
+              noValidate
+            >
+              <p className="text-sm">{t("auth.two_factor.enabled_notice")}</p>
+              <FormField
+                control={disableForm.control}
+                name="password"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>
+                      {t("auth.two_factor.current_password_label")}
+                    </FormLabel>
+                    <FormControl>
+                      <Input
+                        type="password"
+                        autoComplete="current-password"
+                        {...field}
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={disableForm.control}
+                name="code"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>{t("auth.two_factor.code_label")}</FormLabel>
+                    <FormControl>
+                      <Input
+                        inputMode="numeric"
+                        autoComplete="one-time-code"
+                        {...field}
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <Button
+                type="submit"
+                variant="destructive"
+                disabled={disableForm.formState.isSubmitting}
+              >
+                {t("auth.two_factor.disable")}
+              </Button>
+            </form>
+          </Form>
+        ) : provisioning ? (
+          <Form {...verifyForm}>
+            <form
+              className="space-y-3"
+              onSubmit={(event) => {
+                void verifyForm.handleSubmit(handleVerify)(event);
+              }}
+              noValidate
+            >
+              <p className="text-sm">{t("auth.two_factor.scan_instruction")}</p>
+              <p className="break-all rounded-md bg-muted p-2 font-mono text-xs">
+                {provisioning.provisioningUri}
+              </p>
+              <p className="text-xs text-muted-foreground">
+                {t("auth.two_factor.secret_label", {
+                  secret: provisioning.secret,
+                })}
+              </p>
+              <FormField
+                control={verifyForm.control}
+                name="code"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>
+                      {t("auth.two_factor.code_input_label")}
+                    </FormLabel>
+                    <FormControl>
+                      <Input
+                        inputMode="numeric"
+                        autoComplete="one-time-code"
+                        {...field}
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <Button
+                type="submit"
+                disabled={verifyForm.formState.isSubmitting}
+              >
+                {t("auth.two_factor.verify_and_enable")}
+              </Button>
+            </form>
+          </Form>
+        ) : (
+          <Button
+            type="button"
+            onClick={() => {
+              void handleStartEnable();
+            }}
+            disabled={enable2fa.isPending}
+          >
+            {t("auth.two_factor.enable")}
+          </Button>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+export function SecuritySettingsPage() {
+  const { t } = useTranslation();
+  const modules = useModules();
+  return (
+    <div className="max-w-xl space-y-6 p-6">
+      <h1 className="text-xl font-semibold">{t("common.nav.security")}</h1>
+      <SessionsCard />
+      {modules.totp2fa ? <TwoFactorCard /> : null}
+    </div>
+  );
+}

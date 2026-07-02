@@ -1,0 +1,15 @@
+rules:
+  - id: no-os-environ
+    languages: [python]
+    severity: ERROR
+    message: >-
+      Direct os.environ / os.getenv access is banned outside app/core/config.py
+      (§0.6). Add the field to Settings in app/core/config.py and read it via
+      get_settings() instead.
+    patterns:
+      - pattern-either:
+          - pattern: os.environ
+          - pattern: os.getenv(...)
+    paths:
+      exclude:
+        - "**/app/core/config.py"

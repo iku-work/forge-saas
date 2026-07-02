@@ -1,0 +1,729 @@
+"""
+Verifies T-022 (auth router): the full HTTP surface under /api/v1/auth --
+cookie attributes on /login, rate limiting on the 6th call, 401 on a missing
+refresh cookie, and cookie clearing on /logout -- plus a happy-path and a
+key error-path test for every other endpoint in the table. Uses the same
+real-Postgres + real-Redis testcontainers pattern as test_dependencies.py
+and test_rate_limit.py: a fresh AsyncSession per request (mirroring
+app.core.db.get_session in production) so each router commit is actually
+visible to the next request, and the slowapi limiter's storage swapped to a
+disposable Redis so /login's 5-per-minute limit can be exercised directly.
+
+Uses httpx.AsyncClient(transport=ASGITransport(...)) rather than
+fastapi.testclient.TestClient -- TestClient drives the ASGI app from a
+*second* event loop (an anyio portal in a background thread), which both
+breaks asyncpg's loop-bound connections and is invisible to coverage.py's
+default tracer past the first `await`. AsyncClient runs the app on this
+same test's event loop, so it needs none of those workarounds.
+"""
+
+from collections.abc import AsyncGenerator, Callable, Iterator
+from datetime import UTC, datetime, timedelta
+from uuid import uuid4
+
+import httpx
+import pytest
+from httpx import ASGITransport
+from limits.storage import RedisStorage, storage_from_string
+from limits.strategies import FixedWindowRateLimiter
+from redis.asyncio import Redis
+from sqlalchemy.ext.asyncio import (
+    AsyncEngine,
+    AsyncSession,
+    async_sessionmaker,
+    create_async_engine,
+)
+from sqlmodel import SQLModel
+from testcontainers.postgres import PostgresContainer
+from testcontainers.redis import RedisContainer
+
+from app.core.db import get_session
+from app.core.dependencies import get_redis
+from app.main import app
+from app.middleware import rate_limit as rate_limit_module
+from app.modules.auth.models import (
+    EmailVerificationToken,
+    MagicLinkToken,
+    PasswordResetToken,
+    User,
+)
+from app.modules.auth.models import Session as SessionModel
+from app.modules.auth.repository import (
+    EmailVerificationTokenRepository,
+    MagicLinkTokenRepository,
+    PasswordResetTokenRepository,
+    SessionRepository,
+    UserRepository,
+)
+from app.modules.auth.utils import create_access_token, hash_password, hash_token
+
+_TABLES = [
+    User.__table__,
+    SessionModel.__table__,
+    EmailVerificationToken.__table__,
+    PasswordResetToken.__table__,
+    MagicLinkToken.__table__,
+]
+_VALID_PASSWORD = "Correct-Horse9"
+_REFRESH_COOKIE_NAME = "refresh_token"
+_PLATFORM_HEADER = "X-Client-Platform"
+
+
+@pytest.fixture(scope="module")
+def postgres_container() -> "PostgresContainer":
+    with PostgresContainer("postgres:16-alpine") as container:
+        yield container
+
+
+@pytest.fixture(scope="module")
+def redis_container() -> "RedisContainer":
+    with RedisContainer("redis:7-alpine") as container:
+        yield container
+
+
+# Function-scoped (not module-scoped): see test_auth_repository.py — an
+# asyncpg-backed engine can't be reused across pytest-asyncio's per-test loop.
+@pytest.fixture
+async def test_engine(postgres_container: "PostgresContainer") -> AsyncGenerator[AsyncEngine, None]:
+    url = postgres_container.get_connection_url().replace("psycopg2", "asyncpg")
+    engine = create_async_engine(url)
+    async with engine.begin() as conn:
+        await conn.run_sync(SQLModel.metadata.create_all, tables=_TABLES)
+    yield engine
+    async with engine.begin() as conn:
+        await conn.run_sync(SQLModel.metadata.drop_all, tables=_TABLES)
+    await engine.dispose()
+
+
+@pytest.fixture
+def session_factory(test_engine: AsyncEngine) -> async_sessionmaker[AsyncSession]:
+    return async_sessionmaker(test_engine, expire_on_commit=False, class_=AsyncSession)
+
+
+# A direct handle for test setup/assertions -- separate from the sessions the
+# overridden get_session() hands to each request, exactly like a second
+# psql connection would be in production.
+@pytest.fixture
+async def session(
+    session_factory: async_sessionmaker[AsyncSession],
+) -> AsyncGenerator[AsyncSession, None]:
+    async with session_factory() as s:
+        yield s
+
+
+@pytest.fixture
+def user_repo(session: AsyncSession) -> UserRepository:
+    return UserRepository(session)
+
+
+@pytest.fixture
+def session_repo(session: AsyncSession) -> SessionRepository:
+    return SessionRepository(session)
+
+
+@pytest.fixture
+def email_token_repo(session: AsyncSession) -> EmailVerificationTokenRepository:
+    return EmailVerificationTokenRepository(session)
+
+
+@pytest.fixture
+def password_reset_repo(session: AsyncSession) -> PasswordResetTokenRepository:
+    return PasswordResetTokenRepository(session)
+
+
+@pytest.fixture
+def magic_link_repo(session: AsyncSession) -> MagicLinkTokenRepository:
+    return MagicLinkTokenRepository(session)
+
+
+@pytest.fixture
+async def verified_user(user_repo: UserRepository, session: AsyncSession) -> User:
+    user = await user_repo.create(
+        email="alice@example.com",
+        hashed_password=hash_password(_VALID_PASSWORD),
+        email_verified_at=datetime.now(UTC),
+    )
+    await session.commit()
+    return user
+
+
+def _auth_header(user: User) -> dict[str, str]:
+    token = create_access_token(user.id, None, ())
+    return {"Authorization": f"Bearer {token}"}
+
+
+@pytest.fixture
+def get_session_override(
+    session_factory: async_sessionmaker[AsyncSession],
+) -> Callable[[], AsyncGenerator[AsyncSession, None]]:
+    # Mirrors app.core.db.get_session exactly, just bound to the test engine:
+    # a fresh session (= fresh transaction) per request, so a route's
+    # `await session.commit()` is what makes the write visible to the next
+    # request -- the same contract as production.
+    async def _get_session() -> AsyncGenerator[AsyncSession, None]:
+        request_session = session_factory()
+        try:
+            yield request_session
+        except Exception:
+            await request_session.rollback()
+            raise
+        finally:
+            await request_session.close()
+
+    return _get_session
+
+
+@pytest.fixture
+async def redis_client(redis_container: "RedisContainer") -> AsyncGenerator[Redis, None]:
+    host = redis_container.get_container_host_ip()
+    port = redis_container.get_exposed_port(6379)
+    client: Redis = Redis.from_url(f"redis://{host}:{port}/0")
+    await client.flushdb()
+    yield client
+    await client.aclose()
+
+
+@pytest.fixture(scope="module")
+def _redis_backed_storage(redis_container: "RedisContainer") -> Iterator[RedisStorage]:
+    # Same swap-the-singleton's-storage approach as test_rate_limit.py: the
+    # auth_limit/sensitive_limit/api_limit decorators close over the one
+    # `limiter` object built at import time, so pointing its storage at a
+    # disposable Redis (and restoring it after) is how its 5/minute limit
+    # gets exercised without leaking into other test modules.
+    original_storage = rate_limit_module.limiter._storage
+    original_limiter = rate_limit_module.limiter._limiter
+    host = redis_container.get_container_host_ip()
+    port = redis_container.get_exposed_port(6379)
+    storage = storage_from_string(f"redis://{host}:{port}/1")
+    rate_limit_module.limiter._storage = storage
+    rate_limit_module.limiter._limiter = FixedWindowRateLimiter(storage)
+    yield storage
+    rate_limit_module.limiter._storage = original_storage
+    rate_limit_module.limiter._limiter = original_limiter
+
+
+@pytest.fixture
+async def client(
+    _redis_backed_storage: RedisStorage,
+    get_session_override: Callable[[], AsyncGenerator[AsyncSession, None]],
+    redis_client: Redis,
+) -> AsyncGenerator[httpx.AsyncClient, None]:
+    _redis_backed_storage.reset()
+    app.dependency_overrides[get_session] = get_session_override
+    app.dependency_overrides[get_redis] = lambda: redis_client
+    try:
+        async with app.router.lifespan_context(app):
+            transport = ASGITransport(app=app)
+            # base_url is https:// so httpx's cookie jar will actually
+            # forward the refresh_token cookie back on later requests --
+            # it's marked Secure, and a compliant jar withholds Secure
+            # cookies on plain http.
+            async with httpx.AsyncClient(transport=transport, base_url="https://testserver") as c:
+                yield c
+    finally:
+        app.dependency_overrides.clear()
+
+
+# --- /register ---------------------------------------------------------------
+
+
+async def test_register_returns_200_with_no_cookie(client: httpx.AsyncClient) -> None:
+    response = await client.post(
+        "/api/v1/auth/register", json={"email": "new@example.com", "password": _VALID_PASSWORD}
+    )
+
+    assert response.status_code == 200
+    assert response.json()["data"] is None
+    assert "set-cookie" not in response.headers
+
+
+async def test_register_duplicate_email_same_response_shape(client: httpx.AsyncClient) -> None:
+    body = {"email": "dupe@example.com", "password": _VALID_PASSWORD}
+    first = await client.post("/api/v1/auth/register", json=body)
+
+    second = await client.post("/api/v1/auth/register", json=body)
+
+    assert first.status_code == second.status_code == 200
+    assert first.json()["data"] == second.json()["data"] is None
+    assert first.json()["error"] == second.json()["error"] is None
+
+
+# --- /login --------------------------------------------------------------------
+
+
+async def test_login_sets_cookie_with_correct_attributes(
+    client: httpx.AsyncClient, verified_user: User
+) -> None:
+    response = await client.post(
+        "/api/v1/auth/login", json={"email": verified_user.email, "password": _VALID_PASSWORD}
+    )
+
+    assert response.status_code == 200
+    cookies = response.headers.get_list("set-cookie")
+    assert len(cookies) == 1
+    cookie = cookies[0]
+    assert cookie.startswith(f"{_REFRESH_COOKIE_NAME}=")
+    assert "HttpOnly" in cookie
+    assert "Secure" in cookie
+    assert "SameSite=strict" in cookie
+    assert "Path=/api/v1/auth" in cookie
+
+
+async def test_login_response_contains_access_token_and_user(
+    client: httpx.AsyncClient, verified_user: User
+) -> None:
+    response = await client.post(
+        "/api/v1/auth/login", json={"email": verified_user.email, "password": _VALID_PASSWORD}
+    )
+
+    data = response.json()["data"]
+    assert data["access_token"]
+    assert data["user"]["email"] == verified_user.email
+
+
+async def test_login_without_mobile_header_omits_refresh_token_from_body(
+    client: httpx.AsyncClient, verified_user: User
+) -> None:
+    response = await client.post(
+        "/api/v1/auth/login", json={"email": verified_user.email, "password": _VALID_PASSWORD}
+    )
+
+    assert response.json()["data"]["refresh_token"] is None
+
+
+async def test_login_with_mobile_header_returns_refresh_token_in_body(
+    client: httpx.AsyncClient, verified_user: User
+) -> None:
+    response = await client.post(
+        "/api/v1/auth/login",
+        json={"email": verified_user.email, "password": _VALID_PASSWORD},
+        headers={_PLATFORM_HEADER: "mobile"},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["data"]["refresh_token"]
+
+
+async def test_login_wrong_password_returns_401(
+    client: httpx.AsyncClient, verified_user: User
+) -> None:
+    response = await client.post(
+        "/api/v1/auth/login", json={"email": verified_user.email, "password": "wrong-password"}
+    )
+
+    assert response.status_code == 401
+    assert response.json()["data"] is None
+    assert response.json()["error"]["code"] == "authentication_failed"
+
+
+async def test_sixth_login_call_within_a_minute_is_rate_limited(
+    client: httpx.AsyncClient, verified_user: User
+) -> None:
+    body = {"email": verified_user.email, "password": "wrong-password"}
+    responses = [await client.post("/api/v1/auth/login", json=body) for _ in range(6)]
+
+    assert [r.status_code for r in responses[:5]] == [401] * 5
+    assert responses[5].status_code == 429
+    assert responses[5].json()["error"]["code"] == "rate_limited"
+
+
+# --- /refresh ------------------------------------------------------------------
+
+
+async def test_refresh_without_cookie_returns_401(client: httpx.AsyncClient) -> None:
+    response = await client.post("/api/v1/auth/refresh")
+
+    assert response.status_code == 401
+
+
+async def test_refresh_with_invalid_cookie_returns_401(client: httpx.AsyncClient) -> None:
+    response = await client.post(
+        "/api/v1/auth/refresh", cookies={_REFRESH_COOKIE_NAME: "not-a-real-token"}
+    )
+
+    assert response.status_code == 401
+
+
+async def test_refresh_happy_path_rotates_cookie_and_returns_new_access_token(
+    client: httpx.AsyncClient, verified_user: User
+) -> None:
+    login_response = await client.post(
+        "/api/v1/auth/login", json={"email": verified_user.email, "password": _VALID_PASSWORD}
+    )
+    old_access_token = login_response.json()["data"]["access_token"]
+
+    refresh_response = await client.post("/api/v1/auth/refresh")
+
+    assert refresh_response.status_code == 200
+    new_access_token = refresh_response.json()["data"]["access_token"]
+    assert new_access_token != old_access_token
+    assert refresh_response.headers.get_list("set-cookie")
+
+
+async def test_refresh_reused_old_cookie_after_rotation_returns_401(
+    client: httpx.AsyncClient, verified_user: User
+) -> None:
+    login_response = await client.post(
+        "/api/v1/auth/login", json={"email": verified_user.email, "password": _VALID_PASSWORD}
+    )
+    old_cookie = login_response.headers.get_list("set-cookie")[0].split(";")[0].split("=", 1)[1]
+    await client.post("/api/v1/auth/refresh")  # rotates -- old_cookie is now revoked
+    # Drop the jar's now-rotated cookie so the explicit `cookies=` below is
+    # the only refresh_token sent -- otherwise both would be on the wire.
+    client.cookies.clear()
+
+    response = await client.post("/api/v1/auth/refresh", cookies={_REFRESH_COOKIE_NAME: old_cookie})
+
+    assert response.status_code == 401
+
+
+async def test_refresh_via_body_token_without_cookie_succeeds_for_mobile(
+    client: httpx.AsyncClient, verified_user: User
+) -> None:
+    login_response = await client.post(
+        "/api/v1/auth/login",
+        json={"email": verified_user.email, "password": _VALID_PASSWORD},
+        headers={_PLATFORM_HEADER: "mobile"},
+    )
+    refresh_token = login_response.json()["data"]["refresh_token"]
+    client.cookies.clear()  # mobile has no cookie jar -- only the body token
+
+    response = await client.post(
+        "/api/v1/auth/refresh",
+        json={"refresh_token": refresh_token},
+        headers={_PLATFORM_HEADER: "mobile"},
+    )
+
+    assert response.status_code == 200
+    data = response.json()["data"]
+    assert data["access_token"]
+    assert data["refresh_token"]
+    assert data["refresh_token"] != refresh_token
+
+
+async def test_refresh_without_mobile_header_omits_refresh_token_from_body(
+    client: httpx.AsyncClient, verified_user: User
+) -> None:
+    await client.post(
+        "/api/v1/auth/login", json={"email": verified_user.email, "password": _VALID_PASSWORD}
+    )
+
+    response = await client.post("/api/v1/auth/refresh")
+
+    assert response.json()["data"]["refresh_token"] is None
+
+
+# --- /logout / /logout-all ------------------------------------------------------
+
+
+async def test_logout_clears_cookie(client: httpx.AsyncClient, verified_user: User) -> None:
+    await client.post(
+        "/api/v1/auth/login", json={"email": verified_user.email, "password": _VALID_PASSWORD}
+    )
+
+    response = await client.post("/api/v1/auth/logout")
+
+    assert response.status_code == 200
+    cookie = response.headers.get_list("set-cookie")[0]
+    assert cookie.startswith(f"{_REFRESH_COOKIE_NAME}=")
+    assert "Max-Age=0" in cookie
+
+
+async def test_logout_without_cookie_is_a_no_op_200(client: httpx.AsyncClient) -> None:
+    response = await client.post("/api/v1/auth/logout")
+
+    assert response.status_code == 200
+
+
+async def test_logout_via_body_token_without_cookie_revokes_session(
+    client: httpx.AsyncClient, verified_user: User, session_repo: SessionRepository
+) -> None:
+    login_response = await client.post(
+        "/api/v1/auth/login",
+        json={"email": verified_user.email, "password": _VALID_PASSWORD},
+        headers={_PLATFORM_HEADER: "mobile"},
+    )
+    refresh_token = login_response.json()["data"]["refresh_token"]
+    client.cookies.clear()
+
+    response = await client.post("/api/v1/auth/logout", json={"refresh_token": refresh_token})
+
+    assert response.status_code == 200
+    active = await session_repo.list_active_for_user(verified_user.id)
+    assert active == []
+
+
+async def test_logout_all_without_bearer_token_returns_401(client: httpx.AsyncClient) -> None:
+    response = await client.post("/api/v1/auth/logout-all")
+
+    assert response.status_code == 401
+
+
+async def test_logout_all_revokes_every_session(
+    client: httpx.AsyncClient, verified_user: User, session_repo: SessionRepository
+) -> None:
+    await client.post(
+        "/api/v1/auth/login", json={"email": verified_user.email, "password": _VALID_PASSWORD}
+    )
+    client.cookies.clear()
+    await client.post(
+        "/api/v1/auth/login", json={"email": verified_user.email, "password": _VALID_PASSWORD}
+    )
+
+    response = await client.post("/api/v1/auth/logout-all", headers=_auth_header(verified_user))
+
+    assert response.status_code == 200
+    active = await session_repo.list_active_for_user(verified_user.id)
+    assert active == []
+
+
+# --- /verify-email ---------------------------------------------------------------
+
+
+async def test_verify_email_happy_path(
+    client: httpx.AsyncClient,
+    user_repo: UserRepository,
+    email_token_repo: EmailVerificationTokenRepository,
+    session: AsyncSession,
+) -> None:
+    user = await user_repo.create(
+        email="unverified@example.com", hashed_password=hash_password(_VALID_PASSWORD)
+    )
+    await email_token_repo.create(
+        user_id=user.id,
+        token_hash=hash_token("plain-verify-token"),
+        expires_at=datetime.now(UTC) + timedelta(hours=24),
+    )
+    await session.commit()
+
+    response = await client.post("/api/v1/auth/verify-email", json={"token": "plain-verify-token"})
+
+    assert response.status_code == 200
+    refetched = await user_repo.get_by_email("unverified@example.com")
+    assert refetched is not None
+    assert refetched.is_active is True
+
+
+async def test_verify_email_invalid_token_returns_401(client: httpx.AsyncClient) -> None:
+    response = await client.post("/api/v1/auth/verify-email", json={"token": "not-a-real-token"})
+
+    assert response.status_code == 401
+
+
+# --- /forgot-password / /reset-password -----------------------------------------
+
+
+async def test_forgot_password_unknown_email_returns_200(client: httpx.AsyncClient) -> None:
+    response = await client.post(
+        "/api/v1/auth/forgot-password", json={"email": "ghost@example.com"}
+    )
+
+    assert response.status_code == 200
+    assert response.json()["data"] is None
+
+
+async def test_forgot_password_known_email_returns_200(
+    client: httpx.AsyncClient, verified_user: User
+) -> None:
+    response = await client.post(
+        "/api/v1/auth/forgot-password", json={"email": verified_user.email}
+    )
+
+    assert response.status_code == 200
+    assert response.json()["data"] is None
+
+
+async def test_reset_password_happy_path_then_old_password_rejected(
+    client: httpx.AsyncClient,
+    verified_user: User,
+    password_reset_repo: PasswordResetTokenRepository,
+    session: AsyncSession,
+) -> None:
+    await password_reset_repo.create(
+        user_id=verified_user.id,
+        token_hash=hash_token("plain-reset-token"),
+        expires_at=datetime.now(UTC) + timedelta(hours=1),
+    )
+    await session.commit()
+
+    response = await client.post(
+        "/api/v1/auth/reset-password",
+        json={"token": "plain-reset-token", "new_password": "Even-Better-Horse8"},
+    )
+
+    assert response.status_code == 200
+    login_with_old = await client.post(
+        "/api/v1/auth/login", json={"email": verified_user.email, "password": _VALID_PASSWORD}
+    )
+    assert login_with_old.status_code == 401
+
+
+async def test_reset_password_invalid_token_returns_401(client: httpx.AsyncClient) -> None:
+    response = await client.post(
+        "/api/v1/auth/reset-password",
+        json={"token": "not-a-real-token", "new_password": "Even-Better-Horse8"},
+    )
+
+    assert response.status_code == 401
+
+
+# --- /magic-link / /magic-link/consume -------------------------------------------
+
+
+async def test_request_magic_link_returns_200_for_any_email(client: httpx.AsyncClient) -> None:
+    response = await client.post("/api/v1/auth/magic-link", json={"email": "ghost@example.com"})
+
+    assert response.status_code == 200
+    assert response.json()["data"] is None
+
+
+async def test_consume_magic_link_happy_path_sets_cookie(
+    client: httpx.AsyncClient,
+    verified_user: User,
+    magic_link_repo: MagicLinkTokenRepository,
+    session: AsyncSession,
+) -> None:
+    await magic_link_repo.create(
+        user_id=verified_user.id,
+        token_hash=hash_token("plain-magic-token"),
+        expires_at=datetime.now(UTC) + timedelta(minutes=15),
+    )
+    await session.commit()
+
+    response = await client.post(
+        "/api/v1/auth/magic-link/consume", json={"token": "plain-magic-token"}
+    )
+
+    assert response.status_code == 200
+    assert response.json()["data"]["access_token"]
+    assert response.headers.get_list("set-cookie")
+
+
+async def test_consume_magic_link_invalid_token_returns_401(client: httpx.AsyncClient) -> None:
+    response = await client.post(
+        "/api/v1/auth/magic-link/consume", json={"token": "not-a-real-token"}
+    )
+
+    assert response.status_code == 401
+
+
+# --- /me -----------------------------------------------------------------------
+
+
+async def test_me_without_bearer_token_returns_401(client: httpx.AsyncClient) -> None:
+    response = await client.get("/api/v1/auth/me")
+
+    assert response.status_code == 401
+
+
+async def test_me_returns_current_user(client: httpx.AsyncClient, verified_user: User) -> None:
+    response = await client.get("/api/v1/auth/me", headers=_auth_header(verified_user))
+
+    assert response.status_code == 200
+    assert response.json()["data"]["email"] == verified_user.email
+
+
+# --- PATCH /me ---------------------------------------------------------------
+
+
+async def test_update_me_without_bearer_token_returns_401(client: httpx.AsyncClient) -> None:
+    response = await client.patch("/api/v1/auth/me", json={"locale": "fi"})
+
+    assert response.status_code == 401
+
+
+async def test_update_me_updates_locale(client: httpx.AsyncClient, verified_user: User) -> None:
+    response = await client.patch(
+        "/api/v1/auth/me", json={"locale": "fi"}, headers=_auth_header(verified_user)
+    )
+
+    assert response.status_code == 200
+    assert response.json()["data"]["locale"] == "fi"
+
+    me_response = await client.get("/api/v1/auth/me", headers=_auth_header(verified_user))
+    assert me_response.json()["data"]["locale"] == "fi"
+
+
+async def test_update_me_rejects_unsupported_locale(
+    client: httpx.AsyncClient, verified_user: User
+) -> None:
+    response = await client.patch(
+        "/api/v1/auth/me", json={"locale": "xx"}, headers=_auth_header(verified_user)
+    )
+
+    assert response.status_code == 422
+
+
+# --- /sessions -------------------------------------------------------------------
+
+
+async def test_list_sessions_without_bearer_token_returns_401(client: httpx.AsyncClient) -> None:
+    response = await client.get("/api/v1/auth/sessions")
+
+    assert response.status_code == 401
+
+
+async def test_list_sessions_returns_active_sessions(
+    client: httpx.AsyncClient, verified_user: User
+) -> None:
+    await client.post(
+        "/api/v1/auth/login", json={"email": verified_user.email, "password": _VALID_PASSWORD}
+    )
+
+    response = await client.get("/api/v1/auth/sessions", headers=_auth_header(verified_user))
+
+    assert response.status_code == 200
+    sessions = response.json()["data"]
+    assert len(sessions) == 1
+    assert sessions[0]["ip_address"]
+
+
+async def test_revoke_session_for_unknown_id_returns_404(
+    client: httpx.AsyncClient, verified_user: User
+) -> None:
+    response = await client.delete(
+        f"/api/v1/auth/sessions/{uuid4()}", headers=_auth_header(verified_user)
+    )
+
+    assert response.status_code == 404
+
+
+async def test_revoke_session_removes_it_from_active_list(
+    client: httpx.AsyncClient, verified_user: User
+) -> None:
+    await client.post(
+        "/api/v1/auth/login", json={"email": verified_user.email, "password": _VALID_PASSWORD}
+    )
+    headers = _auth_header(verified_user)
+    listed = (await client.get("/api/v1/auth/sessions", headers=headers)).json()["data"]
+    session_id = listed[0]["id"]
+
+    response = await client.delete(f"/api/v1/auth/sessions/{session_id}", headers=headers)
+
+    assert response.status_code == 200
+    remaining = (await client.get("/api/v1/auth/sessions", headers=headers)).json()["data"]
+    assert remaining == []
+
+
+async def test_revoke_session_owned_by_another_user_returns_404(
+    client: httpx.AsyncClient, verified_user: User, user_repo: UserRepository, session: AsyncSession
+) -> None:
+    other_user = await user_repo.create(
+        email="bob@example.com",
+        hashed_password=hash_password(_VALID_PASSWORD),
+        email_verified_at=datetime.now(UTC),
+    )
+    await session.commit()
+    await client.post(
+        "/api/v1/auth/login", json={"email": other_user.email, "password": _VALID_PASSWORD}
+    )
+    other_sessions = (
+        await client.get("/api/v1/auth/sessions", headers=_auth_header(other_user))
+    ).json()["data"]
+    other_session_id = other_sessions[0]["id"]
+
+    response = await client.delete(
+        f"/api/v1/auth/sessions/{other_session_id}", headers=_auth_header(verified_user)
+    )
+
+    assert response.status_code == 404

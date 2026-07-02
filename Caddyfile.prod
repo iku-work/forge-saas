@@ -1,0 +1,12 @@
+{$DOMAIN} {
+	reverse_proxy backend:8000
+	# Caddy auto-obtains and renews Let's Encrypt cert — no config needed
+	encode gzip zstd
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+	}
+}
+
+http://{$DOMAIN} {
+	redir https://{$DOMAIN}{uri} 301
+}

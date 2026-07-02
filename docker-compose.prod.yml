@@ -1,0 +1,114 @@
+networks:
+  forge-net:
+    driver: bridge
+
+volumes:
+  postgres_data:
+  redis_data:
+  caddy_data:
+  clamav_data:
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    env_file:
+      - ./backend/.env
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - forge-net
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - forge-net
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    image: forge-saas-backend
+    restart: unless-stopped
+    env_file:
+      - ./backend/.env
+    command: uvicorn app.main:app --host 0.0.0.0
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    networks:
+      - forge-net
+
+  worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    image: forge-saas-backend
+    restart: unless-stopped
+    env_file:
+      - ./backend/.env
+    command: arq app.workers.main.WorkerSettings
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - forge-net
+
+  # T-113: only started when explicitly requested (`docker compose --profile
+  # clamav up`) -- settings.VIRUS_SCANNER must also be set to "clamav" (and
+  # CLAMAV_HOST=clamav) in backend/.env for the worker to actually use it.
+  clamav:
+    image: clamav/clamav:stable
+    restart: unless-stopped
+    profiles: ["clamav"]
+    volumes:
+      - clamav_data:/var/lib/clamav
+    healthcheck:
+      test: ["CMD", "clamdcheck.sh"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 180s # first boot downloads the virus definition database
+    networks:
+      - forge-net
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    env_file:
+      - ./backend/.env
+    volumes:
+      - ./Caddyfile.prod:/etc/caddy/Caddyfile
+      - caddy_data:/data
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    depends_on:
+      backend:
+        condition: service_healthy
+    networks:
+      - forge-net

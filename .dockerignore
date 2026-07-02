@@ -1,0 +1,37 @@
+# backend/Dockerfile builds with the repo root as context (see that file's
+# top comment) -- without this, every `docker build` ships the whole
+# checkout, including every workspace's node_modules, as the build context.
+# The email-templates-builder stage's `pnpm install` also can't tolerate a
+# stale node_modules/ already present from the host (it asks to confirm
+# purging it, which has no TTY to answer in a container build).
+node_modules/
+**/node_modules/
+.turbo/
+**/.turbo/
+.git/
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+**/.venv/
+*.egg-info/
+.mypy_cache/
+**/.mypy_cache/
+.ruff_cache/
+**/.ruff_cache/
+.pytest_cache/
+**/.pytest_cache/
+.hypothesis/
+.import_linter_cache/
+htmlcov/
+.coverage
+
+# Env -- never bake secrets into a build context or image
+.env
+.env.local
+.env.*.local
+
+# OS
+.DS_Store
+Thumbs.db

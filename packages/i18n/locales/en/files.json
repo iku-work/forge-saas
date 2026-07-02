@@ -1,0 +1,57 @@
+{
+  "page": {
+    "title": "Files",
+    "empty": "No files yet. Upload one to get started.",
+    "error_load": "Could not load files."
+  },
+  "uploader": {
+    "drop_here": "Drop files here",
+    "drag_active": "Drop to upload",
+    "browse": "Browse",
+    "hint": "or drag and drop",
+    "cancel": "Cancel",
+    "retry": "Retry",
+    "error_type": "File type not allowed.",
+    "error_size": "File exceeds the {max} limit.",
+    "error_upload": "Upload failed.",
+    "queued": "Queued",
+    "uploading": "Uploading…",
+    "done": "Done"
+  },
+  "table": {
+    "col_name": "Name",
+    "col_size": "Size",
+    "col_uploader": "Uploaded by",
+    "col_status": "Status",
+    "col_actions": "Actions"
+  },
+  "status": {
+    "pending": "Pending",
+    "ready": "Ready",
+    "infected": "Infected",
+    "failed": "Failed"
+  },
+  "action": {
+    "download": "Download",
+    "delete": "Delete",
+    "delete_confirm": "Delete this file?"
+  },
+  "picker": {
+    "upload_button": "Upload",
+    "upload_hint": "Choose a source to add a file",
+    "sheet_title": "Add a file",
+    "source_camera": "Take photo",
+    "source_camera_hint": "Take a new photo with the camera",
+    "source_library": "Photo library",
+    "source_library_hint": "Choose a photo from your library",
+    "source_document": "Browse files",
+    "source_document_hint": "Choose a document from this device",
+    "cancel": "Cancel",
+    "cancel_hint": "Closes this menu without picking a file",
+    "permission_denied": "Permission is required to continue.",
+    "error_upload": "Upload failed.",
+    "avatar_button": "Change photo",
+    "avatar_hint": "Upload a new profile photo from your library",
+    "avatar_uploaded": "Profile photo updated."
+  }
+}

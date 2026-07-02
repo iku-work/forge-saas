@@ -1,0 +1,41 @@
+{
+  "coming_soon": "Notifications are coming soon.",
+  "messages": {
+    "count": "{count, plural, one {1 message} other {# messages}}"
+  },
+  "bell": {
+    "aria_label": "Notifications",
+    "aria_label_unread": "Notifications, {count, plural, one {1 unread} other {# unread}}"
+  },
+  "feed": {
+    "heading": "Notifications",
+    "mark_all_read": "Mark all as read",
+    "mark_all_read_hint": "Marks every notification as read",
+    "mark_read": "Mark as read",
+    "mark_read_hint": "Marks this notification as read",
+    "load_more": "Load more",
+    "view": "View",
+    "view_hint": "Opens the linked page for this notification",
+    "loading": "Loading notifications…",
+    "error": "Couldn't load notifications.",
+    "empty": "You're all caught up."
+  },
+  "banner": {
+    "dismiss_hint": "Dismisses this notification"
+  },
+  "preferences": {
+    "title": "Notification preferences",
+    "description": "Choose how you'd like to hear about activity on your account.",
+    "channel_email": "Email",
+    "channel_in_app": "In-app",
+    "channel_push": "Push",
+    "save": "Save preferences",
+    "saved": "Preferences saved.",
+    "error_save": "Couldn't save your preferences.",
+    "type_member_invited": "Someone joins your organization",
+    "type_payment_failed": "A payment fails",
+    "type_subscription_expiring": "Your subscription is expiring",
+    "type_weekly_summary": "Weekly summary",
+    "type_file_uploaded": "A file is uploaded"
+  }
+}

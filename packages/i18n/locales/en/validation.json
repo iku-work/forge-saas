@@ -1,0 +1,15 @@
+{
+  "required": "This field is required.",
+  "email_invalid": "Enter a valid email address.",
+  "password": {
+    "min_length": "Password must be at least 12 characters",
+    "uppercase": "Password must contain an uppercase letter",
+    "lowercase": "Password must contain a lowercase letter",
+    "digit": "Password must contain a digit",
+    "common_password": "Password is too common — choose something less guessable"
+  },
+  "code_digits_only": "Digits only.",
+  "code_length": "Enter the 6-digit code.",
+  "org_name_required": "Organization name is required.",
+  "role_required": "Choose a role."
+}

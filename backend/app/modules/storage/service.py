@@ -1,0 +1,231 @@
+"""
+StorageService (T-112): orchestrates the three-step (presign -> client PUT ->
+confirm) upload flow, plan-quota enforcement, and the post-confirm
+virus-scan/notification fan-out. Two object-key invariants live here rather
+than in the router, since they're security-load-bearing, not presentation:
+the key is always server-generated with a UUID component (a client-supplied
+`key` is simply not a field PresignUploadRequest defines, so there is nothing
+to ignore), and `filename` only ever feeds the human-readable tail of that
+key via `_slugify_filename` -- never the lookup itself.
+
+`virus_scan` and `hard_delete_stored_file` are enqueued by name (app.core.jobs)
+before either worker function exists, the same forward-reference pattern
+app.modules.gdpr.service already uses for its own ARQ jobs -- T-113 and a
+future hard-delete task each register the function side once they land.
+"""
+
+import re
+from datetime import datetime, timedelta
+from typing import Any
+from uuid import UUID, uuid4
+
+from redis.asyncio import Redis
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.core import jobs
+from app.core.exceptions import PlanLimitError, UnprocessableEntityError
+from app.models._mixins import utcnow
+from app.modules.audit.service import AuditService
+from app.modules.billing.dependencies import OrgSubscription
+from app.modules.notifications.service import NotificationService
+from app.modules.storage.backend import get_storage_backend
+from app.modules.storage.models import StoredFile
+from app.modules.storage.repository import StoredFileRepository
+
+_SIZE_TOLERANCE_BYTES = 1024
+_DOWNLOAD_EXPIRES_IN_SECONDS = 3600
+_HARD_DELETE_GRACE_PERIOD = timedelta(days=7)
+
+_DEFAULT_ALLOWED_CONTENT_TYPES = frozenset(
+    {
+        "image/jpeg",
+        "image/png",
+        "image/gif",
+        "image/webp",
+        "application/pdf",
+        "application/msword",
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        "application/vnd.ms-excel",
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        "text/plain",
+        "text/csv",
+    }
+)
+# Per-bucket overrides of the default allowlist above (T-112's Build section:
+# "configurable per bucket").
+_BUCKET_ALLOWED_CONTENT_TYPES: dict[str, frozenset[str]] = {
+    "avatars": frozenset({"image/jpeg", "image/png", "image/webp"}),
+}
+
+_SLUG_DISALLOWED = re.compile(r"[^a-z0-9]+")
+
+
+def _slugify_filename(filename: str) -> str:
+    stem, dot, ext = filename.rpartition(".")
+    if not dot:
+        stem, ext = filename, ""
+    slug = _SLUG_DISALLOWED.sub("-", stem.lower()).strip("-") or "file"
+    ext_slug = _SLUG_DISALLOWED.sub("", ext.lower())
+    return f"{slug}.{ext_slug}" if ext_slug else slug
+
+
+def _allowed_content_types(bucket: str) -> frozenset[str]:
+    return _BUCKET_ALLOWED_CONTENT_TYPES.get(bucket, _DEFAULT_ALLOWED_CONTENT_TYPES)
+
+
+class StorageService:
+    def __init__(self, session: AsyncSession, org_id: UUID, redis: Redis) -> None:
+        self._session = session
+        self._org_id = org_id
+        self._repo = StoredFileRepository(session, org_id, redis)
+        self._audit = AuditService(session)
+        self._notifications = NotificationService(session, redis)
+        self._backend = get_storage_backend()
+
+    async def presign_upload(  # noqa: PLR0913 -- matches the T-112 spec's exact param set
+        self,
+        user_id: UUID,
+        *,
+        filename: str,
+        content_type: str,
+        size_bytes: int,
+        bucket: str = "default",
+        org_sub: OrgSubscription | None,
+    ) -> dict[str, Any]:
+        if content_type not in _allowed_content_types(bucket):
+            raise UnprocessableEntityError(
+                "errors.content_type_not_allowed",
+                fallback=f"Content type '{content_type}' is not allowed for bucket '{bucket}'",
+                params={"content_type": content_type, "bucket": bucket},
+            )
+
+        if org_sub is not None:
+            await self._check_quota(size_bytes, org_sub)
+
+        key = f"{self._org_id}/{bucket}/{uuid4()}/{_slugify_filename(filename)}"
+        stored_file = await self._repo.create(
+            uploaded_by=user_id,
+            key=key,
+            filename=filename,
+            content_type=content_type,
+            size_bytes=size_bytes,
+            bucket=bucket,
+            status="pending",
+        )
+        presigned = await self._backend.presign_upload(
+            key, content_type, max_bytes=size_bytes + _SIZE_TOLERANCE_BYTES
+        )
+
+        await self._audit.log(
+            action="file.presigned",
+            resource_type="file",
+            resource_id=str(stored_file.id),
+            org_id=self._org_id,
+            actor_id=user_id,
+        )
+
+        return {
+            "file_id": stored_file.id,
+            "upload_url": presigned.url,
+            "fields": presigned.fields,
+            "key": presigned.key,
+            "expires_at": presigned.expires_at,
+        }
+
+    async def _check_quota(self, size_bytes: int, org_sub: OrgSubscription) -> None:
+        max_upload_mb = org_sub.plan.features.get("max_upload_mb")
+        if max_upload_mb is not None and size_bytes > max_upload_mb * 1_000_000:
+            raise PlanLimitError(
+                "errors.file_too_large",
+                fallback=f"File exceeds the {max_upload_mb}MB per-file limit on your plan",
+                params={"max_upload_mb": str(max_upload_mb)},
+            )
+
+        storage_gb = org_sub.plan.features.get("storage_gb")
+        if storage_gb is not None:
+            total_bytes = await self._repo.total_bytes_for_org()
+            if total_bytes + size_bytes > storage_gb * 1_000_000_000:
+                raise PlanLimitError(
+                    "errors.storage_quota_exceeded",
+                    fallback=f"This would exceed the {storage_gb}GB storage quota on your plan",
+                    params={"storage_gb": str(storage_gb)},
+                )
+
+    async def confirm_upload(self, user_id: UUID, file_id: UUID) -> StoredFile:
+        stored_file = await self._repo.get_or_raise(file_id)
+        if stored_file.status != "pending":
+            # Idempotent: re-confirming an already-ready file is a no-op
+            # success rather than an error (T-112 Build section).
+            return stored_file
+
+        metadata = await self._backend.head(stored_file.key)
+        if metadata is None:
+            raise UnprocessableEntityError(
+                "errors.file_not_uploaded", fallback="No upload found at the presigned location"
+            )
+
+        actual_size = int(metadata["ContentLength"])
+        if actual_size > stored_file.size_bytes + _SIZE_TOLERANCE_BYTES:
+            await self._backend.delete(stored_file.key)
+            raise UnprocessableEntityError(
+                "errors.file_size_mismatch",
+                fallback="Uploaded file size does not match the claimed size",
+            )
+
+        checksum = metadata.get("ETag")
+        updated = await self._repo.update(
+            file_id,
+            status="ready",
+            checksum_sha256=checksum.strip('"') if checksum else None,
+        )
+        await self._repo.invalidate_total_bytes_cache()
+
+        await jobs.enqueue_job("virus_scan", file_id=updated.id)
+
+        await self._audit.log(
+            action="file.uploaded",
+            resource_type="file",
+            resource_id=str(updated.id),
+            org_id=self._org_id,
+            actor_id=user_id,
+        )
+        await self._notifications.send(
+            user_id=user_id,
+            org_id=self._org_id,
+            type="file_uploaded",
+            title="File uploaded",
+            body=f"{updated.filename} finished uploading.",
+        )
+        return updated
+
+    async def list_files(
+        self, after: UUID | None, limit: int, *, bucket: str | None = None
+    ) -> tuple[list[StoredFile], UUID | None]:
+        return await self._repo.list_cursor_filtered(after, limit, bucket=bucket)
+
+    async def get_download_url(self, file_id: UUID) -> tuple[str, datetime]:
+        stored_file = await self._repo.get_or_raise(file_id)
+        url = await self._backend.presign_download(
+            stored_file.key, _DOWNLOAD_EXPIRES_IN_SECONDS, filename=stored_file.filename
+        )
+        expires_at = utcnow() + timedelta(seconds=_DOWNLOAD_EXPIRES_IN_SECONDS)
+        return url, expires_at
+
+    async def delete_file(self, user_id: UUID, file_id: UUID) -> None:
+        stored_file = await self._repo.get_or_raise(file_id)
+        await self._repo.soft_delete(file_id)
+        await self._repo.invalidate_total_bytes_cache()
+
+        await jobs.enqueue_job(
+            "hard_delete_stored_file",
+            file_id=stored_file.id,
+            _defer_by=_HARD_DELETE_GRACE_PERIOD,
+        )
+
+        await self._audit.log(
+            action="file.deleted",
+            resource_type="file",
+            resource_id=str(stored_file.id),
+            org_id=self._org_id,
+            actor_id=user_id,
+        )

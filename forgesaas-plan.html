@@ -1,0 +1,2505 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ForgeSaaS — Production Template Blueprint</title>
+<style>
+  :root {
+    --bg: #0f1117;
+    --bg2: #161b26;
+    --bg3: #1e2435;
+    --border: rgba(255,255,255,0.07);
+    --border2: rgba(255,255,255,0.12);
+    --text: #e8eaf0;
+    --muted: #8b92a8;
+    --dim: #555e78;
+    --purple: #7c6ff7;
+    --purple-soft: rgba(124,111,247,0.12);
+    --purple-glow: rgba(124,111,247,0.25);
+    --teal: #2ec4a6;
+    --teal-soft: rgba(46,196,166,0.1);
+    --coral: #f06a50;
+    --coral-soft: rgba(240,106,80,0.1);
+    --amber: #f0a030;
+    --amber-soft: rgba(240,160,48,0.1);
+    --green: #4ade80;
+    --green-soft: rgba(74,222,128,0.1);
+    --blue: #60a5fa;
+    --blue-soft: rgba(96,165,250,0.1);
+    --red: #f87171;
+    --red-soft: rgba(248,113,113,0.1);
+    --mono: 'JetBrains Mono', 'Fira Code', 'Cascadia Code', monospace;
+    --sans: -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', sans-serif;
+    --radius: 10px;
+    --radius-lg: 16px;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: var(--sans);
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.6;
+    font-size: 14px;
+  }
+
+  /* Layout */
+  .layout { display: flex; min-height: 100vh; }
+
+  /* Sidebar */
+  .sidebar {
+    width: 240px;
+    min-width: 240px;
+    background: var(--bg2);
+    border-right: 1px solid var(--border);
+    position: sticky;
+    top: 0;
+    height: 100vh;
+    overflow-y: auto;
+    padding: 20px 0;
+    flex-shrink: 0;
+  }
+
+  .sidebar-logo {
+    padding: 0 20px 20px;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 16px;
+  }
+
+  .sidebar-logo .wordmark {
+    font-size: 15px;
+    font-weight: 700;
+    letter-spacing: -0.3px;
+    color: var(--text);
+  }
+
+  .sidebar-logo .wordmark span { color: var(--purple); }
+
+  .sidebar-logo .tagline {
+    font-size: 11px;
+    color: var(--dim);
+    margin-top: 2px;
+    letter-spacing: 0.3px;
+  }
+
+  .nav-section {
+    padding: 0 12px;
+    margin-bottom: 8px;
+  }
+
+  .nav-label {
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.8px;
+    text-transform: uppercase;
+    color: var(--dim);
+    padding: 0 8px;
+    margin-bottom: 4px;
+    margin-top: 12px;
+  }
+
+  .nav-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 8px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 13px;
+    color: var(--muted);
+    transition: all 0.15s;
+    text-decoration: none;
+    border: none;
+    background: none;
+    width: 100%;
+    text-align: left;
+  }
+
+  .nav-item:hover { background: var(--bg3); color: var(--text); }
+  .nav-item.active { background: var(--purple-soft); color: var(--purple); }
+
+  .nav-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    flex-shrink: 0;
+    background: currentColor;
+    opacity: 0.5;
+  }
+
+  .nav-item.active .nav-dot { opacity: 1; }
+
+  /* Main content */
+  .main { flex: 1; overflow-y: auto; }
+
+  /* Section */
+  .section {
+    display: none;
+    padding: 40px 48px;
+    max-width: 880px;
+    animation: fadeIn 0.2s ease;
+  }
+
+  .section.active { display: block; }
+
+  @keyframes fadeIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
+
+  /* Section header */
+  .section-eyebrow {
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    color: var(--purple);
+    margin-bottom: 8px;
+  }
+
+  .section-title {
+    font-size: 28px;
+    font-weight: 700;
+    letter-spacing: -0.5px;
+    color: var(--text);
+    margin-bottom: 8px;
+    line-height: 1.2;
+  }
+
+  .section-desc {
+    font-size: 14px;
+    color: var(--muted);
+    line-height: 1.7;
+    margin-bottom: 32px;
+    max-width: 620px;
+  }
+
+  /* Divider */
+  .divider {
+    border: none;
+    border-top: 1px solid var(--border);
+    margin: 28px 0;
+  }
+
+  /* Headings */
+  h2 {
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--text);
+    margin: 28px 0 12px;
+    letter-spacing: -0.2px;
+  }
+
+  h3 {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.6px;
+    margin: 20px 0 8px;
+  }
+
+  p { color: var(--muted); line-height: 1.7; margin-bottom: 12px; }
+  p strong { color: var(--text); font-weight: 600; }
+
+  /* Cards */
+  .card-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 12px;
+    margin: 16px 0;
+  }
+
+  .card {
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 16px;
+    transition: border-color 0.15s;
+  }
+
+  .card:hover { border-color: var(--border2); }
+
+  .card-icon {
+    font-size: 18px;
+    margin-bottom: 8px;
+  }
+
+  .card-title {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text);
+    margin-bottom: 4px;
+  }
+
+  .card-desc {
+    font-size: 12px;
+    color: var(--dim);
+    line-height: 1.5;
+  }
+
+  /* Decision cards (colored left border) */
+  .decision { border-left: 3px solid var(--purple); }
+  .decision.teal { border-left-color: var(--teal); }
+  .decision.coral { border-left-color: var(--coral); }
+  .decision.amber { border-left-color: var(--amber); }
+  .decision.green { border-left-color: var(--green); }
+
+  /* Feature table */
+  .feature-table { width: 100%; border-collapse: collapse; margin: 16px 0; }
+
+  .feature-table th {
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+    color: var(--dim);
+    text-align: left;
+    padding: 8px 12px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .feature-table td {
+    padding: 10px 12px;
+    border-bottom: 1px solid var(--border);
+    font-size: 13px;
+    color: var(--muted);
+    vertical-align: top;
+  }
+
+  .feature-table td:first-child { color: var(--text); font-weight: 500; }
+  .feature-table tr:hover td { background: var(--bg2); }
+
+  /* Code blocks */
+  pre {
+    background: var(--bg3);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 16px;
+    overflow-x: auto;
+    margin: 12px 0;
+    font-family: var(--mono);
+    font-size: 12px;
+    line-height: 1.6;
+    color: var(--text);
+  }
+
+  code {
+    font-family: var(--mono);
+    font-size: 12px;
+    background: var(--bg3);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 1px 6px;
+    color: var(--teal);
+  }
+
+  pre code { background: none; border: none; padding: 0; }
+
+  .code-comment { color: var(--dim); }
+  .code-key { color: var(--purple); }
+  .code-str { color: var(--teal); }
+  .code-num { color: var(--amber); }
+  .code-kw { color: var(--coral); }
+  .code-fn { color: var(--blue); }
+
+  /* Badges / pills */
+  .badge {
+    display: inline-flex;
+    align-items: center;
+    font-size: 11px;
+    font-weight: 500;
+    padding: 2px 8px;
+    border-radius: 20px;
+    letter-spacing: 0.2px;
+  }
+
+  .badge-purple { background: var(--purple-soft); color: var(--purple); }
+  .badge-teal { background: var(--teal-soft); color: var(--teal); }
+  .badge-coral { background: var(--coral-soft); color: var(--coral); }
+  .badge-amber { background: var(--amber-soft); color: var(--amber); }
+  .badge-green { background: var(--green-soft); color: var(--green); }
+  .badge-red { background: var(--red-soft); color: var(--red); }
+
+  /* Phase timeline */
+  .timeline { position: relative; padding-left: 24px; margin: 16px 0; }
+
+  .timeline::before {
+    content: '';
+    position: absolute;
+    left: 7px;
+    top: 6px;
+    bottom: 6px;
+    width: 1px;
+    background: var(--border2);
+  }
+
+  .phase {
+    position: relative;
+    margin-bottom: 24px;
+  }
+
+  .phase::before {
+    content: '';
+    position: absolute;
+    left: -21px;
+    top: 6px;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: var(--bg);
+    border: 2px solid var(--purple);
+  }
+
+  .phase.teal::before { border-color: var(--teal); }
+  .phase.coral::before { border-color: var(--coral); }
+  .phase.amber::before { border-color: var(--amber); }
+  .phase.green::before { border-color: var(--green); }
+
+  .phase-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 8px;
+  }
+
+  .phase-title {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text);
+  }
+
+  .phase-weeks {
+    font-size: 11px;
+    color: var(--dim);
+  }
+
+  .phase-items {
+    list-style: none;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .phase-items li {
+    font-size: 13px;
+    color: var(--muted);
+    padding-left: 12px;
+    position: relative;
+  }
+
+  .phase-items li::before {
+    content: '–';
+    position: absolute;
+    left: 0;
+    color: var(--dim);
+  }
+
+  /* Callout boxes */
+  .callout {
+    border-radius: var(--radius);
+    padding: 14px 16px;
+    margin: 16px 0;
+    border: 1px solid transparent;
+    font-size: 13px;
+    line-height: 1.6;
+  }
+
+  .callout-title {
+    font-weight: 600;
+    margin-bottom: 4px;
+    font-size: 13px;
+  }
+
+  .callout p { margin: 0; font-size: 13px; }
+
+  .callout-warn { background: var(--amber-soft); border-color: rgba(240,160,48,0.2); color: var(--amber); }
+  .callout-warn p { color: rgba(240,160,48,0.8); }
+
+  .callout-info { background: var(--blue-soft); border-color: rgba(96,165,250,0.2); color: var(--blue); }
+  .callout-info p { color: rgba(96,165,250,0.8); }
+
+  .callout-danger { background: var(--red-soft); border-color: rgba(248,113,113,0.2); color: var(--red); }
+  .callout-danger p { color: rgba(248,113,113,0.8); }
+
+  .callout-success { background: var(--green-soft); border-color: rgba(74,222,128,0.2); color: var(--green); }
+  .callout-success p { color: rgba(74,222,128,0.8); }
+
+  /* Two-column layout */
+  .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin: 16px 0; }
+
+  /* VS comparison */
+  .vs-row {
+    display: grid;
+    grid-template-columns: 1fr auto 1fr;
+    gap: 12px;
+    align-items: start;
+    margin: 10px 0;
+    padding: 10px 0;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .vs-row:last-child { border-bottom: none; }
+  .vs-left { font-size: 13px; color: var(--dim); text-decoration: line-through; }
+  .vs-arrow { color: var(--purple); font-size: 12px; padding-top: 2px; }
+  .vs-right { font-size: 13px; color: var(--teal); font-weight: 500; }
+  .vs-note { font-size: 11px; color: var(--dim); margin-top: 2px; }
+
+  /* Module grid */
+  .module-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 10px;
+    margin: 16px 0;
+  }
+
+  .module {
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 14px;
+  }
+
+  .module-name {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text);
+    margin-bottom: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .module-files {
+    list-style: none;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .module-files li {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--dim);
+  }
+
+  /* Scrollbar */
+  ::-webkit-scrollbar { width: 6px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 3px; }
+
+  /* Responsive */
+  @media (max-width: 768px) {
+    .sidebar { display: none; }
+    .section { padding: 24px 20px; }
+    .two-col { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+<div class="layout">
+
+<!-- Sidebar -->
+<aside class="sidebar">
+  <div class="sidebar-logo">
+    <div class="wordmark">Forge<span>SaaS</span></div>
+    <div class="tagline">Production Blueprint v1.0</div>
+  </div>
+
+  <nav class="nav-section">
+    <div class="nav-label">Overview</div>
+    <button class="nav-item active" onclick="show('philosophy')"><span class="nav-dot"></span>Philosophy &amp; decisions</button>
+    <button class="nav-item" onclick="show('structure')"><span class="nav-dot"></span>Monorepo structure</button>
+    <button class="nav-item" onclick="show('stack')"><span class="nav-dot"></span>Final stack</button>
+  </nav>
+
+  <nav class="nav-section">
+    <div class="nav-label">Backend</div>
+    <button class="nav-item" onclick="show('backend-arch')"><span class="nav-dot"></span>Architecture layers</button>
+    <button class="nav-item" onclick="show('models')"><span class="nav-dot"></span>Core data models</button>
+    <button class="nav-item" onclick="show('auth')"><span class="nav-dot"></span>Auth &amp; sessions</button>
+    <button class="nav-item" onclick="show('tenancy')"><span class="nav-dot"></span>Multi-tenancy</button>
+    <button class="nav-item" onclick="show('billing')"><span class="nav-dot"></span>Billing</button>
+    <button class="nav-item" onclick="show('jobs')"><span class="nav-dot"></span>Background jobs</button>
+    <button class="nav-item" onclick="show('notifications')"><span class="nav-dot"></span>Notifications</button>
+    <button class="nav-item" onclick="show('storage')"><span class="nav-dot"></span>File storage</button>
+    <button class="nav-item" onclick="show('gdpr')"><span class="nav-dot"></span>GDPR &amp; compliance</button>
+  </nav>
+
+  <nav class="nav-section">
+    <div class="nav-label">Frontend</div>
+    <button class="nav-item" onclick="show('web')"><span class="nav-dot"></span>React web app</button>
+    <button class="nav-item" onclick="show('mobile')"><span class="nav-dot"></span>React Native</button>
+    <button class="nav-item" onclick="show('shared')"><span class="nav-dot"></span>Shared packages</button>
+  </nav>
+
+  <nav class="nav-section">
+    <div class="nav-label">Production</div>
+    <button class="nav-item" onclick="show('security')"><span class="nav-dot"></span>Security</button>
+    <button class="nav-item" onclick="show('observability')"><span class="nav-dot"></span>Observability</button>
+    <button class="nav-item" onclick="show('performance')"><span class="nav-dot"></span>Performance</button>
+  </nav>
+
+  <nav class="nav-section">
+    <div class="nav-label">Quality &amp; delivery</div>
+    <button class="nav-item" onclick="show('testing')"><span class="nav-dot"></span>Testing strategy</button>
+    <button class="nav-item" onclick="show('owasp')"><span class="nav-dot"></span>OWASP &amp; sec testing</button>
+    <button class="nav-item" onclick="show('seo')"><span class="nav-dot"></span>SEO &amp; web vitals</button>
+    <button class="nav-item" onclick="show('cicd')"><span class="nav-dot"></span>CI/CD pipeline</button>
+    <button class="nav-item" onclick="show('devops')"><span class="nav-dot"></span>Local dev &amp; config</button>
+  </nav>
+
+  <nav class="nav-section">
+    <div class="nav-label">Workflow</div>
+    <button class="nav-item" onclick="show('best-practices')"><span class="nav-dot"></span>Best practices</button>
+    <button class="nav-item" onclick="show('phases')"><span class="nav-dot"></span>Build phases</button>
+    <button class="nav-item" onclick="show('extending')"><span class="nav-dot"></span>Extending the template</button>
+    <button class="nav-item" onclick="show('checklist')"><span class="nav-dot"></span>Launch checklist</button>
+  </nav>
+</aside>
+
+<!-- Main -->
+<main class="main">
+
+<!-- ══════════════════════════════════════════ PHILOSOPHY -->
+<section class="section active" id="s-philosophy">
+  <div class="section-eyebrow">Foundation</div>
+  <div class="section-title">Philosophy &amp; key decisions</div>
+  <div class="section-desc">The choices made here determine everything else. Most boilerplates fail because they accumulate defaults. These are deliberate decisions with explicit reasoning you can override.</div>
+
+  <h2>Core philosophy</h2>
+  <div class="card-grid">
+    <div class="card decision">
+      <div class="card-title">Configure, don't rewrite</div>
+      <div class="card-desc">Every module has a clear interface. Swap Stripe for Paddle, S3 for R2, Resend for Postmark — without touching business logic.</div>
+    </div>
+    <div class="card decision teal">
+      <div class="card-title">Thin layers, fat contracts</div>
+      <div class="card-desc">Router → Service → Repository. Each layer has a single job. Services never touch the DB. Repositories never know about HTTP.</div>
+    </div>
+    <div class="card decision coral">
+      <div class="card-title">Org-scoped from day one</div>
+      <div class="card-desc">Every table has org_id. Every repository query is scoped. This cannot be retrofitted cheaply — it must be designed in from the first migration.</div>
+    </div>
+    <div class="card decision amber">
+      <div class="card-title">Cursor pagination everywhere</div>
+      <div class="card-desc">Offset pagination silently breaks at scale. Cursor-based is the only acceptable default for a production template.</div>
+    </div>
+    <div class="card decision green">
+      <div class="card-title">OpenAPI is the contract</div>
+      <div class="card-desc">Types flow from FastAPI → OpenAPI schema → generated TS client. No hand-written fetch calls. No type drift between frontend and backend.</div>
+    </div>
+    <div class="card decision">
+      <div class="card-title">Immutability where it matters</div>
+      <div class="card-desc">Audit log, billing events, webhook receipts — written once, never updated. Append-only tables for anything compliance-sensitive.</div>
+    </div>
+  </div>
+
+  <hr class="divider">
+  <h2>Key decision log — the "why" behind the choices</h2>
+
+  <div class="vs-row">
+    <div>
+      <div class="vs-left">fastapi-users</div>
+      <div class="vs-note">Fights you on custom fields, multi-tenancy, magic links</div>
+    </div>
+    <div class="vs-arrow">→</div>
+    <div>
+      <div class="vs-right">Hand-rolled auth module (~300 lines)</div>
+      <div class="vs-note">Full control, no library conflicts, easy to extend</div>
+    </div>
+  </div>
+
+  <div class="vs-row">
+    <div>
+      <div class="vs-left">Celery + broker</div>
+      <div class="vs-note">Complex ops, separate broker process, heavy for most SaaS workloads</div>
+    </div>
+    <div class="vs-arrow">→</div>
+    <div>
+      <div class="vs-right">ARQ (async, Redis-native)</div>
+      <div class="vs-note">Zero broker, async-native, simple worker, Celery-compatible API if you need to migrate</div>
+    </div>
+  </div>
+
+  <div class="vs-row">
+    <div>
+      <div class="vs-left">Separate models/ and db/ directories</div>
+      <div class="vs-note">Causes circular imports with SQLModel — models are tables</div>
+    </div>
+    <div class="vs-arrow">→</div>
+    <div>
+      <div class="vs-right">Single models/ + repository pattern</div>
+      <div class="vs-note">SQLModel table classes live in models/, repositories own all queries</div>
+    </div>
+  </div>
+
+  <div class="vs-row">
+    <div>
+      <div class="vs-left">Offset pagination</div>
+      <div class="vs-note">Performance cliff at 100k+ rows, impossible to retrofit</div>
+    </div>
+    <div class="vs-arrow">→</div>
+    <div>
+      <div class="vs-right">Cursor pagination from migration 0001</div>
+      <div class="vs-note">created_at + id cursor, works at any scale</div>
+    </div>
+  </div>
+
+  <div class="vs-row">
+    <div>
+      <div class="vs-left">GDPR as a backlog item</div>
+      <div class="vs-note">Adding data export and deletion retroactively touches every table</div>
+    </div>
+    <div class="vs-arrow">→</div>
+    <div>
+      <div class="vs-right">GDPR module in Phase 1</div>
+      <div class="vs-note">ConsentRecord table, /me/export, /me/delete endpoints built before first user</div>
+    </div>
+  </div>
+
+  <div class="vs-row">
+    <div>
+      <div class="vs-left">Manual type sync frontend ↔ backend</div>
+      <div class="vs-note">Types drift immediately, bugs are silent</div>
+    </div>
+    <div class="vs-arrow">→</div>
+    <div>
+      <div class="vs-right">openapi-ts in turbo pipeline</div>
+      <div class="vs-note">turbo build generates fresh TS client before every build — enforced</div>
+    </div>
+  </div>
+
+  <div class="vs-row">
+    <div>
+      <div class="vs-left">Analytics module (vague)</div>
+      <div class="vs-note">"Basic event tracking" means nothing — becomes a stub nobody uses</div>
+    </div>
+    <div class="vs-arrow">→</div>
+    <div>
+      <div class="vs-right">Concrete Event table = audit log</div>
+      <div class="vs-note">actor_id, org_id, action, resource_type, resource_id, diff, ip, ts — one table, two purposes</div>
+    </div>
+  </div>
+
+  <div class="vs-row">
+    <div>
+      <div class="vs-left">Feature flags via LaunchDarkly</div>
+      <div class="vs-note">External dependency, cost, overkill for 95% of early SaaS</div>
+    </div>
+    <div class="vs-arrow">→</div>
+    <div>
+      <div class="vs-right">DB-backed flags + plan features dict</div>
+      <div class="vs-note">OrgFeatureFlag table + plan.features JSON — migrate to LaunchDarkly later if needed</div>
+    </div>
+  </div>
+
+  <hr class="divider">
+
+  <div class="callout callout-warn">
+    <div class="callout-title">The scope discipline rule</div>
+    <p>Phase 1 ships when auth, tenancy, billing skeleton, and GDPR are done — not when everything feels polished. Write acceptance criteria for Phase 1 before writing code. The feature list in this doc is the full vision, not the MVP.</p>
+  </div>
+</section>
+
+<!-- ══════════════════════════════════════════ STRUCTURE -->
+<section class="section" id="s-structure">
+  <div class="section-eyebrow">Repository</div>
+  <div class="section-title">Monorepo structure</div>
+  <div class="section-desc">Turborepo manages the monorepo. Apps share types, UI components, and utilities through internal packages. The build pipeline is deterministic and cacheable.</div>
+
+  <pre><span class="code-comment"># forge-saas/</span>
+├── apps/
+│   ├── web/                    <span class="code-comment"># React 18 + Vite + TanStack</span>
+│   └── mobile/                 <span class="code-comment"># Expo + React Native + Expo Router</span>
+├── packages/
+│   ├── ui/                     <span class="code-comment"># Shadcn/ui + Tailwind — shared components</span>
+│   ├── api-client/             <span class="code-comment"># Auto-generated from OpenAPI (openapi-ts)</span>
+│   ├── types/                  <span class="code-comment"># Shared TS types (manual + generated)</span>
+│   ├── hooks/                  <span class="code-comment"># Shared React hooks (no JSX dependencies)</span>
+│   ├── validation/             <span class="code-comment"># Zod schemas shared by web + mobile</span>
+│   └── utils/                  <span class="code-comment"># Pure TS utilities</span>
+├── backend/
+│   ├── app/
+│   │   ├── core/               <span class="code-comment"># config, db session, security utils</span>
+│   │   ├── models/             <span class="code-comment"># SQLModel table classes (single source)</span>
+│   │   ├── schemas/            <span class="code-comment"># Pydantic request/response (separate from models)</span>
+│   │   ├── repositories/       <span class="code-comment"># All DB access, org-scoped, no business logic</span>
+│   │   ├── services/           <span class="code-comment"># Business logic, no direct DB calls</span>
+│   │   ├── api/
+│   │   │   └── v1/             <span class="code-comment"># Versioned routers only</span>
+│   │   ├── workers/            <span class="code-comment"># ARQ job definitions</span>
+│   │   ├── middleware/         <span class="code-comment"># Rate limiting, tenancy, logging</span>
+│   │   └── modules/            <span class="code-comment"># Self-contained feature modules</span>
+│   │       ├── auth/
+│   │       ├── billing/
+│   │       ├── notifications/
+│   │       ├── storage/
+│   │       ├── gdpr/
+│   │       └── _template/      <span class="code-comment"># Cookiecutter for new modules</span>
+│   ├── alembic/                <span class="code-comment"># Migrations (at backend root, not inside app/)</span>
+│   └── tests/
+├── docker-compose.yml
+├── docker-compose.prod.yml
+├── .env.example
+├── turbo.json
+└── Makefile                    <span class="code-comment"># make dev, make test, make migrate, make gen-client</span></pre>
+
+  <h2>Module anatomy</h2>
+  <p>Every feature module is self-contained and follows the same structure. New ideas plug in without touching existing code.</p>
+
+  <div class="module-grid">
+    <div class="module">
+      <div class="module-name">auth/ <span class="badge badge-purple">core</span></div>
+      <ul class="module-files">
+        <li>models.py</li>
+        <li>schemas.py</li>
+        <li>repository.py</li>
+        <li>service.py</li>
+        <li>router.py</li>
+        <li>dependencies.py</li>
+        <li>utils.py</li>
+      </ul>
+    </div>
+    <div class="module">
+      <div class="module-name">billing/ <span class="badge badge-teal">core</span></div>
+      <ul class="module-files">
+        <li>models.py</li>
+        <li>schemas.py</li>
+        <li>repository.py</li>
+        <li>service.py</li>
+        <li>router.py</li>
+        <li>webhooks.py</li>
+        <li>plans.py</li>
+      </ul>
+    </div>
+    <div class="module">
+      <div class="module-name">_template/ <span class="badge badge-amber">scaffold</span></div>
+      <ul class="module-files">
+        <li>models.py</li>
+        <li>schemas.py</li>
+        <li>repository.py</li>
+        <li>service.py</li>
+        <li>router.py</li>
+        <li>README.md</li>
+      </ul>
+    </div>
+  </div>
+
+  <h2>Turbo pipeline</h2>
+  <pre><span class="code-comment"># turbo.json</span>
+{
+  <span class="code-key">"pipeline"</span>: {
+    <span class="code-key">"gen-client"</span>: {
+      <span class="code-str">"outputs"</span>: [<span class="code-str">"packages/api-client/src/**"</span>],
+      <span class="code-str">"dependsOn"</span>: []
+    },
+    <span class="code-key">"build"</span>: {
+      <span class="code-str">"dependsOn"</span>: [<span class="code-str">"gen-client"</span>, <span class="code-str">"^build"</span>],
+      <span class="code-str">"outputs"</span>: [<span class="code-str">"dist/**"</span>]
+    },
+    <span class="code-key">"test"</span>: {
+      <span class="code-str">"dependsOn"</span>: [<span class="code-str">"^build"</span>]
+    }
+  }
+}</pre>
+
+  <div class="callout callout-info">
+    <div class="callout-title">Makefile shortcuts</div>
+    <p><code>make dev</code> — start all services via docker compose<br>
+    <code>make gen-client</code> — regenerate TypeScript API client from live OpenAPI schema<br>
+    <code>make migrate</code> — run Alembic migrations<br>
+    <code>make test</code> — run backend pytest + frontend vitest in parallel<br>
+    <code>make new-module NAME=invoices</code> — scaffold a new backend module from _template/</p>
+  </div>
+</section>
+
+<!-- ══════════════════════════════════════════ STACK -->
+<section class="section" id="s-stack">
+  <div class="section-eyebrow">Technology</div>
+  <div class="section-title">Final stack</div>
+  <div class="section-desc">Each choice is deliberate. The "why" matters more than the "what" — so you know when to swap something out for your specific idea.</div>
+
+  <table class="feature-table">
+    <thead>
+      <tr>
+        <th>Layer</th>
+        <th>Technology</th>
+        <th>Why this, not the alternative</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr><td>API framework</td><td>FastAPI</td><td>Async-native, auto OpenAPI, Pydantic v2 built-in, fastest Python framework</td></tr>
+      <tr><td>ORM / models</td><td>SQLModel</td><td>One class = Pydantic schema + SQLAlchemy table. No duplication.</td></tr>
+      <tr><td>Migrations</td><td>Alembic</td><td>Industry standard, autogenerate works well with SQLModel</td></tr>
+      <tr><td>Database</td><td>PostgreSQL 16</td><td>JSONB for flexible fields, row-level security ready, proven at scale</td></tr>
+      <tr><td>Cache / queues</td><td>Redis 7</td><td>Sessions, rate limiting, ARQ job queue — one dependency, three jobs</td></tr>
+      <tr><td>Background jobs</td><td>ARQ</td><td>Async-native, Redis-backed, no broker, ~200 line worker. Celery-compatible if you outgrow it.</td></tr>
+      <tr><td>Password hashing</td><td>argon2-cffi</td><td>Current OWASP recommendation. bcrypt is fine but argon2 is better.</td></tr>
+      <tr><td>Social auth</td><td>authlib</td><td>Clean OAuth2 client, works with any provider, no magic</td></tr>
+      <tr><td>Email</td><td>Resend</td><td>Modern API, React Email templates, great DX. Postmark is the fallback.</td></tr>
+      <tr><td>File storage</td><td>Abstract backend → S3/R2</td><td>Interface pattern means you can use MinIO locally and R2 in prod</td></tr>
+      <tr><td>Billing</td><td>Stripe</td><td>Market standard. All other providers are measured against it.</td></tr>
+      <tr><td>Web framework</td><td>React 18 + Vite</td><td>Stable, fast HMR, huge ecosystem</td></tr>
+      <tr><td>Data fetching</td><td>TanStack Query v5</td><td>Caching, optimistic updates, deduplication — replaces Redux for 95% of cases</td></tr>
+      <tr><td>Routing</td><td>TanStack Router</td><td>Type-safe routes, file-based, loader pattern built in</td></tr>
+      <tr><td>UI components</td><td>shadcn/ui + Tailwind</td><td>Unstyled primitives you own — not a dependency, a starting point</td></tr>
+      <tr><td>Forms</td><td>React Hook Form + Zod</td><td>Zod schemas shared with mobile. One schema, validated on both ends.</td></tr>
+      <tr><td>Mobile</td><td>Expo SDK + Expo Router</td><td>File-based routing, OTA updates, managed workflow reduces native complexity</td></tr>
+      <tr><td>Mobile storage</td><td>expo-secure-store</td><td>Keychain/Keystore backed. Never store tokens in AsyncStorage.</td></tr>
+      <tr><td>Monorepo</td><td>Turborepo</td><td>Cacheable builds, simple pipeline config, works with pnpm workspaces</td></tr>
+      <tr><td>Error tracking</td><td>Sentry</td><td>Works on FastAPI, React, and React Native with one SDK per platform</td></tr>
+      <tr><td>Structured logs</td><td>Loguru + JSON output</td><td>Structured from day one. Ship JSON to any log aggregator without reformatting.</td></tr>
+      <tr><td>Tracing</td><td>OpenTelemetry</td><td>Vendor-neutral. Ship to Grafana Tempo, Jaeger, Honeycomb — your choice.</td></tr>
+      <tr><td>Metrics</td><td>Prometheus + Grafana</td><td>Standard, self-hosted, free. Replace with Datadog if you have budget.</td></tr>
+      <tr><td>Local HTTPS</td><td>Caddy (dev + prod)</td><td>Auto TLS in prod, simple Caddyfile, reverse proxy with zero config</td></tr>
+      <tr><td>Containerisation</td><td>Docker + Compose</td><td>Dev parity with prod. No "works on my machine" surprises.</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<!-- ══════════════════════════════════════════ BACKEND ARCH -->
+<section class="section" id="s-backend-arch">
+  <div class="section-eyebrow">Backend</div>
+  <div class="section-title">Architecture layers</div>
+  <div class="section-desc">The layer discipline is non-negotiable. It's what makes the template actually reusable. If a service imports from a router, or a router touches the DB, the architecture has broken.</div>
+
+  <h2>The four-layer rule</h2>
+  <div class="card-grid">
+    <div class="card decision">
+      <div class="card-title">1. Router</div>
+      <div class="card-desc">Handles HTTP only. Validates input (Pydantic). Calls service. Returns response schema. No business logic. No DB calls.</div>
+    </div>
+    <div class="card decision teal">
+      <div class="card-title">2. Service</div>
+      <div class="card-desc">Business logic lives here. Calls repositories. Calls other services. Emits events. Sends notifications. No HTTP, no DB queries.</div>
+    </div>
+    <div class="card decision coral">
+      <div class="card-title">3. Repository</div>
+      <div class="card-desc">All DB access. Always org-scoped. Returns domain models. No business logic. No HTTP concerns. Testable in isolation.</div>
+    </div>
+    <div class="card decision amber">
+      <div class="card-title">4. Model</div>
+      <div class="card-desc">SQLModel table class. Data shape only. No methods beyond simple validators. One file per domain entity.</div>
+    </div>
+  </div>
+
+  <h2>Base classes</h2>
+  <pre><span class="code-comment"># app/db/base.py — BaseCRUD every repository inherits</span>
+<span class="code-kw">class</span> <span class="code-fn">BaseRepository</span>[T](Generic[T]):
+    model: type[T]
+
+    <span class="code-kw">def</span> <span class="code-fn">__init__</span>(self, session: AsyncSession, org_id: UUID):
+        self.session = session
+        self.org_id = org_id  <span class="code-comment"># injected — all queries use this</span>
+
+    <span class="code-kw">async def</span> <span class="code-fn">get</span>(self, id: UUID) -> T | None:
+        <span class="code-kw">return</span> <span class="code-kw">await</span> self.session.get(
+            self.model, id,
+            options=[selectinload(<span class="code-str">"*"</span>)]
+        )
+
+    <span class="code-kw">async def</span> <span class="code-fn">list_cursor</span>(
+        self, after: UUID | None, limit: int = 20
+    ) -> list[T]:
+        <span class="code-comment"># cursor pagination — never offset</span>
+        q = select(self.model).where(
+            self.model.org_id == self.org_id
+        ).order_by(self.model.created_at.desc(), self.model.id.desc())
+        <span class="code-kw">if</span> after:
+            q = q.where(self.model.id < after)
+        <span class="code-kw">return</span> (<span class="code-kw">await</span> self.session.exec(q.limit(limit))).all()
+
+    <span class="code-kw">async def</span> <span class="code-fn">create</span>(self, data: dict) -> T:
+        obj = self.model(org_id=self.org_id, **data)
+        self.session.add(obj)
+        <span class="code-kw">await</span> self.session.flush()
+        <span class="code-kw">return</span> obj</pre>
+
+  <h2>Standard API response envelope</h2>
+  <pre><span class="code-comment"># Every endpoint returns this shape — never raw model dumps</span>
+{
+  <span class="code-key">"data"</span>: { ... },          <span class="code-comment"># null on errors</span>
+  <span class="code-key">"error"</span>: <span class="code-num">null</span>,            <span class="code-comment"># { code, message, details } on errors</span>
+  <span class="code-key">"meta"</span>: {
+    <span class="code-key">"request_id"</span>: <span class="code-str">"uuid"</span>,    <span class="code-comment"># traced end-to-end</span>
+    <span class="code-key">"next_cursor"</span>: <span class="code-str">"uuid"</span>,   <span class="code-comment"># null if no more pages</span>
+    <span class="code-key">"version"</span>: <span class="code-str">"1.0.0"</span>
+  }
+}</pre>
+
+  <h2>Dependency injection pattern</h2>
+  <pre><span class="code-comment"># app/core/dependencies.py</span>
+<span class="code-kw">async def</span> <span class="code-fn">get_current_user</span>(
+    token: str = Depends(oauth2_scheme),
+    session: AsyncSession = Depends(get_session)
+) -> User:
+    payload = verify_access_token(token)
+    user = <span class="code-kw">await</span> UserRepository(session).get(payload.sub)
+    <span class="code-kw">if not</span> user: <span class="code-kw">raise</span> HTTPException(<span class="code-num">401</span>)
+    <span class="code-kw">return</span> user
+
+<span class="code-kw">async def</span> <span class="code-fn">get_current_org</span>(
+    user: User = Depends(get_current_user),
+    org_id: UUID = Header(...)
+) -> Organization:
+    <span class="code-comment"># verify membership + inject org context</span>
+    ...
+
+<span class="code-kw">def</span> <span class="code-fn">require_permission</span>(permission: Permission):
+    <span class="code-kw">async def</span> <span class="code-fn">checker</span>(user: User = Depends(get_current_user), ...):
+        <span class="code-kw">if</span> permission <span class="code-kw">not in</span> user.permissions:
+            <span class="code-kw">raise</span> HTTPException(<span class="code-num">403</span>)
+    <span class="code-kw">return</span> checker</pre>
+</section>
+
+<!-- ══════════════════════════════════════════ MODELS -->
+<section class="section" id="s-models">
+  <div class="section-eyebrow">Backend</div>
+  <div class="section-title">Core data models</div>
+  <div class="section-desc">These are the tables that everything else hangs off. Get these right in migration 0001 and you won't need painful schema changes later.</div>
+
+  <h2>Entity relationship overview</h2>
+  <pre>User ──┐
+       ├── Membership ──── Organization ──── Subscription ── Plan
+       ├── Session                │
+       ├── OAuthAccount           ├── OrgFeatureFlag
+       └── TOTPSecret             ├── Invitation
+                                  ├── AuditEvent
+                                  ├── Notification
+                                  ├── StoredFile
+                                  └── WebhookEvent</pre>
+
+  <h2>Key model definitions</h2>
+  <pre><span class="code-comment"># app/models/user.py</span>
+<span class="code-kw">class</span> <span class="code-fn">User</span>(SQLModel, table=True):
+    id: UUID = Field(default_factory=uuid4, primary_key=True)
+    email: str = Field(unique=True, index=True)
+    email_verified_at: datetime | None = None
+    hashed_password: str | None = None   <span class="code-comment"># null for OAuth-only users</span>
+    full_name: str | None = None
+    avatar_url: str | None = None
+    is_active: bool = True
+    is_superadmin: bool = False
+    totp_secret: str | None = None
+    totp_enabled: bool = False
+    locale: str = <span class="code-str">"en"</span>
+    created_at: datetime = Field(default_factory=utcnow)
+    updated_at: datetime = Field(default_factory=utcnow)
+
+<span class="code-comment"># app/models/organization.py</span>
+<span class="code-kw">class</span> <span class="code-fn">Organization</span>(SQLModel, table=True):
+    id: UUID = Field(default_factory=uuid4, primary_key=True)
+    name: str
+    slug: str = Field(unique=True, index=True)
+    logo_url: str | None = None
+    settings: dict = Field(default_factory=dict, sa_column=Column(JSONB))
+    plan_id: UUID | None = Field(foreign_key=<span class="code-str">"plan.id"</span>)
+    stripe_customer_id: str | None = None
+    created_at: datetime = Field(default_factory=utcnow)
+
+<span class="code-comment"># app/models/membership.py</span>
+<span class="code-kw">class</span> <span class="code-fn">Membership</span>(SQLModel, table=True):
+    id: UUID = Field(default_factory=uuid4, primary_key=True)
+    user_id: UUID = Field(foreign_key=<span class="code-str">"user.id"</span>, index=True)
+    org_id: UUID = Field(foreign_key=<span class="code-str">"organization.id"</span>, index=True)
+    role: MemberRole = MemberRole.MEMBER   <span class="code-comment"># OWNER | ADMIN | MEMBER</span>
+    invited_by: UUID | None = None
+    joined_at: datetime = Field(default_factory=utcnow)
+
+<span class="code-comment"># app/models/audit.py — append-only, never UPDATE</span>
+<span class="code-kw">class</span> <span class="code-fn">AuditEvent</span>(SQLModel, table=True):
+    id: UUID = Field(default_factory=uuid4, primary_key=True)
+    org_id: UUID = Field(index=True)
+    actor_id: UUID | None = None           <span class="code-comment"># null for system events</span>
+    action: str                            <span class="code-comment"># "user.invited", "plan.upgraded"</span>
+    resource_type: str                     <span class="code-comment"># "user", "invoice"</span>
+    resource_id: str | None = None
+    diff: dict | None = Field(sa_column=Column(JSONB))
+    ip_address: str | None = None
+    user_agent: str | None = None
+    ts: datetime = Field(default_factory=utcnow)</pre>
+
+  <div class="callout callout-danger">
+    <div class="callout-title">Never omit org_id from a table</div>
+    <p>Every user-data table needs org_id. The repository's __init__ takes org_id and every query uses it. This is the multi-tenancy guarantee. Tables that belong to users directly (Session, OAuthAccount) use user_id as the scope instead.</p>
+  </div>
+</section>
+
+<!-- ══════════════════════════════════════════ AUTH -->
+<section class="section" id="s-auth">
+  <div class="section-eyebrow">Backend</div>
+  <div class="section-title">Auth &amp; sessions</div>
+  <div class="section-desc">Hand-rolled, not library-dependent. ~300 lines of code that you fully understand and can extend without fighting an abstraction.</div>
+
+  <h2>Token strategy</h2>
+  <div class="card-grid">
+    <div class="card decision">
+      <div class="card-title">Access token — 15 min JWT</div>
+      <div class="card-desc">Short-lived, stateless. Signed with RS256 (asymmetric — public key can be shared). Contains user_id, org_id, permissions snapshot.</div>
+    </div>
+    <div class="card decision teal">
+      <div class="card-title">Refresh token — 30 day, rotating</div>
+      <div class="card-desc">Stored as httpOnly Secure SameSite=Strict cookie. Hashed in DB. Rotation on every use — theft detection built in.</div>
+    </div>
+    <div class="card decision coral">
+      <div class="card-title">Session table</div>
+      <div class="card-desc">Every refresh token maps to a Session row with device, IP, last_seen. Users can see and revoke individual devices.</div>
+    </div>
+  </div>
+
+  <h2>Auth flows supported</h2>
+  <table class="feature-table">
+    <thead>
+      <tr><th>Flow</th><th>Endpoint</th><th>Notes</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>Email + password</td><td>POST /auth/login</td><td>argon2 verify, rate-limited 5/min per IP</td></tr>
+      <tr><td>Register</td><td>POST /auth/register</td><td>Sends verification email, account inactive until verified</td></tr>
+      <tr><td>Email verification</td><td>GET /auth/verify?token=</td><td>Signed URL, 24h expiry</td></tr>
+      <tr><td>Forgot password</td><td>POST /auth/forgot-password</td><td>Signed reset token, 1h expiry, single-use</td></tr>
+      <tr><td>Magic link</td><td>POST /auth/magic-link</td><td>Passwordless login via email, 15min expiry</td></tr>
+      <tr><td>Google OAuth</td><td>GET /auth/oauth/google</td><td>authlib, links to existing account by email</td></tr>
+      <tr><td>GitHub OAuth</td><td>GET /auth/oauth/github</td><td>Same pattern, add providers by config</td></tr>
+      <tr><td>TOTP 2FA</td><td>POST /auth/2fa/enable</td><td>QR code generation, 6-digit verify, backup codes</td></tr>
+      <tr><td>Token refresh</td><td>POST /auth/refresh</td><td>httpOnly cookie, rotates token, updates Session</td></tr>
+      <tr><td>Logout</td><td>POST /auth/logout</td><td>Revokes current session</td></tr>
+      <tr><td>Logout all</td><td>POST /auth/logout-all</td><td>Revokes all sessions for user</td></tr>
+    </tbody>
+  </table>
+
+  <h2>RBAC model</h2>
+  <pre><span class="code-comment"># app/modules/auth/permissions.py</span>
+<span class="code-kw">class</span> <span class="code-fn">Permission</span>(str, Enum):
+    <span class="code-comment"># defined in code, not DB — changing is a deploy, not a migration</span>
+    MEMBERS_READ = <span class="code-str">"members:read"</span>
+    MEMBERS_MANAGE = <span class="code-str">"members:manage"</span>
+    BILLING_READ = <span class="code-str">"billing:read"</span>
+    BILLING_MANAGE = <span class="code-str">"billing:manage"</span>
+    FILES_READ = <span class="code-str">"files:read"</span>
+    FILES_MANAGE = <span class="code-str">"files:manage"</span>
+    AUDIT_READ = <span class="code-str">"audit:read"</span>
+    SETTINGS_MANAGE = <span class="code-str">"settings:manage"</span>
+
+ROLE_PERMISSIONS: dict[MemberRole, set[Permission]] = {
+    MemberRole.OWNER: set(Permission),              <span class="code-comment"># all</span>
+    MemberRole.ADMIN: {
+        Permission.MEMBERS_READ, Permission.MEMBERS_MANAGE,
+        Permission.BILLING_READ, Permission.FILES_MANAGE, ...
+    },
+    MemberRole.MEMBER: {
+        Permission.MEMBERS_READ, Permission.FILES_READ, ...
+    },
+}</pre>
+
+  <div class="callout callout-info">
+    <div class="callout-title">Mobile auth note</div>
+    <p>On mobile, refresh tokens are stored in <code>expo-secure-store</code> (Keychain on iOS, Keystore on Android), not cookies. The mobile app implements the same rotation logic via explicit headers. Biometric unlock gates the secure store read via <code>expo-local-authentication</code>.</p>
+  </div>
+</section>
+
+<!-- ══════════════════════════════════════════ TENANCY -->
+<section class="section" id="s-tenancy">
+  <div class="section-eyebrow">Backend</div>
+  <div class="section-title">Multi-tenancy</div>
+  <div class="section-desc">The template starts with row-level tenancy (org_id on every table, every query scoped). Schema-level tenancy can be layered on top later without redesigning the data model.</div>
+
+  <h2>What's built in Phase 1</h2>
+  <ul style="list-style:none; display:flex; flex-direction:column; gap:8px; margin: 12px 0;">
+    <li style="font-size:13px; color:var(--muted); padding-left:16px; position:relative;"><span style="position:absolute;left:0;color:var(--teal)">✓</span> Organization model with slug, settings JSONB, logo, plan reference</li>
+    <li style="font-size:13px; color:var(--muted); padding-left:16px; position:relative;"><span style="position:absolute;left:0;color:var(--teal)">✓</span> Membership table: user ↔ org with role</li>
+    <li style="font-size:13px; color:var(--muted); padding-left:16px; position:relative;"><span style="position:absolute;left:0;color:var(--teal)">✓</span> Signed invitation tokens (email → token → join → membership row)</li>
+    <li style="font-size:13px; color:var(--muted); padding-left:16px; position:relative;"><span style="position:absolute;left:0;color:var(--teal)">✓</span> Current org injected via middleware after auth (X-Org-ID header)</li>
+    <li style="font-size:13px; color:var(--muted); padding-left:16px; position:relative;"><span style="position:absolute;left:0;color:var(--teal)">✓</span> BaseRepository always scopes to org_id — impossible to forget</li>
+    <li style="font-size:13px; color:var(--muted); padding-left:16px; position:relative;"><span style="position:absolute;left:0;color:var(--teal)">✓</span> Settings page: org name, logo upload, member list, invite flow, role management</li>
+    <li style="font-size:13px; color:var(--muted); padding-left:16px; position:relative;"><span style="position:absolute;left:0;color:var(--teal)">✓</span> Feature flags: OrgFeatureFlag table keyed by (org_id, flag_name)</li>
+  </ul>
+
+  <h2>Invitation flow</h2>
+  <pre>POST /orgs/{id}/invitations  →  create Invitation row (email, role, token=sign(email+org+role), expires 72h)
+                              →  send invite email with link
+GET  /invitations/{token}/accept  →  verify signature + expiry
+                                  →  create/link user account
+                                  →  create Membership row
+                                  →  delete Invitation row</pre>
+
+  <div class="callout callout-warn">
+    <div class="callout-title">Schema-level tenancy (future)</div>
+    <p>If you need strong tenant isolation later (regulatory, enterprise), the path is: create a Postgres schema per org, set <code>search_path</code> in the session middleware, move tables without org_id. The repository pattern makes this migration surgical — you only touch the session setup, not every query.</p>
+  </div>
+</section>
+
+<!-- ══════════════════════════════════════════ BILLING -->
+<section class="section" id="s-billing">
+  <div class="section-eyebrow">Backend</div>
+  <div class="section-title">Billing</div>
+  <div class="section-desc">Stripe is the integration. The pattern around it is what matters — idempotent webhooks, webhook event storage, plan-gating as a dependency, not scattered if-statements.</div>
+
+  <h2>Data model</h2>
+  <pre><span class="code-kw">class</span> <span class="code-fn">Plan</span>(SQLModel, table=True):
+    id: UUID
+    name: str                              <span class="code-comment"># "starter", "pro", "enterprise"</span>
+    stripe_price_id: str
+    price_monthly: int                     <span class="code-comment"># cents</span>
+    price_yearly: int
+    features: dict = Field(sa_column=Column(JSONB))
+    <span class="code-comment"># features: { "seats": 5, "storage_gb": 10, "api_calls": 10000 }</span>
+    is_active: bool = True
+
+<span class="code-kw">class</span> <span class="code-fn">Subscription</span>(SQLModel, table=True):
+    id: UUID
+    org_id: UUID
+    plan_id: UUID
+    stripe_subscription_id: str
+    status: SubscriptionStatus             <span class="code-comment"># active | past_due | canceled | trialing</span>
+    current_period_start: datetime
+    current_period_end: datetime
+    cancel_at_period_end: bool = False
+    trial_end: datetime | None = None
+
+<span class="code-kw">class</span> <span class="code-fn">WebhookEvent</span>(SQLModel, table=True):
+    <span class="code-comment"># idempotency: store every Stripe event, process once</span>
+    id: str                                <span class="code-comment"># Stripe event ID (evt_...)</span>
+    type: str
+    payload: dict = Field(sa_column=Column(JSONB))
+    processed_at: datetime | None = None
+    error: str | None = None</pre>
+
+  <h2>Webhook handler pattern</h2>
+  <pre><span class="code-comment"># POST /billing/webhooks/stripe</span>
+<span class="code-kw">async def</span> <span class="code-fn">stripe_webhook</span>(request: Request, session: AsyncSession):
+    payload = <span class="code-kw">await</span> request.body()
+    sig = request.headers.get(<span class="code-str">"stripe-signature"</span>)
+    event = stripe.Webhook.construct_event(payload, sig, settings.STRIPE_WEBHOOK_SECRET)
+
+    <span class="code-comment"># idempotency check — never process twice</span>
+    existing = <span class="code-kw">await</span> session.get(WebhookEvent, event[<span class="code-str">"id"</span>])
+    <span class="code-kw">if</span> existing?.processed_at: <span class="code-kw">return</span> {<span class="code-str">"ok"</span>: True}
+
+    <span class="code-comment"># store raw event first, then process</span>
+    stored = WebhookEvent(id=event[<span class="code-str">"id"</span>], type=event[<span class="code-str">"type"</span>], payload=event)
+    session.add(stored)
+    <span class="code-kw">await</span> billing_service.handle_event(event, session)
+    stored.processed_at = utcnow()
+    <span class="code-kw">await</span> session.commit()</pre>
+
+  <h2>Plan-gating dependency</h2>
+  <pre><span class="code-comment"># Use as a FastAPI dependency on any protected route</span>
+<span class="code-kw">def</span> <span class="code-fn">require_feature</span>(feature: str, minimum_value: int | None = None):
+    <span class="code-kw">async def</span> <span class="code-fn">checker</span>(org: Organization = Depends(get_current_org)):
+        value = org.plan.features.get(feature)
+        <span class="code-kw">if not</span> value: <span class="code-kw">raise</span> HTTPException(<span class="code-num">402</span>, <span class="code-str">"upgrade required"</span>)
+        <span class="code-kw">if</span> minimum_value <span class="code-kw">and</span> value < minimum_value:
+            <span class="code-kw">raise</span> HTTPException(<span class="code-num">402</span>, <span class="code-str">"plan limit reached"</span>)
+    <span class="code-kw">return</span> checker
+
+<span class="code-comment"># Usage:</span>
+@router.post(<span class="code-str">"/reports"</span>, dependencies=[Depends(require_feature(<span class="code-str">"advanced_reports"</span>))])</pre>
+
+  <h2>What's included</h2>
+  <table class="feature-table">
+    <thead><tr><th>Feature</th><th>Implementation</th></tr></thead>
+    <tbody>
+      <tr><td>Checkout</td><td>Stripe Checkout Session redirect (hosted page, no PCI scope)</td></tr>
+      <tr><td>Customer portal</td><td>Stripe Portal redirect — cancel, change plan, update card</td></tr>
+      <tr><td>Trial</td><td>trial_end on Subscription, grace period after trial_end</td></tr>
+      <tr><td>Dunning</td><td>Webhook: invoice.payment_failed → status=past_due → email sequence</td></tr>
+      <tr><td>Invoice history</td><td>Stripe list invoices API, cached in org settings</td></tr>
+      <tr><td>Usage metering</td><td>Skeleton: UsageRecord model, report_usage() job stub</td></tr>
+      <tr><td>Plan change</td><td>Stripe subscription update, prorated immediately</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<!-- ══════════════════════════════════════════ JOBS -->
+<section class="section" id="s-jobs">
+  <div class="section-eyebrow">Backend</div>
+  <div class="section-title">Background jobs</div>
+  <div class="section-desc">ARQ replaces Celery. Async-native, Redis-backed, runs in the same Python process family as FastAPI. Zero broker. Zero extra infrastructure for 95% of workloads.</div>
+
+  <h2>Worker setup</h2>
+  <pre><span class="code-comment"># app/workers/main.py</span>
+<span class="code-kw">from</span> arq <span class="code-kw">import</span> create_pool
+<span class="code-kw">from</span> arq.connections <span class="code-kw">import</span> RedisSettings
+
+<span class="code-kw">class</span> <span class="code-fn">WorkerSettings</span>:
+    functions = [
+        send_email_job,
+        process_file_upload,
+        sync_stripe_subscription,
+        send_push_notification,
+        purge_user_data,          <span class="code-comment"># GDPR delete job</span>
+        generate_invoice_pdf,
+        run_scheduled_report,
+    ]
+    redis_settings = RedisSettings.from_dsn(settings.REDIS_URL)
+    max_jobs = 20
+    job_timeout = 300
+    on_startup = startup             <span class="code-comment"># creates DB pool</span>
+    on_shutdown = shutdown</pre>
+
+  <h2>Scheduled tasks</h2>
+  <pre><span class="code-comment"># APScheduler runs inside the worker — cron-style</span>
+scheduler.add_job(
+    sync_expiring_trials,
+    trigger=<span class="code-str">"cron"</span>, hour=<span class="code-num">8</span>, minute=<span class="code-num">0</span>,
+    id=<span class="code-str">"sync_expiring_trials"</span>, replace_existing=True
+)
+scheduler.add_job(
+    cleanup_expired_sessions,
+    trigger=<span class="code-str">"interval"</span>, hours=<span class="code-num">6</span>
+)
+scheduler.add_job(
+    flush_usage_metrics,
+    trigger=<span class="code-str">"interval"</span>, minutes=<span class="code-num">15</span>
+)</pre>
+
+  <h2>Job model (for visibility)</h2>
+  <pre><span class="code-kw">class</span> <span class="code-fn">JobRecord</span>(SQLModel, table=True):
+    id: UUID
+    org_id: UUID | None = None
+    job_type: str
+    status: JobStatus              <span class="code-comment"># queued | running | done | failed</span>
+    arq_job_id: str | None = None
+    payload: dict = Field(sa_column=Column(JSONB))
+    result: dict | None = Field(sa_column=Column(JSONB))
+    error: str | None = None
+    attempts: int = 0
+    created_at: datetime
+    started_at: datetime | None = None
+    completed_at: datetime | None = None</pre>
+
+  <div class="callout callout-info">
+    <div class="callout-title">Migrating to Celery later</div>
+    <p>If your workload grows to need Celery's workflow primitives (chains, chords, canvases), the ARQ job functions are pure async Python — they migrate with minimal changes. The JobRecord table stays the same.</p>
+  </div>
+</section>
+
+<!-- ══════════════════════════════════════════ NOTIFICATIONS -->
+<section class="section" id="s-notifications">
+  <div class="section-eyebrow">Backend</div>
+  <div class="section-title">Notifications</div>
+  <div class="section-desc">One notification model, three delivery channels. The service decides which channels to use based on user preferences. Adding a new channel (SMS, Slack) is adding one delivery method to the service.</div>
+
+  <h2>Data model</h2>
+  <pre><span class="code-kw">class</span> <span class="code-fn">Notification</span>(SQLModel, table=True):
+    id: UUID
+    org_id: UUID
+    user_id: UUID
+    type: str                     <span class="code-comment"># "member_invited", "payment_failed"</span>
+    title: str
+    body: str
+    action_url: str | None = None
+    channels: list[str]           <span class="code-comment"># ["email", "in_app", "push"]</span>
+    read_at: datetime | None = None
+    email_sent_at: datetime | None = None
+    push_sent_at: datetime | None = None
+    created_at: datetime</pre>
+
+  <h2>Delivery channels</h2>
+  <div class="card-grid">
+    <div class="card decision">
+      <div class="card-title">Email (Resend)</div>
+      <div class="card-desc">React Email templates compiled to HTML. One template per notification type. Resend API for delivery. Postmark as fallback.</div>
+    </div>
+    <div class="card decision teal">
+      <div class="card-title">In-app (SSE)</div>
+      <div class="card-desc">GET /notifications/stream — Server-Sent Events. Frontend holds connection, displays badge count and notification feed in real time.</div>
+    </div>
+    <div class="card decision coral">
+      <div class="card-title">Push (Expo)</div>
+      <div class="card-desc">Expo Push Notification service. Device tokens stored in PushToken table per user. Sent via ARQ job to avoid blocking the request.</div>
+    </div>
+  </div>
+
+  <h2>User preferences</h2>
+  <pre><span class="code-comment"># Stored in User.notification_preferences JSONB</span>
+{
+  <span class="code-key">"member_invited"</span>:    { <span class="code-key">"email"</span>: true,  <span class="code-key">"in_app"</span>: true,  <span class="code-key">"push"</span>: false },
+  <span class="code-key">"payment_failed"</span>:    { <span class="code-key">"email"</span>: true,  <span class="code-key">"in_app"</span>: true,  <span class="code-key">"push"</span>: true  },
+  <span class="code-key">"weekly_summary"</span>:   { <span class="code-key">"email"</span>: true,  <span class="code-key">"in_app"</span>: false, <span class="code-key">"push"</span>: false }
+}</pre>
+</section>
+
+<!-- ══════════════════════════════════════════ STORAGE -->
+<section class="section" id="s-storage">
+  <div class="section-eyebrow">Backend</div>
+  <div class="section-title">File storage</div>
+  <div class="section-desc">Files never proxy through the API. Users upload directly to object storage via pre-signed URLs. The API only handles metadata.</div>
+
+  <h2>Storage backend interface</h2>
+  <pre><span class="code-kw">class</span> <span class="code-fn">StorageBackend</span>(Protocol):
+    <span class="code-kw">async def</span> <span class="code-fn">presign_upload</span>(self, key: str, content_type: str, max_bytes: int) -> PresignedUpload: ...
+    <span class="code-kw">async def</span> <span class="code-fn">presign_download</span>(self, key: str, expires: int = 3600) -> str: ...
+    <span class="code-kw">async def</span> <span class="code-fn">delete</span>(self, key: str) -> None: ...
+    <span class="code-kw">async def</span> <span class="code-fn">exists</span>(self, key: str) -> bool: ...
+
+<span class="code-comment"># Swap implementations via config:</span>
+<span class="code-comment"># STORAGE_BACKEND=s3 → S3Backend</span>
+<span class="code-comment"># STORAGE_BACKEND=r2 → R2Backend (S3-compatible)</span>
+<span class="code-comment"># STORAGE_BACKEND=minio → MinIOBackend (local dev)</span></pre>
+
+  <h2>Upload flow</h2>
+  <pre>1. POST /files/presign { filename, content_type, size }
+   → validate size limit (from plan.features.storage_gb)
+   → create StoredFile row (status=pending)
+   → return { upload_url, file_id, fields }
+
+2. Client PUTs directly to S3/R2 using upload_url
+
+3. POST /files/{id}/confirm
+   → verify file exists in storage
+   → update StoredFile status=ready
+   → enqueue virus_scan_job
+   → return StoredFile metadata</pre>
+
+  <h2>StoredFile model</h2>
+  <pre><span class="code-kw">class</span> <span class="code-fn">StoredFile</span>(SQLModel, table=True):
+    id: UUID
+    org_id: UUID
+    uploaded_by: UUID
+    key: str                      <span class="code-comment"># storage object key</span>
+    filename: str
+    content_type: str
+    size_bytes: int
+    status: FileStatus            <span class="code-comment"># pending | ready | infected | deleted</span>
+    virus_scan_result: str | None = None
+    deleted_at: datetime | None = None   <span class="code-comment"># soft delete</span>
+    created_at: datetime</pre>
+</section>
+
+<!-- ══════════════════════════════════════════ GDPR -->
+<section class="section" id="s-gdpr">
+  <div class="section-eyebrow">Backend</div>
+  <div class="section-title">GDPR &amp; compliance</div>
+  <div class="section-desc">This is a first-class module, not a backlog item. Built in Phase 1 because retrofitting data deletion across every table is a multi-week project.</div>
+
+  <h2>Endpoints</h2>
+  <table class="feature-table">
+    <thead><tr><th>Endpoint</th><th>What it does</th></tr></thead>
+    <tbody>
+      <tr><td>GET /me/export</td><td>Enqueues export job → produces JSON zip of all user data → emails download link (expires 24h)</td></tr>
+      <tr><td>DELETE /me</td><td>Soft-deletes user, enqueues purge_user_data job (30-day grace period before hard delete)</td></tr>
+      <tr><td>GET /me/consents</td><td>Returns all consent records for the user</td></tr>
+      <tr><td>POST /me/consents</td><td>Records a consent event (marketing emails, analytics, etc.)</td></tr>
+      <tr><td>DELETE /orgs/{id}</td><td>Schedules org deletion: cancels subscription, queues data purge for all members</td></tr>
+    </tbody>
+  </table>
+
+  <h2>Consent model</h2>
+  <pre><span class="code-kw">class</span> <span class="code-fn">ConsentRecord</span>(SQLModel, table=True):
+    id: UUID
+    user_id: UUID
+    consent_type: str             <span class="code-comment"># "marketing", "analytics", "cookies"</span>
+    granted: bool
+    version: str                  <span class="code-comment"># policy version that was accepted</span>
+    ip_address: str
+    user_agent: str
+    ts: datetime                  <span class="code-comment"># append-only — never update consent records</span></pre>
+
+  <h2>Data purge job</h2>
+  <pre><span class="code-kw">async def</span> <span class="code-fn">purge_user_data</span>(ctx, user_id: UUID):
+    <span class="code-comment"># hard-deletes all user data after grace period</span>
+    <span class="code-comment"># runs as background job so it can be cancelled</span>
+    <span class="code-comment"># tables to purge (in dependency order):</span>
+    tables_in_order = [
+        AuditEvent, Notification, StoredFile,
+        Session, OAuthAccount, ConsentRecord,
+        Membership, User
+    ]
+    <span class="code-kw">for</span> table <span class="code-kw">in</span> tables_in_order:
+        <span class="code-kw">await</span> session.exec(delete(table).where(table.user_id == user_id))
+    <span class="code-kw">await</span> session.commit()
+    <span class="code-comment"># also delete from Stripe and storage</span></pre>
+
+  <div class="callout callout-success">
+    <div class="callout-title">GDPR is a competitive advantage</div>
+    <p>Shipping with visible data controls (export, delete, consent log) builds user trust. It also prepares you for enterprise sales where procurement asks about data handling on day one.</p>
+  </div>
+</section>
+
+<!-- ══════════════════════════════════════════ WEB -->
+<section class="section" id="s-web">
+  <div class="section-eyebrow">Frontend</div>
+  <div class="section-title">React web app</div>
+  <div class="section-desc">Vite + TypeScript + TanStack Router + TanStack Query. No Redux. The API client is generated — no hand-written fetch calls anywhere in the codebase.</div>
+
+  <h2>Project structure</h2>
+  <pre>apps/web/src/
+├── api/              <span class="code-comment"># generated from packages/api-client — do not edit</span>
+├── components/
+│   ├── ui/           <span class="code-comment"># re-exported from packages/ui</span>
+│   └── app/          <span class="code-comment"># composed business components</span>
+├── features/         <span class="code-comment"># self-contained feature slices</span>
+│   ├── auth/         <span class="code-comment"># login, register, forgot, verify</span>
+│   ├── billing/      <span class="code-comment"># upgrade modal, plan selector, invoice list</span>
+│   ├── members/      <span class="code-comment"># member list, invite modal, role editor</span>
+│   ├── notifications/
+│   ├── settings/     <span class="code-comment"># profile, org, security, billing tabs</span>
+│   └── files/
+├── hooks/            <span class="code-comment"># useAuth, useOrg, usePermission, useFeatureFlag</span>
+├── layouts/
+│   ├── AppLayout.tsx     <span class="code-comment"># sidebar + topbar, requires auth</span>
+│   ├── AuthLayout.tsx    <span class="code-comment"># centered card, no auth</span>
+│   └── PublicLayout.tsx  <span class="code-comment"># marketing pages</span>
+├── routes/           <span class="code-comment"># TanStack Router file-based routes</span>
+└── main.tsx</pre>
+
+  <h2>Route guards</h2>
+  <pre><span class="code-comment"># TanStack Router beforeLoad — type-safe, no wrapper components</span>
+<span class="code-kw">export const</span> appRoute = createRoute({
+  beforeLoad: <span class="code-kw">async</span> ({ context }) => {
+    <span class="code-kw">if</span> (!context.auth.user) <span class="code-kw">throw</span> redirect({ to: <span class="code-str">"/login"</span> })
+    <span class="code-kw">if</span> (!context.auth.user.email_verified_at)
+      <span class="code-kw">throw</span> redirect({ to: <span class="code-str">"/verify-email"</span> })
+  }
+})
+
+<span class="code-kw">export const</span> billingRoute = createRoute({
+  beforeLoad: <span class="code-kw">async</span> ({ context }) => {
+    <span class="code-kw">if</span> (!context.org.subscription?.is_active)
+      <span class="code-kw">throw</span> redirect({ to: <span class="code-str">"/upgrade"</span> })
+  }
+})</pre>
+
+  <h2>Core pages built in Phase 1</h2>
+  <div class="two-col">
+    <div>
+      <h3>Auth flows</h3>
+      <ul class="phase-items" style="margin:0">
+        <li>Login (email + social buttons)</li>
+        <li>Register + email verification gate</li>
+        <li>Forgot / reset password</li>
+        <li>Magic link entry</li>
+        <li>2FA setup + verify</li>
+        <li>Accept invitation</li>
+      </ul>
+    </div>
+    <div>
+      <h3>App shell</h3>
+      <ul class="phase-items" style="margin:0">
+        <li>Dashboard (empty state ready)</li>
+        <li>Settings — profile, security</li>
+        <li>Settings — org, members, invites</li>
+        <li>Settings — billing, plan, invoices</li>
+        <li>Notification center + SSE feed</li>
+        <li>Org switcher in sidebar</li>
+      </ul>
+    </div>
+  </div>
+
+  <h2>Key hooks</h2>
+  <pre><span class="code-comment">// hooks/usePermission.ts — checks against current user's role</span>
+<span class="code-kw">export function</span> <span class="code-fn">usePermission</span>(permission: Permission) {
+  <span class="code-kw">const</span> { user } = useAuth()
+  <span class="code-kw">return</span> user?.permissions.includes(permission) ?? false
+}
+
+<span class="code-comment">// hooks/useFeatureFlag.ts — checks org plan features</span>
+<span class="code-kw">export function</span> <span class="code-fn">useFeatureFlag</span>(flag: string) {
+  <span class="code-kw">const</span> { org } = useOrg()
+  <span class="code-kw">return</span> Boolean(org?.plan?.features?.[flag])
+}
+
+<span class="code-comment">// Usage in any component:</span>
+<span class="code-kw">const</span> canManageBilling = <span class="code-fn">usePermission</span>(Permission.BILLING_MANAGE)
+<span class="code-kw">const</span> hasAdvancedReports = <span class="code-fn">useFeatureFlag</span>(<span class="code-str">"advanced_reports"</span>)</pre>
+</section>
+
+<!-- ══════════════════════════════════════════ MOBILE -->
+<section class="section" id="s-mobile">
+  <div class="section-eyebrow">Frontend</div>
+  <div class="section-title">React Native (Expo)</div>
+  <div class="section-desc">Expo Router for navigation, NativeWind for styling, the same TanStack Query + Zod setup as web. Business logic lives in shared packages — not duplicated.</div>
+
+  <h2>What's shared with web</h2>
+  <div class="card-grid">
+    <div class="card decision">
+      <div class="card-title">packages/api-client</div>
+      <div class="card-desc">Same generated client. Same types. Same query keys. One place to update when the API changes.</div>
+    </div>
+    <div class="card decision teal">
+      <div class="card-title">packages/validation</div>
+      <div class="card-desc">Zod schemas for all forms. Login, register, profile update — validated identically on web and mobile.</div>
+    </div>
+    <div class="card decision coral">
+      <div class="card-title">packages/hooks</div>
+      <div class="card-desc">useAuth, useOrg, usePermission, useFeatureFlag — pure TS, no JSX. Work in both environments.</div>
+    </div>
+  </div>
+
+  <h2>Native-specific</h2>
+  <table class="feature-table">
+    <thead><tr><th>Concern</th><th>Solution</th></tr></thead>
+    <tbody>
+      <tr><td>Token storage</td><td>expo-secure-store — Keychain (iOS) / Keystore (Android). Never AsyncStorage for auth tokens.</td></tr>
+      <tr><td>Biometric auth</td><td>expo-local-authentication gates secure store read on re-auth</td></tr>
+      <tr><td>Push notifications</td><td>expo-notifications, token stored in PushToken table per device</td></tr>
+      <tr><td>Deep links</td><td>Expo Router handles magic links, invite links, OAuth callbacks natively</td></tr>
+      <tr><td>OTA updates</td><td>expo-updates — ship JS fixes without App Store review</td></tr>
+      <tr><td>Navigation</td><td>Expo Router (file-based, same mental model as Next.js app dir)</td></tr>
+      <tr><td>Styling</td><td>NativeWind — Tailwind classes in React Native</td></tr>
+    </tbody>
+  </table>
+
+  <h2>Auth token handling on mobile</h2>
+  <pre><span class="code-comment">// No cookies on mobile — explicit token management</span>
+<span class="code-kw">export async function</span> <span class="code-fn">login</span>(email: string, password: string) {
+  <span class="code-kw">const</span> { access_token, refresh_token } = <span class="code-kw">await</span> api.auth.login({ email, password })
+  <span class="code-kw">await</span> SecureStore.setItemAsync(<span class="code-str">"access_token"</span>, access_token)
+  <span class="code-kw">await</span> SecureStore.setItemAsync(<span class="code-str">"refresh_token"</span>, refresh_token)
+}
+
+<span class="code-comment">// Axios/fetch interceptor handles refresh automatically</span>
+api.interceptors.response.use(null, <span class="code-kw">async</span> (error) => {
+  <span class="code-kw">if</span> (error.status === <span class="code-num">401</span>) {
+    <span class="code-kw">const</span> refreshToken = <span class="code-kw">await</span> SecureStore.getItemAsync(<span class="code-str">"refresh_token"</span>)
+    <span class="code-kw">const</span> { access_token } = <span class="code-kw">await</span> api.auth.refresh({ refresh_token: refreshToken })
+    <span class="code-kw">await</span> SecureStore.setItemAsync(<span class="code-str">"access_token"</span>, access_token)
+    <span class="code-kw">return</span> api.request(error.config)   <span class="code-comment"># retry original request</span>
+  }
+})</pre>
+</section>
+
+<!-- ══════════════════════════════════════════ SHARED -->
+<section class="section" id="s-shared">
+  <div class="section-eyebrow">Frontend</div>
+  <div class="section-title">Shared packages</div>
+  <div class="section-desc">The shared layer is the highest-leverage investment in the monorepo. Every hour spent here saves hours on both web and mobile.</div>
+
+  <table class="feature-table">
+    <thead><tr><th>Package</th><th>Contents</th><th>Consumers</th></tr></thead>
+    <tbody>
+      <tr><td>packages/api-client</td><td>Auto-generated from OpenAPI. Typed request functions, response types, query key factories.</td><td>web, mobile</td></tr>
+      <tr><td>packages/ui</td><td>shadcn/ui components + Tailwind config. Button, Input, Modal, Table, Toast, DataTable, etc.</td><td>web only (NativeWind on mobile)</td></tr>
+      <tr><td>packages/validation</td><td>Zod schemas for all forms. loginSchema, registerSchema, profileSchema, orgSchema.</td><td>web, mobile</td></tr>
+      <tr><td>packages/hooks</td><td>useAuth, useOrg, usePermission, useFeatureFlag, useNotifications, useCursorPagination.</td><td>web, mobile</td></tr>
+      <tr><td>packages/types</td><td>Shared TypeScript enums, Permission, MemberRole, SubscriptionStatus, FileStatus.</td><td>web, mobile, api-client</td></tr>
+      <tr><td>packages/utils</td><td>formatDate, formatBytes, slugify, cn (classnames), retry, debounce.</td><td>web, mobile</td></tr>
+    </tbody>
+  </table>
+
+  <h2>API client generation</h2>
+  <pre><span class="code-comment"># packages/api-client/package.json</span>
+{
+  <span class="code-key">"scripts"</span>: {
+    <span class="code-key">"generate"</span>: <span class="code-str">"openapi-ts --input http://localhost:8000/openapi.json --output src/"</span>
+  }
+}
+
+<span class="code-comment"># turbo.json pipeline ensures this runs before every build</span>
+<span class="code-comment"># "gen-client" → "build" (dependsOn: ["gen-client"])</span>
+<span class="code-comment"># Enforced: you cannot ship a build with stale types</span></pre>
+</section>
+
+<!-- ══════════════════════════════════════════ SECURITY -->
+<section class="section" id="s-security">
+  <div class="section-eyebrow">Production</div>
+  <div class="section-title">Security</div>
+  <div class="section-desc">Not a checklist to do later. These are built into the template from the start. Most security failures aren't from unknown attacks — they're from known mitigations that were skipped.</div>
+
+  <h2>Transport &amp; headers</h2>
+  <pre><span class="code-comment"># app/middleware/security.py</span>
+app.add_middleware(
+    SecurityHeadersMiddleware,
+    content_security_policy=<span class="code-str">"default-src 'self'; ..."</span>,
+    strict_transport_security=<span class="code-str">"max-age=31536000; includeSubDomains"</span>,
+    x_frame_options=<span class="code-str">"DENY"</span>,
+    x_content_type_options=<span class="code-str">"nosniff"</span>,
+    referrer_policy=<span class="code-str">"strict-origin-when-cross-origin"</span>,
+    permissions_policy=<span class="code-str">"camera=(), microphone=(), geolocation=()"</span>
+)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=settings.ALLOWED_ORIGINS,   <span class="code-comment"># never ["*"] in prod</span>
+    allow_credentials=True,
+    allow_methods=[<span class="code-str">"GET"</span>, <span class="code-str">"POST"</span>, <span class="code-str">"PUT"</span>, <span class="code-str">"PATCH"</span>, <span class="code-str">"DELETE"</span>],
+)</pre>
+
+  <h2>Rate limiting</h2>
+  <pre><span class="code-comment"># slowapi + Redis sliding window</span>
+limiter = Limiter(key_func=get_remote_address, storage_uri=settings.REDIS_URL)
+
+<span class="code-comment"># Per-endpoint limits:</span>
+@limiter.limit(<span class="code-str">"5/minute"</span>)     <span class="code-comment"># auth endpoints — brute force protection</span>
+@limiter.limit(<span class="code-str">"3/minute"</span>)     <span class="code-comment"># forgot password, magic link</span>
+@limiter.limit(<span class="code-str">"100/minute"</span>)   <span class="code-comment"># general API — per user</span>
+@limiter.limit(<span class="code-str">"1000/hour"</span>)    <span class="code-comment"># general API — per org</span></pre>
+
+  <h2>Security checklist built into the template</h2>
+  <table class="feature-table">
+    <thead><tr><th>Threat</th><th>Mitigation</th></tr></thead>
+    <tbody>
+      <tr><td>SQL injection</td><td>SQLModel/SQLAlchemy parameterised queries only. No raw SQL unless explicitly wrapped in text() with bound params.</td></tr>
+      <tr><td>XSS</td><td>React escapes by default. CSP header. dangerouslySetInnerHTML banned via ESLint rule.</td></tr>
+      <tr><td>CSRF</td><td>SameSite=Strict cookies + Origin header check in middleware. Double-submit cookie for forms.</td></tr>
+      <tr><td>Brute force</td><td>Rate limiting on auth endpoints + account lockout after 10 failures (15 min unlock).</td></tr>
+      <tr><td>Session theft</td><td>Refresh token rotation — stolen token detected on next use. httpOnly Secure cookies.</td></tr>
+      <tr><td>Mass assignment</td><td>Separate request schemas from model classes. No model.update(**request.dict()).</td></tr>
+      <tr><td>IDOR</td><td>All repository queries include org_id — cross-tenant data access structurally prevented.</td></tr>
+      <tr><td>Secrets leakage</td><td>All config via pydantic-settings + env vars. .env in .gitignore. Secrets scanner in CI (truffleHog).</td></tr>
+      <tr><td>Dependency CVEs</td><td>Dependabot + pip-audit + npm audit in CI. Fail build on high severity.</td></tr>
+      <tr><td>Upload abuse</td><td>File size limits per plan. Content-type validation. Virus scan job (ClamAV stub or SaaS API).</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<!-- ══════════════════════════════════════════ OBSERVABILITY -->
+<section class="section" id="s-observability">
+  <div class="section-eyebrow">Production</div>
+  <div class="section-title">Observability</div>
+  <div class="section-desc">You can't fix what you can't see. The three pillars — logs, metrics, traces — are wired in from day one, not added when something breaks in production.</div>
+
+  <h2>The three pillars</h2>
+  <div class="card-grid">
+    <div class="card decision">
+      <div class="card-title">Structured logs (Loguru)</div>
+      <div class="card-desc">JSON output in all environments. Every log line includes request_id, user_id, org_id, duration. Ship to any aggregator (Loki, CloudWatch, Papertrail) without reformatting.</div>
+    </div>
+    <div class="card decision teal">
+      <div class="card-title">Metrics (Prometheus)</div>
+      <div class="card-desc">HTTP request count/duration, job queue depth, active sessions, DB pool usage, Stripe webhook processing time. Grafana dashboards included.</div>
+    </div>
+    <div class="card decision coral">
+      <div class="card-title">Traces (OpenTelemetry)</div>
+      <div class="card-desc">Vendor-neutral. Auto-instrument FastAPI + SQLAlchemy + ARQ. Export to Grafana Tempo, Jaeger, or Honeycomb via OTLP. Single environment variable to switch.</div>
+    </div>
+  </div>
+
+  <h2>Request ID middleware</h2>
+  <pre><span class="code-comment"># Every request gets a UUID, traced end-to-end</span>
+<span class="code-kw">class</span> <span class="code-fn">RequestIDMiddleware</span>(BaseHTTPMiddleware):
+    <span class="code-kw">async def</span> <span class="code-fn">dispatch</span>(self, request, call_next):
+        request_id = request.headers.get(<span class="code-str">"X-Request-ID"</span>, str(uuid4()))
+        request.state.request_id = request_id
+        response = <span class="code-kw">await</span> call_next(request)
+        response.headers[<span class="code-str">"X-Request-ID"</span>] = request_id
+        <span class="code-kw">return</span> response
+
+<span class="code-comment"># Sentry integration — attach to every event automatically</span>
+sentry_sdk.set_tag(<span class="code-str">"request_id"</span>, request.state.request_id)</pre>
+
+  <h2>Health endpoints</h2>
+  <pre>GET /health         → { "status": "ok", "version": "1.2.3" }
+GET /health/ready   → checks DB + Redis connectivity
+GET /health/live    → returns 200 if process is alive (k8s liveness)
+GET /metrics        → Prometheus text format (internal network only)</pre>
+</section>
+
+<!-- ══════════════════════════════════════════ DEVOPS -->
+<!-- ══════════════════════════════════════════ TESTING -->
+<section class="section" id="s-testing">
+  <div class="section-eyebrow">Quality &amp; delivery</div>
+  <div class="section-title">Testing strategy</div>
+  <div class="section-desc">Tests are the contract that lets you change code without fear — the single most important enabler of "ship a new idea in days". The strategy is a pyramid: many fast unit tests, fewer integration tests, a handful of E2E tests that cover the money paths.</div>
+
+  <h2>The test pyramid</h2>
+  <div class="card-grid">
+    <div class="card decision">
+      <div class="card-title">Unit — fast, many</div>
+      <div class="card-desc">Services and pure functions tested in isolation. Repositories mocked. Milliseconds each. Run on every save. This is where most tests live.</div>
+    </div>
+    <div class="card decision teal">
+      <div class="card-title">Integration — real DB</div>
+      <div class="card-desc">API endpoints tested against a real Postgres + Redis (testcontainers). Verifies routing, auth, serialization, and queries together.</div>
+    </div>
+    <div class="card decision coral">
+      <div class="card-title">E2E — few, critical</div>
+      <div class="card-desc">Playwright (web) and Maestro (mobile) drive the real UI through signup → invite → upgrade. Slow, so reserved for flows that must never break.</div>
+    </div>
+    <div class="card decision amber">
+      <div class="card-title">Contract — auto-generated</div>
+      <div class="card-desc">Schemathesis fuzzes every endpoint against the OpenAPI schema. Free property-based testing the moment a route exists.</div>
+    </div>
+  </div>
+
+  <h2>Backend testing stack</h2>
+  <table class="feature-table">
+    <thead><tr><th>Tool</th><th>Role</th></tr></thead>
+    <tbody>
+      <tr><td>pytest + pytest-asyncio</td><td>Test runner, async-native to match the app</td></tr>
+      <tr><td>testcontainers</td><td>Spins up real Postgres + Redis per test session — no SQLite-in-prod-Postgres mismatch</td></tr>
+      <tr><td>httpx AsyncClient</td><td>Drives the ASGI app in-process for integration tests, no network</td></tr>
+      <tr><td>polyfactory</td><td>Generates valid model instances from SQLModel/Pydantic types — no hand-written fixtures</td></tr>
+      <tr><td>schemathesis</td><td>Property-based fuzzing against the OpenAPI schema — finds edge cases you didn't write</td></tr>
+      <tr><td>pytest-cov</td><td>Coverage reporting, fails CI below threshold</td></tr>
+      <tr><td>freezegun</td><td>Freeze time for token-expiry, trial-end, scheduled-job tests</td></tr>
+    </tbody>
+  </table>
+
+  <h2>Test isolation pattern</h2>
+  <pre><span class="code-comment"># conftest.py — every test runs in a rolled-back transaction</span>
+<span class="code-fn">@pytest.fixture</span>
+<span class="code-kw">async def</span> <span class="code-fn">session</span>(engine):
+    <span class="code-kw">async with</span> engine.connect() <span class="code-kw">as</span> conn:
+        txn = <span class="code-kw">await</span> conn.begin()
+        <span class="code-kw">async with</span> AsyncSession(bind=conn) <span class="code-kw">as</span> s:
+            <span class="code-kw">yield</span> s
+        <span class="code-kw">await</span> txn.rollback()   <span class="code-comment"># DB pristine after every test</span>
+
+<span class="code-fn">@pytest.fixture</span>
+<span class="code-kw">async def</span> <span class="code-fn">client</span>(session):
+    app.dependency_overrides[get_session] = <span class="code-kw">lambda</span>: session
+    <span class="code-kw">async with</span> AsyncClient(app=app, base_url=<span class="code-str">"http://test"</span>) <span class="code-kw">as</span> c:
+        <span class="code-kw">yield</span> c</pre>
+
+  <h2>What must have tests (non-negotiable)</h2>
+  <ul class="phase-items" style="margin:0 0 16px">
+    <li>Every auth flow — login, refresh rotation, token expiry, 2FA, password reset single-use</li>
+    <li>Cross-tenant isolation — user in org A cannot read/write org B's data (the IDOR test)</li>
+    <li>RBAC — each permission gate denies the roles that lack it</li>
+    <li>Stripe webhook idempotency — same event twice processes once</li>
+    <li>Cursor pagination — correct ordering, no duplicates or gaps across pages</li>
+    <li>GDPR — export completeness, delete purges every table</li>
+    <li>Rate limits — endpoint blocks after threshold</li>
+  </ul>
+
+  <h2>Frontend &amp; mobile testing</h2>
+  <table class="feature-table">
+    <thead><tr><th>Layer</th><th>Tool</th><th>Scope</th></tr></thead>
+    <tbody>
+      <tr><td>Component / unit</td><td>Vitest + React Testing Library</td><td>Hooks, form validation, conditional rendering by permission</td></tr>
+      <tr><td>API mocking</td><td>MSW (Mock Service Worker)</td><td>Intercepts the generated client — tests run without a backend</td></tr>
+      <tr><td>E2E web</td><td>Playwright</td><td>Signup → verify → invite → upgrade, across Chromium + WebKit</td></tr>
+      <tr><td>E2E mobile</td><td>Maestro</td><td>Auth flow, deep links, push registration on iOS + Android</td></tr>
+      <tr><td>Accessibility</td><td>axe-core (in Playwright)</td><td>WCAG violations fail the build — a11y is a test, not a hope</td></tr>
+      <tr><td>Visual regression</td><td>Playwright snapshots</td><td>Catches unintended UI changes on key pages</td></tr>
+    </tbody>
+  </table>
+
+  <h2>Load &amp; resilience</h2>
+  <p>A <code>k6</code> script lives in <code>tests/load/</code> and models realistic traffic: login bursts, list pagination, file presign. Run it before launch and after any change to the data layer. It asserts p95 latency and error-rate budgets, so a regression fails CI rather than surfacing in production.</p>
+
+  <div class="callout callout-success">
+    <div class="callout-title">Coverage gates that mean something</div>
+    <p>Backend: 85% line coverage, but 100% on the auth, billing, and tenancy modules — the code where a bug is a breach or a lost charge. Coverage on the boring CRUD is less important than coverage on the dangerous paths. CI enforces both numbers separately.</p>
+  </div>
+</section>
+
+<!-- ══════════════════════════════════════════ OWASP -->
+<section class="section" id="s-owasp">
+  <div class="section-eyebrow">Quality &amp; delivery</div>
+  <div class="section-title">OWASP &amp; security testing</div>
+  <div class="section-desc">Security is verified continuously, not audited once. Each item in the OWASP Top 10 (2021) maps to a concrete mitigation already in the template and an automated test or scan that proves it stays mitigated.</div>
+
+  <h2>OWASP Top 10 — mitigation &amp; test mapping</h2>
+  <table class="feature-table">
+    <thead><tr><th>Risk</th><th>Mitigation in template</th><th>How it's tested</th></tr></thead>
+    <tbody>
+      <tr><td><span class="badge badge-red">A01</span> Broken access control</td><td>org_id on every query; require_permission() gates; IDOR structurally impossible</td><td>Integration tests assert cross-tenant 403/404; per-role permission matrix tests</td></tr>
+      <tr><td><span class="badge badge-red">A02</span> Cryptographic failures</td><td>argon2 hashing; RS256 JWT; TLS-only; secrets in env; tokens in Keychain/httpOnly</td><td>Unit test verifies no plaintext secrets logged; header test asserts HSTS</td></tr>
+      <tr><td><span class="badge badge-red">A03</span> Injection</td><td>Parameterised queries only; Pydantic + Zod validation; no string-built SQL</td><td>Schemathesis fuzzing; Bandit SAST flags raw SQL; sqlmap smoke in nightly</td></tr>
+      <tr><td><span class="badge badge-red">A04</span> Insecure design</td><td>Rate limiting; account lockout; threat-model doc per module; deny-by-default</td><td>Rate-limit integration tests; design review checklist in PR template</td></tr>
+      <tr><td><span class="badge badge-red">A05</span> Security misconfiguration</td><td>Security headers middleware; strict CORS; no debug in prod; minimal images</td><td>ZAP baseline scan asserts headers; test fails if CORS allows "*"</td></tr>
+      <tr><td><span class="badge badge-red">A06</span> Vulnerable components</td><td>Pinned deps + lockfiles; minimal dependency surface</td><td>pip-audit, npm audit, Trivy image scan, Dependabot — all fail build on high severity</td></tr>
+      <tr><td><span class="badge badge-red">A07</span> Auth failures</td><td>Refresh rotation; lockout; MFA; short token TTL; session revocation</td><td>Brute-force test; token-replay test; session-revocation test</td></tr>
+      <tr><td><span class="badge badge-red">A08</span> Integrity failures</td><td>Stripe webhook signature verify; signed CI artifacts; lockfile integrity</td><td>Webhook test rejects bad signature; CI verifies lockfile unchanged</td></tr>
+      <tr><td><span class="badge badge-red">A09</span> Logging &amp; monitoring</td><td>Immutable audit log; structured logs; Sentry; security-event alerts</td><td>Test asserts audit row written on sensitive actions; alert rule tested</td></tr>
+      <tr><td><span class="badge badge-red">A10</span> SSRF</td><td>Allowlist for outbound URLs (webhooks, file fetch); block internal IP ranges</td><td>Unit test rejects localhost/metadata-endpoint URLs in webhook config</td></tr>
+    </tbody>
+  </table>
+
+  <h2>Security tooling in the pipeline</h2>
+  <div class="card-grid">
+    <div class="card decision coral">
+      <div class="card-title">SAST — Bandit + Semgrep</div>
+      <div class="card-desc">Static analysis on every PR. Bandit for Python anti-patterns, Semgrep for custom rules (e.g. "no model.update(**request)").</div>
+    </div>
+    <div class="card decision coral">
+      <div class="card-title">DAST — OWASP ZAP</div>
+      <div class="card-desc">ZAP baseline scan runs against a live ephemeral deploy in CI. Full active scan runs nightly against staging.</div>
+    </div>
+    <div class="card decision coral">
+      <div class="card-title">Dependency — Trivy + audit</div>
+      <div class="card-desc">Trivy scans the Docker image and filesystem. pip-audit and npm audit cover language deps. Fails on high/critical.</div>
+    </div>
+    <div class="card decision coral">
+      <div class="card-title">Secrets — truffleHog + gitleaks</div>
+      <div class="card-desc">Scans the diff and full history. A committed secret fails the build before it ever reaches a reviewer.</div>
+    </div>
+  </div>
+
+  <h2>Beyond the Top 10</h2>
+  <p>Because this is an API-first product, the template also tracks the <strong>OWASP API Security Top 10</strong> — particularly excessive data exposure (response schemas never leak fields the caller shouldn't see), broken object-property-level authorization (mass-assignment guarded by separate request schemas), and unrestricted resource consumption (pagination limits capped, upload sizes bounded by plan). The <strong>OWASP ASVS</strong> Level 2 checklist serves as the pre-launch verification standard for any product built on the template.</p>
+
+  <div class="callout callout-danger">
+    <div class="callout-title">Penetration testing before real money</div>
+    <p>Automated scans catch the known classes. Before processing live payments or handling sensitive customer data, commission a manual pentest. The automation gets you to a defensible baseline; a human finds the logic flaws scanners can't.</p>
+  </div>
+</section>
+
+<!-- ══════════════════════════════════════════ SEO -->
+<section class="section" id="s-seo">
+  <div class="section-eyebrow">Quality &amp; delivery</div>
+  <div class="section-title">SEO &amp; web vitals</div>
+  <div class="section-desc">The app behind auth doesn't need SEO — but the marketing surface that sells it absolutely does. The template separates the two so each is optimised for its job: the app for interactivity, the marketing site for discoverability.</div>
+
+  <h2>The two-surface split</h2>
+  <div class="two-col">
+    <div class="card decision teal">
+      <div class="card-title">Marketing site — rendered server-side</div>
+      <div class="card-desc">Landing, pricing, blog, docs. Built with Next.js (or Astro) for SSG/SSR so crawlers get full HTML. This is the SEO surface.</div>
+    </div>
+    <div class="card decision">
+      <div class="card-title">App — client-rendered SPA</div>
+      <div class="card-desc">Behind auth, no SEO value, optimised purely for interactivity and bundle size. Vite SPA with noindex.</div>
+    </div>
+  </div>
+
+  <h2>On-page SEO built into the marketing app</h2>
+  <table class="feature-table">
+    <thead><tr><th>Element</th><th>Implementation</th></tr></thead>
+    <tbody>
+      <tr><td>Meta + Open Graph</td><td>Per-page title, description, OG image, Twitter card — a typed SEO component, never hand-written tags</td></tr>
+      <tr><td>Structured data</td><td>JSON-LD: Organization, SoftwareApplication, Product (with pricing), FAQPage, BreadcrumbList</td></tr>
+      <tr><td>Sitemap</td><td>Auto-generated sitemap.xml at build, submitted to Search Console</td></tr>
+      <tr><td>robots.txt</td><td>Allows marketing, disallows /app and API; references sitemap</td></tr>
+      <tr><td>Canonical URLs</td><td>Self-referencing canonicals; query-param variants point to clean URL</td></tr>
+      <tr><td>Semantic HTML</td><td>One h1 per page, logical heading order, landmark elements, descriptive alt text</td></tr>
+      <tr><td>i18n SEO</td><td>hreflang tags per locale; locale in path (/en, /de); per-locale sitemaps</td></tr>
+      <tr><td>Performance</td><td>Static generation, image optimisation, font preloading, minimal JS on marketing pages</td></tr>
+    </tbody>
+  </table>
+
+  <h2>Core Web Vitals as a gate</h2>
+  <p>SEO ranking is downstream of performance. The template treats Core Web Vitals as a hard CI gate via <strong>Lighthouse CI</strong>, not a thing to check manually before launch.</p>
+  <table class="feature-table">
+    <thead><tr><th>Metric</th><th>Budget</th><th>What it measures</th></tr></thead>
+    <tbody>
+      <tr><td>LCP</td><td>&lt; 2.5s</td><td>Largest Contentful Paint — when the main content is visible</td></tr>
+      <tr><td>INP</td><td>&lt; 200ms</td><td>Interaction to Next Paint — responsiveness to input</td></tr>
+      <tr><td>CLS</td><td>&lt; 0.1</td><td>Cumulative Layout Shift — visual stability (why all images get width/height)</td></tr>
+      <tr><td>Lighthouse SEO</td><td>≥ 95</td><td>Aggregate on-page SEO score, asserted per marketing route</td></tr>
+      <tr><td>Lighthouse a11y</td><td>≥ 95</td><td>Accessibility score — overlaps with the axe-core tests</td></tr>
+    </tbody>
+  </table>
+
+  <pre><span class="code-comment"># lighthouserc.json — fails the build if budgets are exceeded</span>
+{
+  <span class="code-key">"ci"</span>: {
+    <span class="code-key">"assert"</span>: {
+      <span class="code-key">"assertions"</span>: {
+        <span class="code-str">"categories:seo"</span>:           [<span class="code-str">"error"</span>, { <span class="code-key">"minScore"</span>: <span class="code-num">0.95</span> }],
+        <span class="code-str">"categories:performance"</span>:   [<span class="code-str">"error"</span>, { <span class="code-key">"minScore"</span>: <span class="code-num">0.9</span> }],
+        <span class="code-str">"largest-contentful-paint"</span>: [<span class="code-str">"error"</span>, { <span class="code-key">"maxNumericValue"</span>: <span class="code-num">2500</span> }],
+        <span class="code-str">"cumulative-layout-shift"</span>:  [<span class="code-str">"error"</span>, { <span class="code-key">"maxNumericValue"</span>: <span class="code-num">0.1</span> }]
+      }
+    }
+  }
+}</pre>
+
+  <div class="callout callout-info">
+    <div class="callout-title">Why a separate marketing app</div>
+    <p>Bolting SSR onto the authenticated SPA to chase SEO is a common mistake — it complicates the app for zero benefit, since logged-in pages are never indexed. Keeping marketing as its own SSG/SSR app means it stays fast and crawlable while the app stays simple. They share the <code>packages/ui</code> design system, so they still look like one product.</p>
+  </div>
+</section>
+
+<!-- ══════════════════════════════════════════ CICD -->
+<section class="section" id="s-cicd">
+  <div class="section-eyebrow">Quality &amp; delivery</div>
+  <div class="section-title">CI/CD pipeline</div>
+  <div class="section-desc">The pipeline is the safety net that makes fast shipping safe. Every quality gate from the testing, OWASP, and SEO sections runs here automatically. Nothing reaches production that hasn't passed all of them.</div>
+
+  <h2>Pipeline stages</h2>
+  <div class="timeline">
+    <div class="phase">
+      <div class="phase-header"><div class="phase-title">1. Lint &amp; format</div><div class="phase-weeks">~30s</div></div>
+      <ul class="phase-items">
+        <li>ruff (lint + format check), mypy --strict — backend</li>
+        <li>eslint, prettier --check, tsc --noEmit — frontend</li>
+        <li>Fails fast so reviewers never see style noise</li>
+      </ul>
+    </div>
+    <div class="phase teal">
+      <div class="phase-header"><div class="phase-title">2. Test</div><div class="phase-weeks">~3min</div></div>
+      <ul class="phase-items">
+        <li>pytest with testcontainers (real Postgres + Redis), coverage gates enforced</li>
+        <li>vitest + React Testing Library with MSW</li>
+        <li>schemathesis contract fuzzing against the OpenAPI schema</li>
+      </ul>
+    </div>
+    <div class="phase coral">
+      <div class="phase-header"><div class="phase-title">3. Security</div><div class="phase-weeks">~2min</div></div>
+      <ul class="phase-items">
+        <li>Bandit + Semgrep (SAST), pip-audit + npm audit (deps)</li>
+        <li>truffleHog + gitleaks (secrets, full history)</li>
+        <li>Trivy (Docker image + filesystem CVEs)</li>
+        <li>OWASP ZAP baseline scan against ephemeral deploy</li>
+      </ul>
+    </div>
+    <div class="phase amber">
+      <div class="phase-header"><div class="phase-title">4. Build</div><div class="phase-weeks">~2min</div></div>
+      <ul class="phase-items">
+        <li>turbo build — gen-client runs first, so types are always fresh</li>
+        <li>Docker image built, tagged with commit SHA, pushed to registry</li>
+        <li>Lighthouse CI against the marketing build — SEO + Web Vitals gates</li>
+      </ul>
+    </div>
+    <div class="phase green">
+      <div class="phase-header"><div class="phase-title">5. Deploy</div><div class="phase-weeks">~3min</div></div>
+      <ul class="phase-items">
+        <li>Migrations run as a pre-deploy job (fail → no deploy)</li>
+        <li>Rolling deploy with health-check gate on /health/ready</li>
+        <li>Smoke test against live deploy; auto-rollback on failure</li>
+        <li>E2E (Playwright) against staging before production promote</li>
+      </ul>
+    </div>
+  </div>
+
+  <h2>The full workflow</h2>
+  <pre><span class="code-comment"># .github/workflows/ci.yml</span>
+on: [push, pull_request]
+
+jobs:
+  lint:
+    steps:
+      - ruff check . && ruff format --check .
+      - mypy --strict app/
+      - pnpm lint && pnpm type-check
+
+  test:
+    services: [postgres, redis]        <span class="code-comment"># real, via testcontainers</span>
+    steps:
+      - pytest --cov=app --cov-fail-under=85 tests/
+      - pnpm gen-client && pnpm test
+      - schemathesis run http://localhost:8000/openapi.json
+
+  security:
+    steps:
+      - bandit -r app/ && semgrep --config auto
+      - pip-audit && npm audit --audit-level=high
+      - trufflehog git file://. && gitleaks detect
+      - trivy fs . && trivy image $IMAGE
+      - zap-baseline.py -t http://localhost:8000
+
+  build:
+    needs: [lint, test, security]
+    steps:
+      - turbo build                    <span class="code-comment"># gen-client → build, types fresh</span>
+      - docker build -t $IMAGE . && docker push $IMAGE
+      - lhci autorun                   <span class="code-comment"># Lighthouse: SEO + Web Vitals gates</span>
+
+  deploy:
+    needs: [build]
+    if: github.ref == 'refs/heads/main'
+    steps:
+      - run-migrations                 <span class="code-comment"># pre-deploy, fail = abort</span>
+      - deploy --strategy rolling --health-gate /health/ready
+      - smoke-test || rollback
+      - playwright test --project=staging</pre>
+
+  <h2>Branch &amp; release discipline</h2>
+  <table class="feature-table">
+    <thead><tr><th>Practice</th><th>Rule</th></tr></thead>
+    <tbody>
+      <tr><td>Branch protection</td><td>main requires green CI + 1 review; no direct pushes; linear history</td></tr>
+      <tr><td>Conventional commits</td><td>feat:, fix:, chore: — drives automated changelog + semver bump</td></tr>
+      <tr><td>Preview environments</td><td>Every PR gets an ephemeral deploy with its own DB for manual review</td></tr>
+      <tr><td>Migrations are reviewed</td><td>Any PR touching alembic/ requires explicit DB-owner approval</td></tr>
+      <tr><td>Rollback plan</td><td>Every deploy is reversible: previous image kept, migrations written reversible</td></tr>
+    </tbody>
+  </table>
+
+  <div class="callout callout-warn">
+    <div class="callout-title">Migrations are the one-way door</div>
+    <p>Code rolls back instantly; data does not. Every migration must be reversible and backward-compatible with the currently-running code (expand-then-contract: add column, deploy, backfill, switch reads, drop old column in a later release). A migration that breaks the running version causes downtime during the rollout window.</p>
+  </div>
+</section>
+
+<section class="section" id="s-devops">
+  <div class="section-eyebrow">Quality &amp; delivery</div>
+  <div class="section-title">Local dev &amp; config</div>
+  <div class="section-desc">Local dev should be one command and mirror production exactly. Configuration is twelve-factor: everything that changes between environments lives in the environment, never in code.</div>
+
+  <h2>Local development</h2>
+  <pre><span class="code-comment"># One command to start everything</span>
+make dev
+
+<span class="code-comment"># docker-compose.yml services:</span>
+<span class="code-comment">#   postgres:16        → localhost:5432</span>
+<span class="code-comment">#   redis:7            → localhost:6379</span>
+<span class="code-comment">#   minio              → localhost:9000 (S3-compatible)</span>
+<span class="code-comment">#   mailhog            → localhost:8025 (email UI)</span>
+<span class="code-comment">#   backend (uvicorn)  → localhost:8000 (hot reload)</span>
+<span class="code-comment">#   web (vite)         → localhost:3000 (HMR)</span>
+<span class="code-comment">#   arq worker         → runs alongside backend</span></pre>
+
+  <div class="callout callout-info">
+    <div class="callout-title">Dev/prod parity</div>
+    <p>The same Postgres and Redis versions run locally and in production. Local file storage uses MinIO, which speaks the S3 API — so the storage code path is identical in both. The only difference between environments is the values in <code>.env</code>, never the code.</p>
+  </div>
+
+  <h2>Onboarding a new developer</h2>
+  <pre>git clone … && cd forge-saas
+cp .env.example .env          <span class="code-comment"># sane defaults, no real secrets</span>
+make dev                      <span class="code-comment"># boots the whole stack</span>
+make migrate                  <span class="code-comment"># applies all migrations</span>
+make seed                     <span class="code-comment"># first superadmin + demo org + demo plans</span>
+<span class="code-comment"># → working environment in under 5 minutes, zero manual steps</span></pre>
+
+  <h2>Environment configuration</h2>
+  <pre><span class="code-comment"># app/core/config.py — pydantic-settings, never os.environ directly</span>
+<span class="code-kw">class</span> <span class="code-fn">Settings</span>(BaseSettings):
+    <span class="code-comment"># Database</span>
+    DATABASE_URL: PostgresDsn
+    REDIS_URL: RedisDsn
+
+    <span class="code-comment"># Auth</span>
+    JWT_PRIVATE_KEY: str              <span class="code-comment"># RS256 private key (PEM)</span>
+    JWT_PUBLIC_KEY: str
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = <span class="code-num">15</span>
+    REFRESH_TOKEN_EXPIRE_DAYS: int = <span class="code-num">30</span>
+
+    <span class="code-comment"># Integrations</span>
+    STRIPE_SECRET_KEY: str
+    STRIPE_WEBHOOK_SECRET: str
+    RESEND_API_KEY: str
+    SENTRY_DSN: str | None = None
+
+    <span class="code-comment"># Storage</span>
+    STORAGE_BACKEND: Literal[<span class="code-str">"s3"</span>, <span class="code-str">"r2"</span>, <span class="code-str">"minio"</span>] = <span class="code-str">"minio"</span>
+    AWS_BUCKET_NAME: str
+    AWS_ACCESS_KEY_ID: str
+    AWS_SECRET_ACCESS_KEY: str
+
+    model_config = SettingsConfigDict(env_file=<span class="code-str">".env"</span>)</pre>
+</section>
+
+<!-- ══════════════════════════════════════════ PERFORMANCE -->
+<section class="section" id="s-performance">
+  <div class="section-eyebrow">Production</div>
+  <div class="section-title">Performance</div>
+  <div class="section-desc">Performance is not an afterthought. These patterns are baked into the template because retrofitting them breaks APIs and requires data migrations.</div>
+
+  <h2>Backend patterns</h2>
+  <table class="feature-table">
+    <thead><tr><th>Pattern</th><th>Why it's a default</th></tr></thead>
+    <tbody>
+      <tr><td>Async sessions everywhere</td><td>asyncpg driver + SQLAlchemy async — FastAPI's async advantage is wasted with sync DB calls</td></tr>
+      <tr><td>Cursor pagination only</td><td>OFFSET n at 100k rows does a full table scan. Cursor is O(1) regardless of dataset size.</td></tr>
+      <tr><td>selectinload over joinedload</td><td>joinedload on collections causes cartesian products. selectinload is N+1 but predictable.</td></tr>
+      <tr><td>Redis cache on hot reads</td><td>User profile, org settings, plan features — cache with 60s TTL, invalidate on write</td></tr>
+      <tr><td>DB connection pooling</td><td>asyncpg pool (min=5, max=20). Never create a new connection per request.</td></tr>
+      <tr><td>Background for slow ops</td><td>Email sending, file processing, report generation — always ARQ jobs, never in request path</td></tr>
+    </tbody>
+  </table>
+
+  <h2>Frontend patterns</h2>
+  <table class="feature-table">
+    <thead><tr><th>Pattern</th><th>Implementation</th></tr></thead>
+    <tbody>
+      <tr><td>Code splitting</td><td>TanStack Router lazy-loads routes. Each feature is a dynamic import chunk.</td></tr>
+      <tr><td>Query deduplication</td><td>TanStack Query deduplicates in-flight requests with the same key automatically.</td></tr>
+      <tr><td>Optimistic updates</td><td>Mutations update cache immediately, roll back on error. No spinner for simple updates.</td></tr>
+      <tr><td>Stale-while-revalidate</td><td>staleTime=60s on user/org queries. Page load feels instant on repeat visits.</td></tr>
+      <tr><td>Virtual lists</td><td>TanStack Virtual for any list that might exceed ~100 items.</td></tr>
+      <tr><td>Image optimisation</td><td>Avatars and org logos served via CDN. Width/height on all img elements to prevent CLS.</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<!-- ══════════════════════════════════════════ BEST PRACTICES -->
+<section class="section" id="s-best-practices">
+  <div class="section-eyebrow">Standards</div>
+  <div class="section-title">Best practices</div>
+  <div class="section-desc">The conventions that keep a codebase fast, secure, and maintainable as it grows and as new ideas get built on top of it. These aren't aspirations — they're enforced by the tooling and CI already described, so they hold even under deadline pressure.</div>
+
+  <h2>Code quality &amp; consistency</h2>
+  <table class="feature-table">
+    <thead><tr><th>Practice</th><th>How it's enforced</th></tr></thead>
+    <tbody>
+      <tr><td>One formatter, zero debate</td><td>ruff format (backend), prettier (frontend). Not configurable per-developer. Style is never a review comment.</td></tr>
+      <tr><td>Strict typing everywhere</td><td>mypy --strict, tsc strict. <code>any</code> and untyped functions fail the build. Types are documentation that can't drift.</td></tr>
+      <tr><td>Lint as a gate, not a suggestion</td><td>ruff + eslint with a curated ruleset. Custom Semgrep rules ban dangerous patterns (raw SQL, dangerouslySetInnerHTML, model mass-assignment).</td></tr>
+      <tr><td>Pre-commit hooks</td><td>Format, lint, type-check, secret-scan run before the commit lands — fast feedback, clean history.</td></tr>
+      <tr><td>Small, single-purpose functions</td><td>A function does one thing. If it needs "and" to describe it, split it. Cyclomatic complexity capped by ruff.</td></tr>
+      <tr><td>Names describe intent</td><td>get_active_subscription_or_raise, not get_sub. Code is read far more than written.</td></tr>
+    </tbody>
+  </table>
+
+  <h2>Architecture discipline</h2>
+  <div class="card-grid">
+    <div class="card decision">
+      <div class="card-title">Dependency direction is one-way</div>
+      <div class="card-desc">router → service → repository → model. Enforced with import-linter: a service importing a router fails CI. The arrows never reverse.</div>
+    </div>
+    <div class="card decision teal">
+      <div class="card-title">Modules are self-contained</div>
+      <div class="card-desc">A feature module owns its models, schemas, service, router. Cross-module calls go through services, never by reaching into another module's repository.</div>
+    </div>
+    <div class="card decision coral">
+      <div class="card-title">Composition over inheritance</div>
+      <div class="card-desc">BaseRepository is the one inheritance point. Everything else composes via dependency injection — easy to test, easy to swap.</div>
+    </div>
+    <div class="card decision amber">
+      <div class="card-title">Explicit over implicit</div>
+      <div class="card-desc">No magic globals, no hidden side effects. org_id is passed in, not pulled from thread-local. You can always trace where a value came from.</div>
+    </div>
+  </div>
+
+  <h2>Error handling</h2>
+  <pre><span class="code-comment"># app/core/exceptions.py — typed domain exceptions, never bare raise</span>
+<span class="code-kw">class</span> <span class="code-fn">DomainError</span>(Exception):
+    status_code: int = <span class="code-num">400</span>
+    code: str = <span class="code-str">"domain_error"</span>
+
+<span class="code-kw">class</span> <span class="code-fn">NotFoundError</span>(DomainError):
+    status_code = <span class="code-num">404</span>; code = <span class="code-str">"not_found"</span>
+
+<span class="code-kw">class</span> <span class="code-fn">PermissionDeniedError</span>(DomainError):
+    status_code = <span class="code-num">403</span>; code = <span class="code-str">"permission_denied"</span>
+
+<span class="code-kw">class</span> <span class="code-fn">PlanLimitError</span>(DomainError):
+    status_code = <span class="code-num">402</span>; code = <span class="code-str">"plan_limit_reached"</span>
+
+<span class="code-comment"># One exception handler maps every DomainError to the standard envelope.</span>
+<span class="code-comment"># Services raise meaning ("PlanLimitError"), not HTTP ("HTTPException(402)").</span>
+<span class="code-comment"># The router layer owns the HTTP translation — keeps services framework-free.</span></pre>
+
+  <p>The rules: never swallow an exception silently, never catch bare <code>Exception</code> except at the top-level handler, and always raise a typed domain error that carries enough context to debug from the log line alone. User-facing messages are actionable and blame the situation, not the user.</p>
+
+  <h2>Database best practices</h2>
+  <table class="feature-table">
+    <thead><tr><th>Rule</th><th>Why</th></tr></thead>
+    <tbody>
+      <tr><td>Every migration is reversible</td><td>downgrade() actually works. Tested in CI by migrating up, down, up again.</td></tr>
+      <tr><td>Expand-then-contract schema changes</td><td>Add new, deploy, backfill, switch, remove old — never a breaking change in one step. Enables zero-downtime deploys.</td></tr>
+      <tr><td>Index every foreign key + filter column</td><td>org_id, user_id, created_at, status — anything in a WHERE or ORDER BY. Missing indexes are the #1 cause of slow SaaS.</td></tr>
+      <tr><td>No business logic in migrations</td><td>Data backfills run as idempotent jobs, not in the schema migration. Migrations stay fast and reversible.</td></tr>
+      <tr><td>N+1 caught in tests</td><td>A query-count assertion fixture fails tests that issue unexpected queries. selectinload is explicit, never accidental.</td></tr>
+      <tr><td>Timestamps + soft delete on everything</td><td>created_at, updated_at, deleted_at as a base mixin. You always know when and whether a row is live.</td></tr>
+    </tbody>
+  </table>
+
+  <h2>API design</h2>
+  <ul class="phase-items" style="margin:0 0 16px">
+    <li>Versioned from day one (/api/v1/) — breaking changes get a new version, never a silent break</li>
+    <li>Consistent envelope ({ data, error, meta }) — clients handle one shape, always</li>
+    <li>Cursor pagination on every list — no exceptions, no offset</li>
+    <li>Request schemas separate from models — prevents mass assignment, decouples wire format from storage</li>
+    <li>Idempotency keys on every mutating external call (Stripe, email) — safe to retry</li>
+    <li>Deprecation policy: a field/endpoint is marked deprecated in OpenAPI for one minor version before removal</li>
+  </ul>
+
+  <h2>Frontend best practices</h2>
+  <table class="feature-table">
+    <thead><tr><th>Practice</th><th>Detail</th></tr></thead>
+    <tbody>
+      <tr><td>Server state ≠ client state</td><td>TanStack Query owns server data; useState/Zustand only for genuine UI state. No server data in Redux.</td></tr>
+      <tr><td>Generated client only</td><td>Zero hand-written fetch. If a type is wrong, the schema is wrong — fix it at the source.</td></tr>
+      <tr><td>Colocate by feature</td><td>A feature's components, hooks, and tests live together. Delete a feature by deleting one folder.</td></tr>
+      <tr><td>Accessibility is a requirement</td><td>Semantic HTML, keyboard nav, visible focus, reduced-motion respected. axe-core gates the build.</td></tr>
+      <tr><td>Loading + empty + error states</td><td>Every data view designs all four states (loading, empty, error, loaded) — not just the happy path.</td></tr>
+      <tr><td>Bundle budget</td><td>Per-route size budget asserted in CI. A heavy dependency fails the build, not the user's load time.</td></tr>
+    </tbody>
+  </table>
+
+  <h2>Documentation &amp; decisions</h2>
+  <div class="card-grid">
+    <div class="card decision">
+      <div class="card-title">ADRs (Architecture Decision Records)</div>
+      <div class="card-desc">docs/adr/ holds short, dated records of every significant choice and its reasoning. Future-you (and new hires) learn why, not just what.</div>
+    </div>
+    <div class="card decision teal">
+      <div class="card-title">README per module</div>
+      <div class="card-desc">Each module has a README: what it does, its public service interface, its events. The _template includes the skeleton.</div>
+    </div>
+    <div class="card decision coral">
+      <div class="card-title">Self-documenting API</div>
+      <div class="card-desc">OpenAPI is generated from code with descriptions on every field. The docs can't go stale because they are the code.</div>
+    </div>
+    <div class="card decision amber">
+      <div class="card-title">Runbooks</div>
+      <div class="card-desc">docs/runbooks/ for operational tasks: rotate a key, replay a webhook, restore a backup. Written before you need them at 3am.</div>
+    </div>
+  </div>
+
+  <h2>Dependency hygiene</h2>
+  <ul class="phase-items" style="margin:0 0 16px">
+    <li>Every dependency is a liability — add one only when it clearly beats writing the code yourself</li>
+    <li>Lockfiles committed (pnpm-lock.yaml, uv.lock); exact versions, reproducible builds</li>
+    <li>Renovate/Dependabot opens grouped update PRs weekly; CI decides if they're safe</li>
+    <li>Prefer the standard library and the framework's built-ins before reaching for a package</li>
+    <li>Audit transitive dependencies — a small package can pull in a large, risky tree</li>
+  </ul>
+
+  <h2>Observability discipline</h2>
+  <ul class="phase-items" style="margin:0 0 16px">
+    <li>Structured logs only — every line is JSON with request_id, user_id, org_id</li>
+    <li>Never log secrets, tokens, passwords, or full PII — a log scrubber strips known-sensitive keys</li>
+    <li>Log levels mean something: ERROR pages someone, WARN is reviewed, INFO is the audit trail, DEBUG is local-only</li>
+    <li>Every external call (DB, Stripe, email) is traced — you can see where latency goes</li>
+    <li>Alerts are actionable: an alert that fires without a clear response gets deleted or fixed</li>
+  </ul>
+
+  <div class="callout callout-success">
+    <div class="callout-title">The maintainability test</div>
+    <p>The real measure of these practices: can a developer who has never seen the codebase add a correct, tested, secure feature in their first week? If the answer is yes, the template is doing its job — and every new product idea you build on it inherits that same speed.</p>
+  </div>
+</section>
+
+<!-- ══════════════════════════════════════════ PHASES -->
+<section class="section" id="s-phases">
+  <div class="section-eyebrow">Workflow</div>
+  <div class="section-title">Build phases</div>
+  <div class="section-desc">The phases are time-boxed. Phase 1 ships a real, usable product. Each subsequent phase adds leverage. Resist adding Phase 2 features to Phase 1.</div>
+
+  <div class="timeline">
+    <div class="phase">
+      <div class="phase-header">
+        <div class="phase-title">Phase 1 — Launchable skeleton</div>
+        <div class="phase-weeks">weeks 1–3</div>
+      </div>
+      <ul class="phase-items">
+        <li>Auth module: email/password, OAuth2 (Google, GitHub), magic link, 2FA skeleton, email verify, password reset</li>
+        <li>Session management: JWT + rotating refresh, Session table, device list</li>
+        <li>RBAC: Permission enum, role → permission map, require_permission() dependency</li>
+        <li>Organization + Membership + Invitation flow</li>
+        <li>Billing skeleton: Plan + Subscription models, Stripe Checkout, Customer Portal, idempotent webhook handler</li>
+        <li>GDPR module: ConsentRecord, /me/export, /me/delete, purge job</li>
+        <li>Audit log: AuditEvent table, service hook, written on every mutating action</li>
+        <li>BaseRepository with cursor pagination, org-scoped queries</li>
+        <li>Standard API envelope, request ID middleware, health endpoints</li>
+        <li>Web: login, register, verify, forgot/reset, accept invite</li>
+        <li>Web: app shell (sidebar, topbar, org switcher), dashboard empty state</li>
+        <li>Web: settings (profile, org, members, billing, security tabs)</li>
+        <li>Mobile: auth flows, secure token storage, deep links</li>
+        <li>Shared packages: api-client (generated), types, validation schemas, core hooks</li>
+        <li>Testing foundation: pytest + testcontainers, vitest + MSW, coverage gates, schemathesis contract fuzzing</li>
+        <li>Tests for the dangerous paths: cross-tenant isolation, RBAC gates, webhook idempotency, auth flows</li>
+        <li>CI pipeline: lint → test → security scan → build, with secret scanning and dependency audit from commit one</li>
+        <li>Docker Compose local dev (one-command), .env.example, make seed for first superadmin</li>
+        <li>OpenAPI → TypeScript generation wired into turbo pipeline</li>
+      </ul>
+    </div>
+
+    <div class="phase teal">
+      <div class="phase-header">
+        <div class="phase-title">Phase 2 — Platform features</div>
+        <div class="phase-weeks">weeks 4–5</div>
+      </div>
+      <ul class="phase-items">
+        <li>Billing complete: dunning email sequence, trial + grace period, usage metering stub, invoice history</li>
+        <li>Notifications: email templates (React Email), in-app SSE feed, push (Expo), user preferences</li>
+        <li>File storage: StorageBackend interface, S3/R2/MinIO implementations, presigned upload flow, soft delete</li>
+        <li>Feature flags: OrgFeatureFlag table, require_feature() dependency, useFeatureFlag() hook</li>
+        <li>Web: notification center, file upload component, upgrade modal / plan selector</li>
+        <li>Mobile: push notification registration, notification list, file picker</li>
+        <li>Storybook for packages/ui components</li>
+        <li>Admin panel: superadmin routes, org list, user impersonation, manual plan override</li>
+      </ul>
+    </div>
+
+    <div class="phase coral">
+      <div class="phase-header">
+        <div class="phase-title">Phase 3 — Hardening</div>
+        <div class="phase-weeks">weeks 6–7</div>
+      </div>
+      <ul class="phase-items">
+        <li>Observability: Sentry wired on all three platforms, structured JSON logs, Prometheus metrics, OTel traces</li>
+        <li>Rate limiting: per-endpoint limits, per-user + per-org Redis sliding window</li>
+        <li>Security headers, CSP, CSRF double-submit, dependency scanning in CI</li>
+        <li>OWASP hardening: SAST (Bandit + Semgrep), DAST (ZAP baseline in CI, full scan nightly), Trivy image scan</li>
+        <li>OWASP Top 10 test mapping complete; ASVS L2 checklist as the verification standard</li>
+        <li>i18n: i18next on web, expo-localization on mobile, locale stored on User</li>
+        <li>E2E tests: Playwright (web) + Maestro (mobile) for auth + billing; axe-core a11y gates</li>
+        <li>Load testing: k6 scripts with p95 latency + error-rate budgets asserted in CI</li>
+        <li>Performance: virtual lists, query caching tuning, Redis cache on hot reads, bundle budgets</li>
+        <li>Cookiecutter / make new-module scaffold finalized and documented; ADRs + runbooks started</li>
+      </ul>
+    </div>
+
+    <div class="phase amber">
+      <div class="phase-header">
+        <div class="phase-title">Phase 4 — Growth layer</div>
+        <div class="phase-weeks">weeks 8+</div>
+      </div>
+      <ul class="phase-items">
+        <li>Marketing site: separate SSG/SSR app (Next.js or Astro) sharing packages/ui — landing, pricing, blog, docs</li>
+        <li>SEO: meta + Open Graph component, JSON-LD structured data, sitemap, robots.txt, canonical + hreflang</li>
+        <li>Core Web Vitals: Lighthouse CI gates (LCP &lt; 2.5s, INP &lt; 200ms, CLS &lt; 0.1, SEO ≥ 95) per marketing route</li>
+        <li>Multi-tenancy path: schema-per-tenant option, enterprise SSO (SAML/OIDC) stub</li>
+        <li>API keys: public API for third-party integrations, key management UI</li>
+        <li>Webhooks (outgoing): org-defined webhook endpoints, delivery log, retry</li>
+        <li>Usage analytics dashboard: aggregate query views, org-level usage charts</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="callout callout-danger">
+    <div class="callout-title">The feature creep trap</div>
+    <p>Phase 1 acceptance criteria: a new user can sign up, verify their email, invite a team member, and upgrade to a paid plan. That's it. If that works end-to-end with tests, Phase 1 is done. Not "mostly done".</p>
+  </div>
+</section>
+
+<!-- ══════════════════════════════════════════ EXTENDING -->
+<section class="section" id="s-extending">
+  <div class="section-eyebrow">Workflow</div>
+  <div class="section-title">Extending the template</div>
+  <div class="section-desc">The measure of a good template is how quickly you can go from "new idea" to "first endpoint". This is that workflow.</div>
+
+  <h2>Adding a new backend module</h2>
+  <pre><span class="code-comment"># Scaffold from the template</span>
+make new-module NAME=invoices
+
+<span class="code-comment"># Creates backend/app/modules/invoices/ with:</span>
+<span class="code-comment">#   models.py    → SQLModel table (inherits from BaseModel)</span>
+<span class="code-comment">#   schemas.py   → request/response Pydantic schemas</span>
+<span class="code-comment">#   repository.py → extends BaseRepository[Invoice]</span>
+<span class="code-comment">#   service.py   → business logic stub</span>
+<span class="code-comment">#   router.py    → CRUD routes wired to service</span>
+
+<span class="code-comment"># Then:</span>
+<span class="code-comment"># 1. Add Invoice model fields</span>
+<span class="code-comment"># 2. alembic revision --autogenerate -m "add invoices"</span>
+<span class="code-comment"># 3. Register router in app/api/v1/__init__.py</span>
+<span class="code-comment"># 4. make gen-client (regenerates TS types automatically)</span></pre>
+
+  <h2>Adding a new frontend feature</h2>
+  <pre><span class="code-comment"># After make gen-client, the new endpoint is already typed</span>
+<span class="code-comment"># Create apps/web/src/features/invoices/</span>
+
+<span class="code-comment"># The generated client gives you:</span>
+<span class="code-kw">import</span> { invoicesApi } from <span class="code-str">"@forge/api-client"</span>
+
+<span class="code-comment"># TanStack Query makes the rest trivial:</span>
+<span class="code-kw">const</span> { data } = useQuery({
+  queryKey: [<span class="code-str">"invoices"</span>, orgId],
+  queryFn: () => invoicesApi.list({ cursor: undefined })
+})</pre>
+
+  <h2>Branding / theming a new product</h2>
+  <pre><span class="code-comment"># packages/ui/src/tokens.ts — one file, one change</span>
+<span class="code-kw">export const</span> tokens = {
+  brand: {
+    primary: <span class="code-str">"#your-color"</span>,
+    primaryForeground: <span class="code-str">"#ffffff"</span>,
+  },
+  name: <span class="code-str">"YourProductName"</span>,
+  logoUrl: <span class="code-str">"/logo.svg"</span>
+}
+
+<span class="code-comment"># org.settings.branding JSONB stores per-org overrides</span>
+<span class="code-comment"># CSS variables injected at runtime for white-label support</span></pre>
+
+  <h2>Enabling/disabling features per product</h2>
+  <pre><span class="code-comment"># backend/app/core/feature_config.py</span>
+ENABLED_MODULES = {
+  <span class="code-str">"billing"</span>: True,
+  <span class="code-str">"notifications"</span>: True,
+  <span class="code-str">"file_storage"</span>: False,    <span class="code-comment"># disable for this product idea</span>
+  <span class="code-str">"multi_org"</span>: False,       <span class="code-comment"># single-org product</span>
+}
+<span class="code-comment"># Routers only registered if module is enabled</span>
+<span class="code-comment"># Frontend useFeatureConfig() hook reads this from /config endpoint</span></pre>
+</section>
+
+<!-- ══════════════════════════════════════════ CHECKLIST -->
+<section class="section" id="s-checklist">
+  <div class="section-eyebrow">Workflow</div>
+  <div class="section-title">Launch checklist</div>
+  <div class="section-desc">Run this before every production launch. Not after the first bug report.</div>
+
+  <h2>Security</h2>
+  <ul class="phase-items" style="margin:0 0 20px">
+    <li>All secrets in environment variables, none in code or git history (truffleHog scan clean)</li>
+    <li>HTTPS enforced, HSTS header present</li>
+    <li>CORS restricted to known origins</li>
+    <li>CSP header configured and tested</li>
+    <li>Rate limiting active on all auth endpoints</li>
+    <li>pip-audit and npm audit both pass (no high severity CVEs)</li>
+    <li>Stripe webhook signature verification active</li>
+    <li>JWT private key rotated from the default</li>
+    <li>Sentry configured and receiving test events</li>
+  </ul>
+
+  <h2>Data</h2>
+  <ul class="phase-items" style="margin:0 0 20px">
+    <li>All Alembic migrations applied to production DB</li>
+    <li>DB backups configured and tested (restore drill done)</li>
+    <li>Soft-delete verified: deleted records not returned in API responses</li>
+    <li>/me/export produces a complete, accurate zip</li>
+    <li>/me/delete tested end-to-end including purge job</li>
+    <li>org_id present and indexed on every user-data table</li>
+  </ul>
+
+  <h2>Reliability</h2>
+  <ul class="phase-items" style="margin:0 0 20px">
+    <li>/health/ready returns 200 from a fresh container</li>
+    <li>ARQ worker starts clean and processes a test job</li>
+    <li>Stripe webhook delivery confirmed in Stripe dashboard</li>
+    <li>Email delivery confirmed via test send</li>
+    <li>DB connection pool not exhausted under load (check Prometheus)</li>
+    <li>Redis memory limits set (no silent OOM)</li>
+  </ul>
+
+  <h2>Testing &amp; QA</h2>
+  <ul class="phase-items" style="margin:0 0 20px">
+    <li>Coverage gates pass: 85% overall, 100% on auth/billing/tenancy</li>
+    <li>Cross-tenant isolation tests green (no IDOR)</li>
+    <li>schemathesis contract fuzzing passes against production schema</li>
+    <li>Playwright E2E green: signup → verify → invite → upgrade</li>
+    <li>k6 load test meets p95 latency and error-rate budgets</li>
+    <li>axe-core accessibility tests pass on all key pages</li>
+  </ul>
+
+  <h2>OWASP &amp; security scans</h2>
+  <ul class="phase-items" style="margin:0 0 20px">
+    <li>Bandit + Semgrep (SAST) clean</li>
+    <li>OWASP ZAP baseline scan clean; full active scan run against staging</li>
+    <li>Trivy image + filesystem scan: no high/critical CVEs</li>
+    <li>OWASP Top 10 mapping reviewed; each item has a passing test</li>
+    <li>Manual pentest commissioned before processing live payments</li>
+  </ul>
+
+  <h2>SEO &amp; web vitals (marketing site)</h2>
+  <ul class="phase-items" style="margin:0 0 20px">
+    <li>Lighthouse SEO ≥ 95 on landing + pricing</li>
+    <li>Core Web Vitals within budget (LCP &lt; 2.5s, INP &lt; 200ms, CLS &lt; 0.1)</li>
+    <li>sitemap.xml + robots.txt present and submitted to Search Console</li>
+    <li>Open Graph + JSON-LD validated (rich results test)</li>
+    <li>Canonical and hreflang tags correct per locale</li>
+    <li>/app and API paths set to noindex / disallowed</li>
+  </ul>
+
+  <h2>Frontend</h2>
+  <ul class="phase-items" style="margin:0 0 20px">
+    <li>turbo build passes with no TypeScript errors</li>
+    <li>openapi-ts client regenerated from production OpenAPI schema</li>
+    <li>Core auth flows tested on mobile (iOS + Android)</li>
+    <li>Deep links work: magic link, invite link, OAuth callback</li>
+    <li>Push notification token registration confirmed</li>
+    <li>Expo OTA update channel configured correctly</li>
+  </ul>
+
+  <h2>Billing</h2>
+  <ul class="phase-items" style="margin:0 0 20px">
+    <li>Stripe test mode → live mode keys swapped</li>
+    <li>Checkout flow completed end-to-end with a real card (then refunded)</li>
+    <li>Webhook endpoint registered in Stripe dashboard</li>
+    <li>All relevant webhook events subscribed (subscription.updated, invoice.payment_failed, etc.)</li>
+    <li>Customer portal accessible and correctly linked</li>
+    <li>Plan feature gates tested: non-paying user cannot access paid features</li>
+  </ul>
+
+  <div class="callout callout-success">
+    <div class="callout-title">You're ready to ship</div>
+    <p>If every item above is checked, the template has done its job. Your new idea has a production-grade foundation. The only thing left is the feature that makes it worth using.</p>
+  </div>
+</section>
+
+</main>
+</div>
+
+<script>
+  function show(id) {
+    document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+    document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+    const section = document.getElementById('s-' + id);
+    if (section) section.classList.add('active');
+    event.currentTarget.classList.add('active');
+    document.querySelector('.main').scrollTop = 0;
+  }
+</script>
+</body>
+</html>

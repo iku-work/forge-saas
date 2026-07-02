@@ -1,0 +1,8 @@
+localhost {
+	reverse_proxy backend:8000
+	tls internal
+}
+
+http://localhost {
+	redir https://localhost{uri} 301
+}

@@ -1,0 +1,96 @@
+{
+  "subject": {
+    "verify_email": "Vahvista sähköpostiosoitteesi",
+    "password_reset": "Vaihda salasanasi",
+    "magic_link": "Kirjautumislinkkisi ForgeSaaSiin",
+    "invitation": "Sinut on kutsuttu liittymään organisaatioon",
+    "welcome": "Tervetuloa ForgeSaaSiin",
+    "download_link": "Tietojesi vienti on valmis",
+    "member_invited": "Uusi tiimin jäsen",
+    "payment_failed": "Maksusi epäonnistui",
+    "subscription_expiring": "Tilauksesi on päättymässä",
+    "trial_ending": "Kokeilujaksosi on päättymässä",
+    "file_uploaded": "Uusi tiedosto ladattu"
+  },
+  "footer": {
+    "ignore_notice": "Jos et pyytänyt tätä sähköpostia, voit jättää sen huomiotta."
+  },
+  "verify_email": {
+    "title": "Vahvista sähköpostiosoitteesi",
+    "greeting": "Hei",
+    "body": "Kiitos, että rekisteröidyit ForgeSaaSiin. Vahvista sähköpostiosoitteesi aktivoidaksesi tilisi.",
+    "button": "Vahvista sähköposti",
+    "paste_link": "Tai liitä tämä linkki selaimeesi:",
+    "expires": "Tämä linkki vanhenee 24 tunnin kuluttua."
+  },
+  "password_reset": {
+    "title": "Vaihda salasanasi",
+    "greeting": "Hei",
+    "body": "Saimme pyynnön vaihtaa ForgeSaaS-salasanasi. Valitse uusi salasana alla olevasta painikkeesta.",
+    "button": "Vaihda salasana",
+    "paste_link": "Tai liitä tämä linkki selaimeesi:",
+    "expires": "Tämä linkki vanhenee tunnin kuluttua. Jos et pyytänyt salasanan vaihtoa, tilisi on yhä turvassa — voit jättää tämän viestin huomiotta."
+  },
+  "magic_link": {
+    "title": "Kirjautumislinkkisi",
+    "greeting": "Hei",
+    "body": "Kirjaudu ForgeSaaSiin alla olevasta painikkeesta. Salasanaa ei tarvita.",
+    "button": "Kirjaudu sisään",
+    "paste_link": "Tai liitä tämä linkki selaimeesi:",
+    "expires": "Tämä linkki vanhenee 15 minuutin kuluttua ja sitä voi käyttää vain kerran."
+  },
+  "invitation": {
+    "title": "Sinut on kutsuttu",
+    "greeting": "Hei,",
+    "body_with_inviter": "{inviter_name} on kutsunut sinut liittymään {org_name}-organisaatioon ForgeSaaSissa.",
+    "body_without_inviter": "Sinut on kutsuttu liittymään {org_name}-organisaatioon ForgeSaaSissa.",
+    "button": "Hyväksy kutsu",
+    "paste_link": "Tai liitä tämä linkki selaimeesi:",
+    "expires": "Tämä kutsu vanhenee 72 tunnin kuluttua."
+  },
+  "welcome": {
+    "title": "Tervetuloa ForgeSaaSiin",
+    "greeting": "Hei",
+    "body": "Sähköpostiosoitteesi on vahvistettu ja ForgeSaaS-tilisi on valmis käytettäväksi.",
+    "button": "Siirry hallintapaneeliin",
+    "closing": "Mukava nähdä sinut mukana."
+  },
+  "download_link": {
+    "title": "Tietojesi vienti on valmis",
+    "greeting": "Hei",
+    "body": "Pyytämäsi tietojen vienti on valmis ladattavaksi.",
+    "button": "Lataa tietosi",
+    "paste_link": "Tai liitä tämä linkki selaimeesi:",
+    "expires": "Tämä linkki vanhenee 24 tunnin kuluttua."
+  },
+  "member_invited": {
+    "title": "Uusi tiimin jäsen",
+    "greeting": "Hei",
+    "body": "{member_name} liittyi {org_name}-organisaatioon roolilla {role}.",
+    "button": "Näytä tiimi"
+  },
+  "payment_failed": {
+    "title": "Maksu epäonnistui",
+    "greeting": "Hei",
+    "body": "Korttiveloitus {org_name}-organisaation tilaukselle ({amount}) epäonnistui. Päivitä maksutapasi, jotta käyttöoikeutesi ei katkea.",
+    "button": "Päivitä maksutapa"
+  },
+  "subscription_expiring": {
+    "title": "Tilauksesi on päättymässä",
+    "greeting": "Hei",
+    "body": "{org_name}-organisaation {plan_name}-tilaus päättyy {expires_at}. Uudista tilaus, jotta käyttö jatkuu keskeytyksettä.",
+    "button": "Hallinnoi tilausta"
+  },
+  "trial_ending": {
+    "title": "Kokeilujaksosi on päättymässä",
+    "greeting": "Hei",
+    "body": "{org_name}-organisaation kokeilujakso päättyy {trial_end_date}. Päivitä tilaus, jotta tiimisi käyttöoikeus jatkuu.",
+    "button": "Päivitä tilaus"
+  },
+  "file_uploaded": {
+    "title": "Uusi tiedosto ladattu",
+    "greeting": "Hei",
+    "body": "{uploaded_by} latasi tiedoston {filename} organisaatioon {org_name}.",
+    "button": "Näytä tiedosto"
+  }
+}

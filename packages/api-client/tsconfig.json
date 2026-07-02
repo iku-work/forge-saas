@@ -1,0 +1,11 @@
+{
+  "extends": "../../tsconfig.json",
+  "compilerOptions": {
+    "outDir": "dist",
+    "rootDir": "src",
+    // Generated client.gen.ts imports the runtimeConfigPath target with its
+    // literal ".ts" extension (hey-api/openapi-ts convention).
+    "allowImportingTsExtensions": true
+  },
+  "include": ["src"]
+}

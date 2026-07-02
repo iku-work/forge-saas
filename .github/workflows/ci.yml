@@ -1,0 +1,449 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: backend/pyproject.toml
+
+      - name: Install backend dependencies
+        working-directory: backend
+        run: pip install -e ".[dev]"
+
+      - name: Ruff (lint + format check)
+        working-directory: backend
+        run: |
+          ruff check .
+          ruff format --check .
+
+      - name: Mypy --strict
+        working-directory: backend
+        run: mypy --strict app/
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: pnpm
+
+      - name: Install frontend dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Frontend lint + type-check
+        run: |
+          pnpm lint
+          pnpm type-check
+
+  test:
+    needs: lint
+    runs-on: ubuntu-latest
+
+    # Same creds/DB-name baked into backend/.env.test, so that file can be
+    # copied as-is to boot the live backend below — no per-step overrides.
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: forge_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U postgres"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=10
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd="redis-cli ping"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: backend/pyproject.toml
+
+      - name: Install backend dependencies
+        working-directory: backend
+        run: pip install -e ".[dev]"
+
+      # app/core/db.py builds the engine at import time (_settings =
+      # get_settings()), which runs the moment conftest.py is collected --
+      # before any fixture gets a chance to monkeypatch env vars. The dummy
+      # values in .env.test must already be on disk as backend/.env first.
+      - name: Copy test environment file
+        working-directory: backend
+        run: cp .env.test .env
+
+      # T-048's fixtures spin up their own Postgres/Redis via testcontainers
+      # (Docker-in-Docker, available by default on GitHub-hosted runners) --
+      # the services above are only for the live backend started below.
+      - name: Backend tests (real Postgres + Redis via testcontainers)
+        working-directory: backend
+        run: pytest --cov=app --cov-fail-under=85 tests/ -x
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: pnpm
+
+      - name: Install frontend dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Migrate test database
+        working-directory: backend
+        run: alembic upgrade head
+
+      - name: Start backend
+        working-directory: backend
+        run: |
+          nohup uvicorn app.main:app --host 0.0.0.0 --port 8000 > uvicorn.log 2>&1 &
+          for i in $(seq 1 30); do
+            curl -sf http://localhost:8000/health && exit 0
+            sleep 1
+          done
+          echo "backend did not become ready" >&2
+          cat uvicorn.log
+          exit 1
+
+      - name: Generate API client from live OpenAPI schema
+        run: pnpm --filter @forge/api-client generate
+
+      - name: Build workspace packages
+        run: pnpm build
+
+      - name: Frontend tests
+        run: pnpm --filter web test --run
+
+      - name: i18n package tests
+        run: pnpm --filter @forge/i18n test
+
+      - name: Email templates package tests
+        run: pnpm --filter @forge/email-templates test
+
+      # --checks intentionally narrowed to match tests/contract/test_schemathesis.py
+      # (T-050): this app never documents 401/403/404/409/429 in the OpenAPI
+      # schema (§0.4), so status_code_conformance / positive_data_acceptance
+      # would fail on every unauthenticated fuzz hit against a protected route.
+      - name: Schemathesis live fuzz against running backend
+        working-directory: backend
+        run: |
+          schemathesis run http://localhost:8000/openapi.json \
+            --checks=not_a_server_error,response_schema_conformance \
+            --suppress-health-check=filter_too_much \
+            --max-examples=20
+
+  security:
+    needs: lint
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # trufflehog/gitleaks scan full git history, not just the latest commit
+
+      # Secret- and dependency-file scanners run first, against the bare
+      # checkout, before any install step can drop node_modules/.venv on
+      # disk -- those are .gitignored (never scanned in real CI) but would
+      # otherwise flood a filesystem-walking scanner with third-party-package
+      # false positives and slow the scan down for no benefit.
+      - name: Install trufflehog
+        run: |
+          curl -sSfL https://raw.githubusercontent.com/trufflesecurity/trufflehog/main/scripts/install.sh \
+            | sh -s -- -b /usr/local/bin v3.95.6
+
+      # --exclude-paths: backend/.env.test is a committed test fixture with a
+      # structurally-valid but never-deployed dummy RS256 keypair + Fernet key
+      # (Settings() needs real-shaped key material to construct in tests).
+      - name: Trufflehog (git history secret scan)
+        run: |
+          trufflehog git file://. --fail --no-update \
+            --exclude-paths .trufflehog-exclude.txt
+
+      - name: Install gitleaks
+        run: |
+          curl -sSL -o /tmp/gitleaks.tar.gz \
+            https://github.com/gitleaks/gitleaks/releases/download/v8.30.1/gitleaks_8.30.1_linux_x64.tar.gz
+          tar -xzf /tmp/gitleaks.tar.gz -C /usr/local/bin gitleaks
+
+      # --no-git: scans the working tree directly rather than git history --
+      # .gitleaks.toml allowlists the same known test fixtures as trufflehog
+      # above, plus .secrets.baseline (detect-secrets' own file, which stores
+      # secret *hashes* that read as high-entropy strings to other scanners).
+      - name: Gitleaks (working-tree secret scan)
+        run: gitleaks detect --no-git --config .gitleaks.toml
+
+      - name: Get current date for trivy DB cache key
+        id: date
+        run: echo "date=$(date +%Y-%m-%d)" >> "$GITHUB_OUTPUT"
+
+      - name: Cache trivy vulnerability DB
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/trivy
+          key: trivy-db-${{ steps.date.outputs.date }}
+          restore-keys: trivy-db-
+
+      - name: Install trivy
+        run: |
+          curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh \
+            | sh -s -- -b /usr/local/bin v0.71.2
+
+      - name: Trivy filesystem scan (deps + secrets, high+ severity)
+        run: trivy fs . --exit-code 1 --severity HIGH,CRITICAL --skip-dirs node_modules
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: backend/pyproject.toml
+
+      - name: Install backend dependencies
+        working-directory: backend
+        run: pip install -e ".[dev]"
+
+      - name: Bandit (medium+ severity)
+        working-directory: backend
+        run: bandit -r app/ -ll
+
+      - name: Cache semgrep registry rules
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/semgrep
+          key: semgrep-${{ hashFiles('backend/semgrep/**') }}
+          restore-keys: semgrep-
+
+      # --config semgrep/ adds the project's own rules (no-os-environ,
+      # no-mass-assign, no-plaintext-secret-column) on top of the community
+      # registry ruleset.
+      - name: Semgrep (community + project custom rules)
+        working-directory: backend
+        run: semgrep --config auto --config semgrep/ --error app/
+
+      # --skip-editable: forge-saas-backend itself is installed editable and
+      # isn't a published package: there's nothing on PyPI/OSV to audit it
+      # against, and pip-audit treats an unaudited package as a hard failure
+      # otherwise. Real findings in third-party deps still fail this step.
+      - name: pip-audit (Python dependency CVEs)
+        working-directory: backend
+        run: pip-audit --skip-editable
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: pnpm
+
+      - name: Install frontend dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: pnpm audit (Node dependency CVEs, high+ severity)
+        run: pnpm audit --audit-level=high
+
+  build:
+    needs: [test, security]
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+      packages: write
+
+    env:
+      IMAGE: ghcr.io/${{ github.repository }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: backend/pyproject.toml
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: pnpm
+
+      - name: Install frontend dependencies
+        run: pnpm install --frozen-lockfile
+
+      # Client generation only needs /openapi.json, which never touches the
+      # DB/Redis -- .env.test's dummy credentials (same fixture the lint/test
+      # jobs use) are enough to boot the app and serve the schema.
+      - name: Start backend for OpenAPI schema
+        working-directory: backend
+        run: |
+          pip install -e .
+          cp .env.test .env
+          nohup uvicorn app.main:app --host 0.0.0.0 --port 8000 > uvicorn.log 2>&1 &
+          for i in $(seq 1 30); do
+            curl -sf http://localhost:8000/health && exit 0
+            sleep 1
+          done
+          echo "backend did not become ready" >&2
+          cat uvicorn.log
+          exit 1
+
+      - name: Generate API client from live OpenAPI schema
+        run: pnpm --filter @forge/api-client generate
+
+      - name: turbo build — gen-client output feeds every package/app build
+        run: pnpm build
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build image
+        run: |
+          docker build \
+            --label "git-sha=$GITHUB_SHA" \
+            -t "$IMAGE:$GITHUB_SHA" \
+            -f backend/Dockerfile \
+            .
+
+      - name: Get current date for trivy DB cache key
+        id: date
+        run: echo "date=$(date +%Y-%m-%d)" >> "$GITHUB_OUTPUT"
+
+      - name: Cache trivy vulnerability DB
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/trivy
+          key: trivy-db-${{ steps.date.outputs.date }}
+          restore-keys: trivy-db-
+
+      - name: Install trivy
+        run: |
+          curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh \
+            | sh -s -- -b /usr/local/bin v0.71.2
+
+      - name: Trivy image scan (high+ severity)
+        run: trivy image "$IMAGE:$GITHUB_SHA" --exit-code 1 --severity HIGH,CRITICAL
+
+      # Pushed only once the scan above passes -- a vulnerable image never
+      # reaches the registry the deploy job pulls from.
+      - name: Push image
+        run: docker push "$IMAGE:$GITHUB_SHA"
+
+  # Dormant until RENDER_API_KEY / RENDER_BACKEND_SERVICE_ID /
+  # RENDER_WORKER_SERVICE_ID / PROD_ENV_FILE / PROD_DATABASE_URL / PROD_DOMAIN
+  # secrets are configured on the repo (see docs/runbooks/deploy-render.md).
+  # Until then this job simply fails fast on the first curl, on push to main.
+  deploy:
+    if: github.ref == 'refs/heads/main'
+    needs: build
+    runs-on: ubuntu-latest
+    environment: production
+
+    permissions:
+      contents: read
+      packages: read
+
+    env:
+      IMAGE: ghcr.io/${{ github.repository }}:${{ github.sha }}
+
+    steps:
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Write production .env (Settings() needs every required field, not just DATABASE_URL)
+        run: printf '%s' "${{ secrets.PROD_ENV_FILE }}" > prod.env
+
+      # Same image that was scanned + pushed in `build` -- never reinstalled
+      # from source, so what ran migrations is byte-for-byte what gets deployed.
+      - name: Run migrations against production DB (fail = abort, no deploy)
+        run: docker run --rm --env-file prod.env "$IMAGE" alembic upgrade head
+
+      - name: Capture currently-live deploy (rollback target if the new one fails)
+        id: previous
+        run: |
+          DEPLOY_ID=$(curl -sf -H "Authorization: Bearer ${{ secrets.RENDER_API_KEY }}" \
+            "https://api.render.com/v1/services/${{ secrets.RENDER_BACKEND_SERVICE_ID }}/deploys?status=live&limit=1" \
+            | jq -r '.[0] | (.deploy // .) | .id')
+          echo "deploy_id=$DEPLOY_ID" >> "$GITHUB_OUTPUT"
+
+      - name: Trigger Render deploy — backend
+        id: deploy_backend
+        run: |
+          DEPLOY_ID=$(curl -sf -X POST \
+            "https://api.render.com/v1/services/${{ secrets.RENDER_BACKEND_SERVICE_ID }}/deploys" \
+            -H "Authorization: Bearer ${{ secrets.RENDER_API_KEY }}" \
+            -H "Content-Type: application/json" \
+            -d "{\"imageUrl\": \"$IMAGE\"}" | jq -r '.id')
+          echo "deploy_id=$DEPLOY_ID" >> "$GITHUB_OUTPUT"
+
+      - name: Trigger Render deploy — worker
+        run: |
+          curl -sf -X POST \
+            "https://api.render.com/v1/services/${{ secrets.RENDER_WORKER_SERVICE_ID }}/deploys" \
+            -H "Authorization: Bearer ${{ secrets.RENDER_API_KEY }}" \
+            -H "Content-Type: application/json" \
+            -d "{\"imageUrl\": \"$IMAGE\"}"
+
+      # Render keeps the previous deploy serving traffic until the new one
+      # reports "live" -- this makes that health gate visible in CI rather
+      # than trusting it silently.
+      - name: Wait for backend health gate
+        run: |
+          for i in $(seq 1 60); do
+            STATUS=$(curl -sf -H "Authorization: Bearer ${{ secrets.RENDER_API_KEY }}" \
+              "https://api.render.com/v1/services/${{ secrets.RENDER_BACKEND_SERVICE_ID }}/deploys/${{ steps.deploy_backend.outputs.deploy_id }}" \
+              | jq -r '.status')
+            echo "deploy status: $STATUS"
+            [ "$STATUS" = "live" ] && exit 0
+            case "$STATUS" in *failed*|canceled) exit 1 ;; esac
+            sleep 5
+          done
+          echo "timed out waiting for deploy to go live" >&2
+          exit 1
+
+      - name: Smoke test
+        id: smoke_test
+        run: curl -sf "https://${{ secrets.PROD_DOMAIN }}/health/ready"
+
+      - name: Roll back to previous deploy
+        if: failure() && steps.smoke_test.outcome == 'failure'
+        run: |
+          curl -sf -X POST "https://api.render.com/v1/services/${{ secrets.RENDER_BACKEND_SERVICE_ID }}/rollback" \
+            -H "Authorization: Bearer ${{ secrets.RENDER_API_KEY }}" \
+            -H "Content-Type: application/json" \
+            -d "{\"deployId\": \"${{ steps.previous.outputs.deploy_id }}\"}"
+
+      # E2E (Playwright) against staging lands in T-220 (Phase 3) -- no
+      # Playwright project exists in this repo yet, so this step is
+      # intentionally not wired up until then.

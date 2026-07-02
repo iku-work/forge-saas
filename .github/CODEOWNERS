@@ -1,0 +1,9 @@
+# Template core — requires template-maintainer approval in product PRs
+/backend/app/core/          @your-org/template-maintainers
+/backend/app/modules/auth/  @your-org/template-maintainers
+/packages/                  @your-org/template-maintainers
+/docker-compose.yml         @your-org/template-maintainers
+
+# Product-owned — no template-maintainer review needed
+/product.config.py          @your-org/product-owners
+/product.config.ts          @your-org/product-owners

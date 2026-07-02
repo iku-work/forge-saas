@@ -1,0 +1,54 @@
+{
+  "app": {
+    "name": "ForgeSaaS"
+  },
+  "button": {
+    "save": "Tallenna",
+    "cancel": "Peruuta",
+    "submit": "Lähetä",
+    "load_more": "Lataa lisää",
+    "remove": "Poista",
+    "upload": "Lataa"
+  },
+  "status": {
+    "loading": "Latautuu…",
+    "saving": "Tallennetaan…",
+    "saved": "Tallennettu.",
+    "logging_out": "Kirjaudutaan ulos…"
+  },
+  "nav": {
+    "dashboard": "Etusivu",
+    "files": "Tiedostot",
+    "files_hint": "Avaa ladatut tiedostosi",
+    "settings": "Asetukset",
+    "profile": "Profiili",
+    "security": "Tietoturva",
+    "organization": "Organisaatio",
+    "members": "Jäsenet",
+    "billing": "Laskutus",
+    "notifications": "Ilmoitukset",
+    "logout": "Kirjaudu ulos"
+  },
+  "org_switcher": {
+    "label": "Organisaatiot",
+    "select": "Valitse organisaatio",
+    "create": "Luo organisaatio",
+    "loading": "Latautuu…"
+  },
+  "locale_switcher": {
+    "label": "Kieli"
+  },
+  "dashboard": {
+    "empty": "Ei sisältöä vielä."
+  },
+  "not_found": {
+    "title": "Sivua ei löytynyt",
+    "back": "Takaisin etusivulle"
+  },
+  "error": {
+    "unexpected": "Jokin meni pieleen. Yritä uudelleen.",
+    "permission_denied": "Sinulla ei ole oikeutta tähän toimintoon.",
+    "not_a_member": "Et ole tämän organisaation jäsen.",
+    "org_id_required": "Tätä toimintoa varten on valittava organisaatio."
+  }
+}

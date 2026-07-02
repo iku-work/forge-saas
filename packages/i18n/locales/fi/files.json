@@ -1,0 +1,57 @@
+{
+  "page": {
+    "title": "Tiedostot",
+    "empty": "Ei tiedostoja vielä. Lataa yksi aloittaaksesi.",
+    "error_load": "Tiedostojen lataaminen epäonnistui."
+  },
+  "uploader": {
+    "drop_here": "Pudota tiedostot tähän",
+    "drag_active": "Pudota ladataksesi",
+    "browse": "Selaa",
+    "hint": "tai vedä ja pudota",
+    "cancel": "Peruuta",
+    "retry": "Yritä uudelleen",
+    "error_type": "Tiedostotyyppiä ei tueta.",
+    "error_size": "Tiedosto ylittää {max}-rajan.",
+    "error_upload": "Lataus epäonnistui.",
+    "queued": "Jonossa",
+    "uploading": "Ladataan…",
+    "done": "Valmis"
+  },
+  "table": {
+    "col_name": "Nimi",
+    "col_size": "Koko",
+    "col_uploader": "Lataaja",
+    "col_status": "Tila",
+    "col_actions": "Toiminnot"
+  },
+  "status": {
+    "pending": "Odottaa",
+    "ready": "Valmis",
+    "infected": "Saastunut",
+    "failed": "Epäonnistunut"
+  },
+  "action": {
+    "download": "Lataa",
+    "delete": "Poista",
+    "delete_confirm": "Poistaanko tämä tiedosto?"
+  },
+  "picker": {
+    "upload_button": "Lataa",
+    "upload_hint": "Valitse lähde tiedoston lisäämiseksi",
+    "sheet_title": "Lisää tiedosto",
+    "source_camera": "Ota kuva",
+    "source_camera_hint": "Ota uusi kuva kameralla",
+    "source_library": "Kuvakirjasto",
+    "source_library_hint": "Valitse kuva kuvakirjastosta",
+    "source_document": "Selaa tiedostoja",
+    "source_document_hint": "Valitse asiakirja tästä laitteesta",
+    "cancel": "Peruuta",
+    "cancel_hint": "Sulkee tämän valikon valitsematta tiedostoa",
+    "permission_denied": "Tämä vaatii käyttöoikeuden jatkaaksesi.",
+    "error_upload": "Lataus epäonnistui.",
+    "avatar_button": "Vaihda kuva",
+    "avatar_hint": "Lataa uusi profiilikuva kuvakirjastosta",
+    "avatar_uploaded": "Profiilikuva päivitetty."
+  }
+}

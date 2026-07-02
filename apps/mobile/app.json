@@ -1,0 +1,24 @@
+{
+  "expo": {
+    "name": "ForgeSaaS",
+    "slug": "forge-saas",
+    "scheme": "forge",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "automatic",
+    "newArchEnabled": true,
+    "plugins": [
+      "expo-router",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Allow $(PRODUCT_NAME) to access your photos to attach files.",
+          "cameraPermission": "Allow $(PRODUCT_NAME) to access your camera to attach files."
+        }
+      ]
+    ],
+    "experiments": {
+      "typedRoutes": true
+    }
+  }
+}

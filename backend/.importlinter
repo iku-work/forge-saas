@@ -1,0 +1,19 @@
+[importlinter]
+root_package = app
+
+# Per §0.1: router -> service -> repository -> models, imports flow downward
+# only, inside every feature module. Layers are wrapped in parentheses
+# ("optional") because modules are built up incrementally across several
+# tasks (e.g. T-013 adds only models.py; router.py lands later in T-022) —
+# without that, the contract would hard-fail for any module missing a layer
+# rather than just checking the imports that do exist.
+[importlinter:contract:layers]
+name = Four-layer rule
+type = layers
+layers =
+    (router)
+    (service)
+    (repository)
+    (models)
+containers =
+    app.modules.*

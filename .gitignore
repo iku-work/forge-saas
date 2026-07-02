@@ -1,0 +1,31 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+*.egg-info/
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+htmlcov/
+.coverage
+
+# Node
+node_modules/
+dist/
+.turbo/
+.next/
+packages/api-client/src/generated/
+packages/i18n/src/keys.ts
+
+# Expo
+.expo/
+web-build/
+
+# Env
+.env
+.env.local
+.env.*.local
+
+# OS
+.DS_Store
+Thumbs.db

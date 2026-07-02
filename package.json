@@ -1,0 +1,25 @@
+{
+  "name": "forge-saas",
+  "private": true,
+  "version": "0.1.0",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "turbo run dev",
+    "build": "turbo run build",
+    "test": "turbo run test",
+    "lint": "turbo run lint",
+    "type-check": "turbo run type-check",
+    "gen-client": "turbo run gen-client"
+  },
+  "devDependencies": {
+    "turbo": "^2.3.0",
+    "prettier": "^3.4.1"
+  },
+  "packageManager": "pnpm@11.8.0",
+  "engines": {
+    "node": ">=22.13"
+  }
+}

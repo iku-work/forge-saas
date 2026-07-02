@@ -1,0 +1,28 @@
+{
+  "title": "Billing",
+  "current_plan": {
+    "title": "Current plan",
+    "status": "Status: {status}",
+    "badge": "Current plan",
+    "free_label": "Free"
+  },
+  "available_plans": {
+    "title": "Available plans",
+    "no_plans": "No plans are configured yet.",
+    "per_month": "/mo"
+  },
+  "upgrade_button": "Upgrade",
+  "manage_button": "Manage billing",
+  "invoices": {
+    "title": "Invoices",
+    "not_available": "Invoice history isn't available yet."
+  },
+  "error": {
+    "permission_denied": "You don't have permission to view billing for this organization.",
+    "checkout_failed": "Unable to start checkout.",
+    "portal_failed": "Unable to open the billing portal.",
+    "feature_unavailable": "The '{feature}' feature isn't available on your plan.",
+    "plan_limit_reached": "You've reached your plan's limit for '{feature}'.",
+    "plan_not_found": "Plan '{plan_slug}' could not be found."
+  }
+}

@@ -1,0 +1,21 @@
+title = "ForgeSaaS gitleaks config"
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Known dummy fixtures committed on purpose, not real secrets"
+paths = [
+  # detect-secrets' own baseline: stores SHA-1 *hashes* of allowlisted
+  # findings, not secrets. High-entropy hex digests trip the generic-api-key
+  # rule every time.
+  '''\.secrets\.baseline''',
+  # Settings() needs a structurally-valid RS256 keypair + Fernet key to
+  # construct in tests; both are dummy, never-deployed, generated solely for
+  # tests/test_config.py (see file header comment).
+  '''backend/\.env\.test''',
+  # Placeholder PEM markers ("...") for documentation only -- not parseable
+  # key material, but gitleaks' private-key rule matches the BEGIN/END
+  # markers regardless of body content.
+  '''backend/\.env\.example''',
+]

@@ -1,0 +1,21 @@
+packages:
+  - "apps/*"
+  - "packages/*"
+allowBuilds:
+  esbuild: true
+  # msw's postinstall only copies a browser service-worker script, gated on
+  # an `msw.workerDirectory` key in package.json -- this project only uses
+  # msw/node (setupServer) and declares no such key, so the script is a
+  # verified no-op. Safe to allow.
+  msw: true
+minimumReleaseAgeExclude:
+  - "@tanstack/query-core@5.101.1"
+  - "@tanstack/react-query@5.101.1"
+overrides:
+  "@tanstack/react-router": ">=1.170.4"
+  "@tanstack/react-router-devtools": ">=1.167.0"
+  "@tanstack/router-plugin": ">=1.168.18"
+  # T-054 security job (trivy fs / pnpm audit): transitive pins dragged in by
+  # Expo CLI tooling resolved to vulnerable versions — force the fixed ones.
+  "@xmldom/xmldom": ">=0.9.10"
+  "tar": ">=7.5.11"
