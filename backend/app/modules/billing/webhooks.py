@@ -19,10 +19,12 @@ from typing import Annotated
 
 import stripe
 from fastapi import APIRouter, Depends, Request, Response
+from redis.asyncio import Redis
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
 from app.core.db import get_session
+from app.core.dependencies import get_redis
 from app.core.exceptions import DomainError
 from app.modules.billing.repository import WebhookEventRepository
 from app.modules.billing.service import BillingService
@@ -36,6 +38,7 @@ router = APIRouter(prefix="/billing", tags=["billing"])
 async def stripe_webhook(
     request: Request,
     session: Annotated[AsyncSession, Depends(get_session)],
+    redis: Annotated[Redis, Depends(get_redis)],
 ) -> Response:
     settings = get_settings()
     raw_body = await request.body()
@@ -71,7 +74,7 @@ async def stripe_webhook(
         # Broad except is intentional: any failure here must be recorded so
         # Stripe's retry re-runs handle_event, then re-raised so the global
         # handler logs it and responds 500.
-        await BillingService(session).handle_event(existing)
+        await BillingService(session, redis).handle_event(existing)
     except Exception as exc:
         await repo.mark_failed(existing, error=str(exc))
         await session.commit()

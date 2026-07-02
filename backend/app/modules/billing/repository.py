@@ -4,12 +4,13 @@ upserts, and the WebhookEvent idempotency ledger. T-031 adds the read paths
 app.modules.billing.dependencies and .service need: Plan.get_by_id/get_by_slug/
 list_active and Subscription.get_by_org_id.
 
-None of the three satisfy BaseRepository's `_OrgScopedRecord` shape: Plan is
+None of these satisfy BaseRepository's `_OrgScopedRecord` shape: Plan is
 a catalog table with no org_id at all, Subscription has no `deleted_at`
 (cancellation is a status change driven by Stripe, never a local soft
-delete), and WebhookEvent is keyed by Stripe's own event id and isn't
-org-scoped -- a single webhook delivery can affect any org. Bespoke classes,
-same pattern as app.modules.tenancy.repository.
+delete), WebhookEvent is keyed by Stripe's own event id and isn't
+org-scoped -- a single webhook delivery can affect any org -- and
+DunningCampaign (T-130) is reached through subscription_id, not its own
+org_id column. Bespoke classes, same pattern as app.modules.tenancy.repository.
 """
 
 from datetime import datetime
@@ -20,7 +21,7 @@ from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models._mixins import utcnow
-from app.modules.billing.models import Plan, Subscription, WebhookEvent
+from app.modules.billing.models import DunningCampaign, Plan, Subscription, WebhookEvent
 
 
 class PlanRepository:
@@ -70,6 +71,9 @@ class SubscriptionRepository:
         stmt = select(Subscription).where(m.stripe_subscription_id == stripe_subscription_id)
         result = await self.session.execute(stmt)
         return result.scalar_one_or_none()
+
+    async def get_by_id(self, subscription_id: UUID) -> Subscription | None:
+        return await self.session.get(Subscription, subscription_id)
 
     async def get_by_org_id(self, org_id: UUID) -> Subscription | None:
         # org_id is unique on this table (§"Billing models", T-029) -- one
@@ -165,3 +169,44 @@ class WebhookEventRepository:
         event.error = error
         event.attempt_count += 1
         await self.session.flush()
+
+
+class DunningCampaignRepository:
+    def __init__(self, session: AsyncSession) -> None:
+        self.session = session
+
+    async def get_by_id(self, campaign_id: UUID) -> DunningCampaign | None:
+        return await self.session.get(DunningCampaign, campaign_id)
+
+    async def get_active_by_subscription_id(self, subscription_id: UUID) -> DunningCampaign | None:
+        m = cast("Any", DunningCampaign)
+        stmt = select(DunningCampaign).where(
+            m.subscription_id == subscription_id, m.status == "active"
+        )
+        result = await self.session.execute(stmt)
+        return result.scalar_one_or_none()
+
+    async def create(
+        self, *, subscription_id: UUID, invoice_id: str, scheduled_job_ids: list[str]
+    ) -> DunningCampaign:
+        campaign = DunningCampaign(
+            subscription_id=subscription_id,
+            invoice_id=invoice_id,
+            scheduled_job_ids=scheduled_job_ids,
+        )
+        self.session.add(campaign)
+        await self.session.flush()
+        return campaign
+
+    async def close(self, campaign: DunningCampaign, *, status: str) -> DunningCampaign:
+        campaign.status = status
+        campaign.ended_at = utcnow()
+        await self.session.flush()
+        return campaign
+
+    async def set_scheduled_job_ids(
+        self, campaign: DunningCampaign, job_ids: list[str]
+    ) -> DunningCampaign:
+        campaign.scheduled_job_ids = job_ids
+        await self.session.flush()
+        return campaign

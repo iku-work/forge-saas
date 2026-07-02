@@ -16,6 +16,7 @@ from typing import Any
 from uuid import uuid4
 
 import pytest
+from redis.asyncio import Redis
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import (
     AsyncEngine,
@@ -27,11 +28,25 @@ from sqlmodel import SQLModel
 from testcontainers.postgres import PostgresContainer
 
 from app.modules.audit.models import AuditEvent
-from app.modules.billing.models import Plan, Subscription, WebhookEvent
-from app.modules.billing.repository import SubscriptionRepository, WebhookEventRepository
+from app.modules.billing.models import DunningCampaign, Plan, Subscription, WebhookEvent
+from app.modules.billing.repository import (
+    DunningCampaignRepository,
+    SubscriptionRepository,
+    WebhookEventRepository,
+)
 from app.modules.billing.service import BillingService
+from app.modules.feature_flags.service import FeatureFlagService
+from app.modules.tenancy.models import Organization, OrgFeatureFlag
 
-_TABLES = [Plan.__table__, Subscription.__table__, WebhookEvent.__table__, AuditEvent.__table__]
+_TABLES = [
+    Plan.__table__,
+    Subscription.__table__,
+    WebhookEvent.__table__,
+    AuditEvent.__table__,
+    Organization.__table__,
+    OrgFeatureFlag.__table__,
+    DunningCampaign.__table__,
+]
 
 
 @pytest.fixture(scope="module")
@@ -62,8 +77,13 @@ async def session(test_engine: AsyncEngine) -> AsyncGenerator[AsyncSession, None
 
 
 @pytest.fixture
-def service(session: AsyncSession) -> BillingService:
-    return BillingService(session)
+def redis(_redis_client: Redis) -> Redis:
+    return _redis_client
+
+
+@pytest.fixture
+def service(session: AsyncSession, redis: Redis) -> BillingService:
+    return BillingService(session, redis)
 
 
 @pytest.fixture
@@ -74,6 +94,11 @@ def subscriptions(session: AsyncSession) -> SubscriptionRepository:
 @pytest.fixture
 def webhook_events(session: AsyncSession) -> WebhookEventRepository:
     return WebhookEventRepository(session)
+
+
+@pytest.fixture
+def dunning_campaigns(session: AsyncSession) -> DunningCampaignRepository:
+    return DunningCampaignRepository(session)
 
 
 async def _make_plan(session: AsyncSession, *, price_id: str = "price_1") -> Plan:
@@ -110,8 +135,8 @@ def _subscription_event(
     }
 
 
-def _invoice_event(*, subscription_id: str | None) -> dict[str, Any]:
-    return {"data": {"object": {"subscription": subscription_id}}}
+def _invoice_event(*, subscription_id: str | None, invoice_id: str = "in_1") -> dict[str, Any]:
+    return {"data": {"object": {"id": invoice_id, "subscription": subscription_id}}}
 
 
 # --- customer.subscription.created / updated ----------------------------------------
@@ -356,6 +381,188 @@ async def test_invoice_payment_failed_without_subscription_field_is_noop(
     )
 
 
+# --- T-130: dunning campaign wiring ----------------------------------------------------
+
+
+async def test_invoice_payment_failed_starts_a_dunning_campaign(
+    service: BillingService,
+    session: AsyncSession,
+    subscriptions: SubscriptionRepository,
+    dunning_campaigns: DunningCampaignRepository,
+    enqueued_jobs: list[tuple[str, dict[str, Any]]],
+) -> None:
+    await _make_plan(session, price_id="price_dunning_1")
+    await service.handle_event(
+        WebhookEvent(
+            id="evt_create",
+            type="customer.subscription.created",
+            payload=_subscription_event(
+                subscription_id="sub_dunning_1",
+                status="active",
+                org_id=str(uuid4()),
+                price_id="price_dunning_1",
+            ),
+        )
+    )
+
+    await service.handle_event(
+        WebhookEvent(
+            id="evt_invoice_failed",
+            type="invoice.payment_failed",
+            payload=_invoice_event(subscription_id="sub_dunning_1", invoice_id="in_dunning_1"),
+        )
+    )
+
+    sub = await subscriptions.get_by_stripe_subscription_id("sub_dunning_1")
+    assert sub is not None
+    campaign = await dunning_campaigns.get_active_by_subscription_id(sub.id)
+    assert campaign is not None
+    assert campaign.invoice_id == "in_dunning_1"
+    assert len(campaign.scheduled_job_ids) == 3
+
+    dunning_calls = [c for c in enqueued_jobs if c[0] == "send_dunning_email"]
+    assert len(dunning_calls) == 3
+    assert {kwargs["step"] for _function, kwargs in dunning_calls} == {"day1", "day3", "day7"}
+
+
+async def test_invoice_payment_succeeded_completes_the_active_dunning_campaign(
+    service: BillingService,
+    session: AsyncSession,
+    subscriptions: SubscriptionRepository,
+    dunning_campaigns: DunningCampaignRepository,
+) -> None:
+    await _make_plan(session, price_id="price_dunning_2")
+    await service.handle_event(
+        WebhookEvent(
+            id="evt_create",
+            type="customer.subscription.created",
+            payload=_subscription_event(
+                subscription_id="sub_dunning_2",
+                status="past_due",
+                org_id=str(uuid4()),
+                price_id="price_dunning_2",
+            ),
+        )
+    )
+    await service.handle_event(
+        WebhookEvent(
+            id="evt_invoice_failed",
+            type="invoice.payment_failed",
+            payload=_invoice_event(subscription_id="sub_dunning_2"),
+        )
+    )
+    sub = await subscriptions.get_by_stripe_subscription_id("sub_dunning_2")
+    assert sub is not None
+    campaign = await dunning_campaigns.get_active_by_subscription_id(sub.id)
+    assert campaign is not None
+
+    await service.handle_event(
+        WebhookEvent(
+            id="evt_invoice_succeeded",
+            type="invoice.payment_succeeded",
+            payload=_invoice_event(subscription_id="sub_dunning_2"),
+        )
+    )
+
+    reloaded = await dunning_campaigns.get_by_id(campaign.id)
+    assert reloaded is not None
+    assert reloaded.status == "completed"
+    assert await dunning_campaigns.get_active_by_subscription_id(sub.id) is None
+
+
+async def test_subscription_deleted_cancels_the_active_dunning_campaign(
+    service: BillingService,
+    session: AsyncSession,
+    subscriptions: SubscriptionRepository,
+    dunning_campaigns: DunningCampaignRepository,
+) -> None:
+    await _make_plan(session, price_id="price_dunning_3")
+    await service.handle_event(
+        WebhookEvent(
+            id="evt_create",
+            type="customer.subscription.created",
+            payload=_subscription_event(
+                subscription_id="sub_dunning_3",
+                status="past_due",
+                org_id=str(uuid4()),
+                price_id="price_dunning_3",
+            ),
+        )
+    )
+    await service.handle_event(
+        WebhookEvent(
+            id="evt_invoice_failed",
+            type="invoice.payment_failed",
+            payload=_invoice_event(subscription_id="sub_dunning_3"),
+        )
+    )
+    sub = await subscriptions.get_by_stripe_subscription_id("sub_dunning_3")
+    assert sub is not None
+    campaign = await dunning_campaigns.get_active_by_subscription_id(sub.id)
+    assert campaign is not None
+
+    await service.handle_event(
+        WebhookEvent(
+            id="evt_delete",
+            type="customer.subscription.deleted",
+            payload={"data": {"object": {"id": "sub_dunning_3"}}},
+        )
+    )
+
+    reloaded = await dunning_campaigns.get_by_id(campaign.id)
+    assert reloaded is not None
+    assert reloaded.status == "canceled"
+
+
+async def test_retriggering_payment_failed_cancels_the_previous_campaign(
+    service: BillingService,
+    session: AsyncSession,
+    subscriptions: SubscriptionRepository,
+    dunning_campaigns: DunningCampaignRepository,
+) -> None:
+    await _make_plan(session, price_id="price_dunning_4")
+    await service.handle_event(
+        WebhookEvent(
+            id="evt_create",
+            type="customer.subscription.created",
+            payload=_subscription_event(
+                subscription_id="sub_dunning_4",
+                status="past_due",
+                org_id=str(uuid4()),
+                price_id="price_dunning_4",
+            ),
+        )
+    )
+    await service.handle_event(
+        WebhookEvent(
+            id="evt_invoice_failed_1",
+            type="invoice.payment_failed",
+            payload=_invoice_event(subscription_id="sub_dunning_4", invoice_id="in_first"),
+        )
+    )
+    sub = await subscriptions.get_by_stripe_subscription_id("sub_dunning_4")
+    assert sub is not None
+    first_campaign = await dunning_campaigns.get_active_by_subscription_id(sub.id)
+    assert first_campaign is not None
+
+    await service.handle_event(
+        WebhookEvent(
+            id="evt_invoice_failed_2",
+            type="invoice.payment_failed",
+            payload=_invoice_event(subscription_id="sub_dunning_4", invoice_id="in_second"),
+        )
+    )
+
+    reloaded_first = await dunning_campaigns.get_by_id(first_campaign.id)
+    assert reloaded_first is not None
+    assert reloaded_first.status == "canceled"
+
+    second_campaign = await dunning_campaigns.get_active_by_subscription_id(sub.id)
+    assert second_campaign is not None
+    assert second_campaign.id != first_campaign.id
+    assert second_campaign.invoice_id == "in_second"
+
+
 # --- unknown event types ---------------------------------------------------------------
 
 
@@ -363,3 +570,68 @@ async def test_unhandled_event_type_is_ignored(service: BillingService) -> None:
     await service.handle_event(
         WebhookEvent(id="evt_ignored", type="customer.created", payload={"data": {"object": {}}})
     )
+
+
+# --- T-120: feature-flag cache invalidation on subscription changes -------------------
+
+
+async def _make_org(session: AsyncSession) -> Organization:
+    org = Organization(name="Acme", slug=f"acme-{uuid4().hex[:8]}")
+    session.add(org)
+    await session.flush()
+    return org
+
+
+async def test_subscription_upserted_invalidates_feature_flag_cache(
+    service: BillingService, session: AsyncSession, redis: Redis
+) -> None:
+    await _make_plan(session, price_id="price_flags_1")
+    org = await _make_org(session)
+    await FeatureFlagService(session, redis).is_enabled(org, "seats")
+    assert await redis.get(f"feature_flags:{org.id}:seats") is not None
+
+    await service.handle_event(
+        WebhookEvent(
+            id="evt_flags_upsert",
+            type="customer.subscription.created",
+            payload=_subscription_event(
+                subscription_id="sub_flags_1",
+                status="active",
+                org_id=str(org.id),
+                price_id="price_flags_1",
+            ),
+        )
+    )
+
+    assert await redis.get(f"feature_flags:{org.id}:seats") is None
+
+
+async def test_subscription_deleted_invalidates_feature_flag_cache(
+    service: BillingService, session: AsyncSession, redis: Redis
+) -> None:
+    await _make_plan(session, price_id="price_flags_2")
+    org = await _make_org(session)
+    await service.handle_event(
+        WebhookEvent(
+            id="evt_flags_create",
+            type="customer.subscription.created",
+            payload=_subscription_event(
+                subscription_id="sub_flags_2",
+                status="active",
+                org_id=str(org.id),
+                price_id="price_flags_2",
+            ),
+        )
+    )
+    await FeatureFlagService(session, redis).is_enabled(org, "seats")
+    assert await redis.get(f"feature_flags:{org.id}:seats") is not None
+
+    await service.handle_event(
+        WebhookEvent(
+            id="evt_flags_delete",
+            type="customer.subscription.deleted",
+            payload={"data": {"object": {"id": "sub_flags_2"}}},
+        )
+    )
+
+    assert await redis.get(f"feature_flags:{org.id}:seats") is None

@@ -8,7 +8,7 @@ no code path that can mutate or remove a row once written.
 from typing import Any, cast
 from uuid import UUID
 
-from sqlalchemy import select, tuple_
+from sqlalchemy import exists, select, tuple_
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.repository import DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE
@@ -24,6 +24,15 @@ class AuditRepository:
         self.session.add(event)
         await self.session.flush()
         return event
+
+    async def exists(self, *, action: str, resource_id: str) -> bool:
+        # Idempotency check for at-least-once background steps (T-130's
+        # per-day dunning email) that must not re-send on a retried run --
+        # the audit log itself doubles as the "already did this" marker.
+        m = cast("Any", AuditEvent)
+        stmt = select(exists().where(m.action == action, m.resource_id == resource_id))
+        result = await self.session.execute(stmt)
+        return bool(result.scalar_one())
 
     async def list_cursor(
         self, org_id: UUID, after: UUID | None = None, limit: int = DEFAULT_PAGE_SIZE

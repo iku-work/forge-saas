@@ -14,6 +14,7 @@ from redis.asyncio import Redis
 
 from app.core.config import get_settings
 from app.core.db import dispose_engine
+from app.workers.jobs.billing import send_dunning_email
 from app.workers.jobs.email import send_email
 from app.workers.jobs.encryption import reencrypt_column_job
 from app.workers.jobs.gdpr import export_user_data, purge_user_data
@@ -49,6 +50,7 @@ class WorkerSettings:
         backfill_notification_preferences,
         send_push,
         virus_scan,
+        send_dunning_email,
     ]
     redis_settings = RedisSettings.from_dsn(str(get_settings().REDIS_URL))
     max_jobs = 20

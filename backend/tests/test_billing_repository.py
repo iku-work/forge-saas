@@ -27,14 +27,20 @@ from sqlalchemy.ext.asyncio import (
 from sqlmodel import SQLModel
 from testcontainers.postgres import PostgresContainer
 
-from app.modules.billing.models import Plan, Subscription, WebhookEvent
+from app.modules.billing.models import DunningCampaign, Plan, Subscription, WebhookEvent
 from app.modules.billing.repository import (
+    DunningCampaignRepository,
     PlanRepository,
     SubscriptionRepository,
     WebhookEventRepository,
 )
 
-_TABLES = [Plan.__table__, Subscription.__table__, WebhookEvent.__table__]
+_TABLES = [
+    Plan.__table__,
+    Subscription.__table__,
+    WebhookEvent.__table__,
+    DunningCampaign.__table__,
+]
 
 
 @pytest.fixture(scope="module")
@@ -77,6 +83,25 @@ def subscriptions(session: AsyncSession) -> SubscriptionRepository:
 @pytest.fixture
 def webhook_events(session: AsyncSession) -> WebhookEventRepository:
     return WebhookEventRepository(session)
+
+
+@pytest.fixture
+def dunning_campaigns(session: AsyncSession) -> DunningCampaignRepository:
+    return DunningCampaignRepository(session)
+
+
+async def _make_subscription(session: AsyncSession, plan: Plan) -> Subscription:
+    subscription = Subscription(
+        org_id=uuid4(),
+        plan_id=plan.id,
+        stripe_subscription_id=f"sub_{uuid4().hex[:8]}",
+        status="past_due",
+        current_period_start=datetime(2026, 1, 1, tzinfo=UTC),
+        current_period_end=datetime(2026, 2, 1, tzinfo=UTC),
+    )
+    session.add(subscription)
+    await session.flush()
+    return subscription
 
 
 async def _make_plan(session: AsyncSession) -> Plan:
@@ -245,6 +270,24 @@ async def test_get_by_stripe_subscription_id_unknown_returns_none(
     assert await subscriptions.get_by_stripe_subscription_id("sub_unknown") is None
 
 
+async def test_subscription_get_by_id_returns_subscription(
+    subscriptions: SubscriptionRepository, session: AsyncSession
+) -> None:
+    plan = await _make_plan(session)
+    sub = await _make_subscription(session, plan)
+
+    found = await subscriptions.get_by_id(sub.id)
+
+    assert found is not None
+    assert found.id == sub.id
+
+
+async def test_subscription_get_by_id_unknown_returns_none(
+    subscriptions: SubscriptionRepository,
+) -> None:
+    assert await subscriptions.get_by_id(uuid4()) is None
+
+
 async def test_get_by_org_id_returns_subscription(
     subscriptions: SubscriptionRepository, session: AsyncSession
 ) -> None:
@@ -409,3 +452,95 @@ async def test_mark_failed_sets_error_and_increments_attempt_count(
     assert event.error == "boom again"
     assert event.attempt_count == 2
     assert event.processed_at is None
+
+
+# --- DunningCampaignRepository (T-130) -----------------------------------------------
+
+
+async def test_dunning_create_then_get_by_id_round_trips(
+    dunning_campaigns: DunningCampaignRepository, session: AsyncSession
+) -> None:
+    plan = await _make_plan(session)
+    sub = await _make_subscription(session, plan)
+
+    created = await dunning_campaigns.create(
+        subscription_id=sub.id, invoice_id="in_1", scheduled_job_ids=["job_1", "job_2", "job_3"]
+    )
+
+    found = await dunning_campaigns.get_by_id(created.id)
+
+    assert found is not None
+    assert found.subscription_id == sub.id
+    assert found.invoice_id == "in_1"
+    assert found.status == "active"
+    assert found.scheduled_job_ids == ["job_1", "job_2", "job_3"]
+    assert found.ended_at is None
+
+
+async def test_dunning_get_by_id_unknown_returns_none(
+    dunning_campaigns: DunningCampaignRepository,
+) -> None:
+    assert await dunning_campaigns.get_by_id(uuid4()) is None
+
+
+async def test_dunning_get_active_by_subscription_id_returns_active_campaign(
+    dunning_campaigns: DunningCampaignRepository, session: AsyncSession
+) -> None:
+    plan = await _make_plan(session)
+    sub = await _make_subscription(session, plan)
+    created = await dunning_campaigns.create(
+        subscription_id=sub.id, invoice_id="in_1", scheduled_job_ids=[]
+    )
+
+    found = await dunning_campaigns.get_active_by_subscription_id(sub.id)
+
+    assert found is not None
+    assert found.id == created.id
+
+
+async def test_dunning_get_active_by_subscription_id_excludes_closed_campaigns(
+    dunning_campaigns: DunningCampaignRepository, session: AsyncSession
+) -> None:
+    plan = await _make_plan(session)
+    sub = await _make_subscription(session, plan)
+    created = await dunning_campaigns.create(
+        subscription_id=sub.id, invoice_id="in_1", scheduled_job_ids=[]
+    )
+    await dunning_campaigns.close(created, status="completed")
+
+    assert await dunning_campaigns.get_active_by_subscription_id(sub.id) is None
+
+
+async def test_dunning_get_active_by_subscription_id_unknown_returns_none(
+    dunning_campaigns: DunningCampaignRepository,
+) -> None:
+    assert await dunning_campaigns.get_active_by_subscription_id(uuid4()) is None
+
+
+async def test_dunning_close_sets_status_and_ended_at(
+    dunning_campaigns: DunningCampaignRepository, session: AsyncSession
+) -> None:
+    plan = await _make_plan(session)
+    sub = await _make_subscription(session, plan)
+    created = await dunning_campaigns.create(
+        subscription_id=sub.id, invoice_id="in_1", scheduled_job_ids=[]
+    )
+
+    closed = await dunning_campaigns.close(created, status="canceled")
+
+    assert closed.status == "canceled"
+    assert closed.ended_at is not None
+
+
+async def test_dunning_set_scheduled_job_ids_updates_ids(
+    dunning_campaigns: DunningCampaignRepository, session: AsyncSession
+) -> None:
+    plan = await _make_plan(session)
+    sub = await _make_subscription(session, plan)
+    created = await dunning_campaigns.create(
+        subscription_id=sub.id, invoice_id="in_1", scheduled_job_ids=[]
+    )
+
+    updated = await dunning_campaigns.set_scheduled_job_ids(created, ["job_a", "job_b"])
+
+    assert updated.scheduled_job_ids == ["job_a", "job_b"]

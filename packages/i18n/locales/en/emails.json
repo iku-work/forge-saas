@@ -9,6 +9,7 @@
     "member_invited": "New team member",
     "payment_failed": "Your payment didn't go through",
     "subscription_expiring": "Your subscription is expiring soon",
+    "subscription_suspended": "Your subscription has been suspended",
     "trial_ending": "Your trial is ending soon",
     "file_uploaded": "A new file was uploaded"
   },
@@ -80,6 +81,12 @@
     "greeting": "Hi",
     "body": "{org_name}'s {plan_name} plan expires on {expires_at}. Renew now to keep uninterrupted access.",
     "button": "Manage subscription"
+  },
+  "subscription_suspended": {
+    "title": "Your subscription has been suspended",
+    "greeting": "Hi",
+    "body": "{org_name}'s {plan_name} plan has been suspended due to a failed payment. Update your payment method to restore access.",
+    "button": "Update payment method"
   },
   "trial_ending": {
     "title": "Your trial is ending soon",

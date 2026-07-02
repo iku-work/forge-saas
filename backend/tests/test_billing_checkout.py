@@ -21,6 +21,7 @@ from uuid import uuid4
 
 import pytest
 import stripe
+from redis.asyncio import Redis
 from sqlalchemy.ext.asyncio import (
     AsyncEngine,
     AsyncSession,
@@ -66,8 +67,13 @@ async def session(test_engine: AsyncEngine) -> AsyncGenerator[AsyncSession, None
 
 
 @pytest.fixture
-def service(session: AsyncSession) -> BillingService:
-    return BillingService(session)
+def redis(_redis_client: Redis) -> Redis:
+    return _redis_client
+
+
+@pytest.fixture
+def service(session: AsyncSession, redis: Redis) -> BillingService:
+    return BillingService(session, redis)
 
 
 @pytest.fixture

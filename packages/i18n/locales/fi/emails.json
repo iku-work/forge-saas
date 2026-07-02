@@ -9,6 +9,7 @@
     "member_invited": "Uusi tiimin jäsen",
     "payment_failed": "Maksusi epäonnistui",
     "subscription_expiring": "Tilauksesi on päättymässä",
+    "subscription_suspended": "Tilauksesi on keskeytetty",
     "trial_ending": "Kokeilujaksosi on päättymässä",
     "file_uploaded": "Uusi tiedosto ladattu"
   },
@@ -80,6 +81,12 @@
     "greeting": "Hei",
     "body": "{org_name}-organisaation {plan_name}-tilaus päättyy {expires_at}. Uudista tilaus, jotta käyttö jatkuu keskeytyksettä.",
     "button": "Hallinnoi tilausta"
+  },
+  "subscription_suspended": {
+    "title": "Tilauksesi on keskeytetty",
+    "greeting": "Hei",
+    "body": "{org_name}-organisaation {plan_name}-tilaus on keskeytetty epäonnistuneen maksun vuoksi. Päivitä maksutapasi palauttaaksesi käyttöoikeuden.",
+    "button": "Päivitä maksutapa"
   },
   "trial_ending": {
     "title": "Kokeilujaksosi on päättymässä",

@@ -55,3 +55,8 @@ class AuditService:
         except Exception as exc:  # noqa: BLE001 — audit failures must never roll back the caller's business transaction (§T-028)
             logger.warning("audit.write_failed: action=%s resource_type=%s", action, resource_type)
             sentry_sdk.capture_exception(exc)
+
+    async def has_logged(self, *, action: str, resource_id: str) -> bool:
+        # T-130: lets an at-least-once background step (a dunning email day)
+        # check its own audit trail before re-sending on a retried run.
+        return await self._repo.exists(action=action, resource_id=resource_id)

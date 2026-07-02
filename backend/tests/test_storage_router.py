@@ -45,7 +45,7 @@ from app.modules.notifications.models import Notification
 from app.modules.storage import service as storage_service_module
 from app.modules.storage.backend import PresignedUpload
 from app.modules.storage.models import StoredFile
-from app.modules.tenancy.models import Membership, Organization
+from app.modules.tenancy.models import Membership, Organization, OrgFeatureFlag
 
 _TABLES = [
     User.__table__,
@@ -56,6 +56,7 @@ _TABLES = [
     StoredFile.__table__,
     Notification.__table__,
     AuditEvent.__table__,
+    OrgFeatureFlag.__table__,
 ]
 
 

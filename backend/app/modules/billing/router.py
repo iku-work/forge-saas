@@ -16,10 +16,11 @@ from typing import Annotated
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, Request
+from redis.asyncio import Redis
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.db import get_session
-from app.core.dependencies import get_current_org, require_permission
+from app.core.dependencies import get_current_org, get_redis, require_permission
 from app.core.envelope import Envelope, Meta
 from app.middleware.rate_limit import api_limit
 from app.modules.auth.permissions import Permission
@@ -42,7 +43,7 @@ def _request_id(request: Request) -> str:
 
 @router.post("/checkout-session")
 @api_limit
-async def create_checkout_session(
+async def create_checkout_session(  # noqa: PLR0913 — T-120 adds redis on top of the existing 5
     request: Request,
     body: CheckoutSessionRequest,
     org_and_membership: Annotated[tuple[Organization, Membership], Depends(get_current_org)],
@@ -50,9 +51,12 @@ async def create_checkout_session(
         Membership, Depends(require_permission(Permission.BILLING_MANAGE))
     ],
     session: Annotated[AsyncSession, Depends(get_session)],
+    redis: Annotated[Redis, Depends(get_redis)],
 ) -> Envelope[CheckoutSessionResponse]:
     org, _ = org_and_membership
-    url = await BillingService(session).create_checkout_session(org, body.plan_slug, body.interval)
+    url = await BillingService(session, redis).create_checkout_session(
+        org, body.plan_slug, body.interval
+    )
     await session.commit()
     return Envelope(
         data=CheckoutSessionResponse(url=url), meta=Meta(request_id=_request_id(request))
@@ -68,9 +72,10 @@ async def create_portal_session(
         Membership, Depends(require_permission(Permission.BILLING_MANAGE))
     ],
     session: Annotated[AsyncSession, Depends(get_session)],
+    redis: Annotated[Redis, Depends(get_redis)],
 ) -> Envelope[PortalSessionResponse]:
     org, _ = org_and_membership
-    url = await BillingService(session).create_portal_session(org)
+    url = await BillingService(session, redis).create_portal_session(org)
     await session.commit()
     return Envelope(data=PortalSessionResponse(url=url), meta=Meta(request_id=_request_id(request)))
 
@@ -84,9 +89,10 @@ async def get_subscription(
         Membership, Depends(require_permission(Permission.BILLING_READ))
     ],
     session: Annotated[AsyncSession, Depends(get_session)],
+    redis: Annotated[Redis, Depends(get_redis)],
 ) -> Envelope[SubscriptionPublic | None]:
     org, _ = org_and_membership
-    subscription = await BillingService(session).get_subscription(org.id)
+    subscription = await BillingService(session, redis).get_subscription(org.id)
     data = SubscriptionPublic.model_validate(subscription) if subscription is not None else None
     return Envelope(data=data, meta=Meta(request_id=_request_id(request)))
 
@@ -96,7 +102,8 @@ async def get_subscription(
 async def list_plans(
     request: Request,
     session: Annotated[AsyncSession, Depends(get_session)],
+    redis: Annotated[Redis, Depends(get_redis)],
 ) -> Envelope[list[PlanPublic]]:
-    plans = await BillingService(session).list_active_plans()
+    plans = await BillingService(session, redis).list_active_plans()
     data = [PlanPublic.model_validate(p) for p in plans]
     return Envelope(data=data, meta=Meta(request_id=_request_id(request)))

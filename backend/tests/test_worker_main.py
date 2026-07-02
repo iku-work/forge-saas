@@ -22,6 +22,7 @@ from redis.asyncio import Redis
 from testcontainers.redis import RedisContainer
 
 from app.core.config import get_settings
+from app.workers.jobs.billing import send_dunning_email
 from app.workers.jobs.email import send_email
 from app.workers.jobs.encryption import reencrypt_column_job
 from app.workers.jobs.gdpr import export_user_data, purge_user_data
@@ -80,6 +81,7 @@ def test_worker_settings_has_agreed_shape() -> None:
     assert send_email in WorkerSettings.functions
     assert purge_user_data in WorkerSettings.functions
     assert export_user_data in WorkerSettings.functions
+    assert send_dunning_email in WorkerSettings.functions
     assert isinstance(WorkerSettings.redis_settings, RedisSettings)
     assert WorkerSettings.max_jobs == 20
     assert WorkerSettings.job_timeout == 300

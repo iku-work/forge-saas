@@ -15,6 +15,12 @@ rather than through BillingService, and uses the X-Org-ID-header convention
 (get_current_org) rather than app.modules.tenancy.router's path-keyed one,
 since every route this gates is a flat /billing/... endpoint with no org_id
 segment.
+
+T-120: require_feature's boolean gate now delegates to FeatureFlagService
+(better caching, and it lets an admin override -- T-122 -- turn a feature
+off per-org without touching the org's Plan). It still resolves the org's
+OrgSubscription itself for the numeric `minimum` comparison, since
+FeatureFlagService only ever answers a bool, not a raw plan-feature value.
 """
 
 from collections.abc import Awaitable, Callable
@@ -23,15 +29,17 @@ from datetime import timedelta
 from typing import Annotated, cast
 
 from fastapi import Depends
+from redis.asyncio import Redis
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.db import get_session
-from app.core.dependencies import get_current_org
+from app.core.dependencies import get_current_org, get_redis
 from app.core.exceptions import PlanLimitError
 from app.core.module_loader import is_enabled
 from app.models._mixins import utcnow
 from app.modules.billing.models import Plan, Subscription
 from app.modules.billing.repository import PlanRepository, SubscriptionRepository
+from app.modules.feature_flags.service import FeatureFlagService
 from app.modules.tenancy.models import Membership, Organization
 
 _GRACE_PERIOD = timedelta(days=7)
@@ -63,11 +71,7 @@ def _is_entitled(subscription: Subscription) -> bool:
     return False
 
 
-async def get_current_org_subscription(
-    org_and_membership: Annotated[tuple[Organization, Membership], Depends(get_current_org)],
-    session: Annotated[AsyncSession, Depends(get_session)],
-) -> OrgSubscription:
-    org, _ = org_and_membership
+async def resolve_org_subscription(org: Organization, session: AsyncSession) -> OrgSubscription:
     subscription = await SubscriptionRepository(session).get_by_org_id(org.id)
     if subscription is None or not _is_entitled(subscription):
         return OrgSubscription(org=org, subscription=subscription, plan=_FREE_PLAN)
@@ -78,12 +82,21 @@ async def get_current_org_subscription(
     return OrgSubscription(org=org, subscription=subscription, plan=cast("Plan", plan))
 
 
+async def get_current_org_subscription(
+    org_and_membership: Annotated[tuple[Organization, Membership], Depends(get_current_org)],
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> OrgSubscription:
+    org, _ = org_and_membership
+    return await resolve_org_subscription(org, session)
+
+
 def require_feature(
     feature: str, minimum: int | None = None
 ) -> Callable[..., Awaitable[OrgSubscription | None]]:
     async def checker(
         org_and_membership: Annotated[tuple[Organization, Membership], Depends(get_current_org)],
         session: Annotated[AsyncSession, Depends(get_session)],
+        redis: Annotated[Redis, Depends(get_redis)],
     ) -> OrgSubscription | None:
         # Billing disabled -> every feature is implicitly available, so
         # non-billing products work with no Plan/Subscription tables at all
@@ -93,14 +106,15 @@ def require_feature(
             return None
 
         org_sub = await get_current_org_subscription(org_and_membership, session)
-        value = org_sub.plan.features.get(feature)
-        if not value:
+        flag_enabled = await FeatureFlagService(session, redis).is_enabled(org_sub.org, feature)
+        if not flag_enabled:
             raise PlanLimitError(
                 "errors.feature_unavailable",
                 fallback=f"Feature '{feature}' not available on your plan",
                 params={"feature": feature},
             )
-        if minimum is not None and value < minimum:
+        value = org_sub.plan.features.get(feature)
+        if minimum is not None and (value is None or value < minimum):
             raise PlanLimitError(
                 "errors.plan_limit_reached_for_feature",
                 fallback=f"Plan limit reached for '{feature}'",

@@ -20,6 +20,10 @@ same shape as get_current_org_subscription -- rather than depending on
 get_current_org_subscription directly, so it can check is_enabled("billing")
 and return None *before* any Plan/Subscription query runs (those tables
 don't exist when billing is disabled, see test_require_feature_is_noop_when_billing_disabled).
+
+T-120: the checker's boolean gate now delegates to FeatureFlagService (a
+third `redis` param on the checker), so an OrgFeatureFlag override can deny
+a feature the plan otherwise grants -- see the "override wins" tests below.
 """
 
 from collections.abc import AsyncGenerator, Generator
@@ -27,6 +31,7 @@ from datetime import datetime, timedelta
 from uuid import UUID, uuid4
 
 import pytest
+from redis.asyncio import Redis
 from sqlalchemy.ext.asyncio import (
     AsyncEngine,
     AsyncSession,
@@ -43,10 +48,11 @@ from app.models._mixins import utcnow
 from app.modules.auth.permissions import MemberRole
 from app.modules.billing.dependencies import get_current_org_subscription, require_feature
 from app.modules.billing.models import Plan, Subscription
-from app.modules.tenancy.models import Membership, Organization
+from app.modules.feature_flags.repository import OrgFeatureFlagRepository
+from app.modules.tenancy.models import Membership, Organization, OrgFeatureFlag
 from product import config as product_config
 
-_TABLES = [Plan.__table__, Subscription.__table__]
+_TABLES = [Plan.__table__, Subscription.__table__, Organization.__table__, OrgFeatureFlag.__table__]
 
 
 @pytest.fixture(autouse=True)
@@ -81,6 +87,11 @@ async def session(test_engine: AsyncEngine) -> AsyncGenerator[AsyncSession, None
     factory = async_sessionmaker(test_engine, expire_on_commit=False, class_=AsyncSession)
     async with factory() as s:
         yield s
+
+
+@pytest.fixture
+def redis(_redis_client: Redis) -> Redis:
+    return _redis_client
 
 
 def _org() -> Organization:
@@ -245,16 +256,18 @@ _BILLING_OFF = EnabledModules(
 )
 
 
-async def test_require_feature_denies_free_plan(session: AsyncSession) -> None:
+async def test_require_feature_denies_free_plan(session: AsyncSession, redis: Redis) -> None:
     org = _org()
     checker = require_feature("advanced_reports")
 
     with pytest.raises(PlanLimitError) as exc_info:
-        await checker((org, _membership(org.id)), session)
+        await checker((org, _membership(org.id)), session, redis)
     assert exc_info.value.status_code == 402
 
 
-async def test_require_feature_allows_when_plan_has_feature(session: AsyncSession) -> None:
+async def test_require_feature_allows_when_plan_has_feature(
+    session: AsyncSession, redis: Redis
+) -> None:
     org = _org()
     plan = await _make_plan(session, features={"seats": 5})
     await _make_subscription(
@@ -266,13 +279,13 @@ async def test_require_feature_allows_when_plan_has_feature(session: AsyncSessio
     )
     checker = require_feature("seats")
 
-    result = await checker((org, _membership(org.id)), session)
+    result = await checker((org, _membership(org.id)), session, redis)
 
     assert result is not None
     assert result.plan.id == plan.id
 
 
-async def test_require_feature_below_minimum_raises(session: AsyncSession) -> None:
+async def test_require_feature_below_minimum_raises(session: AsyncSession, redis: Redis) -> None:
     org = _org()
     plan = await _make_plan(session, features={"seats": 3})
     await _make_subscription(
@@ -285,11 +298,11 @@ async def test_require_feature_below_minimum_raises(session: AsyncSession) -> No
     checker = require_feature("seats", minimum=5)
 
     with pytest.raises(PlanLimitError) as exc_info:
-        await checker((org, _membership(org.id)), session)
+        await checker((org, _membership(org.id)), session, redis)
     assert exc_info.value.status_code == 402
 
 
-async def test_require_feature_meets_minimum_allows(session: AsyncSession) -> None:
+async def test_require_feature_meets_minimum_allows(session: AsyncSession, redis: Redis) -> None:
     org = _org()
     plan = await _make_plan(session, features={"seats": 5})
     await _make_subscription(
@@ -301,33 +314,86 @@ async def test_require_feature_meets_minimum_allows(session: AsyncSession) -> No
     )
     checker = require_feature("seats", minimum=5)
 
-    result = await checker((org, _membership(org.id)), session)
+    result = await checker((org, _membership(org.id)), session, redis)
 
     assert result is not None
     assert result.plan.id == plan.id
 
 
 async def test_require_feature_is_noop_when_billing_disabled(
-    monkeypatch: pytest.MonkeyPatch, session: AsyncSession
+    monkeypatch: pytest.MonkeyPatch, session: AsyncSession, redis: Redis
 ) -> None:
     monkeypatch.setattr(product_config, "MODULES", _BILLING_OFF)
     module_loader.get_modules.cache_clear()
     org = _org()
     checker = require_feature("anything")
 
-    result = await checker((org, _membership(org.id)), session)
+    result = await checker((org, _membership(org.id)), session, redis)
 
     assert result is None
 
 
 async def test_require_feature_with_minimum_is_noop_when_billing_disabled(
-    monkeypatch: pytest.MonkeyPatch, session: AsyncSession
+    monkeypatch: pytest.MonkeyPatch, session: AsyncSession, redis: Redis
 ) -> None:
     monkeypatch.setattr(product_config, "MODULES", _BILLING_OFF)
     module_loader.get_modules.cache_clear()
     org = _org()
     checker = require_feature("anything", minimum=1000)
 
-    result = await checker((org, _membership(org.id)), session)
+    result = await checker((org, _membership(org.id)), session, redis)
 
     assert result is None
+
+
+# --- T-120: require_feature delegates to FeatureFlagService ---------------------------
+# An OrgFeatureFlag override needs a real Organization row to satisfy its FK
+# (unlike the tests above, which never persist `_org()`'s in-memory object --
+# a plain SELECT against org_feature_flag needs no such row).
+
+
+async def _persisted_org(session: AsyncSession) -> Organization:
+    org = _org()
+    session.add(org)
+    await session.flush()
+    return org
+
+
+async def test_require_feature_denied_by_override_even_when_plan_allows(
+    session: AsyncSession, redis: Redis
+) -> None:
+    org = await _persisted_org(session)
+    plan = await _make_plan(session, features={"seats": 5})
+    await _make_subscription(
+        session,
+        org_id=org.id,
+        plan_id=plan.id,
+        status="active",
+        current_period_end=utcnow() + timedelta(days=20),
+    )
+    await OrgFeatureFlagRepository(session, org.id).set_override("seats", enabled=False)
+    checker = require_feature("seats")
+
+    with pytest.raises(PlanLimitError) as exc_info:
+        await checker((org, _membership(org.id)), session, redis)
+    assert exc_info.value.status_code == 402
+
+
+async def test_require_feature_override_cannot_grant_a_flag_the_plan_denies(
+    session: AsyncSession, redis: Redis
+) -> None:
+    org = await _persisted_org(session)
+    plan = await _make_plan(session, features={})
+    await _make_subscription(
+        session,
+        org_id=org.id,
+        plan_id=plan.id,
+        status="active",
+        current_period_end=utcnow() + timedelta(days=20),
+    )
+    await OrgFeatureFlagRepository(session, org.id).set_override("advanced_reports", enabled=True)
+    checker = require_feature("advanced_reports")
+
+    with pytest.raises(PlanLimitError) as exc_info:
+        await checker((org, _membership(org.id)), session, redis)
+    assert exc_info.value.status_code == 402

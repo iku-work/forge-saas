@@ -59,19 +59,31 @@ def _reset_fernet_cache() -> Generator[None]:
 
 @pytest.fixture(autouse=True)
 def enqueued_jobs(monkeypatch: pytest.MonkeyPatch) -> list[tuple[str, dict[str, Any]]]:
-    # AuthService/TenancyService/GDPRService enqueue verification/reset/
-    # invitation emails and export/purge jobs through app.core.jobs.enqueue_job
-    # (looked up dynamically as `jobs.enqueue_job` at call time, so patching
-    # the attribute here reaches every caller without touching a real Redis).
+    # AuthService/TenancyService/GDPRService/DunningService enqueue verification/
+    # reset/invitation/dunning emails and export/purge jobs through
+    # app.core.jobs.enqueue_job (looked up dynamically as `jobs.enqueue_job` at
+    # call time, so patching the attribute here reaches every caller without
+    # touching a real Redis). Returns a synthetic job id per call (mirroring the
+    # real function's `str | None` return) so callers that persist the id, like
+    # DunningService.start, have something realistic to store. revoke_job is
+    # also faked to a no-op for the same reason -- DunningService.cancel/
+    # complete call it with those synthetic ids, which would otherwise try (and
+    # fail) to reach a real Redis; see tests/test_billing_dunning_service.py
+    # for the dedicated real-Redis coverage of the genuine revoke_job.
     calls: list[tuple[str, dict[str, Any]]] = []
 
     async def _fake_enqueue_job(
         function: str,
         **kwargs: Any,  # noqa: ANN401 -- mirrors app.core.jobs.enqueue_job's **kwargs
-    ) -> None:
+    ) -> str:
         calls.append((function, kwargs))
+        return f"fake-job-{len(calls)}"
+
+    async def _fake_revoke_job(job_id: str) -> None:  # noqa: ARG001 -- mirrors app.core.jobs.revoke_job's signature
+        return
 
     monkeypatch.setattr(jobs_module, "enqueue_job", _fake_enqueue_job)
+    monkeypatch.setattr(jobs_module, "revoke_job", _fake_revoke_job)
     return calls
 
 

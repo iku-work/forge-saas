@@ -41,6 +41,22 @@ class Subscription(UUIDPKMixin, TimestampMixin, SQLModel, table=True):
     trial_end: datetime | None = Field(default=None, sa_type=_TZ_DATETIME)  # type: ignore[call-overload]
 
 
+class DunningCampaign(UUIDPKMixin, TimestampMixin, SQLModel, table=True):
+    __tablename__ = "dunning_campaign"
+
+    # Not OrgScopedMixin: like Subscription (which this joins through for its
+    # org), a dunning campaign is reached via subscription_id, never listed
+    # by org_id directly.
+    subscription_id: UUID = Field(foreign_key="subscription.id", index=True)
+    invoice_id: str
+    status: str = Field(default="active")  # "active" | "canceled" | "completed"
+    # arq job ids for the day-1/day-3/day-7 steps, in that order -- so
+    # DunningService.cancel/complete can revoke whichever haven't fired yet.
+    scheduled_job_ids: list[str] = Field(sa_column=Column(JSONB, nullable=False))
+    started_at: datetime = Field(default_factory=utcnow, sa_type=_TZ_DATETIME)  # type: ignore[call-overload]
+    ended_at: datetime | None = Field(default=None, sa_type=_TZ_DATETIME)  # type: ignore[call-overload]
+
+
 class WebhookEvent(SQLModel, table=True):
     __tablename__ = "webhook_event"
 

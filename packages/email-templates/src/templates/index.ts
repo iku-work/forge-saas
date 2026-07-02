@@ -11,6 +11,10 @@ import {
   SubscriptionExpiring,
   subscriptionExpiringExampleProps,
 } from "./SubscriptionExpiring.js";
+import {
+  SubscriptionSuspended,
+  subscriptionSuspendedExampleProps,
+} from "./SubscriptionSuspended.js";
 import { TrialEnding, trialEndingExampleProps } from "./TrialEnding.js";
 import { VerifyEmail, verifyEmailExampleProps } from "./VerifyEmail.js";
 import { Welcome, welcomeExampleProps } from "./Welcome.js";
@@ -56,6 +60,10 @@ export const TEMPLATES = {
   member_invited: defineTemplate(memberInvitedExampleProps, MemberInvited),
   payment_failed: defineTemplate(paymentFailedExampleProps, PaymentFailed),
   subscription_expiring: defineTemplate(subscriptionExpiringExampleProps, SubscriptionExpiring),
+  subscription_suspended: defineTemplate(
+    subscriptionSuspendedExampleProps,
+    SubscriptionSuspended,
+  ),
   trial_ending: defineTemplate(trialEndingExampleProps, TrialEnding),
   file_uploaded: defineTemplate(fileUploadedExampleProps, FileUploaded),
 } satisfies Record<string, TemplateEntry>;
