@@ -21,6 +21,13 @@ T-120: require_feature's boolean gate now delegates to FeatureFlagService
 off per-org without touching the org's Plan). It still resolves the org's
 OrgSubscription itself for the numeric `minimum` comparison, since
 FeatureFlagService only ever answers a bool, not a raw plan-feature value.
+
+T-132: record_usage is a metering counterpart to require_feature, not a
+gate -- it never rejects the request, it just writes a UsageRecord for the
+current org via UsageService before the route handler runs. Same "billing
+disabled -> no-op" short-circuit as require_feature, for the same reason:
+the usage_record table only exists when the billing module is enabled
+(T-062).
 """
 
 from collections.abc import Awaitable, Callable
@@ -39,6 +46,7 @@ from app.core.module_loader import is_enabled
 from app.models._mixins import utcnow
 from app.modules.billing.models import Plan, Subscription
 from app.modules.billing.repository import PlanRepository, SubscriptionRepository
+from app.modules.billing.usage_service import UsageService
 from app.modules.feature_flags.service import FeatureFlagService
 from app.modules.tenancy.models import Membership, Organization
 
@@ -123,3 +131,16 @@ def require_feature(
         return org_sub
 
     return checker
+
+
+def record_usage(metric: str, quantity: int = 1) -> Callable[..., Awaitable[None]]:
+    async def recorder(
+        org_and_membership: Annotated[tuple[Organization, Membership], Depends(get_current_org)],
+        session: Annotated[AsyncSession, Depends(get_session)],
+    ) -> None:
+        if not is_enabled("billing"):
+            return
+        org, _ = org_and_membership
+        await UsageService(session, org.id).record(metric=metric, quantity=quantity)
+
+    return recorder

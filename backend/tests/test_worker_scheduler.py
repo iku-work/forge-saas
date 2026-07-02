@@ -411,6 +411,7 @@ async def test_create_scheduler_registers_all_jobs_in_utc(redis_client: Redis) -
         "expire_data_export_urls",
         "notify_expiring_trials",
         "expire_trials_to_inactive",
+        "report_usage_to_stripe",
     }
     assert "hour='*/6'" in repr(jobs_by_id["cleanup_expired_sessions"].trigger)
     assert "hour='8'" in repr(jobs_by_id["sync_expiring_trials"].trigger)
@@ -418,6 +419,7 @@ async def test_create_scheduler_registers_all_jobs_in_utc(redis_client: Redis) -
     assert "hour='10'" in repr(jobs_by_id["expire_trials_to_inactive"].trigger)
     assert "hour=" not in repr(jobs_by_id["cleanup_expired_tokens"].trigger)
     assert "hour=" not in repr(jobs_by_id["expire_data_export_urls"].trigger)
+    assert "minute='*/15'" in repr(jobs_by_id["report_usage_to_stripe"].trigger)
     for job in jobs_by_id.values():
         assert "timezone='UTC'" in repr(job.trigger)
 

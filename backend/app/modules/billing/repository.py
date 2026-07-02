@@ -11,6 +11,11 @@ delete), WebhookEvent is keyed by Stripe's own event id and isn't
 org-scoped -- a single webhook delivery can affect any org -- and
 DunningCampaign (T-130) is reached through subscription_id, not its own
 org_id column. Bespoke classes, same pattern as app.modules.tenancy.repository.
+
+UsageRecordRepository (T-132) is bespoke for the same reason: UsageRecord
+(app.modules.billing.usage_models) is an append-only ledger with no
+`deleted_at` -- nothing ever soft-deletes a usage record -- so it doesn't
+satisfy `_OrgScopedRecord` either, despite being genuinely org-scoped.
 """
 
 from datetime import datetime
@@ -22,6 +27,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models._mixins import utcnow
 from app.modules.billing.models import DunningCampaign, Plan, Subscription, WebhookEvent
+from app.modules.billing.usage_models import UsageRecord
 
 
 class PlanRepository:
@@ -238,3 +244,65 @@ class DunningCampaignRepository:
         campaign.scheduled_job_ids = job_ids
         await self.session.flush()
         return campaign
+
+
+class UsageRecordRepository:
+    def __init__(self, session: AsyncSession) -> None:
+        self.session = session
+
+    async def get_by_idempotency_key(self, idempotency_key: str) -> UsageRecord | None:
+        m = cast("Any", UsageRecord)
+        stmt = select(UsageRecord).where(m.idempotency_key == idempotency_key)
+        result = await self.session.execute(stmt)
+        return result.scalar_one_or_none()
+
+    async def create(
+        self,
+        *,
+        org_id: UUID,
+        metric: str,
+        quantity: int,
+        occurred_at: datetime | None = None,
+        idempotency_key: str | None = None,
+    ) -> UsageRecord:
+        record = UsageRecord(
+            org_id=org_id,
+            metric=metric,
+            quantity=quantity,
+            occurred_at=occurred_at or utcnow(),
+            idempotency_key=idempotency_key,
+        )
+        self.session.add(record)
+        await self.session.flush()
+        return record
+
+    async def sum_quantity(
+        self, *, org_id: UUID, metric: str, since: datetime, until: datetime
+    ) -> int:
+        m = cast("Any", UsageRecord)
+        stmt = select(func.coalesce(func.sum(UsageRecord.quantity), 0)).where(
+            m.org_id == org_id,
+            m.metric == metric,
+            m.occurred_at >= since,
+            m.occurred_at < until,
+        )
+        result = await self.session.execute(stmt)
+        return int(result.scalar_one())
+
+    async def list_unreported(self) -> list[UsageRecord]:
+        # report_usage_to_stripe (app.workers.jobs.usage) groups these by
+        # (org_id, metric) itself -- no GROUP BY here, since it also needs
+        # each row's id to mark as reported afterward.
+        m = cast("Any", UsageRecord)
+        stmt = select(UsageRecord).where(m.reported_to_stripe_at.is_(None))
+        result = await self.session.execute(stmt)
+        return list(result.scalars().all())
+
+    async def mark_reported(
+        self, records: list[UsageRecord], *, stripe_usage_record_id: str
+    ) -> None:
+        now = utcnow()
+        for record in records:
+            record.reported_to_stripe_at = now
+            record.stripe_usage_record_id = stripe_usage_record_id
+        await self.session.flush()

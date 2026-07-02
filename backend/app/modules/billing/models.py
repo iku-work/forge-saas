@@ -26,6 +26,19 @@ class Plan(UUIDPKMixin, TimestampMixin, SoftDeleteMixin, SQLModel, table=True):
     # billing.dependencies.require_feature (T-031).
     features: dict[str, int] = Field(sa_column=Column(JSONB, nullable=False))
     is_active: bool = Field(default=True)
+    # T-132: metered-metric name -> Stripe billing Meter event_name for that
+    # dimension, e.g. {"api_calls": "api_calls_meter"} (see
+    # https://docs.stripe.com/billing/subscriptions/usage-based/meters --
+    # the modern Billing Meters API, not the deprecated
+    # SubscriptionItem.create_usage_record). Deliberately its own column
+    # rather than a value inside `features` (typed dict[str, int] above, and
+    # relied on as such by require_feature's numeric `minimum` comparison) --
+    # a meter's event_name is reported against the org's Stripe *customer*
+    # (app.workers.jobs.usage.report_usage_to_stripe), not a plan feature
+    # count.
+    usage_meter_event_names: dict[str, str] = Field(
+        default_factory=dict, sa_column=Column(JSONB, nullable=False)
+    )
 
 
 class Subscription(UUIDPKMixin, TimestampMixin, SQLModel, table=True):

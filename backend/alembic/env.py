@@ -30,7 +30,7 @@ config.set_main_option("sqlalchemy.url", str(get_settings().DATABASE_URL))
 # not imported -> not on metadata anyway) nor a DROP for one that is still
 # physically present in the DB from a time the module was enabled.
 MODULE_TABLES: dict[str, set[str]] = {
-    "billing": {"plan", "subscription", "webhook_event"},
+    "billing": {"plan", "subscription", "webhook_event", "dunning_campaign", "usage_record"},
     "gdpr": {"consent_record", "data_export_job"},
     "notifications": {"notification", "push_token"},
     "file_storage": {"stored_file"},
@@ -55,6 +55,7 @@ def load_models_for_migration() -> None:
     modules = get_modules()
     if modules.billing.enabled:
         import app.modules.billing.models  # noqa: PLC0415
+        import app.modules.billing.usage_models  # noqa: PLC0415
     if modules.gdpr.enabled:
         import app.modules.gdpr.models  # noqa: PLC0415
     if modules.notifications.enabled:

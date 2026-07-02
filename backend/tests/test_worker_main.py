@@ -120,6 +120,7 @@ async def test_worker_startup_wires_redis_and_starts_scheduler() -> None:
             "expire_data_export_urls",
             "notify_expiring_trials",
             "expire_trials_to_inactive",
+            "report_usage_to_stripe",
         }
     finally:
         await worker_shutdown(ctx)

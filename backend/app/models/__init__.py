@@ -10,6 +10,7 @@
 from app.modules.audit import models as audit_models  # noqa: F401
 from app.modules.auth import models as auth_models  # noqa: F401
 from app.modules.billing import models as billing_models  # noqa: F401
+from app.modules.billing import usage_models as billing_usage_models  # noqa: F401
 from app.modules.gdpr import models as gdpr_models  # noqa: F401
 from app.modules.notifications import models as notifications_models  # noqa: F401
 from app.modules.storage import models as storage_models  # noqa: F401

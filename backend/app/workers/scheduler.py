@@ -31,6 +31,7 @@ from app.modules.auth.repository import (
 from app.modules.billing.repository import SubscriptionRepository
 from app.modules.gdpr.repository import DataExportJobRepository
 from app.workers.jobs.billing import expire_trials_to_inactive, notify_expiring_trials
+from app.workers.jobs.usage import report_usage_to_stripe
 
 logger = logging.getLogger(__name__)
 
@@ -130,6 +131,13 @@ def create_scheduler(redis_client: Redis) -> AsyncIOScheduler:
         expire_trials_to_inactive,
         "expire_trials_to_inactive",
         CronTrigger(hour=10, minute=0, timezone="UTC"),
+    )
+    _add_locked_job(
+        scheduler,
+        redis_client,
+        report_usage_to_stripe,
+        "report_usage_to_stripe",
+        CronTrigger(minute="*/15", timezone="UTC"),
     )
     return scheduler
 
