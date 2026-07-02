@@ -17,6 +17,7 @@ default (all-enabled) config.
 """
 
 from collections.abc import Generator
+from uuid import uuid4
 
 import httpx
 import pytest
@@ -118,6 +119,30 @@ def test_always_on_routes_survive_every_optional_module_disabled(
     assert "/api/v1/auth/login" in paths
     assert "/api/v1/orgs" in paths
     assert "/api/v1/config" in paths
+
+
+def test_admin_routes_excluded_from_openapi_schema() -> None:
+    # T-140: include_in_schema=False on the admin router -- this app builds
+    # one process-wide cached OpenAPI schema (no per-token variance), so
+    # never showing admin routes to anyone trivially satisfies "not shown to
+    # non-admin tokens".
+    paths = _paths()
+
+    assert not any(path.startswith("/api/v1/admin") for path in paths)
+
+
+async def test_admin_routes_absent_when_module_disabled(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        product_config, "MODULES", EnabledModules(admin=ModuleConfig(enabled=False))
+    )
+    app = FastAPI()
+    app.include_router(build_router())
+
+    transport = ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="https://testserver") as client:
+        response = await client.get(f"/api/v1/admin/orgs/{uuid4()}/feature-flags")
+
+    assert response.status_code == 404
 
 
 async def test_disabled_billing_route_returns_404(monkeypatch: pytest.MonkeyPatch) -> None:

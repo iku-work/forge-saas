@@ -24,7 +24,13 @@ from testcontainers.postgres import PostgresContainer
 from testcontainers.redis import RedisContainer
 
 from app.core.config import get_settings
-from app.core.dependencies import get_current_org, get_current_user, get_redis, require_permission
+from app.core.dependencies import (
+    get_current_org,
+    get_current_user,
+    get_redis,
+    require_permission,
+    require_superadmin,
+)
 from app.core.exceptions import AuthenticationError, DomainError, PermissionDeniedError
 from app.core.migrations import build_config
 from app.core.migrations import upgrade as upgrade_migrations
@@ -291,3 +297,73 @@ async def test_require_permission_allows_owner_with_billing_manage() -> None:
     result = await checker((org, membership))
 
     assert result is membership
+
+
+# ---- require_superadmin (T-140) --------------------------------------------
+
+
+def _admin_request() -> Request:
+    return Request(
+        scope={
+            "type": "http",
+            "path": "/api/v1/admin/orgs/acme/feature-flags",
+            "query_string": b"",
+            "path_params": {"org_id": "acme"},
+            "headers": [],
+        }
+    )
+
+
+async def test_require_superadmin_denies_non_superadmin(active_user: User) -> None:
+    with pytest.raises(PermissionDeniedError) as exc_info:
+        await require_superadmin(request=_admin_request(), user=active_user)
+
+    assert exc_info.value.status_code == 403
+
+
+async def test_require_superadmin_allows_superadmin(session: AsyncSession) -> None:
+    admin = User(email=f"admin-{uuid4()}@example.com", is_superadmin=True)
+    session.add(admin)
+    await session.flush()
+
+    result = await require_superadmin(request=_admin_request(), user=admin)
+
+    assert result is admin
+
+
+async def test_require_superadmin_logs_admin_action_with_actor_and_path(
+    session: AsyncSession,
+) -> None:
+    from loguru import logger as loguru_logger  # noqa: PLC0415
+
+    admin = User(email=f"admin-{uuid4()}@example.com", is_superadmin=True)
+    session.add(admin)
+    await session.flush()
+
+    records: list[dict[str, object]] = []
+    sink_id = loguru_logger.add(lambda message: records.append(message.record), level="INFO")
+    try:
+        await require_superadmin(request=_admin_request(), user=admin)
+    finally:
+        loguru_logger.remove(sink_id)
+
+    assert len(records) == 1
+    extra = records[0]["extra"]
+    assert extra["admin_action"] is True
+    assert extra["actor_id"] == str(admin.id)
+    assert extra["path"] == "/api/v1/admin/orgs/acme/feature-flags"
+    assert extra["target"] == {"org_id": "acme"}
+
+
+async def test_require_superadmin_does_not_log_on_denial(active_user: User) -> None:
+    from loguru import logger as loguru_logger  # noqa: PLC0415
+
+    records: list[dict[str, object]] = []
+    sink_id = loguru_logger.add(lambda message: records.append(message.record), level="INFO")
+    try:
+        with pytest.raises(PermissionDeniedError):
+            await require_superadmin(request=_admin_request(), user=active_user)
+    finally:
+        loguru_logger.remove(sink_id)
+
+    assert records == []

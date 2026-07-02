@@ -1,6 +1,7 @@
 import { useState, type ReactNode } from "react";
 import { Link, useLocation, useNavigate } from "@tanstack/react-router";
 import {
+  BarChart3,
   Bell,
   Building2,
   Check,
@@ -16,7 +17,13 @@ import {
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
-import { useAuth, useModules, useOrg, usePermission } from "@forge/hooks";
+import {
+  useAuth,
+  useFeatureFlag,
+  useModules,
+  useOrg,
+  usePermission,
+} from "@forge/hooks";
 import type { ActiveModules } from "@forge/hooks";
 import { Permission } from "@forge/types";
 import {
@@ -48,11 +55,26 @@ interface NavItem {
   icon: typeof LayoutDashboard;
   permission?: Permission;
   module?: keyof ActiveModules;
+  // Org-plan-driven gate (T-121), orthogonal to `module` (product-config-driven)
+  // -- both a disabled module and a plan without this flag hide the item.
+  flag?: string;
 }
 
 const PRIMARY_NAV: NavItem[] = [
   { to: "/", labelKey: "common.nav.dashboard", icon: LayoutDashboard },
-  { to: "/files", labelKey: "common.nav.files", icon: FolderOpen, module: "fileStorage" },
+  {
+    to: "/files",
+    labelKey: "common.nav.files",
+    icon: FolderOpen,
+    module: "fileStorage",
+  },
+  {
+    to: "/reports",
+    labelKey: "common.nav.reports",
+    icon: BarChart3,
+    module: "featureFlags",
+    flag: "advanced_reports",
+  },
 ];
 
 const SETTINGS_NAV: NavItem[] = [
@@ -88,6 +110,7 @@ const SETTINGS_PAGE_TITLE_KEYS: Record<string, string> = {
 
 function pageTitleFor(pathname: string, t: (key: string) => string): string {
   if (pathname === "/files") return t("common.nav.files");
+  if (pathname === "/reports") return t("common.nav.reports");
   const settingsKey = SETTINGS_PAGE_TITLE_KEYS[pathname];
   if (settingsKey) {
     return `${t("common.nav.settings")} / ${t(settingsKey)}`;
@@ -108,7 +131,13 @@ function NavLink({ item }: { item: NavItem }) {
   const hasPermission = usePermission(
     item.permission ?? Permission.MEMBERS_READ,
   );
+  // Same unconditional-call-with-a-placeholder reasoning as usePermission
+  // above -- item.flag is only consulted below when one was actually declared.
+  const hasFlag = useFeatureFlag(item.flag ?? "");
   if (item.permission && !hasPermission) {
+    return null;
+  }
+  if (item.flag && !hasFlag) {
     return null;
   }
   const Icon = item.icon;

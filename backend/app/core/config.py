@@ -77,6 +77,10 @@ class Settings(BaseSettings):
     CLAMAV_PORT: int = 3310
     VIRUSTOTAL_API_KEY: str = ""
 
+    # Superadmin (T-140) — dedicated Loguru sink admin actions are written to,
+    # in addition to the normal log stream.
+    ADMIN_AUDIT_LOG_PATH: str = "admin-audit.log"
+
     @model_validator(mode="after")
     def _enforce_startup_invariants(self) -> Self:
         if self.ENVIRONMENT != "dev":

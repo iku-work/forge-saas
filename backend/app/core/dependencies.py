@@ -17,6 +17,7 @@ from uuid import UUID
 
 from fastapi import Depends, Header, Request
 from fastapi.security import OAuth2PasswordBearer
+from loguru import logger
 from redis.asyncio import Redis
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -125,6 +126,30 @@ async def get_current_org(
             "errors.not_org_member", fallback="Not a member of this organization"
         )
     return org, membership
+
+
+async def require_superadmin(
+    request: Request, user: Annotated[User, Depends(get_current_user)]
+) -> User:
+    """
+    T-140: a platform-level role, distinct from org-scoped RBAC above --
+    gates every route under /api/v1/admin/. Every access (not just mutations)
+    is logged with admin_action=True, which app.core.logging's dedicated
+    sink routes into admin-audit.log in addition to the normal log stream.
+    """
+    if not user.is_superadmin:
+        raise PermissionDeniedError(
+            "errors.superadmin_required", fallback="Superadmin access required"
+        )
+    logger.bind(
+        admin_action=True,
+        actor_id=str(user.id),
+        path=request.url.path,
+        query=str(request.url.query),
+        request_id=getattr(request.state, "request_id", None),
+        target=dict(request.path_params) or None,
+    ).info("admin.access")
+    return user
 
 
 def require_permission(permission: Permission) -> Callable[..., Awaitable[Membership]]:

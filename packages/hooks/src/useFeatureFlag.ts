@@ -1,50 +1,43 @@
-import { useEffect, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+import type { UseQueryResult } from "@tanstack/react-query";
 
-import { getSubscriptionApiV1BillingSubscriptionGet, listPlansApiV1BillingPlansGet } from "@forge/api-client";
+import {
+  listFeatureFlagsApiV1OrgsOrgIdFeatureFlagsGet,
+  listFeatureFlagsApiV1OrgsOrgIdFeatureFlagsGetQueryKey,
+} from "@forge/api-client";
+import type { EnvelopeFeatureFlagsResponse } from "@forge/api-client";
 
 import { useOrg } from "./useOrg";
 
-// Unlike useOrg/usePermission, this isn't a module-scoped singleton: a flag
-// check is cheap, per-component, read-only state, not identity the rest of
-// the app shell needs to agree on. Resolves to false (rather than throwing)
-// for a member who lacks BILLING_READ -- a feature gate degrading to "off"
-// is the right failure mode for someone who can't see billing at all.
-export function useFeatureFlag(flag: string): boolean {
+const STALE_TIME_MS = 60_000;
+
+// Resolved once per (org, 60s) via TanStack Query -- org.id in the query key
+// (see MembersSettingsPage.tsx for the same `org?.id ?? ""` + `enabled`
+// pattern) means switching orgs is a normal cache-miss refetch, not a
+// manual invalidation this hook has to orchestrate itself.
+export function useFeatureFlags(): UseQueryResult<EnvelopeFeatureFlagsResponse> {
   const { org } = useOrg();
-  const orgId = org?.id ?? null;
-  const [enabled, setEnabled] = useState(false);
 
-  useEffect(() => {
-    if (!orgId) {
-      setEnabled(false);
-      return;
-    }
-    let cancelled = false;
-    void (async () => {
-      try {
-        const [subResult, plansResult] = await Promise.all([
-          getSubscriptionApiV1BillingSubscriptionGet({ throwOnError: true }),
-          listPlansApiV1BillingPlansGet({ throwOnError: true }),
-        ]);
-        if (cancelled) return;
-        const subscription = subResult.data.data;
-        if (!subscription) {
-          setEnabled(false);
-          return;
-        }
-        const plans = plansResult.data.data ?? [];
-        const plan = plans.find((candidate) => candidate.id === subscription.plan_id);
-        setEnabled(Boolean(plan?.features[flag]));
-      } catch {
-        if (!cancelled) {
-          setEnabled(false);
-        }
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [orgId, flag]);
+  return useQuery({
+    queryKey: listFeatureFlagsApiV1OrgsOrgIdFeatureFlagsGetQueryKey({
+      path: { org_id: org?.id ?? "" },
+    }),
+    queryFn: async () => {
+      const { data } = await listFeatureFlagsApiV1OrgsOrgIdFeatureFlagsGet({
+        path: { org_id: org?.id ?? "" },
+        throwOnError: true,
+      });
+      return data;
+    },
+    enabled: Boolean(org),
+    staleTime: STALE_TIME_MS,
+  });
+}
 
-  return enabled;
+// Deny-by-default: no data yet (loading, no org, or a failed fetch) reads as
+// disabled rather than throwing -- a feature gate degrading to "off" is the
+// right failure mode for a flag that can't be resolved yet.
+export function useFeatureFlag(flag: string): boolean {
+  const { data } = useFeatureFlags();
+  return Boolean(data?.data?.flags[flag]);
 }

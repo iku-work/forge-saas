@@ -17,8 +17,16 @@ def _restore_default_logging() -> None:
     configure_logging()
 
 
-def _staging_settings() -> Settings:
-    return Settings(_env_file=FIXTURE_ENV_FILE, ENVIRONMENT="staging", FORCE_HTTPS=True)
+def _staging_settings(admin_audit_log_path: str | None = None) -> Settings:
+    kwargs: dict[str, object] = {}
+    if admin_audit_log_path is not None:
+        kwargs["ADMIN_AUDIT_LOG_PATH"] = admin_audit_log_path
+    return Settings(
+        _env_file=FIXTURE_ENV_FILE,
+        ENVIRONMENT="staging",
+        FORCE_HTTPS=True,
+        **kwargs,  # type: ignore[arg-type]
+    )
 
 
 def _last_json_line(captured_err: str) -> dict[str, object]:
@@ -128,6 +136,44 @@ def test_exception_traceback_is_included_in_json_output(
     exception_text = record["exception"]
     assert isinstance(exception_text, str)
     assert "ValueError: boom" in exception_text
+
+
+def test_admin_action_is_written_to_admin_audit_log_path(tmp_path: Path) -> None:
+    log_path = tmp_path / "admin-audit.log"
+    configure_logging(settings=_staging_settings(admin_audit_log_path=str(log_path)))
+
+    logger.bind(admin_action=True, actor_id="admin-1", path="/api/v1/admin/orgs/x").info(
+        "admin.access"
+    )
+
+    lines = log_path.read_text(encoding="utf-8").strip().splitlines()
+    assert len(lines) == 1
+    record = json.loads(lines[0])
+    assert record["actor_id"] == "admin-1"
+    assert record["path"] == "/api/v1/admin/orgs/x"
+    assert record["message"] == "admin.access"
+
+
+def test_admin_action_also_reaches_the_normal_log_stream(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    log_path = tmp_path / "admin-audit.log"
+    configure_logging(settings=_staging_settings(admin_audit_log_path=str(log_path)))
+
+    logger.bind(admin_action=True, actor_id="admin-1").info("admin.access")
+
+    record = _last_json_line(capsys.readouterr().err)
+    assert record["message"] == "admin.access"
+    assert log_path.exists()
+
+
+def test_non_admin_log_lines_are_not_written_to_admin_audit_log(tmp_path: Path) -> None:
+    log_path = tmp_path / "admin-audit.log"
+    configure_logging(settings=_staging_settings(admin_audit_log_path=str(log_path)))
+
+    logger.info("plain log line, no admin_action")
+
+    assert not log_path.exists()
 
 
 def test_stdlib_custom_level_without_loguru_match_falls_back_to_levelno(

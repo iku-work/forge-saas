@@ -28,8 +28,12 @@
     "billing": "Billing",
     "notifications": "Notifications",
     "notifications_hint": "Opens your notifications list",
+    "reports": "Advanced reports",
     "logout": "Log out",
     "logout_hint": "Signs out of this account on this device"
+  },
+  "reports": {
+    "description": "Advanced reporting is on your plan. Nothing to see here yet."
   },
   "form": {
     "enter_value_hint": "Enter your {field}"

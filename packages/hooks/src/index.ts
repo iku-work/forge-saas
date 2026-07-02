@@ -6,7 +6,7 @@ export type { UseAuthResult } from "./useAuth";
 export { useOrg } from "./useOrg";
 export type { UseOrgResult } from "./useOrg";
 export { usePermission } from "./usePermission";
-export { useFeatureFlag } from "./useFeatureFlag";
+export { useFeatureFlag, useFeatureFlags } from "./useFeatureFlag";
 export { useModules, getModulesSnapshot, bootstrapModules } from "./useModules";
 export type { ActiveModules } from "./useModules";
 export { useLocale } from "./useLocale";

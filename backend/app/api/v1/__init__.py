@@ -51,4 +51,16 @@ def build_router() -> APIRouter:
 
         router.include_router(storage_router)
 
+    if modules.feature_flags.enabled:
+        from app.modules.feature_flags.router import (  # noqa: PLC0415
+            router as feature_flags_router,
+        )
+
+        router.include_router(feature_flags_router)
+
+    if modules.admin.enabled:
+        from app.modules.admin.router import router as admin_router  # noqa: PLC0415
+
+        router.include_router(admin_router)
+
     return router

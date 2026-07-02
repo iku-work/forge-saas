@@ -56,5 +56,6 @@
   "file_too_large": "File exceeds the {max_upload_mb}MB per-file limit on your plan.",
   "storage_quota_exceeded": "This would exceed the {storage_gb}GB storage quota on your plan.",
   "file_not_uploaded": "No upload found at the presigned location.",
-  "file_size_mismatch": "Uploaded file size does not match the claimed size."
+  "file_size_mismatch": "Uploaded file size does not match the claimed size.",
+  "superadmin_required": "Superadmin access required."
 }

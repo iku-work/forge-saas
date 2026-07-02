@@ -59,4 +59,29 @@ describe("AppLayout (owner, one org)", () => {
       await screen.findByRole("heading", { name: "Billing" }),
     ).toBeInTheDocument();
   });
+
+  it("renders the Advanced reports nav item once the advanced_reports flag resolves true", async () => {
+    server.use(
+      http.get(`${API}/api/v1/orgs/:orgId/feature-flags`, () =>
+        HttpResponse.json(envelope({ flags: { advanced_reports: true } })),
+      ),
+    );
+
+    renderApp({ initialPath: "/", user });
+
+    expect(
+      await screen.findByRole("link", { name: "Advanced reports" }),
+    ).toBeInTheDocument();
+  });
+
+  it("hides the Advanced reports nav item when the flag is disabled (the default handler)", async () => {
+    renderApp({ initialPath: "/", user });
+
+    // Wait for a link that's always present once the shell resolves, so the
+    // absence check below isn't just catching an early/loading render.
+    await screen.findByRole("link", { name: "Billing" });
+    expect(
+      screen.queryByRole("link", { name: "Advanced reports" }),
+    ).not.toBeInTheDocument();
+  });
 });

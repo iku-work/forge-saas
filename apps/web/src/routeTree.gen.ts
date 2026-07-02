@@ -18,6 +18,7 @@ import { Route as ForgotPasswordRouteImport } from './routes/forgot-password'
 import { Route as AppRouteImport } from './routes/_app'
 import { Route as AppIndexRouteImport } from './routes/_app.index'
 import { Route as AcceptInvitationTokenRouteImport } from './routes/accept-invitation.$token'
+import { Route as AppReportsRouteImport } from './routes/_app.reports'
 import { Route as AppFilesRouteImport } from './routes/_app.files'
 import { Route as AppSettingsSecurityRouteImport } from './routes/_app.settings.security'
 import { Route as AppSettingsProfileRouteImport } from './routes/_app.settings.profile'
@@ -70,6 +71,11 @@ const AcceptInvitationTokenRoute = AcceptInvitationTokenRouteImport.update({
   path: '/accept-invitation/$token',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AppReportsRoute = AppReportsRouteImport.update({
+  id: '/reports',
+  path: '/reports',
+  getParentRoute: () => AppRoute,
+} as any)
 const AppFilesRoute = AppFilesRouteImport.update({
   id: '/files',
   path: '/files',
@@ -116,6 +122,7 @@ export interface FileRoutesByFullPath {
   '/reset-password': typeof ResetPasswordRoute
   '/verify-email': typeof VerifyEmailRoute
   '/files': typeof AppFilesRoute
+  '/reports': typeof AppReportsRoute
   '/accept-invitation/$token': typeof AcceptInvitationTokenRoute
   '/settings/billing': typeof AppSettingsBillingRoute
   '/settings/members': typeof AppSettingsMembersRoute
@@ -132,6 +139,7 @@ export interface FileRoutesByTo {
   '/reset-password': typeof ResetPasswordRoute
   '/verify-email': typeof VerifyEmailRoute
   '/files': typeof AppFilesRoute
+  '/reports': typeof AppReportsRoute
   '/accept-invitation/$token': typeof AcceptInvitationTokenRoute
   '/': typeof AppIndexRoute
   '/settings/billing': typeof AppSettingsBillingRoute
@@ -151,6 +159,7 @@ export interface FileRoutesById {
   '/reset-password': typeof ResetPasswordRoute
   '/verify-email': typeof VerifyEmailRoute
   '/_app/files': typeof AppFilesRoute
+  '/_app/reports': typeof AppReportsRoute
   '/accept-invitation/$token': typeof AcceptInvitationTokenRoute
   '/_app/': typeof AppIndexRoute
   '/_app/settings/billing': typeof AppSettingsBillingRoute
@@ -171,6 +180,7 @@ export interface FileRouteTypes {
     | '/reset-password'
     | '/verify-email'
     | '/files'
+    | '/reports'
     | '/accept-invitation/$token'
     | '/settings/billing'
     | '/settings/members'
@@ -187,6 +197,7 @@ export interface FileRouteTypes {
     | '/reset-password'
     | '/verify-email'
     | '/files'
+    | '/reports'
     | '/accept-invitation/$token'
     | '/'
     | '/settings/billing'
@@ -205,6 +216,7 @@ export interface FileRouteTypes {
     | '/reset-password'
     | '/verify-email'
     | '/_app/files'
+    | '/_app/reports'
     | '/accept-invitation/$token'
     | '/_app/'
     | '/_app/settings/billing'
@@ -291,6 +303,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AcceptInvitationTokenRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/_app/reports': {
+      id: '/_app/reports'
+      path: '/reports'
+      fullPath: '/reports'
+      preLoaderRoute: typeof AppReportsRouteImport
+      parentRoute: typeof AppRoute
+    }
     '/_app/files': {
       id: '/_app/files'
       path: '/files'
@@ -345,6 +364,7 @@ declare module '@tanstack/react-router' {
 
 interface AppRouteChildren {
   AppFilesRoute: typeof AppFilesRoute
+  AppReportsRoute: typeof AppReportsRoute
   AppIndexRoute: typeof AppIndexRoute
   AppSettingsBillingRoute: typeof AppSettingsBillingRoute
   AppSettingsMembersRoute: typeof AppSettingsMembersRoute
@@ -356,6 +376,7 @@ interface AppRouteChildren {
 
 const AppRouteChildren: AppRouteChildren = {
   AppFilesRoute: AppFilesRoute,
+  AppReportsRoute: AppReportsRoute,
   AppIndexRoute: AppIndexRoute,
   AppSettingsBillingRoute: AppSettingsBillingRoute,
   AppSettingsMembersRoute: AppSettingsMembersRoute,

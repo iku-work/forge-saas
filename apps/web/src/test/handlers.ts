@@ -135,6 +135,9 @@ export const handlers = [
   http.get(`${API}/api/v1/orgs/:orgId/members`, () =>
     HttpResponse.json(envelope([])),
   ),
+  http.get(`${API}/api/v1/orgs/:orgId/feature-flags`, () =>
+    HttpResponse.json(envelope({ flags: { advanced_reports: false } })),
+  ),
   http.patch(`${API}/api/v1/orgs/:orgId/members/:membershipId`, () =>
     HttpResponse.json(envelope(fixtureMembership)),
   ),
@@ -186,7 +189,9 @@ export const handlers = [
     HttpResponse.json(envelope({ preferences: {} })),
   ),
   http.get(`${API}/api/v1/notifications/stream`, shortNotificationStream),
-  http.get(`${API}/api/v1/notifications`, () => HttpResponse.json(envelope([]))),
+  http.get(`${API}/api/v1/notifications`, () =>
+    HttpResponse.json(envelope([])),
+  ),
   http.get(`${API}/api/v1/notifications/unread-count`, () =>
     HttpResponse.json(envelope({ count: 0 })),
   ),
@@ -223,7 +228,10 @@ export const handlers = [
   ),
   http.get(`${API}/api/v1/files/:id/download`, () =>
     HttpResponse.json(
-      envelope({ url: "https://s3.example.test/download", expires_at: "2026-12-31T00:00:00Z" }),
+      envelope({
+        url: "https://s3.example.test/download",
+        expires_at: "2026-12-31T00:00:00Z",
+      }),
     ),
   ),
   http.delete(`${API}/api/v1/files/:id`, () =>

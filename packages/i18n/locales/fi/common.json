@@ -27,7 +27,11 @@
     "members": "Jäsenet",
     "billing": "Laskutus",
     "notifications": "Ilmoitukset",
+    "reports": "Edistyneet raportit",
     "logout": "Kirjaudu ulos"
+  },
+  "reports": {
+    "description": "Edistynyt raportointi sisältyy tilaukseesi. Ei vielä sisältöä."
   },
   "org_switcher": {
     "label": "Organisaatiot",

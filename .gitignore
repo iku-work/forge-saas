@@ -8,6 +8,7 @@ __pycache__/
 .pytest_cache/
 htmlcov/
 .coverage
+admin-audit.log
 
 # Node
 node_modules/

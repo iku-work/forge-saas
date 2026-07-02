@@ -56,5 +56,6 @@
   "file_too_large": "Tiedosto ylittää tilauksesi {max_upload_mb} Mt:n tiedostokohtaisen rajan.",
   "storage_quota_exceeded": "Tämä ylittäisi tilauksesi {storage_gb} Gt:n tallennustilan rajan.",
   "file_not_uploaded": "Esiallekirjoitetusta osoitteesta ei löytynyt ladattua tiedostoa.",
-  "file_size_mismatch": "Ladatun tiedoston koko ei vastaa ilmoitettua kokoa."
+  "file_size_mismatch": "Ladatun tiedoston koko ei vastaa ilmoitettua kokoa.",
+  "superadmin_required": "Pääkäyttäjän oikeudet vaaditaan."
 }

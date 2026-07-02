@@ -16,7 +16,8 @@ import json
 import logging
 import sys
 import traceback
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 from loguru import logger
@@ -89,6 +90,34 @@ def _pretty_sink(message: "Message") -> None:
         sys.stderr.write(_exception_text(exception))
 
 
+def _is_admin_action(record: "Record") -> bool:
+    return bool(record["extra"].get("admin_action"))
+
+
+def _admin_audit_sink_factory(path: str) -> Callable[["Message"], None]:
+    """
+    Separate file sink for superadmin actions (T-140), on top of whatever the
+    normal log stream already wrote via _json_sink/_pretty_sink -- same
+    manual-JSON-write shape as those two (see _json_sink above) rather than
+    Loguru's own `serialize=True`, so admin-audit.log's line shape matches the
+    rest of this app's logs instead of Loguru's default JSON structure.
+    """
+
+    def sink(message: "Message") -> None:
+        record = message.record
+        payload: dict[str, object] = {
+            "timestamp": record["time"].isoformat(),
+            "level": record["level"].name,
+            "message": record["message"],
+            **_scrubbed_extra(record),
+        }
+        Path(path).parent.mkdir(parents=True, exist_ok=True)
+        with Path(path).open("a", encoding="utf-8") as f:
+            f.write(json.dumps(payload, default=str) + "\n")
+
+    return sink
+
+
 class _InterceptHandler(logging.Handler):
     """Forwards stdlib `logging` records into Loguru so they share its sinks."""
 
@@ -109,6 +138,11 @@ def configure_logging(*, settings: Settings | None = None) -> None:
         logger.add(_pretty_sink, level=settings.LOG_LEVEL)
     else:
         logger.add(_json_sink, level=settings.LOG_LEVEL)
+    logger.add(
+        _admin_audit_sink_factory(settings.ADMIN_AUDIT_LOG_PATH),
+        level="INFO",
+        filter=_is_admin_action,
+    )
 
     # Route stdlib `logging` (uvicorn, sqlalchemy, third-party libs, and our
     # own logging.getLogger(__name__) call sites) through the same sinks.
