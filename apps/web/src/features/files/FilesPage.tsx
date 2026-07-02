@@ -1,9 +1,13 @@
-import { useInfiniteQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import {
+  useInfiniteQuery,
+  useMutation,
+  useQueryClient,
+} from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 
 import {
-  deleteFileApiV1FilesIdDelete,
-  downloadFileApiV1FilesIdDownloadGet,
+  deleteFileApiV1FilesFileIdDelete,
+  downloadFileApiV1FilesFileIdDownloadGet,
   listFilesApiV1FilesGet,
   listFilesApiV1FilesGetInfiniteQueryKey,
 } from "@forge/api-client";
@@ -56,7 +60,7 @@ export function FilesPage() {
     queryKey: listFilesApiV1FilesGetInfiniteQueryKey(),
     queryFn: async ({ pageParam }) => {
       const { data } = await listFilesApiV1FilesGet({
-        query: { after: pageParam ?? undefined, limit: 20 },
+        query: { after: pageParam, limit: 20 },
         throwOnError: true,
       });
       return data;
@@ -68,7 +72,10 @@ export function FilesPage() {
 
   const deleteMutation = useMutation({
     mutationFn: async (fileId: string) => {
-      await deleteFileApiV1FilesIdDelete({ path: { id: fileId }, throwOnError: true });
+      await deleteFileApiV1FilesFileIdDelete({
+        path: { file_id: fileId },
+        throwOnError: true,
+      });
     },
     onSuccess: async () => {
       await queryClient.invalidateQueries({
@@ -78,8 +85,8 @@ export function FilesPage() {
   });
 
   async function handleDownload(fileId: string): Promise<void> {
-    const { data } = await downloadFileApiV1FilesIdDownloadGet({
-      path: { id: fileId },
+    const { data } = await downloadFileApiV1FilesFileIdDownloadGet({
+      path: { file_id: fileId },
       throwOnError: true,
     });
     const url = data.data?.url;
@@ -123,7 +130,9 @@ export function FilesPage() {
                 <TableHead>{t("files.table.col_size")}</TableHead>
                 <TableHead>{t("files.table.col_uploader")}</TableHead>
                 <TableHead>{t("files.table.col_status")}</TableHead>
-                <TableHead className="text-right">{t("files.table.col_actions")}</TableHead>
+                <TableHead className="text-right">
+                  {t("files.table.col_actions")}
+                </TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -136,7 +145,7 @@ export function FilesPage() {
                   <TableCell>
                     <Avatar className="size-6">
                       <AvatarFallback className="text-xs">
-                        {uploaderInitials(file.uploader_id)}
+                        {uploaderInitials(file.uploaded_by)}
                       </AvatarFallback>
                     </Avatar>
                   </TableCell>
@@ -161,7 +170,9 @@ export function FilesPage() {
                         size="sm"
                         disabled={deleteMutation.isPending}
                         onClick={() => {
-                          if (window.confirm(t("files.action.delete_confirm"))) {
+                          if (
+                            window.confirm(t("files.action.delete_confirm"))
+                          ) {
                             void deleteMutation.mutateAsync(file.id);
                           }
                         }}

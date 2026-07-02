@@ -6,12 +6,7 @@ import { http, HttpResponse } from "msw";
 import { getApiBaseUrl } from "@forge/api-client";
 import type { StoredFilePublic } from "@forge/api-client";
 
-import {
-  envelope,
-  fixtureOrg,
-  fixtureUser,
-  makeStoredFile,
-} from "../../test/appShellFixtures";
+import { envelope, makeStoredFile } from "../../test/appShellFixtures";
 import { server } from "../../test/server";
 
 // Auto-succeed XHR PUTs (S3 presigned upload) -- jsdom has no real network
@@ -27,11 +22,15 @@ class AutoSuccessXHR {
   open = vi.fn();
   setRequestHeader = vi.fn();
   abort = vi.fn().mockImplementation(() => {
-    Promise.resolve().then(() => this.onabort?.());
+    void Promise.resolve().then(() => this.onabort?.());
   });
   send = vi.fn().mockImplementation(() => {
-    Promise.resolve().then(() => {
-      const e = new ProgressEvent("progress", { loaded: 100, total: 100, lengthComputable: true });
+    void Promise.resolve().then(() => {
+      const e = new ProgressEvent("progress", {
+        loaded: 100,
+        total: 100,
+        lengthComputable: true,
+      });
       this.upload.onprogress?.(e);
       this.onload?.();
     });
@@ -55,6 +54,19 @@ const presignResponse = {
 
 const { FileUploader } = await import("@forge/ui");
 
+// The file input is `aria-hidden`/`sr-only` with no accessible name (the
+// drop-zone label is on its wrapping <div>), so it can't be found via a
+// role/label query -- a real runtime check here (rather than a `!` or `as`
+// assertion) satisfies both no-non-null-assertion and
+// non-nullable-type-assertion-style at once.
+function getFileInput(): HTMLInputElement {
+  const input = document.querySelector<HTMLInputElement>('input[type="file"]');
+  if (!input) {
+    throw new Error('input[type="file"] not found');
+  }
+  return input;
+}
+
 describe("FileUploader", () => {
   beforeEach(() => {
     server.use(
@@ -76,19 +88,21 @@ describe("FileUploader", () => {
 
   it("shows a type-error when an accepted MIME is not matched", async () => {
     render(<FileUploader accept="image/*" onUploaded={vi.fn()} />);
-    const input = document.querySelector('input[type="file"]') as HTMLInputElement;
+    const input = getFileInput();
 
     const file = new File(["hello"], "doc.pdf", { type: "application/pdf" });
     // Bypass userEvent's own accept-filter so the component's matchesAccept logic runs
     const user = userEvent.setup({ applyAccept: false });
     await user.upload(input, file);
 
-    expect(await screen.findByText("File type not allowed.")).toBeInTheDocument();
+    expect(
+      await screen.findByText("File type not allowed."),
+    ).toBeInTheDocument();
   });
 
   it("shows a size-error when the file exceeds maxSize", async () => {
     render(<FileUploader maxSize={100} onUploaded={vi.fn()} />);
-    const input = document.querySelector('input[type="file"]') as HTMLInputElement;
+    const input = getFileInput();
 
     const file = new File(["x".repeat(200)], "big.txt", { type: "text/plain" });
     await userEvent.upload(input, file);
@@ -99,7 +113,7 @@ describe("FileUploader", () => {
   it("runs the full presign → XHR → confirm flow and calls onUploaded", async () => {
     const onUploaded = vi.fn();
     render(<FileUploader onUploaded={onUploaded} />);
-    const input = document.querySelector('input[type="file"]') as HTMLInputElement;
+    const input = getFileInput();
 
     const file = new File(["content"], "test.txt", { type: "text/plain" });
     await userEvent.upload(input, file);
@@ -113,14 +127,18 @@ describe("FileUploader", () => {
     server.use(
       http.post(`${API}/api/v1/files/presign`, () =>
         HttpResponse.json(
-          { data: null, error: { code: "internal_error", message: "err" }, meta: { request_id: "r1" } },
+          {
+            data: null,
+            error: { code: "internal_error", message: "err" },
+            meta: { request_id: "r1" },
+          },
           { status: 500 },
         ),
       ),
     );
 
     render(<FileUploader onUploaded={vi.fn()} />);
-    const input = document.querySelector('input[type="file"]') as HTMLInputElement;
+    const input = getFileInput();
 
     const file = new File(["content"], "test.txt", { type: "text/plain" });
     await userEvent.upload(input, file);
@@ -131,7 +149,7 @@ describe("FileUploader", () => {
   it("queues up to 3 concurrent uploads", async () => {
     const onUploaded = vi.fn();
     render(<FileUploader onUploaded={onUploaded} />);
-    const input = document.querySelector('input[type="file"]') as HTMLInputElement;
+    const input = getFileInput();
 
     const files = [
       new File(["a"], "a.txt", { type: "text/plain" }),

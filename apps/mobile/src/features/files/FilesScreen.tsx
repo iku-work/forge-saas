@@ -17,8 +17,8 @@ import {
 } from "react-native";
 
 import {
-  deleteFileApiV1FilesIdDelete,
-  downloadFileApiV1FilesIdDownloadGet,
+  deleteFileApiV1FilesFileIdDelete,
+  downloadFileApiV1FilesFileIdDownloadGet,
   listFilesApiV1FilesGet,
   listFilesApiV1FilesGetQueryKey,
   type StoredFilePublic,
@@ -132,9 +132,9 @@ export function FilesScreen() {
 
   const deleteMutation = useMutation({
     mutationFn: async (fileId: string) => {
-      await deleteFileApiV1FilesIdDelete({
+      await deleteFileApiV1FilesFileIdDelete({
         client,
-        path: { id: fileId },
+        path: { file_id: fileId },
         throwOnError: true,
       });
     },
@@ -143,9 +143,9 @@ export function FilesScreen() {
 
   const handleDownload = useCallback((fileId: string) => {
     void (async () => {
-      const { data } = await downloadFileApiV1FilesIdDownloadGet({
+      const { data } = await downloadFileApiV1FilesFileIdDownloadGet({
         client,
-        path: { id: fileId },
+        path: { file_id: fileId },
         throwOnError: true,
       });
       const url = data.data?.url;
@@ -188,8 +188,7 @@ export function FilesScreen() {
     [invalidateList, t],
   );
 
-  const files =
-    listQuery.data?.pages.flatMap((page) => page.data ?? []) ?? [];
+  const files = listQuery.data?.pages.flatMap((page) => page.data ?? []) ?? [];
 
   return (
     <View className="flex-1 bg-white">

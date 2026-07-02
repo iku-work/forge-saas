@@ -32,8 +32,8 @@ vi.mock("react-native", async (importOriginal) => {
 const mocks = vi.hoisted(() => ({
   listMyOrgsApiV1OrgsGet: vi.fn(),
   listFilesApiV1FilesGet: vi.fn(),
-  deleteFileApiV1FilesIdDelete: vi.fn(),
-  downloadFileApiV1FilesIdDownloadGet: vi.fn(),
+  deleteFileApiV1FilesFileIdDelete: vi.fn(),
+  downloadFileApiV1FilesFileIdDownloadGet: vi.fn(),
 }));
 vi.mock("@forge/api-client", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@forge/api-client")>();
@@ -41,8 +41,9 @@ vi.mock("@forge/api-client", async (importOriginal) => {
     ...actual,
     listMyOrgsApiV1OrgsGet: mocks.listMyOrgsApiV1OrgsGet,
     listFilesApiV1FilesGet: mocks.listFilesApiV1FilesGet,
-    deleteFileApiV1FilesIdDelete: mocks.deleteFileApiV1FilesIdDelete,
-    downloadFileApiV1FilesIdDownloadGet: mocks.downloadFileApiV1FilesIdDownloadGet,
+    deleteFileApiV1FilesFileIdDelete: mocks.deleteFileApiV1FilesFileIdDelete,
+    downloadFileApiV1FilesFileIdDownloadGet:
+      mocks.downloadFileApiV1FilesFileIdDownloadGet,
   };
 });
 
@@ -101,12 +102,15 @@ describe("FilesScreen", () => {
         meta: { request_id: "r2", next_cursor: null },
       },
     });
-    mocks.deleteFileApiV1FilesIdDelete.mockResolvedValue({
+    mocks.deleteFileApiV1FilesFileIdDelete.mockResolvedValue({
       data: { data: null, error: null },
     });
-    mocks.downloadFileApiV1FilesIdDownloadGet.mockResolvedValue({
+    mocks.downloadFileApiV1FilesFileIdDownloadGet.mockResolvedValue({
       data: {
-        data: { url: "https://cdn.example.com/invoice.pdf", expires_at: "2026-01-01T01:00:00Z" },
+        data: {
+          url: "https://cdn.example.com/invoice.pdf",
+          expires_at: "2026-01-01T01:00:00Z",
+        },
         error: null,
       },
     });
@@ -119,7 +123,11 @@ describe("FilesScreen", () => {
     }));
     mocks.listFilesApiV1FilesGet
       .mockResolvedValueOnce({
-        data: { data: [EXISTING_FILE], error: null, meta: { request_id: "r2", next_cursor: null } },
+        data: {
+          data: [EXISTING_FILE],
+          error: null,
+          meta: { request_id: "r2", next_cursor: null },
+        },
       })
       .mockResolvedValue({
         data: {
@@ -137,7 +145,9 @@ describe("FilesScreen", () => {
     await user.click(screen.getByRole("button", { name: "Upload" }));
     await user.click(screen.getByRole("button", { name: "Take photo" }));
 
-    expect(uploadsMocks.pickAndUpload).toHaveBeenCalledWith({ source: "camera" });
+    expect(uploadsMocks.pickAndUpload).toHaveBeenCalledWith({
+      source: "camera",
+    });
     await waitFor(() => {
       expect(screen.getByText("photo.jpg")).toBeTruthy();
     });
@@ -169,8 +179,8 @@ describe("FilesScreen", () => {
     await user.click(screen.getByRole("button", { name: "Delete" }));
 
     await waitFor(() => {
-      expect(mocks.deleteFileApiV1FilesIdDelete).toHaveBeenCalledWith(
-        expect.objectContaining({ path: { id: "file-1" } }),
+      expect(mocks.deleteFileApiV1FilesFileIdDelete).toHaveBeenCalledWith(
+        expect.objectContaining({ path: { file_id: "file-1" } }),
       );
     });
   });
@@ -183,10 +193,14 @@ describe("FilesScreen", () => {
     await user.click(screen.getByRole("button", { name: "Download" }));
 
     await waitFor(() => {
-      expect(mocks.downloadFileApiV1FilesIdDownloadGet).toHaveBeenCalledWith(
-        expect.objectContaining({ path: { id: "file-1" } }),
+      expect(
+        mocks.downloadFileApiV1FilesFileIdDownloadGet,
+      ).toHaveBeenCalledWith(
+        expect.objectContaining({ path: { file_id: "file-1" } }),
       );
-      expect(openURL).toHaveBeenCalledWith("https://cdn.example.com/invoice.pdf");
+      expect(openURL).toHaveBeenCalledWith(
+        "https://cdn.example.com/invoice.pdf",
+      );
     });
   });
 

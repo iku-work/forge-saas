@@ -11,7 +11,7 @@ import {
 } from "lucide-react";
 
 import {
-  confirmUploadApiV1FilesIdConfirmPost,
+  confirmUploadApiV1FilesFileIdConfirmPost,
   presignUploadApiV1FilesPresignPost,
 } from "@forge/api-client";
 import type { StoredFilePublic } from "@forge/api-client";
@@ -45,19 +45,40 @@ function matchesAccept(file: File, accept: string): boolean {
     const p = pattern.trim();
     if (p === file.type) return true;
     if (p.endsWith("/*")) return file.type.startsWith(p.slice(0, -1));
-    if (p.startsWith(".")) return file.name.toLowerCase().endsWith(p.toLowerCase());
+    if (p.startsWith("."))
+      return file.name.toLowerCase().endsWith(p.toLowerCase());
     return false;
   });
 }
 
 function StatusIcon({ status }: { status: UploadStatus }) {
   if (status === "uploading")
-    return <Loader2 className="size-4 shrink-0 animate-spin text-primary" aria-hidden="true" />;
+    return (
+      <Loader2
+        className="size-4 shrink-0 animate-spin text-primary"
+        aria-hidden="true"
+      />
+    );
   if (status === "done")
-    return <CheckCircle className="size-4 shrink-0 text-green-500" aria-hidden="true" />;
+    return (
+      <CheckCircle
+        className="size-4 shrink-0 text-green-500"
+        aria-hidden="true"
+      />
+    );
   if (status === "error")
-    return <AlertCircle className="size-4 shrink-0 text-destructive" aria-hidden="true" />;
-  return <Upload className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />;
+    return (
+      <AlertCircle
+        className="size-4 shrink-0 text-destructive"
+        aria-hidden="true"
+      />
+    );
+  return (
+    <Upload
+      className="size-4 shrink-0 text-muted-foreground"
+      aria-hidden="true"
+    />
+  );
 }
 
 function ProgressBar({ value }: { value: number }) {
@@ -69,12 +90,20 @@ function ProgressBar({ value }: { value: number }) {
       aria-valuemax={100}
       className="mt-1 h-1 w-full overflow-hidden rounded-full bg-muted"
     >
-      <div className="h-full bg-primary transition-all" style={{ width: `${value}%` }} />
+      <div
+        className="h-full bg-primary transition-all"
+        style={{ width: `${value}%` }}
+      />
     </div>
   );
 }
 
-export function FileUploader({ bucket, accept, maxSize, onUploaded }: FileUploaderProps) {
+export function FileUploader({
+  bucket,
+  accept,
+  maxSize,
+  onUploaded,
+}: FileUploaderProps) {
   const { t } = useTranslation();
   const [items, setItems] = useState<UploadItem[]>([]);
   const [isDragActive, setIsDragActive] = useState(false);
@@ -110,7 +139,11 @@ export function FileUploader({ bucket, accept, maxSize, onUploaded }: FileUpload
       // fall through to null check below
     }
     if (!presignResult) {
-      patchItem(localId, { status: "error", error: t("files.uploader.error_upload"), retryable: true });
+      patchItem(localId, {
+        status: "error",
+        error: t("files.uploader.error_upload"),
+        retryable: true,
+      });
       return;
     }
     const { file_id: fileId, upload_url: uploadUrl } = presignResult;
@@ -120,10 +153,15 @@ export function FileUploader({ bucket, accept, maxSize, onUploaded }: FileUpload
         const xhr = new XMLHttpRequest();
         patchItem(localId, { xhr });
         xhr.open("PUT", uploadUrl);
-        xhr.setRequestHeader("Content-Type", file.type || "application/octet-stream");
+        xhr.setRequestHeader(
+          "Content-Type",
+          file.type || "application/octet-stream",
+        );
         xhr.upload.onprogress = (e) => {
           if (e.lengthComputable) {
-            patchItem(localId, { progress: Math.round((e.loaded / e.total) * 100) });
+            patchItem(localId, {
+              progress: Math.round((e.loaded / e.total) * 100),
+            });
           }
         };
         xhr.onload = () => {
@@ -149,9 +187,9 @@ export function FileUploader({ bucket, accept, maxSize, onUploaded }: FileUpload
     }
 
     try {
-      const res = await confirmUploadApiV1FilesIdConfirmPost({
+      const res = await confirmUploadApiV1FilesFileIdConfirmPost({
         throwOnError: true,
-        path: { id: fileId },
+        path: { file_id: fileId },
       });
       const stored = res.data?.data;
       if (!stored) throw new Error("empty confirm");
@@ -168,7 +206,10 @@ export function FileUploader({ bucket, accept, maxSize, onUploaded }: FileUpload
   }
 
   function drain() {
-    while (runningRef.current < MAX_CONCURRENT && pendingRef.current.length > 0) {
+    while (
+      runningRef.current < MAX_CONCURRENT &&
+      pendingRef.current.length > 0
+    ) {
       const entry = pendingRef.current.shift()!;
       runningRef.current++;
       void uploadOne(entry.localId, entry.file).finally(() => {
@@ -183,7 +224,14 @@ export function FileUploader({ bucket, accept, maxSize, onUploaded }: FileUpload
     for (const file of files) {
       const localId = crypto.randomUUID();
       if (accept && !matchesAccept(file, accept)) {
-        newItems.push({ localId, file, status: "error", progress: 0, error: t("files.uploader.error_type"), retryable: false });
+        newItems.push({
+          localId,
+          file,
+          status: "error",
+          progress: 0,
+          error: t("files.uploader.error_type"),
+          retryable: false,
+        });
         continue;
       }
       if (maxSize && file.size > maxSize) {
@@ -208,13 +256,19 @@ export function FileUploader({ bucket, accept, maxSize, onUploaded }: FileUpload
     if (item.xhr) {
       item.xhr.abort();
     } else if (item.status === "queued") {
-      pendingRef.current = pendingRef.current.filter((p) => p.localId !== item.localId);
+      pendingRef.current = pendingRef.current.filter(
+        (p) => p.localId !== item.localId,
+      );
       setItems((prev) => prev.filter((it) => it.localId !== item.localId));
     }
   }
 
   function retry(item: UploadItem) {
-    patchItem(item.localId, { status: "queued", error: undefined, progress: 0 });
+    patchItem(item.localId, {
+      status: "queued",
+      error: undefined,
+      progress: 0,
+    });
     pendingRef.current.push({ localId: item.localId, file: item.file });
     drain();
   }
@@ -268,10 +322,14 @@ export function FileUploader({ bucket, accept, maxSize, onUploaded }: FileUpload
       >
         <Upload className="size-8 text-muted-foreground" aria-hidden="true" />
         <p className="text-sm font-medium">
-          {isDragActive ? t("files.uploader.drag_active") : t("files.uploader.drop_here")}
+          {isDragActive
+            ? t("files.uploader.drag_active")
+            : t("files.uploader.drop_here")}
         </p>
         <p className="text-xs text-muted-foreground">
-          <span className="text-primary underline">{t("files.uploader.browse")}</span>{" "}
+          <span className="text-primary underline">
+            {t("files.uploader.browse")}
+          </span>{" "}
           {t("files.uploader.hint")}
         </p>
         <input
@@ -289,15 +347,24 @@ export function FileUploader({ bucket, accept, maxSize, onUploaded }: FileUpload
       {items.length > 0 && (
         <ul className="space-y-2" aria-label="upload queue">
           {items.map((item) => (
-            <li key={item.localId} className="flex items-center gap-3 rounded-md border p-3">
+            <li
+              key={item.localId}
+              className="flex items-center gap-3 rounded-md border p-3"
+            >
               <StatusIcon status={item.status} />
               <div className="min-w-0 flex-1">
                 <p className="truncate text-sm font-medium">{item.file.name}</p>
-                <p className="text-xs text-muted-foreground">{formatBytes(item.file.size)}</p>
+                <p className="text-xs text-muted-foreground">
+                  {formatBytes(item.file.size)}
+                </p>
                 {item.error && (
-                  <p className="mt-0.5 text-xs text-destructive">{item.error}</p>
+                  <p className="mt-0.5 text-xs text-destructive">
+                    {item.error}
+                  </p>
                 )}
-                {item.status === "uploading" && <ProgressBar value={item.progress} />}
+                {item.status === "uploading" && (
+                  <ProgressBar value={item.progress} />
+                )}
               </div>
               <div className="flex items-center gap-1">
                 {item.status === "error" && item.retryable && (

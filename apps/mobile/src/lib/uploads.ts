@@ -33,8 +33,8 @@ import {
 } from "expo-image-picker";
 
 import {
-  confirmUploadApiV1FilesIdConfirmPost,
-  deleteFileApiV1FilesIdDelete,
+  confirmUploadApiV1FilesFileIdConfirmPost,
+  deleteFileApiV1FilesFileIdDelete,
   presignUploadApiV1FilesPresignPost,
   type StoredFilePublic,
 } from "@forge/api-client";
@@ -123,7 +123,8 @@ async function assetFromImagePicker(
     return null;
   }
   const mimeType = asset.mimeType ?? FALLBACK_IMAGE_MIME_TYPE;
-  const name = asset.fileName ?? `photo-${String(Date.now())}.${extensionFor(mimeType)}`;
+  const name =
+    asset.fileName ?? `photo-${String(Date.now())}.${extensionFor(mimeType)}`;
   const size = await resolveSize(asset.uri, asset.fileSize);
   return { uri: asset.uri, name, size, mimeType };
 }
@@ -160,7 +161,10 @@ type RunState =
 
 async function deletePendingFile(fileId: string): Promise<void> {
   try {
-    await deleteFileApiV1FilesIdDelete({ client, path: { id: fileId } });
+    await deleteFileApiV1FilesFileIdDelete({
+      client,
+      path: { file_id: fileId },
+    });
   } catch {
     // Best effort -- the row is harmless if this fails (it's just a
     // never-confirmed "pending" file) and the caller already got the
@@ -238,12 +242,17 @@ export function pickAndUpload(options: PickAndUploadOptions): UploadHandle {
 
     if (uploadResult.status < 200 || uploadResult.status >= 300) {
       state = { phase: "settled" };
-      throw new Error(`Upload failed with status ${String(uploadResult.status)}.`);
+      throw new Error(
+        `Upload failed with status ${String(uploadResult.status)}.`,
+      );
     }
 
-    const { data: confirmEnvelope } = await confirmUploadApiV1FilesIdConfirmPost(
-      { client, throwOnError: true, path: { id: fileId } },
-    );
+    const { data: confirmEnvelope } =
+      await confirmUploadApiV1FilesFileIdConfirmPost({
+        client,
+        throwOnError: true,
+        path: { file_id: fileId },
+      });
     state = { phase: "settled" };
     const stored = confirmEnvelope.data;
     if (!stored) {

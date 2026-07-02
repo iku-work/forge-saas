@@ -160,18 +160,19 @@ export const fixtureConsent: ConsentRecordPublic = {
   ts: "2026-01-01T00:00:00Z",
 };
 
-export function makeStoredFile(suffix: number, overrides: Partial<StoredFilePublic> = {}): StoredFilePublic {
+export function makeStoredFile(
+  suffix: number,
+  overrides: Partial<StoredFilePublic> = {},
+): StoredFilePublic {
   return {
     id: `aaaaaaaa-aaaa-aaaa-aaaa-${String(suffix).padStart(12, "0")}`,
-    org_id: fixtureOrg.id,
     bucket: "default",
-    filename: `file-${suffix}.txt`,
+    filename: `file-${String(suffix)}.txt`,
     content_type: "text/plain",
     size_bytes: 1024 * suffix,
     status: "ready",
-    uploader_id: fixtureUser.id,
+    uploaded_by: fixtureUser.id,
     created_at: "2026-01-01T00:00:00Z",
-    updated_at: "2026-01-01T00:00:00Z",
     ...overrides,
   };
 }

@@ -29,23 +29,35 @@ vi.mock("expo-image-picker", () => imagePicker);
 
 const mocks = vi.hoisted(() => ({
   presignUploadApiV1FilesPresignPost: vi.fn(),
-  confirmUploadApiV1FilesIdConfirmPost: vi.fn(),
-  deleteFileApiV1FilesIdDelete: vi.fn(),
+  confirmUploadApiV1FilesFileIdConfirmPost: vi.fn(),
+  deleteFileApiV1FilesFileIdDelete: vi.fn(),
 }));
 vi.mock("@forge/api-client", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@forge/api-client")>();
   return {
     ...actual,
-    presignUploadApiV1FilesPresignPost: mocks.presignUploadApiV1FilesPresignPost,
-    confirmUploadApiV1FilesIdConfirmPost: mocks.confirmUploadApiV1FilesIdConfirmPost,
-    deleteFileApiV1FilesIdDelete: mocks.deleteFileApiV1FilesIdDelete,
+    presignUploadApiV1FilesPresignPost:
+      mocks.presignUploadApiV1FilesPresignPost,
+    confirmUploadApiV1FilesFileIdConfirmPost:
+      mocks.confirmUploadApiV1FilesFileIdConfirmPost,
+    deleteFileApiV1FilesFileIdDelete: mocks.deleteFileApiV1FilesFileIdDelete,
   };
 });
 
 const { pickAndUpload, UploadPermissionError } = await import("./uploads");
 
-const GRANTED = { granted: true, status: "granted", expires: "never", canAskAgain: true } as const;
-const DENIED = { granted: false, status: "denied", expires: "never", canAskAgain: true } as const;
+const GRANTED = {
+  granted: true,
+  status: "granted",
+  expires: "never",
+  canAskAgain: true,
+} as const;
+const DENIED = {
+  granted: false,
+  status: "denied",
+  expires: "never",
+  canAskAgain: true,
+} as const;
 
 const PRESIGN_RESPONSE = {
   data: {
@@ -72,9 +84,16 @@ const CONFIRMED_FILE = {
 };
 
 function makeUploadTask(overrides: { uploadResult?: unknown } = {}) {
-  const uploadAsync = vi.fn().mockResolvedValue(
-    overrides.uploadResult ?? { status: 200, headers: {}, mimeType: null, body: "" },
-  );
+  const uploadAsync = vi
+    .fn()
+    .mockResolvedValue(
+      overrides.uploadResult ?? {
+        status: 200,
+        headers: {},
+        mimeType: null,
+        body: "",
+      },
+    );
   const cancelAsync = vi.fn().mockResolvedValue(undefined);
   return { uploadAsync, cancelAsync };
 }
@@ -84,17 +103,28 @@ describe("lib/uploads", () => {
     vi.clearAllMocks();
     imagePicker.requestCameraPermissionsAsync.mockResolvedValue(GRANTED);
     imagePicker.requestMediaLibraryPermissionsAsync.mockResolvedValue(GRANTED);
-    mocks.presignUploadApiV1FilesPresignPost.mockResolvedValue(PRESIGN_RESPONSE);
-    mocks.confirmUploadApiV1FilesIdConfirmPost.mockResolvedValue({
+    mocks.presignUploadApiV1FilesPresignPost.mockResolvedValue(
+      PRESIGN_RESPONSE,
+    );
+    mocks.confirmUploadApiV1FilesFileIdConfirmPost.mockResolvedValue({
       data: { data: CONFIRMED_FILE, error: null },
     });
-    mocks.deleteFileApiV1FilesIdDelete.mockResolvedValue({ data: { data: null, error: null } });
+    mocks.deleteFileApiV1FilesFileIdDelete.mockResolvedValue({
+      data: { data: null, error: null },
+    });
   });
 
   it("runs presign -> PUT -> confirm for a camera capture", async () => {
     imagePicker.launchCameraAsync.mockResolvedValue({
       canceled: false,
-      assets: [{ uri: "file://photo.jpg", fileName: "photo.jpg", fileSize: 1024, mimeType: "image/jpeg" }],
+      assets: [
+        {
+          uri: "file://photo.jpg",
+          fileName: "photo.jpg",
+          fileSize: 1024,
+          mimeType: "image/jpeg",
+        },
+      ],
     });
     const task = makeUploadTask();
     fileSystem.createUploadTask.mockReturnValue(task);
@@ -104,7 +134,11 @@ describe("lib/uploads", () => {
 
     expect(mocks.presignUploadApiV1FilesPresignPost).toHaveBeenCalledWith(
       expect.objectContaining({
-        body: { filename: "photo.jpg", content_type: "image/jpeg", size_bytes: 1024 },
+        body: {
+          filename: "photo.jpg",
+          content_type: "image/jpeg",
+          size_bytes: 1024,
+        },
       }),
     );
     expect(fileSystem.createUploadTask).toHaveBeenCalledWith(
@@ -113,8 +147,8 @@ describe("lib/uploads", () => {
       expect.objectContaining({ httpMethod: "PUT" }),
       expect.any(Function),
     );
-    expect(mocks.confirmUploadApiV1FilesIdConfirmPost).toHaveBeenCalledWith(
-      expect.objectContaining({ path: { id: "file-1" } }),
+    expect(mocks.confirmUploadApiV1FilesFileIdConfirmPost).toHaveBeenCalledWith(
+      expect.objectContaining({ path: { file_id: "file-1" } }),
     );
     expect(file).toEqual(CONFIRMED_FILE);
   });
@@ -122,7 +156,14 @@ describe("lib/uploads", () => {
   it("passes the bucket through to presign when provided", async () => {
     imagePicker.launchImageLibraryAsync.mockResolvedValue({
       canceled: false,
-      assets: [{ uri: "file://avatar.jpg", fileName: "avatar.jpg", fileSize: 512, mimeType: "image/jpeg" }],
+      assets: [
+        {
+          uri: "file://avatar.jpg",
+          fileName: "avatar.jpg",
+          fileSize: 512,
+          mimeType: "image/jpeg",
+        },
+      ],
     });
     fileSystem.createUploadTask.mockReturnValue(makeUploadTask());
 
@@ -143,7 +184,14 @@ describe("lib/uploads", () => {
   it("uploads a document picked from the document source", async () => {
     documentPicker.getDocumentAsync.mockResolvedValue({
       canceled: false,
-      assets: [{ uri: "file://report.pdf", name: "report.pdf", size: 2048, mimeType: "application/pdf" }],
+      assets: [
+        {
+          uri: "file://report.pdf",
+          name: "report.pdf",
+          size: 2048,
+          mimeType: "application/pdf",
+        },
+      ],
     });
     fileSystem.createUploadTask.mockReturnValue(makeUploadTask());
 
@@ -151,14 +199,21 @@ describe("lib/uploads", () => {
 
     expect(mocks.presignUploadApiV1FilesPresignPost).toHaveBeenCalledWith(
       expect.objectContaining({
-        body: { filename: "report.pdf", content_type: "application/pdf", size_bytes: 2048 },
+        body: {
+          filename: "report.pdf",
+          content_type: "application/pdf",
+          size_bytes: 2048,
+        },
       }),
     );
     expect(file).toEqual(CONFIRMED_FILE);
   });
 
   it("resolves null without presigning when the picker is canceled", async () => {
-    imagePicker.launchImageLibraryAsync.mockResolvedValue({ canceled: true, assets: null });
+    imagePicker.launchImageLibraryAsync.mockResolvedValue({
+      canceled: true,
+      assets: null,
+    });
 
     const file = await pickAndUpload({ source: "library" }).result;
 
@@ -169,9 +224,9 @@ describe("lib/uploads", () => {
   it("rejects with UploadPermissionError when camera permission is denied", async () => {
     imagePicker.requestCameraPermissionsAsync.mockResolvedValue(DENIED);
 
-    await expect(pickAndUpload({ source: "camera" }).result).rejects.toBeInstanceOf(
-      UploadPermissionError,
-    );
+    await expect(
+      pickAndUpload({ source: "camera" }).result,
+    ).rejects.toBeInstanceOf(UploadPermissionError);
     expect(imagePicker.launchCameraAsync).not.toHaveBeenCalled();
     expect(mocks.presignUploadApiV1FilesPresignPost).not.toHaveBeenCalled();
   });
@@ -179,7 +234,14 @@ describe("lib/uploads", () => {
   it("reports upload progress as a 0..1 fraction", async () => {
     documentPicker.getDocumentAsync.mockResolvedValue({
       canceled: false,
-      assets: [{ uri: "file://report.pdf", name: "report.pdf", size: 100, mimeType: "application/pdf" }],
+      assets: [
+        {
+          uri: "file://report.pdf",
+          name: "report.pdf",
+          size: 100,
+          mimeType: "application/pdf",
+        },
+      ],
     });
     type ProgressCallback = (data: {
       totalBytesSent: number;
@@ -187,7 +249,12 @@ describe("lib/uploads", () => {
     }) => void;
     let progressCallback: ProgressCallback | undefined;
     fileSystem.createUploadTask.mockImplementation(
-      (_url: string, _uri: string, _options: unknown, callback?: ProgressCallback) => {
+      (
+        _url: string,
+        _uri: string,
+        _options: unknown,
+        callback?: ProgressCallback,
+      ) => {
         progressCallback = callback;
         return makeUploadTask();
       },
@@ -207,13 +274,21 @@ describe("lib/uploads", () => {
   it("deletes the pending StoredFile and resolves null when canceled mid-upload", async () => {
     documentPicker.getDocumentAsync.mockResolvedValue({
       canceled: false,
-      assets: [{ uri: "file://report.pdf", name: "report.pdf", size: 100, mimeType: "application/pdf" }],
+      assets: [
+        {
+          uri: "file://report.pdf",
+          name: "report.pdf",
+          size: 100,
+          mimeType: "application/pdf",
+        },
+      ],
     });
     let resolveUpload: ((value: unknown) => void) | undefined;
     const uploadAsync = vi.fn(
-      () => new Promise((resolve) => {
-        resolveUpload = resolve;
-      }),
+      () =>
+        new Promise((resolve) => {
+          resolveUpload = resolve;
+        }),
     );
     const cancelAsync = vi.fn().mockImplementation(() => {
       resolveUpload?.(undefined);
@@ -228,17 +303,26 @@ describe("lib/uploads", () => {
     const file = await handle.result;
 
     expect(cancelAsync).toHaveBeenCalled();
-    expect(mocks.deleteFileApiV1FilesIdDelete).toHaveBeenCalledWith(
-      expect.objectContaining({ path: { id: "file-1" } }),
+    expect(mocks.deleteFileApiV1FilesFileIdDelete).toHaveBeenCalledWith(
+      expect.objectContaining({ path: { file_id: "file-1" } }),
     );
-    expect(mocks.confirmUploadApiV1FilesIdConfirmPost).not.toHaveBeenCalled();
+    expect(
+      mocks.confirmUploadApiV1FilesFileIdConfirmPost,
+    ).not.toHaveBeenCalled();
     expect(file).toBeNull();
   });
 
   it("does nothing when cancel is called after the upload already settled", async () => {
     imagePicker.launchCameraAsync.mockResolvedValue({
       canceled: false,
-      assets: [{ uri: "file://photo.jpg", fileName: "photo.jpg", fileSize: 1024, mimeType: "image/jpeg" }],
+      assets: [
+        {
+          uri: "file://photo.jpg",
+          fileName: "photo.jpg",
+          fileSize: 1024,
+          mimeType: "image/jpeg",
+        },
+      ],
     });
     fileSystem.createUploadTask.mockReturnValue(makeUploadTask());
 
@@ -246,6 +330,6 @@ describe("lib/uploads", () => {
     await handle.result;
     await handle.cancel();
 
-    expect(mocks.deleteFileApiV1FilesIdDelete).not.toHaveBeenCalled();
+    expect(mocks.deleteFileApiV1FilesFileIdDelete).not.toHaveBeenCalled();
   });
 });

@@ -34,7 +34,7 @@ vi.mock("@forge/hooks", () => hooks);
 
 // Auto-succeed XHR PUTs so the embedded FileUploader renders without errors
 class AutoSuccessXHR {
-  readonly upload = { onprogress: null as any };
+  readonly upload = { onprogress: null as ((e: ProgressEvent) => void) | null };
   status = 200;
   onload: (() => void) | null = null;
   onerror: (() => void) | null = null;
@@ -84,7 +84,9 @@ describe("FilesPage", () => {
 
     renderPage();
 
-    expect(await screen.findByRole("heading", { name: "Files" })).toBeInTheDocument();
+    expect(
+      await screen.findByRole("heading", { name: "Files" }),
+    ).toBeInTheDocument();
   });
 
   it("shows empty state when no files exist", async () => {
@@ -102,7 +104,9 @@ describe("FilesPage", () => {
   it("renders the file list with filename and size", async () => {
     const file = makeStoredFile(1);
     server.use(
-      http.get(`${API}/api/v1/files`, () => HttpResponse.json(envelope([file]))),
+      http.get(`${API}/api/v1/files`, () =>
+        HttpResponse.json(envelope([file])),
+      ),
     );
 
     renderPage();
