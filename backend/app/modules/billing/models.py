@@ -52,6 +52,18 @@ class Subscription(UUIDPKMixin, TimestampMixin, SQLModel, table=True):
     current_period_end: datetime = Field(sa_type=_TZ_DATETIME)  # type: ignore[call-overload]
     cancel_at_period_end: bool = Field(default=False)
     trial_end: datetime | None = Field(default=None, sa_type=_TZ_DATETIME)  # type: ignore[call-overload]
+    # T-141: admin force-assign (app.modules.admin.service.AdminBillingOverrideService)
+    # sets these three on top of Stripe's own fields above. billing_interval
+    # has no Stripe-webhook equivalent to read it back from (Stripe reports
+    # interval per-price, not per-subscription in the webhook payload this
+    # app stores) -- it's purely what the admin selected. free_override marks
+    # a subscription an admin comp'd without a real Stripe subscription behind
+    # it (see stripe_subscription_id's ADMIN_OVERRIDE_PREFIX placeholder in
+    # app.modules.admin.service); override_expires_at is when that comp
+    # should be reviewed/revert, independent of current_period_end.
+    billing_interval: str | None = Field(default=None)
+    free_override: bool = Field(default=False)
+    override_expires_at: datetime | None = Field(default=None, sa_type=_TZ_DATETIME)  # type: ignore[call-overload]
 
 
 class DunningCampaign(UUIDPKMixin, TimestampMixin, SQLModel, table=True):

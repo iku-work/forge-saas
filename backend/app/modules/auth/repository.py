@@ -11,10 +11,11 @@ from datetime import datetime
 from typing import Any, ClassVar, Protocol, cast
 from uuid import UUID
 
-from sqlalchemy import CursorResult, delete, select
+from sqlalchemy import CursorResult, delete, select, tuple_
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import NotFoundError
+from app.core.repository import DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE
 from app.models._mixins import utcnow
 from app.modules.auth.models import (
     EmailVerificationToken,
@@ -72,6 +73,35 @@ class UserRepository:
         user = await self._get_or_raise(user_id)
         user.locked_until = until
         await self.session.flush()
+
+    async def list_cursor(
+        self,
+        after: UUID | None = None,
+        limit: int = DEFAULT_PAGE_SIZE,
+        *,
+        q: str | None = None,
+        active: bool | None = None,
+    ) -> tuple[list[User], UUID | None]:
+        # T-141: admin user directory -- global (not org-scoped), so this
+        # can't live on BaseRepository. Mirrors OrganizationRepository's own
+        # list_cursor (app.modules.tenancy.repository) for the same reason.
+        capped_limit = min(limit, MAX_PAGE_SIZE)
+        m = cast("Any", User)
+        stmt = select(User).where(m.deleted_at.is_(None))
+        if q is not None:
+            stmt = stmt.where(m.email.ilike(f"%{q}%"))
+        if active is not None:
+            stmt = stmt.where(m.is_active.is_(active))
+        stmt = stmt.order_by(m.created_at.desc(), m.id.desc()).limit(capped_limit + 1)
+        if after is not None:
+            anchor = await self.get_by_id(after)
+            if anchor is not None:
+                stmt = stmt.where(tuple_(m.created_at, m.id) < (anchor.created_at, anchor.id))
+        result = await self.session.execute(stmt)
+        items = list(result.scalars().all())
+        page = items[:capped_limit]
+        next_cursor = page[-1].id if page and len(items) > capped_limit else None
+        return page, next_cursor
 
     async def mark_email_verified(self, user_id: UUID) -> None:
         # Verifying the email is what flips a freshly-registered user from

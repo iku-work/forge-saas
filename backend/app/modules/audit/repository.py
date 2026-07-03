@@ -8,7 +8,7 @@ no code path that can mutate or remove a row once written.
 from typing import Any, cast
 from uuid import UUID
 
-from sqlalchemy import exists, select, tuple_
+from sqlalchemy import exists, func, select, tuple_
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.repository import DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE
@@ -63,3 +63,26 @@ class AuditRepository:
         page = items[:capped_limit]
         next_cursor = page[-1].id if len(items) > capped_limit else None
         return page, next_cursor
+
+    async def count_by_actor(self, actor_id: UUID) -> int:
+        # T-141: backs the admin user-detail "audit summary" total count.
+        m = cast("Any", AuditEvent)
+        stmt = select(func.count()).select_from(AuditEvent).where(m.actor_id == actor_id)
+        result = await self.session.execute(stmt)
+        return result.scalar_one()
+
+    async def list_recent_by_actor(
+        self, actor_id: UUID, limit: int = DEFAULT_PAGE_SIZE
+    ) -> list[AuditEvent]:
+        # T-141: a flat "most recent N" list for the admin user-detail
+        # summary, not full cursor pagination -- support staff want a quick
+        # glance, not to page through a user's entire history here.
+        m = cast("Any", AuditEvent)
+        stmt = (
+            select(AuditEvent)
+            .where(m.actor_id == actor_id)
+            .order_by(m.ts.desc(), m.id.desc())
+            .limit(min(limit, MAX_PAGE_SIZE))
+        )
+        result = await self.session.execute(stmt)
+        return list(result.scalars().all())

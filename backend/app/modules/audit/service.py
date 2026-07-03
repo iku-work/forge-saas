@@ -39,6 +39,7 @@ class AuditService:
         diff: dict[str, Any] | None = None,
         ip: str | None = None,
         ua: str | None = None,
+        severity: str = "info",
     ) -> None:
         try:
             async with self._session.begin_nested():
@@ -51,6 +52,7 @@ class AuditService:
                     diff=diff,
                     ip_address=ip,
                     user_agent=ua,
+                    severity=severity,
                 )
         except Exception as exc:  # noqa: BLE001 — audit failures must never roll back the caller's business transaction (§T-028)
             logger.warning("audit.write_failed: action=%s resource_type=%s", action, resource_type)

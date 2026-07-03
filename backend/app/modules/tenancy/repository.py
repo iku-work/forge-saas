@@ -132,6 +132,17 @@ class MembershipRepository:
         next_cursor = page[-1].id if page and len(items) > capped_limit else None
         return page, next_cursor
 
+    async def list_for_user(self, user_id: UUID) -> list[Membership]:
+        # T-141: admin user-detail "memberships" list. Unbounded like
+        # OrganizationRepository.list_for_user just above -- "orgs/memberships
+        # one user belongs to" is bounded by how many orgs a person can
+        # realistically join, not a table §0.3 is guarding unbounded growth
+        # of.
+        m = cast("Any", Membership)
+        stmt = select(Membership).where(m.user_id == user_id).order_by(m.created_at.desc())
+        result = await self.session.execute(stmt)
+        return list(result.scalars().all())
+
     async def set_role(self, membership_id: UUID, role: MemberRole) -> Membership:
         membership = await self._get_or_raise(membership_id)
         membership.role = role
@@ -150,6 +161,14 @@ class MembershipRepository:
         stmt = (
             select(func.count()).select_from(Membership).where(m.org_id == org_id, m.role == role)
         )
+        result = await self.session.execute(stmt)
+        return result.scalar_one()
+
+    async def count_by_org(self, org_id: UUID) -> int:
+        # T-141: admin org-detail "member count" -- every role, not one at a
+        # time like count_by_org_and_role above.
+        m = cast("Any", Membership)
+        stmt = select(func.count()).select_from(Membership).where(m.org_id == org_id)
         result = await self.session.execute(stmt)
         return result.scalar_one()
 

@@ -37,3 +37,8 @@ class AuditEvent(SQLModel, table=True):
     diff: dict[str, Any] | None = Field(default=None, sa_column=Column(JSONB))
     ip_address: str | None = Field(default=None)
     user_agent: str | None = Field(default=None)
+    # T-141: lets admin-audit alerting query "everything elevated" without
+    # parsing `action` strings. Defaults to "info" so every pre-existing
+    # caller (auth, tenancy, T-122's feature-flag overrides) needs no change;
+    # only T-141's admin write endpoints pass severity="elevated".
+    severity: str = Field(default="info", index=True)
