@@ -167,6 +167,9 @@ export const handlers = [
   http.get(`${API}/api/v1/billing/plans`, () =>
     HttpResponse.json(envelope([fixturePlan])),
   ),
+  http.get(`${API}/api/v1/billing/invoices`, () =>
+    HttpResponse.json(envelope([])),
+  ),
   http.post(`${API}/api/v1/billing/webhooks/stripe`, () =>
     HttpResponse.json({ received: true }),
   ),

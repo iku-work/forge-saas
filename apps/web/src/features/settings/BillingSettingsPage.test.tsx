@@ -1,10 +1,11 @@
 import { http, HttpResponse } from "msw";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { getApiBaseUrl } from "@forge/api-client";
-import type { PlanPublic, SubscriptionPublic } from "@forge/api-client";
+import type { InvoiceDto, PlanPublic, SubscriptionPublic } from "@forge/api-client";
 
 import { envelope, fixtureOrg } from "../../test/appShellFixtures";
 import { server } from "../../test/server";
@@ -33,6 +34,21 @@ const proPlan: PlanPublic = {
   price_yearly: 29000,
   features: { seats: 10 },
 };
+
+function makeInvoice(id: string): InvoiceDto {
+  return {
+    id,
+    number: `INV-${id}`,
+    amount_paid: 2900,
+    currency: "usd",
+    status: "paid",
+    hosted_invoice_url: `https://invoice.stripe.example/${id}`,
+    invoice_pdf: `https://invoice.stripe.example/${id}.pdf`,
+    period_start: "2026-01-01T00:00:00Z",
+    period_end: "2026-02-01T00:00:00Z",
+    created_at: "2026-01-01T00:00:00Z",
+  };
+}
 
 function renderPage() {
   const queryClient = new QueryClient();
@@ -124,5 +140,83 @@ describe("BillingSettingsPage", () => {
     // only the Free row offers an upgrade.
     expect(screen.getByRole("button", { name: "Current plan" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "Upgrade" })).toBeInTheDocument();
+  });
+
+  it("shows an empty-state message when the org has no invoices", async () => {
+    hooks.usePermission.mockReturnValue(true);
+    server.use(
+      http.get(`${API}/api/v1/billing/subscription`, () =>
+        HttpResponse.json(envelope(null)),
+      ),
+      http.get(`${API}/api/v1/billing/plans`, () =>
+        HttpResponse.json(envelope([freePlan])),
+      ),
+      http.get(`${API}/api/v1/billing/invoices`, () =>
+        HttpResponse.json(envelope([])),
+      ),
+    );
+
+    renderPage();
+
+    expect(await screen.findByText("No invoices yet.")).toBeInTheDocument();
+  });
+
+  it("lists invoices with formatted amount, status, and a PDF download link", async () => {
+    hooks.usePermission.mockReturnValue(true);
+    server.use(
+      http.get(`${API}/api/v1/billing/subscription`, () =>
+        HttpResponse.json(envelope(null)),
+      ),
+      http.get(`${API}/api/v1/billing/plans`, () =>
+        HttpResponse.json(envelope([freePlan])),
+      ),
+      http.get(`${API}/api/v1/billing/invoices`, () =>
+        HttpResponse.json(envelope([makeInvoice("in_1")])),
+      ),
+    );
+
+    renderPage();
+
+    expect(await screen.findByText("$29.00")).toBeInTheDocument();
+    expect(screen.getByText("paid")).toBeInTheDocument();
+    const link = screen.getByRole("link", { name: "Download PDF" });
+    expect(link).toHaveAttribute(
+      "href",
+      "https://invoice.stripe.example/in_1.pdf",
+    );
+  });
+
+  it("shows a Load more button that fetches the next cursor page", async () => {
+    hooks.usePermission.mockReturnValue(true);
+    server.use(
+      http.get(`${API}/api/v1/billing/subscription`, () =>
+        HttpResponse.json(envelope(null)),
+      ),
+      http.get(`${API}/api/v1/billing/plans`, () =>
+        HttpResponse.json(envelope([freePlan])),
+      ),
+      http.get(`${API}/api/v1/billing/invoices`, ({ request }) => {
+        const after = new URL(request.url).searchParams.get("after");
+        if (after === null) {
+          return HttpResponse.json({
+            ...envelope([makeInvoice("in_1")]),
+            meta: { request_id: "req-1", next_cursor: "in_1" },
+          });
+        }
+        return HttpResponse.json(envelope([makeInvoice("in_2")]));
+      }),
+    );
+
+    renderPage();
+
+    const loadMore = await screen.findByRole("button", { name: "Load more" });
+    await userEvent.click(loadMore);
+
+    await waitFor(() => {
+      expect(screen.getAllByText("$29.00")).toHaveLength(2);
+    });
+    expect(
+      screen.queryByRole("button", { name: "Load more" }),
+    ).not.toBeInTheDocument();
   });
 });

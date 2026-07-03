@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useInfiniteQuery, useMutation, useQuery } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 
 import {
@@ -7,6 +7,8 @@ import {
   createPortalSessionApiV1BillingPortalSessionPost,
   getSubscriptionApiV1BillingSubscriptionGet,
   getSubscriptionApiV1BillingSubscriptionGetQueryKey,
+  listInvoicesApiV1BillingInvoicesGet,
+  listInvoicesApiV1BillingInvoicesGetInfiniteQueryKey,
   listPlansApiV1BillingPlansGet,
   listPlansApiV1BillingPlansGetQueryKey,
 } from "@forge/api-client";
@@ -24,7 +26,14 @@ import {
   CardFooter,
   CardHeader,
   Skeleton,
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
 } from "@forge/ui";
+import { formatDate } from "@forge/utils";
 
 import { getErrorMessage } from "../auth/getErrorMessage";
 
@@ -37,6 +46,16 @@ function formatPrice(cents: number, locale: string): string {
   return new Intl.NumberFormat(locale, {
     style: "currency",
     currency: "USD",
+  }).format(cents / 100);
+}
+
+// Unlike Plan (always USD, see formatPrice above), an InvoiceDTO carries its
+// own Stripe `currency` -- lowercase per Stripe's convention
+// (Intl.NumberFormat requires the uppercase ISO 4217 code).
+function formatInvoiceAmount(cents: number, currency: string, locale: string): string {
+  return new Intl.NumberFormat(locale, {
+    style: "currency",
+    currency: currency.toUpperCase(),
   }).format(cents / 100);
 }
 
@@ -80,6 +99,22 @@ export function BillingSettingsPage() {
     },
     enabled: Boolean(org) && canRead,
   });
+  // Raw SDK call rather than the generated *GetInfiniteOptions() helper --
+  // see MembersSettingsPage.tsx for why. The query key function alone is
+  // fine to reuse since it doesn't make a network call.
+  const invoicesQuery = useInfiniteQuery({
+    queryKey: listInvoicesApiV1BillingInvoicesGetInfiniteQueryKey(),
+    queryFn: async ({ pageParam }: { pageParam: string | null }) => {
+      const { data } = await listInvoicesApiV1BillingInvoicesGet({
+        query: { after: pageParam, limit: 20 },
+        throwOnError: true,
+      });
+      return data;
+    },
+    initialPageParam: null as string | null,
+    getNextPageParam: (lastPage) => lastPage.meta.next_cursor ?? null,
+    enabled: Boolean(org) && canRead,
+  });
 
   // Raw SDK calls rather than the generated *Mutation() helpers -- see the
   // comment above for why.
@@ -104,6 +139,8 @@ export function BillingSettingsPage() {
 
   const subscription = subscriptionQuery.data?.data ?? null;
   const plans = plansQuery.data?.data ?? [];
+  const invoices =
+    invoicesQuery.data?.pages.flatMap((page) => page.data ?? []) ?? [];
   const currentPlan = subscription
     ? (plans.find((plan) => plan.id === subscription.plan_id) ?? null)
     : null;
@@ -256,10 +293,79 @@ export function BillingSettingsPage() {
         <CardHeader>
           <CardDescription>{t("billing.invoices.title")}</CardDescription>
         </CardHeader>
-        <CardContent>
-          <p className="text-sm text-muted-foreground">
-            {t("billing.invoices.not_available")}
-          </p>
+        <CardContent className="space-y-4">
+          {invoicesQuery.isLoading ? (
+            <Skeleton className="h-16 w-full" />
+          ) : invoicesQuery.isError ? (
+            <Alert variant="destructive">
+              <AlertDescription>
+                {getErrorMessage(invoicesQuery.error, "billing.invoices.error_load")}
+              </AlertDescription>
+            </Alert>
+          ) : invoices.length === 0 ? (
+            <p className="text-sm text-muted-foreground">
+              {t("billing.invoices.not_available")}
+            </p>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>{t("billing.invoices.date_col")}</TableHead>
+                  <TableHead>{t("billing.invoices.amount_col")}</TableHead>
+                  <TableHead>{t("billing.invoices.status_col")}</TableHead>
+                  <TableHead className="text-right">
+                    {t("billing.invoices.pdf_col")}
+                  </TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {invoices.map((invoice) => (
+                  <TableRow key={invoice.id}>
+                    <TableCell>
+                      {formatDate(invoice.created_at, i18n.language)}
+                    </TableCell>
+                    <TableCell>
+                      {formatInvoiceAmount(
+                        invoice.amount_paid,
+                        invoice.currency,
+                        i18n.language,
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      {invoice.status ? (
+                        <Badge variant="secondary">{invoice.status}</Badge>
+                      ) : null}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      {invoice.invoice_pdf ? (
+                        <a
+                          href={invoice.invoice_pdf}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="text-sm underline underline-offset-4"
+                        >
+                          {t("billing.invoices.download_pdf")}
+                        </a>
+                      ) : null}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
+
+          {invoicesQuery.hasNextPage ? (
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => {
+                void invoicesQuery.fetchNextPage();
+              }}
+              disabled={invoicesQuery.isFetchingNextPage}
+            >
+              {t("billing.invoices.load_more")}
+            </Button>
+          ) : null}
         </CardContent>
       </Card>
     </div>

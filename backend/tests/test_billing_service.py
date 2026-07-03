@@ -381,6 +381,69 @@ async def test_invoice_payment_failed_without_subscription_field_is_noop(
     )
 
 
+# --- T-133: invoice cache invalidation on invoice.* events -----------------------------
+
+
+async def test_invoice_payment_succeeded_invalidates_invoice_cache(
+    service: BillingService, session: AsyncSession, redis: Redis
+) -> None:
+    org_id = uuid4()
+    await _make_plan(session, price_id="price_invoice_cache_1")
+    await service.handle_event(
+        WebhookEvent(
+            id="evt_create_ic1",
+            type="customer.subscription.created",
+            payload=_subscription_event(
+                subscription_id="sub_ic1",
+                status="past_due",
+                org_id=str(org_id),
+                price_id="price_invoice_cache_1",
+            ),
+        )
+    )
+    await redis.set(f"invoices:{org_id}:first", "cached-payload")
+
+    await service.handle_event(
+        WebhookEvent(
+            id="evt_invoice_succeeded_ic1",
+            type="invoice.payment_succeeded",
+            payload=_invoice_event(subscription_id="sub_ic1"),
+        )
+    )
+
+    assert await redis.get(f"invoices:{org_id}:first") is None
+
+
+async def test_invoice_payment_failed_invalidates_invoice_cache(
+    service: BillingService, session: AsyncSession, redis: Redis
+) -> None:
+    org_id = uuid4()
+    await _make_plan(session, price_id="price_invoice_cache_2")
+    await service.handle_event(
+        WebhookEvent(
+            id="evt_create_ic2",
+            type="customer.subscription.created",
+            payload=_subscription_event(
+                subscription_id="sub_ic2",
+                status="active",
+                org_id=str(org_id),
+                price_id="price_invoice_cache_2",
+            ),
+        )
+    )
+    await redis.set(f"invoices:{org_id}:first", "cached-payload")
+
+    await service.handle_event(
+        WebhookEvent(
+            id="evt_invoice_failed_ic2",
+            type="invoice.payment_failed",
+            payload=_invoice_event(subscription_id="sub_ic2"),
+        )
+    )
+
+    assert await redis.get(f"invoices:{org_id}:first") is None
+
+
 # --- T-130: dunning campaign wiring ----------------------------------------------------
 
 

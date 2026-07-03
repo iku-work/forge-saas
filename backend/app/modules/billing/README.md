@@ -14,6 +14,9 @@ entitlements, dunning, and usage-based metering.
   FastAPI dependency that meters a route (see below).
 - `app.modules.billing.usage_service.UsageService` — record/aggregate usage
   directly (outside a route, e.g. from a background job).
+- `app.modules.billing.invoices.InvoiceService` — cursor-paginated Stripe
+  invoice history for an org, 5-minute Redis cache, invalidated by
+  `BillingService.handle_event` on `invoice.*` webhook events (T-133).
 
 ## Events emitted
 

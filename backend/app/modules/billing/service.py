@@ -29,6 +29,10 @@ reminder email sequence); invoice.payment_succeeded and
 customer.subscription.deleted both end whatever campaign is active for that
 subscription -- completed on a successful payment, canceled on subscription
 deletion -- since either means there's nothing left to remind the org about.
+
+T-133: both invoice.* handlers also invalidate InvoiceService's cache for the
+affected org, since a status flip (open -> paid, or open -> past_due) changes
+what the cached invoice list's `status` field should read.
 """
 
 import logging
@@ -44,6 +48,7 @@ from app.core.config import get_settings
 from app.core.exceptions import DomainError, NotFoundError
 from app.modules.audit.service import AuditService
 from app.modules.billing.dunning import DunningService
+from app.modules.billing.invoices import InvoiceService
 from app.modules.billing.models import Plan, Subscription, WebhookEvent
 from app.modules.billing.repository import PlanRepository, SubscriptionRepository
 from app.modules.feature_flags.service import FeatureFlagService
@@ -64,6 +69,7 @@ class BillingService:
         self._audit = AuditService(session)
         self._flags = FeatureFlagService(session, redis)
         self._dunning = DunningService(session)
+        self._invoices = InvoiceService(session, redis)
         stripe.api_key = get_settings().STRIPE_SECRET_KEY
 
     async def handle_event(self, event: WebhookEvent) -> None:
@@ -126,6 +132,7 @@ class BillingService:
         if subscription is not None:
             await self._dunning.complete(subscription.id)
             await self._flags.invalidate(subscription.org_id)
+            await self._invoices.invalidate(subscription.org_id)
 
     async def _handle_invoice_payment_failed(self, payload: dict[str, Any]) -> None:
         obj = payload["data"]["object"]
@@ -144,6 +151,7 @@ class BillingService:
             )
             await self._dunning.start(subscription.id, obj["id"])
             await self._flags.invalidate(subscription.org_id)
+            await self._invoices.invalidate(subscription.org_id)
 
     # --- checkout / portal / customer (T-031) ----------------------------------------
 

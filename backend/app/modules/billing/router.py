@@ -15,7 +15,7 @@ FastAPI caches get_current_org per request, so this costs no extra query.
 from typing import Annotated
 from uuid import uuid4
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, Query, Request
 from redis.asyncio import Redis
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -24,6 +24,7 @@ from app.core.dependencies import get_current_org, get_redis, require_permission
 from app.core.envelope import Envelope, Meta
 from app.middleware.rate_limit import api_limit
 from app.modules.auth.permissions import Permission
+from app.modules.billing.invoices import InvoiceDTO, InvoiceService
 from app.modules.billing.schemas import (
     CheckoutSessionRequest,
     CheckoutSessionResponse,
@@ -107,3 +108,23 @@ async def list_plans(
     plans = await BillingService(session, redis).list_active_plans()
     data = [PlanPublic.model_validate(p) for p in plans]
     return Envelope(data=data, meta=Meta(request_id=_request_id(request)))
+
+
+@router.get("/invoices")
+@api_limit
+async def list_invoices(  # noqa: PLR0913 — cursor pagination (§0.3) needs after+limit on top of the usual params
+    request: Request,
+    org_and_membership: Annotated[tuple[Organization, Membership], Depends(get_current_org)],
+    membership: Annotated[  # noqa: ARG001 — required to gate on BILLING_READ
+        Membership, Depends(require_permission(Permission.BILLING_READ))
+    ],
+    session: Annotated[AsyncSession, Depends(get_session)],
+    redis: Annotated[Redis, Depends(get_redis)],
+    after: Annotated[str | None, Query()] = None,
+    limit: Annotated[int, Query(ge=1, le=100)] = 20,
+) -> Envelope[list[InvoiceDTO]]:
+    org, _ = org_and_membership
+    items, next_cursor = await InvoiceService(session, redis).list_for_org(
+        org, after_cursor=after, limit=limit
+    )
+    return Envelope(data=items, meta=Meta(request_id=_request_id(request), next_cursor=next_cursor))
