@@ -1,6 +1,9 @@
 import { useCallback, useEffect, useSyncExternalStore } from "react";
 
 import {
+  getAccessToken,
+  getApiBaseUrl,
+  getImpersonatorId,
   loginApiV1AuthLoginPost,
   logoutApiV1AuthLogoutPost,
   meApiV1AuthMeGet,
@@ -10,6 +13,12 @@ import {
   setAccessToken,
 } from "@forge/api-client";
 import type { UserPublic } from "@forge/api-client";
+
+// /api/v1/admin/* is deliberately excluded from the OpenAPI schema (see
+// backend's app.modules.admin.router docstring), so there's no generated SDK
+// function for it -- a raw fetch, same pattern authInterceptor.ts's
+// performRefresh already uses for the same reason.
+const IMPERSONATE_END_PATH = "/api/v1/admin/impersonate/end";
 
 // Thrown when /auth/login responds with a 2FA challenge instead of tokens.
 // Phase 1 has no 2FA-verification UI, so callers surface this as a regular
@@ -24,13 +33,18 @@ export class TwoFactorRequiredError extends Error {
 interface AuthState {
   user: UserPublic | null;
   isLoading: boolean;
+  // T-142: true when the current access token carries an impersonator_id
+  // claim -- drives the app shell's non-dismissable "Impersonating..."
+  // banner. Recomputed alongside `user` on every place the access token
+  // changes (login, bootstrap/refresh, logout).
+  isImpersonating: boolean;
 }
 
 // Module-scoped store (not React Context) so every `useAuth()` call site --
 // AppRoot, the login form, the app shell's user menu -- reads and writes the
 // same session without a provider component, and so the hook file itself
 // never needs JSX.
-let state: AuthState = { user: null, isLoading: true };
+let state: AuthState = { user: null, isLoading: true, isImpersonating: false };
 const listeners = new Set<() => void>();
 
 function setState(next: Partial<AuthState>): void {
@@ -58,8 +72,32 @@ function getSnapshot(): AuthState {
 // so it fires regardless of which component currently has a useAuth() call
 // mounted.
 onSessionExpired(() => {
-  setState({ user: null, isLoading: false });
+  setState({ user: null, isLoading: false, isImpersonating: false });
 });
+
+// Shared by bootstrap() (below, cached as a singleton) and endImpersonation()
+// (which needs a *fresh* refresh+/me cycle every time it's called, not the
+// cached bootstrap promise) -- refreshes the access token from whichever
+// httpOnly refresh cookie the browser is currently holding and resolves the
+// resulting session.
+async function establishSession(): Promise<void> {
+  try {
+    const { data: refreshed } = await refreshApiV1AuthRefreshPost({
+      throwOnError: true,
+    });
+    const accessToken = refreshed.data?.access_token ?? null;
+    setAccessToken(accessToken);
+    const { data: me } = await meApiV1AuthMeGet({ throwOnError: true });
+    setState({
+      user: me.data ?? null,
+      isLoading: false,
+      isImpersonating: getImpersonatorId(accessToken) !== null,
+    });
+  } catch {
+    setAccessToken(null);
+    setState({ user: null, isLoading: false, isImpersonating: false });
+  }
+}
 
 // A page reload loses the in-memory access token but not the httpOnly
 // refresh cookie, so on first mount we try to silently re-establish the
@@ -69,28 +107,18 @@ onSessionExpired(() => {
 let bootstrapPromise: Promise<void> | null = null;
 
 function bootstrap(): Promise<void> {
-  bootstrapPromise ??= (async () => {
-    try {
-      const { data: refreshed } = await refreshApiV1AuthRefreshPost({
-        throwOnError: true,
-      });
-      setAccessToken(refreshed.data?.access_token ?? null);
-      const { data: me } = await meApiV1AuthMeGet({ throwOnError: true });
-      setState({ user: me.data ?? null, isLoading: false });
-    } catch {
-      setAccessToken(null);
-      setState({ user: null, isLoading: false });
-    }
-  })();
+  bootstrapPromise ??= establishSession();
   return bootstrapPromise;
 }
 
 export interface UseAuthResult {
   user: UserPublic | null;
   isLoading: boolean;
+  isImpersonating: boolean;
   login: (email: string, password: string) => Promise<UserPublic>;
   logout: () => Promise<void>;
   register: (email: string, password: string) => Promise<void>;
+  endImpersonation: () => Promise<void>;
 }
 
 export function useAuth(): UseAuthResult {
@@ -119,7 +147,10 @@ export function useAuth(): UseAuthResult {
         throw new Error("Login response was empty.");
       }
       setAccessToken(payload.access_token);
-      setState({ user: payload.user });
+      setState({
+        user: payload.user,
+        isImpersonating: getImpersonatorId(payload.access_token) !== null,
+      });
       return payload.user;
     },
     [],
@@ -140,15 +171,36 @@ export function useAuth(): UseAuthResult {
       await logoutApiV1AuthLogoutPost({ throwOnError: true });
     } finally {
       setAccessToken(null);
-      setState({ user: null });
+      setState({ user: null, isImpersonating: false });
     }
+  }, []);
+
+  // T-142: ends the impersonation session server-side (revokes the jti),
+  // then falls back to the superadmin's own refresh cookie -- impersonation
+  // never touches or replaces it (see backend's AdminImpersonationService
+  // docstring), so this silently restores the real admin session instead of
+  // forcing a fresh login.
+  const endImpersonation = useCallback(async (): Promise<void> => {
+    const token = getAccessToken();
+    try {
+      await fetch(`${getApiBaseUrl()}${IMPERSONATE_END_PATH}`, {
+        method: "POST",
+        headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+        credentials: "include",
+      });
+    } finally {
+      setAccessToken(null);
+    }
+    await establishSession();
   }, []);
 
   return {
     user: snapshot.user,
     isLoading: snapshot.isLoading,
+    isImpersonating: snapshot.isImpersonating,
     login,
     logout,
     register,
+    endImpersonation,
   };
 }

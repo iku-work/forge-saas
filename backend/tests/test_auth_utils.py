@@ -122,6 +122,42 @@ def test_garbage_access_token_raises_authentication_error() -> None:
 
 
 # ---------------------------------------------------------------------------
+# Impersonation claims (T-142)
+# ---------------------------------------------------------------------------
+
+
+def test_access_token_round_trips_impersonator_id() -> None:
+    user_id = uuid4()
+    impersonator_id = uuid4()
+
+    token = create_access_token(
+        user_id, None, [], impersonator_id=impersonator_id, expire_minutes=15
+    )
+    payload = verify_access_token(token)
+
+    assert payload.user_id == user_id
+    assert payload.impersonator_id == impersonator_id
+
+
+def test_access_token_without_impersonator_id_defaults_to_none() -> None:
+    token = create_access_token(uuid4(), None, [])
+
+    payload = verify_access_token(token)
+
+    assert payload.impersonator_id is None
+
+
+def test_create_access_token_expire_minutes_overrides_default() -> None:
+    # A negative override mints an already-expired token -- proves
+    # expire_minutes actually controls `exp` rather than being ignored, which
+    # is what T-142's impersonation hard cap relies on.
+    token = create_access_token(uuid4(), None, [], expire_minutes=-1)
+
+    with pytest.raises(AuthenticationError):
+        verify_access_token(token)
+
+
+# ---------------------------------------------------------------------------
 # Refresh tokens / single-use token hashing
 # ---------------------------------------------------------------------------
 

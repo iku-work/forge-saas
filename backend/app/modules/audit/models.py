@@ -42,3 +42,9 @@ class AuditEvent(SQLModel, table=True):
     # caller (auth, tenancy, T-122's feature-flag overrides) needs no change;
     # only T-141's admin write endpoints pass severity="elevated".
     severity: str = Field(default="info", index=True)
+    # T-142: the real superadmin behind this event when it was written during
+    # an impersonation session (null otherwise). Not a foreign_key -- same
+    # "survives the actor's own row changing" reasoning as actor_id above --
+    # and stamped automatically by AuditService.log via app.core.audit_context,
+    # never set by callers directly.
+    impersonator_id: UUID | None = Field(default=None, index=True)

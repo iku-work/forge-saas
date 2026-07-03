@@ -13,6 +13,7 @@ export {
   getApiBaseUrl,
   getCurrentOrgId,
   setCurrentOrgId,
+  getImpersonatorId,
 } from "./client";
 export { authRetryInterceptor, onSessionExpired } from "./authInterceptor";
 export { orgIdRequestInterceptor } from "./orgInterceptor";

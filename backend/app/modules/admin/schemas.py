@@ -9,6 +9,7 @@ from pydantic import Field
 
 from app.core.schemas import AppBaseModel
 from app.modules.auth.permissions import MemberRole
+from app.modules.auth.schemas import UserPublic
 
 
 class AdminFeatureFlagState(AppBaseModel):
@@ -121,3 +122,17 @@ class AdminExtendTrialRequest(AppBaseModel):
 class AdminCompCreditRequest(AppBaseModel):
     amount_cents: int = Field(gt=0)
     reason: str = Field(min_length=1, max_length=1000)
+
+
+# ---- T-142: user impersonation ----------------------------------------------
+
+
+class AdminImpersonateRequest(AppBaseModel):
+    reason: str = Field(min_length=10, max_length=1000)
+    duration_minutes: int = Field(gt=0, le=60)
+
+
+class AdminImpersonateResponse(AppBaseModel):
+    access_token: str
+    expires_at: datetime
+    user: UserPublic

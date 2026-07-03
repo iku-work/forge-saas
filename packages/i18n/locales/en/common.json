@@ -60,5 +60,9 @@
     "permission_denied": "You don't have permission to do this.",
     "not_a_member": "You're not a member of this organization.",
     "org_id_required": "An organization must be selected for this action."
+  },
+  "impersonation": {
+    "banner": "Impersonating {email}",
+    "end": "End impersonation"
   }
 }

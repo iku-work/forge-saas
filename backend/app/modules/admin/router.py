@@ -21,14 +21,16 @@ from redis.asyncio import Redis
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.db import get_session
-from app.core.dependencies import get_redis, require_superadmin
+from app.core.dependencies import get_current_user, get_redis, oauth2_scheme, require_superadmin
 from app.core.envelope import Envelope, Meta
-from app.core.exceptions import NotFoundError
+from app.core.exceptions import AuthenticationError, NotFoundError
 from app.middleware.rate_limit import api_limit
 from app.modules.admin.schemas import (
     AdminCompCreditRequest,
     AdminExtendTrialRequest,
     AdminFeatureFlagsResponse,
+    AdminImpersonateRequest,
+    AdminImpersonateResponse,
     AdminOrgDetail,
     AdminOrgSummary,
     AdminSetOrgPlanRequest,
@@ -40,9 +42,11 @@ from app.modules.admin.service import (
     AdminBillingOverrideService,
     AdminDirectoryService,
     AdminFeatureFlagService,
+    AdminImpersonationService,
 )
 from app.modules.auth.models import User
 from app.modules.auth.repository import UserRepository
+from app.modules.auth.schemas import UserPublic
 from app.modules.tenancy.models import Organization
 from app.modules.tenancy.repository import OrganizationRepository
 
@@ -277,6 +281,61 @@ async def issue_org_comp_credit(  # noqa: PLR0913 -- request+path+body+auth+sess
         actor_id=superadmin.id,
         ip=_client_ip(request),
         ua=request.headers.get("user-agent", ""),
+    )
+    await session.commit()
+    return Envelope(data=None, meta=Meta(request_id=_request_id(request)))
+
+
+# ---- T-142: user impersonation -----------------------------------------------
+
+
+@router.post("/users/{user_id}/impersonate")
+@api_limit
+async def impersonate_user(  # noqa: PLR0913 -- request+path+body+auth+session+redis, all required
+    request: Request,
+    user_id: UUID,
+    body: AdminImpersonateRequest,
+    superadmin: Annotated[User, Depends(require_superadmin)],
+    session: Annotated[AsyncSession, Depends(get_session)],
+    redis: Annotated[Redis, Depends(get_redis)],
+) -> Envelope[AdminImpersonateResponse]:
+    target = await _get_user_or_404(user_id, session)
+    access_token, expires_at = await AdminImpersonationService(session, redis).start(
+        superadmin=superadmin,
+        target=target,
+        reason=body.reason,
+        duration_minutes=body.duration_minutes,
+        ip=_client_ip(request),
+        ua=request.headers.get("user-agent", ""),
+    )
+    await session.commit()
+    return Envelope(
+        data=AdminImpersonateResponse(
+            access_token=access_token,
+            expires_at=expires_at,
+            user=UserPublic.model_validate(target),
+        ),
+        meta=Meta(request_id=_request_id(request)),
+    )
+
+
+@router.post("/impersonate/end")
+@api_limit
+async def end_impersonation(
+    request: Request,
+    user: Annotated[User, Depends(get_current_user)],  # noqa: ARG001 -- requires *some* valid, non-blocklisted token; the impersonation check itself is on the token payload in the service
+    token: Annotated[str | None, Depends(oauth2_scheme)],
+    session: Annotated[AsyncSession, Depends(get_session)],
+    redis: Annotated[Redis, Depends(get_redis)],
+) -> Envelope[None]:
+    if token is None:
+        # Unreachable in practice -- get_current_user above shares this same
+        # oauth2_scheme dependency and already raises if it's None -- but
+        # kept as an explicit guard rather than an unchecked `str` cast, in
+        # case that coupling ever changes.
+        raise AuthenticationError("errors.missing_bearer_token", fallback="Missing bearer token")
+    await AdminImpersonationService(session, redis).end(
+        token=token, ip=_client_ip(request), ua=request.headers.get("user-agent", "")
     )
     await session.commit()
     return Envelope(data=None, meta=Meta(request_id=_request_id(request)))

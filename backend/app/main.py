@@ -21,6 +21,7 @@ from app.core.i18n import load_translations
 from app.core.jobs import dispose_pool as dispose_jobs_pool
 from app.core.logging import configure_logging
 from app.core.module_loader import get_modules
+from app.middleware.impersonation import ImpersonationContextMiddleware
 from app.middleware.locale import LocaleMiddleware
 from app.middleware.rate_limit import register_rate_limiting
 from app.middleware.request_id import RequestIDMiddleware
@@ -52,6 +53,7 @@ register_exception_handlers(app)
 register_rate_limiting(app)
 app.add_middleware(SecurityHeadersMiddleware)
 app.add_middleware(RequestIDMiddleware)
+app.add_middleware(ImpersonationContextMiddleware)
 app.add_middleware(LocaleMiddleware)
 app.add_middleware(
     CORSMiddleware,

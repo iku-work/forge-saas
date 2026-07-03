@@ -24,9 +24,10 @@ from redis.asyncio import Redis
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
-from app.core.exceptions import NotFoundError
+from app.core.exceptions import DomainError, NotFoundError, PermissionDeniedError
 from app.core.module_loader import is_enabled
 from app.core.repository import DEFAULT_PAGE_SIZE
+from app.core.token_blocklist import block_jti
 from app.models._mixins import utcnow
 from app.modules.admin.repository import AdminOrgRepository
 from app.modules.admin.schemas import (
@@ -45,6 +46,7 @@ from app.modules.audit.repository import AuditRepository
 from app.modules.audit.service import AuditService
 from app.modules.auth.models import User
 from app.modules.auth.repository import SessionRepository, UserRepository
+from app.modules.auth.utils import create_access_token, verify_access_token
 from app.modules.billing.models import Subscription
 from app.modules.billing.repository import PlanRepository, SubscriptionRepository
 from app.modules.feature_flags.repository import OrgFeatureFlagRepository
@@ -52,6 +54,15 @@ from app.modules.feature_flags.service import FeatureFlagService
 from app.modules.storage.repository import StoredFileRepository
 from app.modules.tenancy.models import Organization
 from app.modules.tenancy.repository import MembershipRepository, OrganizationRepository
+
+# T-142: hard cap on impersonation-token lifetime, enforced twice --
+# AdminImpersonateRequest.duration_minutes (schema, le=60) rejects an
+# over-long request before it reaches here, and this constant is what
+# start() actually mints the token's own exp with (belt-and-suspenders: a
+# future caller that bypasses the schema still can't mint a longer-lived
+# token). Also used as the blocklist TTL in end() -- an ended impersonation
+# jti never needs to stay blocked longer than the token could have lived.
+MAX_IMPERSONATION_MINUTES = 60
 
 # Placeholder stripe_subscription_id for a Subscription row an admin
 # force-assigned without a real Stripe subscription behind it (§T-141's
@@ -450,3 +461,77 @@ class AdminBillingOverrideService:
             severity="elevated",
         )
         return coupon.id
+
+
+class AdminImpersonationService:
+    """Support-ops user impersonation (T-142): mints a scoped, non-refreshable
+    access token for `target` carrying an `impersonator_id` claim naming the
+    real superadmin behind the session. No Session row / refresh cookie is
+    ever created for it -- the spec's "cannot be refreshed" requirement falls
+    out for free, since app.modules.auth.router.refresh only ever reads a
+    refresh-token cookie/body field, never the bearer token, and this flow
+    never sets one. That also means a superadmin's own real refresh cookie
+    is left untouched while impersonating, so ending impersonation can
+    silently fall back to it instead of forcing a fresh login.
+
+    Every audit event written for the rest of an impersonated request (by
+    any module) is stamped with impersonator_id automatically -- see
+    app.core.audit_context and app.middleware.impersonation, which decode
+    the claim straight off the bearer token before routing.
+    """
+
+    def __init__(self, session: AsyncSession, redis: Redis) -> None:
+        self._redis = redis
+        self._audit = AuditService(session)
+
+    async def start(  # noqa: PLR0913 -- superadmin+target+reason+duration+ip+ua, all required for the audit diff
+        self,
+        *,
+        superadmin: User,
+        target: User,
+        reason: str,
+        duration_minutes: int,
+        ip: str | None,
+        ua: str | None,
+    ) -> tuple[str, datetime]:
+        if target.is_superadmin:
+            raise PermissionDeniedError(
+                "errors.cannot_impersonate_superadmin",
+                fallback="Cannot impersonate another superadmin",
+            )
+        minutes = min(duration_minutes, MAX_IMPERSONATION_MINUTES)
+        access_token = create_access_token(
+            target.id, None, (), impersonator_id=superadmin.id, expire_minutes=minutes
+        )
+        await self._audit.log(
+            action="admin.impersonate.start",
+            resource_type="user",
+            resource_id=str(target.id),
+            org_id=None,
+            actor_id=superadmin.id,
+            diff={"reason": reason, "duration_minutes": minutes},
+            ip=ip,
+            ua=ua,
+            severity="elevated",
+        )
+        return access_token, utcnow() + timedelta(minutes=minutes)
+
+    async def end(self, *, token: str, ip: str | None, ua: str | None) -> None:
+        payload = verify_access_token(token)
+        if payload.impersonator_id is None:
+            raise DomainError(
+                "errors.not_impersonating",
+                fallback="This token is not an impersonation session",
+            )
+        await block_jti(self._redis, payload.jti, MAX_IMPERSONATION_MINUTES * 60)
+        await self._audit.log(
+            action="admin.impersonate.end",
+            resource_type="user",
+            resource_id=str(payload.user_id),
+            org_id=None,
+            actor_id=payload.user_id,
+            diff={},
+            ip=ip,
+            ua=ua,
+            severity="elevated",
+        )

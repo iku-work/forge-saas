@@ -23,6 +23,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.db import get_session
 from app.core.exceptions import AuthenticationError, DomainError, PermissionDeniedError
+from app.core.token_blocklist import is_jti_blocked
 from app.modules.auth.models import User
 from app.modules.auth.permissions import ROLE_PERMISSIONS, Permission
 from app.modules.auth.repository import UserRepository
@@ -87,6 +88,11 @@ async def get_current_user(
         raise AuthenticationError("errors.missing_bearer_token", fallback="Missing bearer token")
 
     payload = verify_access_token(token)
+    if await is_jti_blocked(redis, payload.jti):
+        # T-142: an ended impersonation token (or any future single-token
+        # revocation) lands here -- distinct from refresh-token rotation
+        # (SessionRepository), which revokes a whole session, not one jti.
+        raise AuthenticationError("errors.token_revoked", fallback="Token has been revoked")
     cache_key = _user_cache_key(payload.user_id)
 
     cached = await redis.get(cache_key)

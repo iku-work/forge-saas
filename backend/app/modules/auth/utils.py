@@ -45,19 +45,35 @@ class AccessTokenPayload:
     org_id: UUID | None
     permissions: tuple[str, ...]
     jti: UUID
+    # T-142: set only on a superadmin-minted impersonation token, naming the
+    # real superadmin acting behind `user_id` (the impersonated target).
+    # `None` on every ordinary login/refresh-issued token.
+    impersonator_id: UUID | None = None
 
 
-def create_access_token(user_id: UUID, org_id: UUID | None, permissions: Sequence[str]) -> str:
+def create_access_token(
+    user_id: UUID,
+    org_id: UUID | None,
+    permissions: Sequence[str],
+    *,
+    impersonator_id: UUID | None = None,
+    expire_minutes: int | None = None,
+) -> str:
     settings = get_settings()
     now = datetime.now(UTC)
-    claims = {
+    ttl_minutes = (
+        expire_minutes if expire_minutes is not None else settings.ACCESS_TOKEN_EXPIRE_MINUTES
+    )
+    claims: dict[str, Any] = {
         "sub": str(user_id),
         "org": str(org_id) if org_id is not None else None,
         "perms": list(permissions),
         "iat": now,
-        "exp": now + timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES),
+        "exp": now + timedelta(minutes=ttl_minutes),
         "jti": str(uuid4()),
     }
+    if impersonator_id is not None:
+        claims["impersonator_id"] = str(impersonator_id)
     return jwt.encode(claims, settings.JWT_PRIVATE_KEY, algorithm=_JWT_ALGORITHM)
 
 
@@ -69,11 +85,13 @@ def verify_access_token(token: str) -> AccessTokenPayload:
         # key as an HMAC secret) would otherwise be accepted.
         claims = jwt.decode(token, settings.JWT_PUBLIC_KEY, algorithms=[_JWT_ALGORITHM])
         org = claims.get("org")
+        impersonator_id = claims.get("impersonator_id")
         return AccessTokenPayload(
             user_id=UUID(claims["sub"]),
             org_id=UUID(org) if org is not None else None,
             permissions=tuple(claims.get("perms", [])),
             jti=UUID(claims["jti"]),
+            impersonator_id=UUID(impersonator_id) if impersonator_id is not None else None,
         )
     except (JWTError, KeyError, ValueError, TypeError) as exc:
         raise AuthenticationError(

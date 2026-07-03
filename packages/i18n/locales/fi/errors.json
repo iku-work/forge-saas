@@ -57,5 +57,8 @@
   "storage_quota_exceeded": "Tämä ylittäisi tilauksesi {storage_gb} Gt:n tallennustilan rajan.",
   "file_not_uploaded": "Esiallekirjoitetusta osoitteesta ei löytynyt ladattua tiedostoa.",
   "file_size_mismatch": "Ladatun tiedoston koko ei vastaa ilmoitettua kokoa.",
-  "superadmin_required": "Pääkäyttäjän oikeudet vaaditaan."
+  "superadmin_required": "Pääkäyttäjän oikeudet vaaditaan.",
+  "token_revoked": "Tunnus on mitätöity.",
+  "cannot_impersonate_superadmin": "Toista pääkäyttäjää ei voi esiintyä.",
+  "not_impersonating": "Tämä tunnus ei ole esiintymisistunto."
 }

@@ -7,6 +7,7 @@ import { onSessionExpired } from "@forge/api-client";
 import { useAuth } from "@forge/hooks";
 
 import { applyProfileLocale } from "./i18n";
+import { ImpersonationBanner } from "./layouts/ImpersonationBanner";
 import type { AppRouter } from "./router";
 
 interface AppRootProps {
@@ -15,7 +16,7 @@ interface AppRootProps {
 }
 
 export function AppRoot({ router, queryClient }: AppRootProps) {
-  const { user, isLoading } = useAuth();
+  const { user, isLoading, isImpersonating, endImpersonation } = useAuth();
   const { t } = useTranslation();
   const [localeReady, setLocaleReady] = useState(false);
 
@@ -44,6 +45,18 @@ export function AppRoot({ router, queryClient }: AppRootProps) {
 
   return (
     <QueryClientProvider client={queryClient}>
+      {/* T-142: rendered above both branches below so it's visible during
+          the loading state too, not just once the router mounts -- an
+          impersonation session should never have a moment where the banner
+          isn't there. */}
+      {isImpersonating && user ? (
+        <ImpersonationBanner
+          email={user.email}
+          onEnd={() => {
+            void endImpersonation();
+          }}
+        />
+      ) : null}
       {isLoading || !localeReady ? (
         <div className="flex min-h-screen items-center justify-center">
           <span className="text-sm text-muted-foreground">

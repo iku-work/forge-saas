@@ -54,5 +54,9 @@
     "permission_denied": "Sinulla ei ole oikeutta tähän toimintoon.",
     "not_a_member": "Et ole tämän organisaation jäsen.",
     "org_id_required": "Tätä toimintoa varten on valittava organisaatio."
+  },
+  "impersonation": {
+    "banner": "Esiinnyt käyttäjänä {email}",
+    "end": "Lopeta esiintyminen"
   }
 }

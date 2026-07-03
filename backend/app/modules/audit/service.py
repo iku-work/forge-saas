@@ -18,6 +18,7 @@ from uuid import UUID
 import sentry_sdk
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.audit_context import get_impersonator_id
 from app.modules.audit.repository import AuditRepository
 
 logger = logging.getLogger(__name__)
@@ -53,6 +54,9 @@ class AuditService:
                     ip_address=ip,
                     user_agent=ua,
                     severity=severity,
+                    # T-142: automatic, not caller-supplied -- see
+                    # app.core.audit_context's own docstring.
+                    impersonator_id=get_impersonator_id(),
                 )
         except Exception as exc:  # noqa: BLE001 — audit failures must never roll back the caller's business transaction (§T-028)
             logger.warning("audit.write_failed: action=%s resource_type=%s", action, resource_type)

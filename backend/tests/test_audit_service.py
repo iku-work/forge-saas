@@ -21,6 +21,7 @@ from sqlalchemy.ext.asyncio import (
 from sqlmodel import SQLModel
 from testcontainers.postgres import PostgresContainer
 
+from app.core.audit_context import reset_impersonator_id, set_impersonator_id
 from app.modules.audit.models import AuditEvent
 from app.modules.audit.service import AuditService
 
@@ -122,3 +123,29 @@ async def test_log_failure_does_not_poison_session_for_later_use(
     # inside log() must not have aborted the caller's outer transaction.
     result = await session.execute(text("SELECT 1"))
     assert result.scalar_one() == 1
+
+
+# --- T-142: automatic impersonator_id stamping --------------------------------
+
+
+async def test_log_stamps_impersonator_id_from_ambient_context(
+    service: AuditService, session: AsyncSession
+) -> None:
+    impersonator_id = uuid4()
+    token = set_impersonator_id(impersonator_id)
+    try:
+        await service.log(action="user.registered", resource_type="user", org_id=None)
+    finally:
+        reset_impersonator_id(token)
+
+    row = (await session.execute(text("SELECT impersonator_id FROM audit_event"))).one()
+    assert str(row.impersonator_id) == str(impersonator_id)
+
+
+async def test_log_leaves_impersonator_id_null_outside_impersonation_context(
+    service: AuditService, session: AsyncSession
+) -> None:
+    await service.log(action="user.registered", resource_type="user", org_id=None)
+
+    row = (await session.execute(text("SELECT impersonator_id FROM audit_event"))).one()
+    assert row.impersonator_id is None
