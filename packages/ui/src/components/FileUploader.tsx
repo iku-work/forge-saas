@@ -81,13 +81,14 @@ function StatusIcon({ status }: { status: UploadStatus }) {
   );
 }
 
-function ProgressBar({ value }: { value: number }) {
+function ProgressBar({ value, label }: { value: number; label: string }) {
   return (
     <div
       role="progressbar"
       aria-valuenow={value}
       aria-valuemin={0}
       aria-valuemax={100}
+      aria-label={label}
       className="mt-1 h-1 w-full overflow-hidden rounded-full bg-muted"
     >
       <div
@@ -332,17 +333,22 @@ export function FileUploader({
           </span>{" "}
           {t("files.uploader.hint")}
         </p>
-        <input
-          ref={inputRef}
-          type="file"
-          className="sr-only"
-          multiple
-          accept={accept}
-          onChange={handleFileChange}
-          aria-hidden="true"
-          tabIndex={-1}
-        />
       </div>
+      {/* A sibling, not a child, of the role="button" dropzone above --
+          axe's nested-interactive rule flags any genuinely-focusable native
+          control nested inside another interactive element, regardless of
+          aria-hidden/tabIndex=-1 on the descendant (those don't remove it
+          from the accessibility tree the way the rule cares about). */}
+      <input
+        ref={inputRef}
+        type="file"
+        className="sr-only"
+        multiple
+        accept={accept}
+        onChange={handleFileChange}
+        aria-hidden="true"
+        tabIndex={-1}
+      />
 
       {items.length > 0 && (
         <ul className="space-y-2" aria-label="upload queue">
@@ -363,7 +369,10 @@ export function FileUploader({
                   </p>
                 )}
                 {item.status === "uploading" && (
-                  <ProgressBar value={item.progress} />
+                  <ProgressBar
+                    value={item.progress}
+                    label={t("files.uploader.uploading")}
+                  />
                 )}
               </div>
               <div className="flex items-center gap-1">

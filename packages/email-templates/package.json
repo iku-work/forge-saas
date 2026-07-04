@@ -17,7 +17,10 @@
     "dev": "email dev --dir src/templates --port 3030",
     "render": "node dist/cli.js",
     "type-check": "tsc --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "storybook": "storybook dev -p 6008",
+    "storybook:build": "storybook build",
+    "storybook:test": "concurrently -k -s first \"http-server storybook-static --port 6009 --silent\" \"wait-on tcp:6009 && test-storybook --url http://localhost:6009\""
   },
   "dependencies": {
     "@forge/i18n": "workspace:*",
@@ -26,11 +29,19 @@
     "react-email": "^6.6.5"
   },
   "devDependencies": {
+    "@storybook/addon-a11y": "^9.1.20",
+    "@storybook/react-vite": "^9.1.20",
+    "@storybook/test-runner": "^0.23.0",
     "@types/node": "^22.10.2",
     "@types/react": "^18.3.31",
     "@types/react-dom": "^18.3.7",
+    "concurrently": "^9.1.2",
+    "http-server": "^14.1.1",
+    "storybook": "^9.1.20",
     "tsup": "^8.3.5",
     "typescript": "^5.7.2",
-    "vitest": "^4.1.9"
+    "vite": "^6.4.3",
+    "vitest": "^4.1.9",
+    "wait-on": "^8.0.1"
   }
 }

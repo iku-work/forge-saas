@@ -18,6 +18,11 @@ dist/
 packages/api-client/src/generated/
 packages/i18n/src/keys.ts
 
+# Storybook (T-150)
+storybook-static/
+test-results/
+coverage/storybook/
+
 # Expo
 .expo/
 web-build/

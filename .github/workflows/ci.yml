@@ -156,6 +156,95 @@ jobs:
             --suppress-health-check=filter_too_much \
             --max-examples=20
 
+  storybook:
+    needs: lint
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: backend/pyproject.toml
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: pnpm
+
+      - name: Install frontend dependencies
+        run: pnpm install --frozen-lockfile
+
+      # Same as the `build` job: client generation only needs /openapi.json,
+      # which never touches the DB/Redis -- .env.test's dummy credentials are
+      # enough to boot the app and serve the schema.
+      - name: Start backend for OpenAPI schema
+        working-directory: backend
+        run: |
+          pip install -e .
+          cp .env.test .env
+          nohup uvicorn app.main:app --host 0.0.0.0 --port 8000 > uvicorn.log 2>&1 &
+          for i in $(seq 1 30); do
+            curl -sf http://localhost:8000/health && exit 0
+            sleep 1
+          done
+          echo "backend did not become ready" >&2
+          cat uvicorn.log
+          exit 1
+
+      - name: Generate API client from live OpenAPI schema
+        run: pnpm --filter @forge/api-client generate
+
+      - name: Build workspace packages
+        run: pnpm build
+
+      # test-storybook (T-150) drives Storybook through a real Chromium via
+      # Playwright -- only chromium is installed since main.ts's a11y addon
+      # only exercises stories in that one browser.
+      - name: Install Playwright chromium
+        run: pnpm --filter @forge/ui exec playwright install --with-deps chromium
+
+      # turbo's own pipeline (turbo.json) makes storybook:test depend on
+      # storybook:build depend on ^build, so this one command builds both
+      # Storybooks, serves each, and runs test-storybook's a11y gate against
+      # both -- same command verified locally via `pnpm storybook:test`.
+      - name: Build + test-runner (a11y gate) for both Storybook instances
+        run: pnpm storybook:test
+
+      # Stand-in for a hosted preview URL until Chromatic (or another static
+      # host) is wired up -- lets a reviewer download and open either build
+      # locally from the Actions run without re-running the pipeline.
+      - name: Upload packages/ui Storybook static build
+        uses: actions/upload-artifact@v4
+        with:
+          name: storybook-ui
+          path: packages/ui/storybook-static
+          retention-days: 30
+
+      - name: Upload packages/email-templates Storybook static build
+        uses: actions/upload-artifact@v4
+        with:
+          name: storybook-email-templates
+          path: packages/email-templates/storybook-static
+          retention-days: 30
+
+      # Phase 2 only configures Chromatic (T-150); Phase 3 wires the actual
+      # visual-regression snapshots. Skips cleanly (not a failure) until
+      # CHROMATIC_PROJECT_TOKEN is added to repo secrets.
+      - name: Chromatic visual regression (packages/ui)
+        if: ${{ secrets.CHROMATIC_PROJECT_TOKEN != '' }}
+        uses: chromaui/action@latest
+        env:
+          CHROMATIC_PROJECT_TOKEN: ${{ secrets.CHROMATIC_PROJECT_TOKEN }}
+        with:
+          workingDir: packages/ui
+          buildScriptName: storybook:build
+          exitZeroOnChanges: true
+
   security:
     needs: lint
     runs-on: ubuntu-latest

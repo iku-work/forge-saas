@@ -2,12 +2,24 @@ packages:
   - "apps/*"
   - "packages/*"
 allowBuilds:
+  # Native binary downloader for tsup's (and, via @storybook/test-runner's
+  # jest dependency chain, jest's) swc transform -- already trusted
+  # transitively before T-150 added storybook tooling, now needs its own
+  # postinstall to fetch the platform binary.
+  '@swc/core': true
   esbuild: true
-  # msw's postinstall only copies a browser service-worker script, gated on
-  # an `msw.workerDirectory` key in package.json -- this project only uses
-  # msw/node (setupServer) and declares no such key, so the script is a
-  # verified no-op. Safe to allow.
+  # msw's postinstall copies the browser service-worker script into the
+  # directory named by a package's `msw.workerDirectory` key. Most packages
+  # in this workspace only use msw/node (setupServer) and declare no such
+  # key, so the script is a no-op there. packages/ui (T-150) declares
+  # `"msw": { "workerDirectory": ["public"] }` for Storybook's
+  # msw-storybook-addon, which does need the generated
+  # public/mockServiceWorker.js -- see packages/ui/.storybook/preview.tsx.
   msw: true
+  # Native resolver binding used by jest-resolve, itself pulled in by
+  # @storybook/test-runner (T-150) -- same "download a platform binary"
+  # shape as @swc/core/esbuild above.
+  unrs-resolver: true
 minimumReleaseAgeExclude:
   - "@tanstack/query-core@5.101.1"
   - "@tanstack/react-query@5.101.1"

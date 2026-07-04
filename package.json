@@ -12,7 +12,9 @@
     "test": "turbo run test",
     "lint": "turbo run lint",
     "type-check": "turbo run type-check",
-    "gen-client": "turbo run gen-client"
+    "gen-client": "turbo run gen-client",
+    "storybook:build": "turbo run storybook:build",
+    "storybook:test": "turbo run storybook:test"
   },
   "devDependencies": {
     "turbo": "^2.3.0",

@@ -18,7 +18,10 @@
   --secondary: oklch(0.97 0 0);
   --secondary-foreground: oklch(0.205 0 0);
   --muted: oklch(0.97 0 0);
-  --muted-foreground: oklch(0.556 0 0);
+  /* T-150: 0.556 measured 4.34:1 against --muted (oklch(0.97 0 0)) under
+     axe-core's color-contrast check, just under WCAG AA's 4.5:1 floor for
+     normal text -- darkened to clear it with margin. */
+  --muted-foreground: oklch(0.48 0 0);
   --accent: oklch(0.97 0 0);
   --accent-foreground: oklch(0.205 0 0);
   --destructive: oklch(0.577 0.245 27.325);
