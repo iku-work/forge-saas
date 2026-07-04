@@ -5,6 +5,7 @@ or deleted_at to bump or filter on, and §0.3 immutability means there must be
 no code path that can mutate or remove a row once written.
 """
 
+from datetime import datetime
 from typing import Any, cast
 from uuid import UUID
 
@@ -86,3 +87,58 @@ class AuditRepository:
         )
         result = await self.session.execute(stmt)
         return list(result.scalars().all())
+
+    async def list_recent_by_action(
+        self, action: str, limit: int = DEFAULT_PAGE_SIZE
+    ) -> list[AuditEvent]:
+        # T-143: backs the admin dashboard's "recent payment failures" panel
+        # -- same flat "most recent N" shape as list_recent_by_actor, global
+        # rather than per-actor.
+        m = cast("Any", AuditEvent)
+        stmt = (
+            select(AuditEvent)
+            .where(m.action == action)
+            .order_by(m.ts.desc(), m.id.desc())
+            .limit(min(limit, MAX_PAGE_SIZE))
+        )
+        result = await self.session.execute(stmt)
+        return list(result.scalars().all())
+
+    async def list_global_cursor(  # noqa: PLR0913 -- cursor pagination (§0.3) plus T-143's four filters
+        self,
+        after: UUID | None = None,
+        limit: int = DEFAULT_PAGE_SIZE,
+        *,
+        actor_id: UUID | None = None,
+        action: str | None = None,
+        org_id: UUID | None = None,
+        since: datetime | None = None,
+        until: datetime | None = None,
+    ) -> tuple[list[AuditEvent], UUID | None]:
+        # T-143: the admin `/audit` global feed -- unlike list_cursor above,
+        # org_id is an optional filter rather than a mandatory scope (a
+        # superadmin needs to see everything by default, but the org detail
+        # page's Audit tab passes it to narrow to one organization).
+        capped_limit = min(limit, MAX_PAGE_SIZE)
+        m = cast("Any", AuditEvent)
+        stmt = select(AuditEvent)
+        if actor_id is not None:
+            stmt = stmt.where(m.actor_id == actor_id)
+        if action is not None:
+            stmt = stmt.where(m.action == action)
+        if org_id is not None:
+            stmt = stmt.where(m.org_id == org_id)
+        if since is not None:
+            stmt = stmt.where(m.ts >= since)
+        if until is not None:
+            stmt = stmt.where(m.ts <= until)
+        stmt = stmt.order_by(m.ts.desc(), m.id.desc()).limit(capped_limit + 1)
+        if after is not None:
+            anchor = await self.session.get(AuditEvent, after)
+            if anchor is not None:
+                stmt = stmt.where(tuple_(m.ts, m.id) < (anchor.ts, anchor.id))
+        result = await self.session.execute(stmt)
+        items = list(result.scalars().all())
+        page = items[:capped_limit]
+        next_cursor = page[-1].id if page and len(items) > capped_limit else None
+        return page, next_cursor

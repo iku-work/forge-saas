@@ -23,7 +23,10 @@ import type {
 // chain and only the SDK calls underneath are mocked, so splitting each
 // scenario into its own file is what gives each one a fresh bootstrap.
 
-export function makeUser(suffix: number): UserPublic {
+export function makeUser(
+  suffix: number,
+  overrides: Partial<UserPublic> = {},
+): UserPublic {
   return {
     id: `11111111-1111-1111-1111-${String(suffix).padStart(12, "0")}`,
     email: "jane@example.com",
@@ -32,6 +35,8 @@ export function makeUser(suffix: number): UserPublic {
     locale: "en",
     email_verified_at: "2026-01-01T00:00:00Z",
     totp_enabled: false,
+    is_superadmin: false,
+    ...overrides,
   };
 }
 

@@ -13,6 +13,7 @@ plan-override/extend-trial/comp-credit writes to this same file; T-142 adds
 impersonation.
 """
 
+from datetime import datetime
 from typing import Annotated
 from uuid import UUID, uuid4
 
@@ -26,7 +27,9 @@ from app.core.envelope import Envelope, Meta
 from app.core.exceptions import AuthenticationError, NotFoundError
 from app.middleware.rate_limit import api_limit
 from app.modules.admin.schemas import (
+    AdminAuditFeedEntry,
     AdminCompCreditRequest,
+    AdminDashboardStats,
     AdminExtendTrialRequest,
     AdminFeatureFlagsResponse,
     AdminImpersonateRequest,
@@ -40,6 +43,7 @@ from app.modules.admin.schemas import (
 )
 from app.modules.admin.service import (
     AdminBillingOverrideService,
+    AdminDashboardService,
     AdminDirectoryService,
     AdminFeatureFlagService,
     AdminImpersonationService,
@@ -339,3 +343,43 @@ async def end_impersonation(
     )
     await session.commit()
     return Envelope(data=None, meta=Meta(request_id=_request_id(request)))
+
+
+# ---- T-143: dashboard + global audit feed ------------------------------------
+
+
+@router.get("/dashboard")
+@api_limit
+async def get_admin_dashboard(
+    request: Request,
+    superadmin: Annotated[User, Depends(require_superadmin)],  # noqa: ARG001 -- gate only
+    session: Annotated[AsyncSession, Depends(get_session)],
+    redis: Annotated[Redis, Depends(get_redis)],
+) -> Envelope[AdminDashboardStats]:
+    stats = await AdminDashboardService(session, redis).get_stats()
+    return Envelope(data=stats, meta=Meta(request_id=_request_id(request)))
+
+
+@router.get("/audit")
+@api_limit
+async def list_admin_audit_feed(  # noqa: PLR0913 -- cursor pagination (§0.3) plus T-143's four filters
+    request: Request,
+    superadmin: Annotated[User, Depends(require_superadmin)],  # noqa: ARG001 -- gate only
+    session: Annotated[AsyncSession, Depends(get_session)],
+    redis: Annotated[Redis, Depends(get_redis)],
+    after: Annotated[UUID | None, Query()] = None,
+    limit: Annotated[int, Query(ge=1, le=100)] = 20,
+    actor: Annotated[UUID | None, Query()] = None,
+    action: Annotated[str | None, Query()] = None,
+    org: Annotated[UUID | None, Query()] = None,
+    since: Annotated[datetime | None, Query()] = None,
+    until: Annotated[datetime | None, Query()] = None,
+) -> Envelope[list[AdminAuditFeedEntry]]:
+    entries, next_cursor = await AdminDirectoryService(session, redis).list_audit_feed(
+        after, limit, actor_id=actor, action=action, org_id=org, since=since, until=until
+    )
+    meta = Meta(
+        request_id=_request_id(request),
+        next_cursor=str(next_cursor) if next_cursor is not None else None,
+    )
+    return Envelope(data=entries, meta=meta)

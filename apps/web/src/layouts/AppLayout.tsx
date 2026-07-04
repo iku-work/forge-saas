@@ -12,6 +12,7 @@ import {
   LogOut,
   Plus,
   Shield,
+  ShieldAlert,
   User as UserIcon,
   Users,
 } from "lucide-react";
@@ -258,6 +259,17 @@ function UserMenu() {
       <DropdownMenuContent align="start" className="w-56">
         <DropdownMenuLabel className="truncate">{user.email}</DropdownMenuLabel>
         <DropdownMenuSeparator />
+        {user.is_superadmin ? (
+          <>
+            <DropdownMenuItem asChild>
+              <Link to="/admin">
+                <ShieldAlert className="size-4" aria-hidden="true" />
+                {t("common.admin.user_menu_link")}
+              </Link>
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+          </>
+        ) : null}
         <DropdownMenuItem
           onSelect={() => {
             void handleLogout();

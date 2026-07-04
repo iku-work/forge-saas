@@ -620,7 +620,10 @@ async def test_me_returns_current_user(client: httpx.AsyncClient, verified_user:
     response = await client.get("/api/v1/auth/me", headers=_auth_header(verified_user))
 
     assert response.status_code == 200
-    assert response.json()["data"]["email"] == verified_user.email
+    body = response.json()["data"]
+    assert body["email"] == verified_user.email
+    # T-143: the web app's _admin route guard reads this off UserPublic.
+    assert body["is_superadmin"] is False
 
 
 # --- PATCH /me ---------------------------------------------------------------

@@ -1062,6 +1062,11 @@ class UserPublic(AppBaseModel):
     locale: str
     email_verified_at: datetime | None
     totp_enabled: bool
+    # T-143: the web app needs this to decide whether to render the "Admin"
+    # link / gate the _admin route tree -- purely a UI convenience, the
+    # backend's own require_superadmin dependency (T-140) is the real
+    # authorization boundary regardless of what this field says.
+    is_superadmin: bool = False
     # T-104: the web settings page needs the user's *current* saved
     # preferences to render its checkboxes against (the PATCH endpoint in
     # app.modules.notifications.sse overwrites the whole column, so a form

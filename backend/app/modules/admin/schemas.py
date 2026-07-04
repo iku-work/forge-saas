@@ -136,3 +136,35 @@ class AdminImpersonateResponse(AppBaseModel):
     access_token: str
     expires_at: datetime
     user: UserPublic
+
+
+# ---- T-143: dashboard + global audit feed -----------------------------------
+
+
+class AdminPaymentFailureEntry(AppBaseModel):
+    org_id: UUID
+    org_name: str
+    subscription_id: str | None
+    ts: datetime
+
+
+class AdminDashboardStats(AppBaseModel):
+    org_count: int
+    user_count: int
+    mrr_cents: int | None  # null when the billing module is disabled
+    recent_signups: list[AdminUserSummary]
+    recent_payment_failures: list[AdminPaymentFailureEntry]
+
+
+class AdminAuditFeedEntry(AppBaseModel):
+    id: UUID
+    ts: datetime
+    action: str
+    resource_type: str
+    resource_id: str | None
+    severity: str
+    actor_id: UUID | None
+    actor_email: str | None
+    org_id: UUID | None
+    org_name: str | None
+    impersonator_id: UUID | None

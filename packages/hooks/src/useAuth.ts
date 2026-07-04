@@ -119,6 +119,7 @@ export interface UseAuthResult {
   logout: () => Promise<void>;
   register: (email: string, password: string) => Promise<void>;
   endImpersonation: () => Promise<void>;
+  loadImpersonatedSession: (accessToken: string, user: UserPublic) => void;
 }
 
 export function useAuth(): UseAuthResult {
@@ -194,6 +195,23 @@ export function useAuth(): UseAuthResult {
     await establishSession();
   }, []);
 
+  // T-143: the admin UI's impersonate-user modal calls
+  // POST /admin/users/{id}/impersonate directly (that endpoint, like the
+  // rest of /admin/*, has no generated SDK function -- see @forge/api-client's
+  // admin.ts), then hands the resulting access_token/user pair here to load
+  // it into the same session state login() would have produced, without
+  // repeating login()'s own state-setting logic at the call site.
+  const loadImpersonatedSession = useCallback(
+    (accessToken: string, impersonatedUser: UserPublic): void => {
+      setAccessToken(accessToken);
+      setState({
+        user: impersonatedUser,
+        isImpersonating: getImpersonatorId(accessToken) !== null,
+      });
+    },
+    [],
+  );
+
   return {
     user: snapshot.user,
     isLoading: snapshot.isLoading,
@@ -202,5 +220,6 @@ export function useAuth(): UseAuthResult {
     logout,
     register,
     endImpersonation,
+    loadImpersonatedSession,
   };
 }

@@ -29,14 +29,17 @@ from app.core.module_loader import is_enabled
 from app.core.repository import DEFAULT_PAGE_SIZE
 from app.core.token_blocklist import block_jti
 from app.models._mixins import utcnow
-from app.modules.admin.repository import AdminOrgRepository
+from app.modules.admin.repository import AdminOrgRepository, AdminStatsRepository
 from app.modules.admin.schemas import (
     AdminAuditEntry,
+    AdminAuditFeedEntry,
     AdminAuditSummary,
+    AdminDashboardStats,
     AdminFeatureFlagState,
     AdminMembershipSummary,
     AdminOrgDetail,
     AdminOrgSummary,
+    AdminPaymentFailureEntry,
     AdminSessionSummary,
     AdminSubscriptionDetail,
     AdminUserDetail,
@@ -281,6 +284,113 @@ class AdminDirectoryService:
             memberships=membership_summaries,
             sessions=session_summaries,
             audit_summary=audit_summary,
+        )
+
+    async def list_audit_feed(  # noqa: PLR0913 -- cursor pagination (§0.3) plus T-143's four filters
+        self,
+        after: UUID | None,
+        limit: int = DEFAULT_PAGE_SIZE,
+        *,
+        actor_id: UUID | None = None,
+        action: str | None = None,
+        org_id: UUID | None = None,
+        since: datetime | None = None,
+        until: datetime | None = None,
+    ) -> tuple[list[AdminAuditFeedEntry], UUID | None]:
+        events, next_cursor = await self._audit.list_global_cursor(
+            after, limit, actor_id=actor_id, action=action, org_id=org_id, since=since, until=until
+        )
+        # Small per-page caches rather than a batch query: the page is capped
+        # at MAX_PAGE_SIZE (100) and actors/orgs repeat heavily within a
+        # page, so this stays cheap while reusing UserRepository/
+        # OrganizationRepository's existing get_by_id instead of adding a
+        # bespoke batch-lookup method to either.
+        user_emails: dict[UUID, str | None] = {}
+        org_names: dict[UUID, str | None] = {}
+        entries: list[AdminAuditFeedEntry] = []
+        for event in events:
+            actor_email: str | None = None
+            if event.actor_id is not None:
+                if event.actor_id not in user_emails:
+                    actor = await self._users.get_by_id(event.actor_id)
+                    user_emails[event.actor_id] = actor.email if actor is not None else None
+                actor_email = user_emails[event.actor_id]
+
+            org_name: str | None = None
+            if event.org_id is not None:
+                if event.org_id not in org_names:
+                    org = await OrganizationRepository(self._session).get_by_id(event.org_id)
+                    org_names[event.org_id] = org.name if org is not None else None
+                org_name = org_names[event.org_id]
+
+            entries.append(
+                AdminAuditFeedEntry(
+                    id=event.id,
+                    ts=event.ts,
+                    action=event.action,
+                    resource_type=event.resource_type,
+                    resource_id=event.resource_id,
+                    severity=event.severity,
+                    actor_id=event.actor_id,
+                    actor_email=actor_email,
+                    org_id=event.org_id,
+                    org_name=org_name,
+                    impersonator_id=event.impersonator_id,
+                )
+            )
+        return entries, next_cursor
+
+
+class AdminDashboardService:
+    """Aggregate counts + recent activity for the admin dashboard (T-143)."""
+
+    def __init__(self, session: AsyncSession, redis: Redis) -> None:  # noqa: ARG002 -- redis kept for signature symmetry with the module's other admin services, unused here (no cached reads on this path)
+        self._stats = AdminStatsRepository(session)
+        self._users = UserRepository(session)
+        self._orgs = OrganizationRepository(session)
+        self._audit = AuditRepository(session)
+
+    async def get_stats(self) -> AdminDashboardStats:
+        org_count = await self._stats.count_orgs()
+        user_count = await self._stats.count_users()
+        mrr_cents = await self._stats.sum_mrr_cents() if is_enabled("billing") else None
+
+        recent_users, _ = await self._users.list_cursor(None, limit=5)
+        recent_signups = [
+            AdminUserSummary(
+                id=u.id,
+                email=u.email,
+                full_name=u.full_name,
+                is_active=u.is_active,
+                created_at=u.created_at,
+            )
+            for u in recent_users
+        ]
+
+        recent_payment_failures: list[AdminPaymentFailureEntry] = []
+        if is_enabled("billing"):
+            events = await self._audit.list_recent_by_action("billing.payment_failed", limit=5)
+            for event in events:
+                if event.org_id is None:
+                    continue
+                org = await self._orgs.get_by_id(event.org_id)
+                if org is None:
+                    continue
+                recent_payment_failures.append(
+                    AdminPaymentFailureEntry(
+                        org_id=org.id,
+                        org_name=org.name,
+                        subscription_id=event.resource_id,
+                        ts=event.ts,
+                    )
+                )
+
+        return AdminDashboardStats(
+            org_count=org_count,
+            user_count=user_count,
+            mrr_cents=mrr_cents,
+            recent_signups=recent_signups,
+            recent_payment_failures=recent_payment_failures,
         )
 
 

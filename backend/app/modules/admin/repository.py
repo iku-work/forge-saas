@@ -18,11 +18,12 @@ would break every admin org listing the moment billing is toggled off.
 from typing import Any, cast
 from uuid import UUID
 
-from sqlalchemy import select, tuple_
+from sqlalchemy import func, select, tuple_
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.module_loader import is_enabled
 from app.core.repository import DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE
+from app.modules.auth.models import User
 from app.modules.billing.models import Plan, Subscription
 from app.modules.tenancy.models import Organization
 
@@ -90,3 +91,43 @@ class AdminOrgRepository:
         page = entries[:capped_limit]
         next_cursor = page[-1][0].id if page and len(entries) > capped_limit else None
         return page, next_cursor
+
+
+class AdminStatsRepository:
+    """Cross-tenant aggregate counts for the admin dashboard (T-143). Same
+    cross-module justification as AdminOrgRepository above."""
+
+    def __init__(self, session: AsyncSession) -> None:
+        self.session = session
+
+    async def count_orgs(self) -> int:
+        m = cast("Any", Organization)
+        stmt = select(func.count()).select_from(Organization).where(m.deleted_at.is_(None))
+        result = await self.session.execute(stmt)
+        return result.scalar_one()
+
+    async def count_users(self) -> int:
+        m = cast("Any", User)
+        stmt = select(func.count()).select_from(User).where(m.deleted_at.is_(None))
+        result = await self.session.execute(stmt)
+        return result.scalar_one()
+
+    async def sum_mrr_cents(self) -> int:
+        # "Estimate": normalizes every active, non-comp'd subscription to a
+        # monthly figure (yearly plans divided by 12) and sums in cents.
+        # free_override rows are support-ops comps (§T-141), not real
+        # revenue, so they're excluded same as they are from comp-credit
+        # eligibility in AdminBillingOverrideService.
+        sub = cast("Any", Subscription)
+        plan = cast("Any", Plan)
+        stmt = (
+            select(sub.billing_interval, plan.price_monthly, plan.price_yearly)
+            .select_from(Subscription)
+            .join(Plan, plan.id == sub.plan_id)
+            .where(sub.status == "active", sub.free_override.is_(False))
+        )
+        result = await self.session.execute(stmt)
+        total = 0
+        for billing_interval, price_monthly, price_yearly in result.all():
+            total += price_yearly // 12 if billing_interval == "yearly" else price_monthly
+        return total

@@ -53,7 +53,11 @@ export function AppRoot({ router, queryClient }: AppRootProps) {
         <ImpersonationBanner
           email={user.email}
           onEnd={() => {
-            void endImpersonation();
+            // T-143: ending impersonation returns the superadmin to the
+            // admin panel they started it from, rather than leaving them on
+            // whatever page of the impersonated user's app they happened to
+            // be viewing.
+            void endImpersonation().then(() => router.navigate({ to: "/admin" }));
           }}
         />
       ) : null}

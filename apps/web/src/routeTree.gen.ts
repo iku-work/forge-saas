@@ -15,11 +15,18 @@ import { Route as RegisterRouteImport } from './routes/register'
 import { Route as MagicLinkRouteImport } from './routes/magic-link'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as ForgotPasswordRouteImport } from './routes/forgot-password'
+import { Route as AdminRouteImport } from './routes/admin'
 import { Route as AppRouteImport } from './routes/_app'
+import { Route as AdminIndexRouteImport } from './routes/admin.index'
 import { Route as AppIndexRouteImport } from './routes/_app.index'
+import { Route as AdminUsersRouteImport } from './routes/admin.users'
+import { Route as AdminOrgsRouteImport } from './routes/admin.orgs'
+import { Route as AdminAuditRouteImport } from './routes/admin.audit'
 import { Route as AcceptInvitationTokenRouteImport } from './routes/accept-invitation.$token'
 import { Route as AppReportsRouteImport } from './routes/_app.reports'
 import { Route as AppFilesRouteImport } from './routes/_app.files'
+import { Route as AdminUsersIdRouteImport } from './routes/admin.users_.$id'
+import { Route as AdminOrgsIdRouteImport } from './routes/admin.orgs_.$id'
 import { Route as AppSettingsSecurityRouteImport } from './routes/_app.settings.security'
 import { Route as AppSettingsProfileRouteImport } from './routes/_app.settings.profile'
 import { Route as AppSettingsOrgRouteImport } from './routes/_app.settings.org'
@@ -57,14 +64,39 @@ const ForgotPasswordRoute = ForgotPasswordRouteImport.update({
   path: '/forgot-password',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AdminRoute = AdminRouteImport.update({
+  id: '/admin',
+  path: '/admin',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AppRoute = AppRouteImport.update({
   id: '/_app',
   getParentRoute: () => rootRouteImport,
+} as any)
+const AdminIndexRoute = AdminIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => AdminRoute,
 } as any)
 const AppIndexRoute = AppIndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => AppRoute,
+} as any)
+const AdminUsersRoute = AdminUsersRouteImport.update({
+  id: '/users',
+  path: '/users',
+  getParentRoute: () => AdminRoute,
+} as any)
+const AdminOrgsRoute = AdminOrgsRouteImport.update({
+  id: '/orgs',
+  path: '/orgs',
+  getParentRoute: () => AdminRoute,
+} as any)
+const AdminAuditRoute = AdminAuditRouteImport.update({
+  id: '/audit',
+  path: '/audit',
+  getParentRoute: () => AdminRoute,
 } as any)
 const AcceptInvitationTokenRoute = AcceptInvitationTokenRouteImport.update({
   id: '/accept-invitation/$token',
@@ -80,6 +112,16 @@ const AppFilesRoute = AppFilesRouteImport.update({
   id: '/files',
   path: '/files',
   getParentRoute: () => AppRoute,
+} as any)
+const AdminUsersIdRoute = AdminUsersIdRouteImport.update({
+  id: '/users_/$id',
+  path: '/users/$id',
+  getParentRoute: () => AdminRoute,
+} as any)
+const AdminOrgsIdRoute = AdminOrgsIdRouteImport.update({
+  id: '/orgs_/$id',
+  path: '/orgs/$id',
+  getParentRoute: () => AdminRoute,
 } as any)
 const AppSettingsSecurityRoute = AppSettingsSecurityRouteImport.update({
   id: '/settings/security',
@@ -115,6 +157,7 @@ const AppSettingsBillingRoute = AppSettingsBillingRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof AppIndexRoute
+  '/admin': typeof AdminRouteWithChildren
   '/forgot-password': typeof ForgotPasswordRoute
   '/login': typeof LoginRoute
   '/magic-link': typeof MagicLinkRoute
@@ -124,12 +167,18 @@ export interface FileRoutesByFullPath {
   '/files': typeof AppFilesRoute
   '/reports': typeof AppReportsRoute
   '/accept-invitation/$token': typeof AcceptInvitationTokenRoute
+  '/admin/audit': typeof AdminAuditRoute
+  '/admin/orgs': typeof AdminOrgsRoute
+  '/admin/users': typeof AdminUsersRoute
+  '/admin/': typeof AdminIndexRoute
   '/settings/billing': typeof AppSettingsBillingRoute
   '/settings/members': typeof AppSettingsMembersRoute
   '/settings/notifications': typeof AppSettingsNotificationsRoute
   '/settings/org': typeof AppSettingsOrgRoute
   '/settings/profile': typeof AppSettingsProfileRoute
   '/settings/security': typeof AppSettingsSecurityRoute
+  '/admin/orgs/$id': typeof AdminOrgsIdRoute
+  '/admin/users/$id': typeof AdminUsersIdRoute
 }
 export interface FileRoutesByTo {
   '/forgot-password': typeof ForgotPasswordRoute
@@ -141,17 +190,24 @@ export interface FileRoutesByTo {
   '/files': typeof AppFilesRoute
   '/reports': typeof AppReportsRoute
   '/accept-invitation/$token': typeof AcceptInvitationTokenRoute
+  '/admin/audit': typeof AdminAuditRoute
+  '/admin/orgs': typeof AdminOrgsRoute
+  '/admin/users': typeof AdminUsersRoute
   '/': typeof AppIndexRoute
+  '/admin': typeof AdminIndexRoute
   '/settings/billing': typeof AppSettingsBillingRoute
   '/settings/members': typeof AppSettingsMembersRoute
   '/settings/notifications': typeof AppSettingsNotificationsRoute
   '/settings/org': typeof AppSettingsOrgRoute
   '/settings/profile': typeof AppSettingsProfileRoute
   '/settings/security': typeof AppSettingsSecurityRoute
+  '/admin/orgs/$id': typeof AdminOrgsIdRoute
+  '/admin/users/$id': typeof AdminUsersIdRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/_app': typeof AppRouteWithChildren
+  '/admin': typeof AdminRouteWithChildren
   '/forgot-password': typeof ForgotPasswordRoute
   '/login': typeof LoginRoute
   '/magic-link': typeof MagicLinkRoute
@@ -161,18 +217,25 @@ export interface FileRoutesById {
   '/_app/files': typeof AppFilesRoute
   '/_app/reports': typeof AppReportsRoute
   '/accept-invitation/$token': typeof AcceptInvitationTokenRoute
+  '/admin/audit': typeof AdminAuditRoute
+  '/admin/orgs': typeof AdminOrgsRoute
+  '/admin/users': typeof AdminUsersRoute
   '/_app/': typeof AppIndexRoute
+  '/admin/': typeof AdminIndexRoute
   '/_app/settings/billing': typeof AppSettingsBillingRoute
   '/_app/settings/members': typeof AppSettingsMembersRoute
   '/_app/settings/notifications': typeof AppSettingsNotificationsRoute
   '/_app/settings/org': typeof AppSettingsOrgRoute
   '/_app/settings/profile': typeof AppSettingsProfileRoute
   '/_app/settings/security': typeof AppSettingsSecurityRoute
+  '/admin/orgs_/$id': typeof AdminOrgsIdRoute
+  '/admin/users_/$id': typeof AdminUsersIdRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
+    | '/admin'
     | '/forgot-password'
     | '/login'
     | '/magic-link'
@@ -182,12 +245,18 @@ export interface FileRouteTypes {
     | '/files'
     | '/reports'
     | '/accept-invitation/$token'
+    | '/admin/audit'
+    | '/admin/orgs'
+    | '/admin/users'
+    | '/admin/'
     | '/settings/billing'
     | '/settings/members'
     | '/settings/notifications'
     | '/settings/org'
     | '/settings/profile'
     | '/settings/security'
+    | '/admin/orgs/$id'
+    | '/admin/users/$id'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/forgot-password'
@@ -199,16 +268,23 @@ export interface FileRouteTypes {
     | '/files'
     | '/reports'
     | '/accept-invitation/$token'
+    | '/admin/audit'
+    | '/admin/orgs'
+    | '/admin/users'
     | '/'
+    | '/admin'
     | '/settings/billing'
     | '/settings/members'
     | '/settings/notifications'
     | '/settings/org'
     | '/settings/profile'
     | '/settings/security'
+    | '/admin/orgs/$id'
+    | '/admin/users/$id'
   id:
     | '__root__'
     | '/_app'
+    | '/admin'
     | '/forgot-password'
     | '/login'
     | '/magic-link'
@@ -218,17 +294,24 @@ export interface FileRouteTypes {
     | '/_app/files'
     | '/_app/reports'
     | '/accept-invitation/$token'
+    | '/admin/audit'
+    | '/admin/orgs'
+    | '/admin/users'
     | '/_app/'
+    | '/admin/'
     | '/_app/settings/billing'
     | '/_app/settings/members'
     | '/_app/settings/notifications'
     | '/_app/settings/org'
     | '/_app/settings/profile'
     | '/_app/settings/security'
+    | '/admin/orgs_/$id'
+    | '/admin/users_/$id'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   AppRoute: typeof AppRouteWithChildren
+  AdminRoute: typeof AdminRouteWithChildren
   ForgotPasswordRoute: typeof ForgotPasswordRoute
   LoginRoute: typeof LoginRoute
   MagicLinkRoute: typeof MagicLinkRoute
@@ -282,6 +365,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ForgotPasswordRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/admin': {
+      id: '/admin'
+      path: '/admin'
+      fullPath: '/admin'
+      preLoaderRoute: typeof AdminRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/_app': {
       id: '/_app'
       path: ''
@@ -289,12 +379,40 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/admin/': {
+      id: '/admin/'
+      path: '/'
+      fullPath: '/admin/'
+      preLoaderRoute: typeof AdminIndexRouteImport
+      parentRoute: typeof AdminRoute
+    }
     '/_app/': {
       id: '/_app/'
       path: '/'
       fullPath: '/'
       preLoaderRoute: typeof AppIndexRouteImport
       parentRoute: typeof AppRoute
+    }
+    '/admin/users': {
+      id: '/admin/users'
+      path: '/users'
+      fullPath: '/admin/users'
+      preLoaderRoute: typeof AdminUsersRouteImport
+      parentRoute: typeof AdminRoute
+    }
+    '/admin/orgs': {
+      id: '/admin/orgs'
+      path: '/orgs'
+      fullPath: '/admin/orgs'
+      preLoaderRoute: typeof AdminOrgsRouteImport
+      parentRoute: typeof AdminRoute
+    }
+    '/admin/audit': {
+      id: '/admin/audit'
+      path: '/audit'
+      fullPath: '/admin/audit'
+      preLoaderRoute: typeof AdminAuditRouteImport
+      parentRoute: typeof AdminRoute
     }
     '/accept-invitation/$token': {
       id: '/accept-invitation/$token'
@@ -316,6 +434,20 @@ declare module '@tanstack/react-router' {
       fullPath: '/files'
       preLoaderRoute: typeof AppFilesRouteImport
       parentRoute: typeof AppRoute
+    }
+    '/admin/users_/$id': {
+      id: '/admin/users_/$id'
+      path: '/users/$id'
+      fullPath: '/admin/users/$id'
+      preLoaderRoute: typeof AdminUsersIdRouteImport
+      parentRoute: typeof AdminRoute
+    }
+    '/admin/orgs_/$id': {
+      id: '/admin/orgs_/$id'
+      path: '/orgs/$id'
+      fullPath: '/admin/orgs/$id'
+      preLoaderRoute: typeof AdminOrgsIdRouteImport
+      parentRoute: typeof AdminRoute
     }
     '/_app/settings/security': {
       id: '/_app/settings/security'
@@ -388,8 +520,29 @@ const AppRouteChildren: AppRouteChildren = {
 
 const AppRouteWithChildren = AppRoute._addFileChildren(AppRouteChildren)
 
+interface AdminRouteChildren {
+  AdminAuditRoute: typeof AdminAuditRoute
+  AdminOrgsRoute: typeof AdminOrgsRoute
+  AdminUsersRoute: typeof AdminUsersRoute
+  AdminIndexRoute: typeof AdminIndexRoute
+  AdminOrgsIdRoute: typeof AdminOrgsIdRoute
+  AdminUsersIdRoute: typeof AdminUsersIdRoute
+}
+
+const AdminRouteChildren: AdminRouteChildren = {
+  AdminAuditRoute: AdminAuditRoute,
+  AdminOrgsRoute: AdminOrgsRoute,
+  AdminUsersRoute: AdminUsersRoute,
+  AdminIndexRoute: AdminIndexRoute,
+  AdminOrgsIdRoute: AdminOrgsIdRoute,
+  AdminUsersIdRoute: AdminUsersIdRoute,
+}
+
+const AdminRouteWithChildren = AdminRoute._addFileChildren(AdminRouteChildren)
+
 const rootRouteChildren: RootRouteChildren = {
   AppRoute: AppRouteWithChildren,
+  AdminRoute: AdminRouteWithChildren,
   ForgotPasswordRoute: ForgotPasswordRoute,
   LoginRoute: LoginRoute,
   MagicLinkRoute: MagicLinkRoute,

@@ -17,6 +17,7 @@ export {
 } from "./client";
 export { authRetryInterceptor, onSessionExpired } from "./authInterceptor";
 export { orgIdRequestInterceptor } from "./orgInterceptor";
+export * from "./admin";
 // Re-exported for consumers (apps/mobile/src/lib/api.ts) that need their own
 // Client instance instead of the singleton above -- that singleton is wired
 // for the browser's cookie + import.meta.env world, which mobile has neither
