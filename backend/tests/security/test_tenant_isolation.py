@@ -140,6 +140,32 @@ async def _get_subscription(ctx: TenantIsolationContext) -> httpx.Response:
     )
 
 
+async def _get_feature_flags(ctx: TenantIsolationContext) -> httpx.Response:
+    return await ctx.client.get(
+        f"/api/v1/orgs/{ctx.org_b.id}/feature-flags", headers=ctx.user_a_headers
+    )
+
+
+async def _presign_file_upload(ctx: TenantIsolationContext) -> httpx.Response:
+    return await ctx.client.post(
+        "/api/v1/files/presign",
+        json={"filename": "x.txt", "content_type": "text/plain", "size_bytes": 1},
+        headers={**ctx.user_a_headers, "X-Org-ID": str(ctx.org_b.id)},
+    )
+
+
+async def _list_files(ctx: TenantIsolationContext) -> httpx.Response:
+    return await ctx.client.get(
+        "/api/v1/files", headers={**ctx.user_a_headers, "X-Org-ID": str(ctx.org_b.id)}
+    )
+
+
+async def _list_notifications(ctx: TenantIsolationContext) -> httpx.Response:
+    return await ctx.client.get(
+        "/api/v1/notifications", headers={**ctx.user_a_headers, "X-Org-ID": str(ctx.org_b.id)}
+    )
+
+
 # (test id, request builder, status codes that prove isolation held)
 _CASES: list[tuple[str, RequestFn, tuple[int, ...]]] = [
     ("GET /orgs/{org_id}", _get_org, (403,)),
@@ -151,6 +177,10 @@ _CASES: list[tuple[str, RequestFn, tuple[int, ...]]] = [
     ("POST /billing/checkout-session", _checkout_session, (403,)),
     ("POST /billing/portal-session", _portal_session, (403,)),
     ("GET /billing/subscription", _get_subscription, (403,)),
+    ("GET /orgs/{org_id}/feature-flags", _get_feature_flags, (403,)),
+    ("POST /files/presign", _presign_file_upload, (403,)),
+    ("GET /files", _list_files, (403,)),
+    ("GET /notifications", _list_notifications, (403,)),
 ]
 
 

@@ -71,7 +71,7 @@ class NotificationService:
             await jobs.enqueue_job(
                 "send_email",
                 to=user.email,
-                template=f"notification_{type}",
+                template=type,
                 locale=user.locale,
                 context={"title": title, "body": body, "action_url": action_url},
             )

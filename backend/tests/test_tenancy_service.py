@@ -12,6 +12,7 @@ from typing import Any
 from uuid import uuid4
 
 import pytest
+from redis.asyncio import Redis
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import (
     AsyncEngine,
@@ -33,6 +34,7 @@ from app.modules.auth.models import User
 from app.modules.auth.permissions import MemberRole
 from app.modules.auth.utils import hash_token, sign_url_token
 from app.modules.billing.models import Plan
+from app.modules.notifications.models import Notification
 from app.modules.tenancy.models import Invitation, Membership, Organization
 from app.modules.tenancy.repository import (
     InvitationRepository,
@@ -48,6 +50,7 @@ _TABLES = [
     Membership.__table__,
     Invitation.__table__,
     AuditEvent.__table__,
+    Notification.__table__,
 ]
 
 
@@ -84,6 +87,11 @@ async def session(test_engine: AsyncEngine) -> AsyncGenerator[AsyncSession, None
     factory = async_sessionmaker(test_engine, expire_on_commit=False, class_=AsyncSession)
     async with factory() as s:
         yield s
+
+
+@pytest.fixture
+def redis(_redis_client: Redis) -> Redis:
+    return _redis_client
 
 
 @pytest.fixture
@@ -195,11 +203,15 @@ async def test_create_org_slug_collision_gets_numeric_suffix(
 
 
 async def test_invite_creates_invitation_with_correct_fields(
-    service: TenancyService, org: Organization, user: User, session: AsyncSession
+    service: TenancyService,
+    org: Organization,
+    user: User,
+    session: AsyncSession,
+    redis: Redis,
 ) -> None:
     inviter = Membership(user_id=user.id, org_id=org.id, role=MemberRole.OWNER)
 
-    await service.invite(org.id, inviter, "newcomer@example.com", MemberRole.ADMIN)
+    await service.invite(org.id, inviter, "newcomer@example.com", MemberRole.ADMIN, redis)
 
     result = await session.execute(
         select(Invitation).where(
@@ -215,7 +227,11 @@ async def test_invite_creates_invitation_with_correct_fields(
 
 
 async def test_invite_raises_not_found_for_soft_deleted_org(
-    service: TenancyService, org: Organization, user: User, session: AsyncSession
+    service: TenancyService,
+    org: Organization,
+    user: User,
+    session: AsyncSession,
+    redis: Redis,
 ) -> None:
     # A literally nonexistent org_id would already fail _invitations.create's
     # FK constraint before reaching this branch -- soft-deleting a real org
@@ -227,23 +243,29 @@ async def test_invite_raises_not_found_for_soft_deleted_org(
     inviter = Membership(user_id=user.id, org_id=org.id, role=MemberRole.OWNER)
 
     with pytest.raises(NotFoundError):
-        await service.invite(org.id, inviter, "nobody@example.com", MemberRole.MEMBER)
+        await service.invite(org.id, inviter, "nobody@example.com", MemberRole.MEMBER, redis)
 
 
 # --- invite + accept round-trip -----------------------------------------------
 
 
-async def test_invite_then_accept_round_trip(
+async def test_invite_then_accept_round_trip(  # noqa: PLR0913 -- redis on top of the usual service/org/user/session/enqueued_jobs set
     service: TenancyService,
     org: Organization,
     user: User,
     enqueued_jobs: list[tuple[str, dict[str, Any]]],
     session: AsyncSession,
+    redis: Redis,
 ) -> None:
     inviter = Membership(user_id=user.id, org_id=org.id, role=MemberRole.OWNER)
-    await service.invite(org.id, inviter, "invitee@example.com", MemberRole.MEMBER)
+    await service.invite(org.id, inviter, "invitee@example.com", MemberRole.MEMBER, redis)
 
-    function, kwargs = enqueued_jobs[-1]
+    # Not enqueued_jobs[-1]: invite() also notifies the inviter (T-160's
+    # member_invited notification), which enqueues its own send_email job
+    # after this one.
+    function, kwargs = next(
+        (f, k) for f, k in enqueued_jobs if f == "send_email" and k["to"] == "invitee@example.com"
+    )
     assert function == "send_email"
     assert kwargs["to"] == "invitee@example.com"
     token = kwargs["context"]["accept_url"].rsplit("/", 1)[-1]

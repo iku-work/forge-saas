@@ -1,3 +1,11 @@
+// Named AppLayout.test.tsx, not _layout.test.tsx: expo-router's typed-routes
+// generator treats any filename starting with "_layout" as a second layout
+// candidate for this directory, which silently aborted route generation for
+// this entire (app) group -- every route under it (dashboard, files,
+// notifications, settings) was missing from .expo/types/router.d.ts, so
+// router.push("/dashboard") etc. failed to typecheck. Co-locating a route's
+// test next to it is expo-router's own recommended pattern (see
+// metro.config.js's blockList comment) -- just never name it "_layout.*".
 import { render } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 

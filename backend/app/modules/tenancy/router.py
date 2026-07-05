@@ -19,10 +19,11 @@ from typing import Annotated
 from uuid import UUID, uuid4
 
 from fastapi import APIRouter, Depends, Query, Request
+from redis.asyncio import Redis
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.db import get_session
-from app.core.dependencies import get_current_user
+from app.core.dependencies import get_current_user, get_redis
 from app.core.envelope import Envelope, Meta
 from app.core.exceptions import PermissionDeniedError
 from app.middleware.rate_limit import api_limit
@@ -180,14 +181,15 @@ async def remove_member(
 
 @router.post("/orgs/{org_id}/invitations")
 @api_limit
-async def create_invitation(
+async def create_invitation(  # noqa: PLR0913 — redis (for the inviter notification) on top of the usual request+org_id+body+actor+session params
     request: Request,
     org_id: UUID,
     body: InviteRequest,
     actor: Annotated[Membership, Depends(require_org_permission(Permission.MEMBERS_MANAGE))],
     session: Annotated[AsyncSession, Depends(get_session)],
+    redis: Annotated[Redis, Depends(get_redis)],
 ) -> Envelope[None]:
-    await TenancyService(session).invite(org_id, actor, body.email, body.role)
+    await TenancyService(session).invite(org_id, actor, body.email, body.role, redis)
     await session.commit()
     return Envelope(data=None, meta=Meta(request_id=_request_id(request)))
 

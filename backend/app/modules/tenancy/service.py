@@ -10,6 +10,7 @@ from datetime import timedelta
 from typing import Any
 from uuid import UUID, uuid4
 
+from redis.asyncio import Redis
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core import jobs
@@ -25,6 +26,7 @@ from app.modules.audit.service import AuditService
 from app.modules.auth.models import User
 from app.modules.auth.permissions import ROLE_PERMISSIONS, MemberRole, Permission
 from app.modules.auth.utils import hash_token, sign_url_token, verify_url_token
+from app.modules.notifications.service import NotificationService
 from app.modules.tenancy.models import Invitation, Membership, Organization
 from app.modules.tenancy.repository import (
     InvitationRepository,
@@ -44,6 +46,7 @@ def _slugify(name: str) -> str:
 
 class TenancyService:
     def __init__(self, session: AsyncSession) -> None:
+        self._session = session
         self._orgs = OrganizationRepository(session)
         self._memberships = MembershipRepository(session)
         self._invitations = InvitationRepository(session)
@@ -64,7 +67,9 @@ class TenancyService:
             suffix += 1
         return slug
 
-    async def invite(self, org_id: UUID, inviter: Membership, email: str, role: MemberRole) -> None:
+    async def invite(
+        self, org_id: UUID, inviter: Membership, email: str, role: MemberRole, redis: Redis
+    ) -> None:
         # No user lookup -- the invitee may not have an account yet.
         invitation_id = uuid4()
         plain_token = sign_url_token({"invitation_id": str(invitation_id)}, _INVITATION_TTL_SECONDS)
@@ -81,6 +86,17 @@ class TenancyService:
         if org is None:
             raise NotFoundError("errors.org_not_found", fallback="Organization not found")
         await self._enqueue_invitation_email(org.name, email, plain_token)
+        # Confirms to the inviter (not the invitee, who may have no account
+        # yet to notify in-app) that the invite went out -- T-160's
+        # notifications happy path checks this lands in the inviter's bell
+        # within 1s via the in-app/SSE channel.
+        await NotificationService(self._session, redis).send(
+            user_id=inviter.user_id,
+            org_id=org_id,
+            type="member_invited",
+            title="Invitation sent",
+            body=f"You invited {email} to join {org.name}.",
+        )
 
     async def accept_invitation(self, token: str, user: User) -> Membership:
         # Two independent checks: the itsdangerous signature + embedded TTL

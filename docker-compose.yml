@@ -47,6 +47,14 @@ services:
     environment:
       MINIO_ROOT_USER: minioadmin
       MINIO_ROOT_PASSWORD: minioadmin
+      # app.modules.storage.backends.s3.S3Backend always requests SSE-S3
+      # (x-amz-server-side-encryption: AES256) on presigned uploads -- real
+      # AWS S3 honors that with no KMS setup, but MinIO refuses *any*
+      # server-side encryption, even SSE-S3, unless a KMS key is configured;
+      # without this, every presigned upload 501s with "KMS not configured".
+      # This is MinIO's own single-key SSE (no external KMS server needed),
+      # dev-only value -- fine to be static/committed.
+      MINIO_KMS_SECRET_KEY: "forge-local-dev:tHWvc0PGShe5j8xl3q3vpa2JO5qEDjgSUSQ6/PVu9oM="
     volumes:
       - minio_data:/data
     ports:

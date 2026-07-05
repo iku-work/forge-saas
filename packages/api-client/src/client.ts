@@ -1,19 +1,30 @@
 import type { CreateClientConfig } from "./generated/client.gen";
 
-// Vite injects `import.meta.env` at build time; this package has no direct
-// dependency on `vite`, so the shape is declared locally instead of pulling
-// in `vite/client` types.
-declare global {
-  interface ImportMetaEnv {
-    readonly VITE_API_URL?: string;
-  }
-  interface ImportMeta {
-    readonly env: ImportMetaEnv;
-  }
-}
+// apps/web/vite.config.ts's `define` replaces this identifier at build
+// (and dev-server) time with a JSON-stringified VITE_API_URL, or the
+// literal string "undefined" when unset -- deliberately NOT `import.meta.env`
+// (Vite's usual mechanism): this package's barrel (index.ts) is also
+// imported by Metro/Hermes consumers (apps/mobile) that only want a couple
+// of generated SDK functions, not this browser-only singleton, and hey-api's
+// generated client.gen.ts calls createClientConfig -> this function eagerly
+// at module load. `import.meta` has no bundler-level replacement under
+// Metro, and Hermes fails to even *compile* a function referencing it
+// (a try/catch around the access doesn't help -- the failure happens
+// compiling the function, before any of its own bytecode, catch included,
+// can run), crashing module load for every mobile screen that imports
+// anything from this package. A plain global identifier is inert under
+// Metro (`typeof` on an undeclared global is just "undefined", no
+// bundler-level rewrite needed) and mobile never uses this singleton
+// anyway -- it builds its own Client with its own EXPO_PUBLIC_API_URL
+// (see apps/mobile/src/lib/api.ts).
+declare const __VITE_API_URL_OVERRIDE__: string | undefined;
 
 export function getApiBaseUrl(): string {
-  return import.meta.env.VITE_API_URL ?? "http://localhost:8000";
+  return (
+    (typeof __VITE_API_URL_OVERRIDE__ !== "undefined"
+      ? __VITE_API_URL_OVERRIDE__
+      : undefined) ?? "http://localhost:8000"
+  );
 }
 
 // In-memory only -- the access token must never touch localStorage/cookies

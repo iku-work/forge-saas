@@ -31,6 +31,11 @@ class StoredFilePublic(AppBaseModel):
     content_type: str
     size_bytes: int
     status: str
+    # "ready" doesn't change when the scan comes back clean (only "infected"/
+    # "failed" change status -- see workers.jobs.virus_scan) -- this is the
+    # only observable signal that a scan has actually completed vs. is still
+    # pending on a file that already reads "ready".
+    virus_scan_result: str | None
     bucket: str
     uploaded_by: UUID
     created_at: datetime

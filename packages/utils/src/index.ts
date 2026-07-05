@@ -26,16 +26,41 @@ const RELATIVE_TIME_DIVISIONS: ReadonlyArray<{
   { amount: Number.POSITIVE_INFINITY, unit: "years" },
 ];
 
+// Plain-English fallback for runtimes with no Intl.RelativeTimeFormat --
+// notably Expo Go's bundled Hermes, which (unlike a production build's
+// Hermes, configurable for full ICU data) throws "Cannot read property
+// 'prototype' of undefined" on `new Intl.RelativeTimeFormat(...)`. Every
+// caller of this shared (web + mobile) util needs to survive that rather
+// than crash the screen -- the web app always has full Intl support, so
+// this path is Hermes-only in practice.
+function formatRelativeTimeFallback(value: number, unit: Intl.RelativeTimeFormatUnit): string {
+  const n = Math.abs(value);
+  const noun = n === 1 ? unit.replace(/s$/, "") : unit;
+  if (value === 0) return "now";
+  return value < 0 ? `${n} ${noun} ago` : `in ${n} ${noun}`;
+}
+
 export function formatRelativeTime(iso: string, locale = "en-US"): string {
-  const formatter = new Intl.RelativeTimeFormat(locale, { numeric: "auto" });
+  let formatter: Intl.RelativeTimeFormat | null;
+  try {
+    formatter = new Intl.RelativeTimeFormat(locale, { numeric: "auto" });
+  } catch {
+    formatter = null;
+  }
   let duration = (new Date(iso).getTime() - Date.now()) / 1000;
   for (const division of RELATIVE_TIME_DIVISIONS) {
     if (Math.abs(duration) < division.amount) {
-      return formatter.format(Math.round(duration), division.unit);
+      const rounded = Math.round(duration);
+      return formatter
+        ? formatter.format(rounded, division.unit)
+        : formatRelativeTimeFallback(rounded, division.unit);
     }
     duration /= division.amount;
   }
-  return formatter.format(Math.round(duration), "years");
+  const rounded = Math.round(duration);
+  return formatter
+    ? formatter.format(rounded, "years")
+    : formatRelativeTimeFallback(rounded, "years");
 }
 
 const BYTE_UNITS = ["B", "KB", "MB", "GB", "TB", "PB"] as const;

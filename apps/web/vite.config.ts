@@ -11,6 +11,12 @@ export default defineConfig({
     react(),
     tailwindcss(),
   ],
+  // @forge/api-client's getApiBaseUrl() reads this instead of
+  // import.meta.env.VITE_API_URL -- see that file's comment for why
+  // (import.meta is unusable in the same package's Metro/Hermes consumers).
+  define: {
+    __VITE_API_URL_OVERRIDE__: JSON.stringify(process.env.VITE_API_URL),
+  },
   server: {
     proxy: {
       "/api": {

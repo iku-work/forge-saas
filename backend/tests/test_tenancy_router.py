@@ -40,6 +40,7 @@ from app.modules.auth.models import User
 from app.modules.auth.permissions import MemberRole
 from app.modules.auth.utils import create_access_token
 from app.modules.billing.models import Plan
+from app.modules.notifications.models import Notification
 from app.modules.tenancy.models import Invitation, Membership, Organization
 
 _TABLES = [
@@ -48,6 +49,7 @@ _TABLES = [
     Organization.__table__,
     Membership.__table__,
     Invitation.__table__,
+    Notification.__table__,
 ]
 
 
@@ -516,7 +518,12 @@ async def test_invitation_full_round_trip_via_http(
     assert invite_response.status_code == 200
     assert invite_response.json()["data"] is None
 
-    function, kwargs = enqueued_jobs[-1]
+    # Not enqueued_jobs[-1]: invite() also notifies the inviter (T-160's
+    # member_invited notification), which enqueues its own send_email job
+    # after this one.
+    function, kwargs = next(
+        (f, k) for f, k in enqueued_jobs if f == "send_email" and k["to"] == user_b.email
+    )
     assert function == "send_email"
     token = kwargs["context"]["accept_url"].rsplit("/", 1)[-1]
 

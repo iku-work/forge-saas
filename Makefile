@@ -6,7 +6,7 @@ dev:
 	# worker's send_email job shells out to this compiled CLI (T-106) --
 	# docker-compose.yml bind-mounts dist/ in rather than building it inside
 	# the (Python) worker image, so it must already exist on the host.
-	pnpm --filter @forge/email-templates build
+	pnpm --filter "@forge/email-templates..." build
 	docker compose up -d
 	@echo "Waiting for backend..."
 	@for i in $$(seq 1 30); do \

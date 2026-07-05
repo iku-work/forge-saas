@@ -21,7 +21,7 @@ from app.modules.tenancy.repository import OrganizationRepository
 from app.modules.tenancy.service import TenancyService
 from app.workers.jobs.notifications import backfill_notification_preferences_for_session
 
-SUPERADMIN_EMAIL = "admin@forge.local"
+SUPERADMIN_EMAIL = "admin@example.com"
 SUPERADMIN_PASSWORD = "DevPassword123!"  # noqa: S105 — documented local-dev-only seed login, not a real secret
 DEMO_ORG_NAME = "Forge Demo"
 DEMO_ORG_SLUG = "forge-demo"
@@ -71,7 +71,13 @@ async def seed(session: AsyncSession) -> None:
                 stripe_price_id_yearly="price_pro_yearly",
                 price_monthly=4900,
                 price_yearly=49000,
-                features={"seats": 25, "storage_gb": 50, "api_calls": 100000},
+                features={
+                    "seats": 25,
+                    "storage_gb": 50,
+                    "api_calls": 100000,
+                    "advanced_reports": True,
+                    "file_storage": True,
+                },
             ),
         )
         await session.flush()

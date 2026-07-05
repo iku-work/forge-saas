@@ -10,28 +10,29 @@ repos:
         # No `cd backend`: pre-commit passes filenames relative to the repo
         # root, and ruff auto-discovers backend/ruff.toml by walking up from
         # each target file, so per-file-ignores resolve correctly either way.
-        # Routed through bash because invoking the venv .exe directly from
-        # pre-commit's own subprocess call fails to resolve on Windows.
-        entry: bash -c 'backend/.venv/Scripts/ruff.exe check --fix "$@"' --
+        # Routed through bash (rather than pre-commit invoking the venv
+        # executable directly) because venv layout differs by platform:
+        # bin/ruff on macOS/Linux, Scripts/ruff.exe on Windows.
+        entry: bash -c 'bin=backend/.venv/bin; [ -d "$bin" ] || bin=backend/.venv/Scripts; ext=""; [ -x "$bin/ruff" ] || ext=".exe"; "$bin/ruff$ext" check --fix "$@"' --
         language: system
         files: ^backend/.*\.py$
 
       - id: ruff-format
         name: ruff format (backend)
-        entry: bash -c 'backend/.venv/Scripts/ruff.exe format "$@"' --
+        entry: bash -c 'bin=backend/.venv/bin; [ -d "$bin" ] || bin=backend/.venv/Scripts; ext=""; [ -x "$bin/ruff" ] || ext=".exe"; "$bin/ruff$ext" format "$@"' --
         language: system
         files: ^backend/.*\.py$
 
       - id: mypy-strict
         name: mypy --strict (backend)
-        entry: bash -c 'cd backend && .venv/Scripts/python.exe -m mypy --strict app'
+        entry: bash -c 'cd backend && bin=.venv/bin; [ -d "$bin" ] || bin=.venv/Scripts; ext=""; [ -x "$bin/python" ] || ext=".exe"; "$bin/python$ext" -m mypy --strict app'
         language: system
         files: ^backend/app/.*\.py$
         pass_filenames: false
 
       - id: lint-imports
         name: import-linter (four-layer rule)
-        entry: bash -c 'cd backend && .venv/Scripts/lint-imports.exe'
+        entry: bash -c 'cd backend && bin=.venv/bin; [ -d "$bin" ] || bin=.venv/Scripts; ext=""; [ -x "$bin/lint-imports" ] || ext=".exe"; "$bin/lint-imports$ext"'
         language: system
         files: ^backend/app/.*\.py$
         pass_filenames: false

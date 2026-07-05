@@ -11,6 +11,7 @@
 These are not guidelines. Every task is checked against them before marking done. A violation is a defect regardless of whether the specific task mentioned the rule.
 
 ### §0.1 Architecture — four-layer rule
+
 ```
 HTTP Request
   → Router      (HTTP only: validate input, call service, return schema — no DB, no logic)
@@ -18,16 +19,19 @@ HTTP Request
   → Repository  (DB only: always org-scoped — no logic, no HTTP)
   → Model       (data shape only: SQLModel table — no methods beyond simple validators)
 ```
+
 - Imports flow **downward only**. A service must never import a router. A repository must never import a service. Enforced in CI with `import-linter`.
 - Cross-module communication goes through services only. Never reach into another module's repository.
 
 ### §0.2 Multi-tenancy — org_id is sacred
+
 - Every user-data table has `org_id` as an indexed FK. No exceptions.
 - `BaseRepository.__init__(session, org_id)` — `org_id` is required, has no default.
 - Every query in every repository includes `WHERE org_id = self.org_id`. This makes cross-tenant data access structurally impossible.
 - Only `User`, `Session`, `OAuthAccount`, `TOTPSecret`, `ConsentRecord` are scoped by `user_id` instead (they belong to the user, not the org).
 
 ### §0.3 Data integrity
+
 - **Cursor pagination only.** `OFFSET` is forbidden. Cursor: `(created_at DESC, id DESC)`.
 - **No raw SQL** without `sqlalchemy.text()` + bound params + a comment explaining why.
 - **`selectinload` for collections**, not `joinedload` (cartesian product hazard). Document any exception.
@@ -37,18 +41,21 @@ HTTP Request
 - **Timestamps + soft-delete on every table** via a shared mixin: `created_at`, `updated_at`, `deleted_at`.
 
 ### §0.4 API contract
+
 - All routes under `/api/v1/`. Versioned from the first endpoint.
 - All responses use `{ data, error, meta }` envelope. Never raw model dumps.
 - Request schemas are **separate Pydantic classes** from model classes. No mass-assignment (`model.update(**request.dict())` is forbidden — enforced by Semgrep rule).
 - Idempotency keys on every mutating external call: Stripe events, outbound webhooks, email sends.
 
 ### §0.5 Error handling
+
 - Services raise **typed `DomainError` subclasses** (`NotFoundError`, `PermissionDeniedError`, `PlanLimitError`, etc.) — never `HTTPException`.
 - One global handler translates `DomainError` → HTTP envelope. Router owns translation, not service.
 - `except Exception` is forbidden except in the single top-level handler.
 - Error messages are user-actionable. Internal detail never leaks to the response body.
 
 ### §0.6 Security — non-negotiable
+
 - Passwords: **argon2-cffi** only.
 - JWTs: **RS256** (asymmetric). Private key in env. Access TTL: 15 min. Refresh TTL: 30 days, rotating, stored as SHA-256 hash.
 - Web refresh tokens: `httpOnly; Secure; SameSite=Strict` cookie. Mobile: `expo-secure-store` (Keychain/Keystore). Never `AsyncStorage` for auth tokens.
@@ -61,6 +68,7 @@ HTTP Request
 - **Sensitive DB columns use Fernet encryption at rest** via the `EncryptedString` SQLAlchemy TypeDecorator built in T-009.5. Fernet provides AES-128-CBC + HMAC-SHA256 authentication — a tampered ciphertext raises, it does not silently return garbage. Columns that **must** use `EncryptedString`: `TOTPSecret.secret_encrypted`, any column holding an OAuth access/refresh token if stored, any future column holding a private key or secret credential. Rule of thumb: if the value is a secret and it lives in the DB, it uses `EncryptedString`. Key rotation is zero-downtime: set `ENCRYPTION_KEY_OLD` alongside `ENCRYPTION_KEY`, deploy, re-encrypt old rows via a background job, then remove the old key.
 
 ### §0.7 Typing & style — enforced, not suggested
+
 - Backend: `mypy --strict`. No `Any`. No untyped functions.
 - Frontend: `tsc --strict`. No `any`. No `@ts-ignore` without a justification comment.
 - Formatter: `ruff format` (backend), `prettier` (frontend). Not configurable per developer.
@@ -68,6 +76,7 @@ HTTP Request
 - All of the above run as pre-commit hooks and CI gates.
 
 ### §0.8 Testing — required, not optional
+
 - A task is not done until its tests pass locally.
 - Coverage floors: **85% overall**, **100% on `auth/`, `billing/`, `tenancy/`, `gdpr/`**.
 - Integration tests use **real Postgres + Redis** via `testcontainers`. No SQLite.
@@ -75,13 +84,16 @@ HTTP Request
 - Non-negotiable test subjects: cross-tenant isolation, every RBAC gate, refresh token rotation + theft detection, Stripe webhook idempotency, cursor pagination correctness, GDPR purge completeness, rate-limit enforcement.
 
 ### §0.9 Performance
+
 - All DB sessions and endpoints are **async**. Sync DB call = defect.
 - DB pool: `min=5, max=20`. Never a per-request connection.
 - Slow operations (email, file processing, 3rd-party calls, report generation) go to **ARQ jobs**. Never in the request path.
 - Redis cache on hot reads (user profile, org settings, plan features): 60 s TTL, explicit invalidation on write.
 
 ### §0.10 Definition of done (every task)
+
 Before marking any task complete:
+
 1. `ruff check . && ruff format --check .` clean
 2. `mypy --strict app/` clean
 3. `pnpm lint && pnpm type-check` clean (frontend tasks)
@@ -141,31 +153,31 @@ On May 11 2026 a CI compromise published 84 malicious versions across 42 `@tanst
 
 Load this section if a task asks "which library do I use for X?"
 
-| Concern | Choice | Why |
-|---|---|---|
-| API | FastAPI | Async-native, auto OpenAPI, Pydantic v2 |
-| ORM | SQLModel | One class = Pydantic schema + SA table |
-| Migrations | Alembic | autogenerate works well with SQLModel |
-| DB | PostgreSQL 16 | JSONB, proven at scale |
-| Cache/Queue | Redis 7 | Sessions, rate limits, ARQ — one dep |
-| Background jobs | ARQ | Async-native, zero broker, Redis-backed |
-| Password hashing | argon2-cffi | OWASP recommendation |
-| Column encryption | cryptography (Fernet) | AES-128-CBC + HMAC-SHA256; authenticated; key rotation built in |
-| Social auth | authlib | Clean OAuth2, no magic |
-| Email | Resend | Modern API, React Email templates |
-| Storage | Abstract → S3/R2/MinIO | Interface pattern, swap without code change |
-| Billing | Stripe | Market standard |
-| Web | React 18 + Vite + TanStack Router + TanStack Query | Stable, type-safe, no Redux |
-| UI components | shadcn/ui + Tailwind | Primitives you own |
-| Forms | React Hook Form + Zod | Zod shared with mobile |
-| Mobile | Expo SDK + Expo Router | File-based routing, OTA updates |
-| Mobile storage | expo-secure-store | Keychain/Keystore |
-| Monorepo | Turborepo + pnpm workspaces | Cacheable builds |
-| Logging | Loguru → JSON | Structured from day one |
-| Tracing | OpenTelemetry | Vendor-neutral |
-| Metrics | Prometheus + Grafana | Standard, self-hosted |
-| Error tracking | Sentry | Works on FastAPI + React + RN |
-| Reverse proxy | Caddy | Auto TLS, simple config |
+| Concern           | Choice                                             | Why                                                             |
+| ----------------- | -------------------------------------------------- | --------------------------------------------------------------- |
+| API               | FastAPI                                            | Async-native, auto OpenAPI, Pydantic v2                         |
+| ORM               | SQLModel                                           | One class = Pydantic schema + SA table                          |
+| Migrations        | Alembic                                            | autogenerate works well with SQLModel                           |
+| DB                | PostgreSQL 16                                      | JSONB, proven at scale                                          |
+| Cache/Queue       | Redis 7                                            | Sessions, rate limits, ARQ — one dep                            |
+| Background jobs   | ARQ                                                | Async-native, zero broker, Redis-backed                         |
+| Password hashing  | argon2-cffi                                        | OWASP recommendation                                            |
+| Column encryption | cryptography (Fernet)                              | AES-128-CBC + HMAC-SHA256; authenticated; key rotation built in |
+| Social auth       | authlib                                            | Clean OAuth2, no magic                                          |
+| Email             | Resend                                             | Modern API, React Email templates                               |
+| Storage           | Abstract → S3/R2/MinIO                             | Interface pattern, swap without code change                     |
+| Billing           | Stripe                                             | Market standard                                                 |
+| Web               | React 18 + Vite + TanStack Router + TanStack Query | Stable, type-safe, no Redux                                     |
+| UI components     | shadcn/ui + Tailwind                               | Primitives you own                                              |
+| Forms             | React Hook Form + Zod                              | Zod shared with mobile                                          |
+| Mobile            | Expo SDK + Expo Router                             | File-based routing, OTA updates                                 |
+| Mobile storage    | expo-secure-store                                  | Keychain/Keystore                                               |
+| Monorepo          | Turborepo + pnpm workspaces                        | Cacheable builds                                                |
+| Logging           | Loguru → JSON                                      | Structured from day one                                         |
+| Tracing           | OpenTelemetry                                      | Vendor-neutral                                                  |
+| Metrics           | Prometheus + Grafana                               | Standard, self-hosted                                           |
+| Error tracking    | Sentry                                             | Works on FastAPI + React + RN                                   |
+| Reverse proxy     | Caddy                                              | Auto TLS, simple config                                         |
 
 ---
 
@@ -216,6 +228,7 @@ forge-saas/
 ```
 
 ### Module anatomy (every feature module is identical in shape)
+
 ```
 modules/<name>/
 ├── models.py       # SQLModel table definitions
@@ -260,12 +273,14 @@ Every task below follows this template. Read **only the current task** — each 
 ## A · Foundation
 
 ### T-001 Monorepo skeleton
+
 > HTML ref: §"Monorepo structure"
 > needs: —
 
 **Goal** Create the empty monorepo with Turborepo, pnpm workspaces, and the exact directory layout from §2.
 
 **Build**
+
 - Root `package.json` declaring `"workspaces": ["apps/*", "packages/*"]`
 - `pnpm-workspace.yaml`
 - `turbo.json` with pipelines: `gen-client` (outputs `packages/api-client/src/**`), `build` (dependsOn: `["gen-client", "^build"]`), `test`, `lint`, `type-check`
@@ -274,10 +289,12 @@ Every task below follows this template. Read **only the current task** — each 
 - Root `Makefile` with targets: `dev`, `test`, `lint`, `migrate`, `gen-client`, `seed`, `new-module`
 
 **Tests**
+
 - `pnpm install` runs at root without error
 - `ls` confirms every directory in §2 exists
 
 **Done when**
+
 - [ ] `pnpm install` clean
 - [ ] All directories from §2 exist
 - [ ] `turbo.json` pipelines reference `gen-client` as a dependency of `build`
@@ -285,12 +302,14 @@ Every task below follows this template. Read **only the current task** — each 
 ---
 
 ### T-002 Backend project + FastAPI app
+
 > HTML ref: §"Architecture layers"
 > needs: T-001
 
 **Goal** Python project with pinned deps, a minimal FastAPI app, and tooling config.
 
 **Build**
+
 - `backend/pyproject.toml` with dependency groups:
   - runtime: `fastapi>=0.115`, `uvicorn[standard]>=0.32`, `sqlmodel>=0.0.22`, `sqlalchemy[asyncio]>=2.0`, `asyncpg>=0.30`, `alembic>=1.13`, `pydantic>=2.9`, `pydantic-settings>=2.5`, `argon2-cffi>=23.1`, `cryptography>=42.0`, `python-jose[cryptography]>=3.3`, `authlib>=1.3`, `python-multipart>=0.0.12`, `arq>=0.26`, `apscheduler>=3.10`, `redis>=5.0`, `stripe>=11.0`, `resend>=2.4`, `slowapi>=0.1.9`, `loguru>=0.7`, `sentry-sdk[fastapi]>=2.15`, `opentelemetry-distro>=0.48b0`, `prometheus-fastapi-instrumentator>=7.0`, `boto3>=1.35`, `itsdangerous>=2.2`
   - dev: `ruff>=0.7`, `mypy>=1.13`, `pytest>=8.3`, `pytest-asyncio>=0.24`, `pytest-cov>=5.0`, `httpx>=0.27`, `testcontainers[postgres,redis]>=4.8`, `polyfactory>=2.18`, `schemathesis>=3.36`, `freezegun>=1.5`, `bandit>=1.7`, `import-linter>=2.1`
@@ -304,9 +323,11 @@ Every task below follows this template. Read **only the current task** — each 
   - `GET /health/live` → always 200
 
 **Tests**
+
 - `tests/test_health.py`: GET `/health` returns 200 with correct body; GET `/health/ready` returns 200 when DB+Redis reachable
 
 **Done when**
+
 - [ ] `uvicorn app.main:app` starts without error
 - [ ] `mypy --strict app/` clean
 - [ ] `ruff check .` clean
@@ -315,13 +336,16 @@ Every task below follows this template. Read **only the current task** — each 
 ---
 
 ### T-003 Configuration module
+
 > HTML ref: §"Local dev & config" → "Environment configuration"
 > needs: T-002
 
 **Goal** Type-safe settings via `pydantic-settings`. No `os.environ` anywhere.
 
 **Build**
+
 - `backend/app/core/config.py`:
+
   ```python
   class Settings(BaseSettings):
       # DB
@@ -354,10 +378,11 @@ Every task below follows this template. Read **only the current task** — each 
       # TLS enforcement
       FORCE_HTTPS: bool = False         # must be True in staging + prod
       model_config = SettingsConfigDict(env_file=".env", extra="forbid")
-  
+
   @lru_cache
   def get_settings() -> Settings: ...
   ```
+
 - Startup validation:
   - if `ENVIRONMENT != "dev"` and `"*"` in `ALLOWED_ORIGINS` → raise `RuntimeError`
   - if `ENVIRONMENT != "dev"` and `FORCE_HTTPS != True` → raise `RuntimeError("FORCE_HTTPS must be true in non-dev environments")`
@@ -366,9 +391,11 @@ Every task below follows this template. Read **only the current task** — each 
 - Semgrep rule `no-os-environ.yaml`: flags any `os.environ` usage outside `config.py`
 
 **Tests**
+
 - `tests/test_config.py`: missing required field raises `ValidationError`; `ALLOWED_ORIGINS=["*"]` + `ENVIRONMENT="prod"` raises at startup; `FORCE_HTTPS=False` + `ENVIRONMENT="prod"` raises; invalid `ENCRYPTION_KEY` raises `EnvironmentError`
 
 **Done when**
+
 - [ ] `get_settings()` loads from `.env.test` fixture
 - [ ] Startup guard test passes
 - [ ] `mypy --strict` clean on `config.py`
@@ -376,12 +403,14 @@ Every task below follows this template. Read **only the current task** — each 
 ---
 
 ### T-004 Docker Compose — local dev
+
 > HTML ref: §"Local dev & config" → "Local development"
 > needs: T-003
 
 **Goal** `make dev` boots the full local stack in under 30 s.
 
 **Build**
+
 - `docker-compose.yml` services (same versions as production):
   - `postgres:16-alpine` — persistent volume, healthcheck (`pg_isready`), port 5432
   - `redis:7-alpine` — persistent volume, healthcheck (`redis-cli ping`), port 6379
@@ -393,22 +422,26 @@ Every task below follows this template. Read **only the current task** — each 
 - `Makefile dev` target: `docker compose up -d`
 
 **Tests**
+
 - `make dev && sleep 10 && curl -f http://localhost:8000/health` exits 0
 - `docker compose down -v` exits 0
 
 **Done when**
+
 - [ ] All services healthy within 30 s
 - [ ] `/health/ready` returns 200 from host
 
 ---
 
 ### T-004.5 Caddy — HTTPS termination (dev + prod)
+
 > HTML ref: §"Stack reference" → "Reverse proxy: Caddy"
 > needs: T-004
 
 **Goal** Caddy terminates TLS in front of every service. HTTP is never exposed outside dev without a redirect. Local dev gets self-signed HTTPS via Caddy's automatic cert; staging/prod gets a real cert via ACME.
 
 **Build**
+
 - `Caddyfile` (dev — used by docker-compose):
   ```caddyfile
   localhost {
@@ -417,6 +450,7 @@ Every task below follows this template. Read **only the current task** — each 
   }
   ```
 - `Caddyfile.prod` (staging/prod — used by docker-compose.prod.yml):
+
   ```caddyfile
   {$DOMAIN} {
       reverse_proxy backend:8000
@@ -431,6 +465,7 @@ Every task below follows this template. Read **only the current task** — each 
       redir https://{$DOMAIN}{uri} 301    # hard redirect — no plain HTTP
   }
   ```
+
 - Add `caddy:2-alpine` service to `docker-compose.yml`:
   - Mounts `./Caddyfile`
   - Depends on `backend` healthy
@@ -441,11 +476,13 @@ Every task below follows this template. Read **only the current task** — each 
 - `Makefile dev` target updated to open `https://localhost` instead of `http://localhost:8000`
 
 **Tests**
+
 - `curl -k https://localhost/health` exits 0 (dev, self-signed cert)
 - `curl http://localhost/health` returns 301 redirect to `https://` (even in dev — redirect is always on)
 - CI: assert `Caddyfile.prod` contains `redir https://` rule (grep check — prevent accidental deletion)
 
 **Done when**
+
 - [ ] `https://localhost/health` returns `{"status": "ok"}` with self-signed cert
 - [ ] HTTP → HTTPS redirect test passes
 - [ ] Caddyfile.prod redirect grep passes in CI
@@ -453,12 +490,14 @@ Every task below follows this template. Read **only the current task** — each 
 ---
 
 ### T-005 DB session + async engine
+
 > HTML ref: §"Architecture layers" → "Base classes"
 > needs: T-003
 
 **Goal** Async SQLAlchemy engine and session factory wired to config.
 
 **Build**
+
 - `backend/app/core/db.py`:
   - `engine = create_async_engine(DATABASE_URL, pool_size=5, max_overflow=15, pool_pre_ping=True, echo=ENVIRONMENT=="dev")`
   - `async_session_factory = async_sessionmaker(engine, expire_on_commit=False, class_=AsyncSession)`
@@ -466,22 +505,27 @@ Every task below follows this template. Read **only the current task** — each 
   - `async def dispose_engine()`: called from app lifespan shutdown
 
 **Tests**
+
 - `tests/test_db.py`: fixture session commits a row; exception causes rollback; row absent after rollback
 
 **Done when**
+
 - [ ] `mypy --strict` clean
 - [ ] Rollback-on-exception test passes
 
 ---
 
 ### T-006 Domain exceptions + response envelope
+
 > HTML ref: §"Architecture layers" → "Standard API response envelope" | §"Best practices" → "Error handling"
 > needs: T-002
 
 **Goal** Typed exceptions and a single response shape for every endpoint.
 
 **Build**
+
 - `backend/app/core/exceptions.py`:
+
   ```python
   class DomainError(Exception):
       status_code: int = 400
@@ -495,7 +539,9 @@ Every task below follows this template. Read **only the current task** — each 
   class PlanLimitError(DomainError):       status_code=402; code="plan_limit_reached"
   class RateLimitError(DomainError):       status_code=429; code="rate_limited"
   ```
+
 - `backend/app/core/envelope.py`:
+
   ```python
   class Meta(BaseModel):
       request_id: str
@@ -512,28 +558,33 @@ Every task below follows this template. Read **only the current task** — each 
       error: ErrorBody | None = None
       meta: Meta
   ```
+
 - `backend/app/core/handlers.py`: register on `app`:
   - `DomainError` → envelope with `error` set, `data=None`, correct status code
   - `RequestValidationError` → 422 envelope
   - bare `Exception` → 500 envelope with generic message, Sentry capture, **no traceback in body**
 
 **Tests**
+
 - Endpoint raising `NotFoundError` → 404 `error.code == "not_found"`
 - Endpoint raising bare `RuntimeError` → 500, body has no stack trace
 
 **Done when**
+
 - [ ] Both tests pass
 - [ ] `mypy --strict` clean on both files
 
 ---
 
 ### T-007 Middleware — request ID, security headers, CORS
+
 > HTML ref: §"Security" → "Transport & headers" | §"Observability" → "Request ID middleware"
 > needs: T-003, T-006
 
 **Goal** Every request has a traced ID; every response has defensive headers; CORS is strict.
 
 **Build**
+
 - `backend/app/middleware/request_id.py` (`BaseHTTPMiddleware`):
   - Read `X-Request-ID` header or generate `str(uuid4())`
   - Store on `request.state.request_id`
@@ -551,23 +602,27 @@ Every task below follows this template. Read **only the current task** — each 
   - startup check: `ENVIRONMENT != "dev"` and `"*"` in `ALLOWED_ORIGINS` → `RuntimeError`
 
 **Tests**
+
 - Every required security header present in a sample response
 - `X-Request-ID` echoed when provided; a UUID generated when absent
 - Startup raises with wildcard CORS in prod
 
 **Done when**
+
 - [ ] All header tests pass
 - [ ] CORS startup guard test passes
 
 ---
 
 ### T-008 Rate limiting
+
 > HTML ref: §"Security" → "Rate limiting"
 > needs: T-003
 
 **Goal** Redis-backed sliding window rate limiter available as a decorator.
 
 **Build**
+
 - `backend/app/middleware/rate_limit.py`:
   - `limiter = Limiter(key_func=_key_func, storage_uri=settings.REDIS_URL)` using `slowapi`
   - `_key_func`: returns `f"user:{user_id}"` if authenticated (pulled from `request.state`), else remote IP
@@ -575,23 +630,28 @@ Every task below follows this template. Read **only the current task** — each 
   - Export named limit decorators: `auth_limit = limiter.limit("5/minute")`, `sensitive_limit = limiter.limit("3/minute")`, `api_limit = limiter.limit("100/minute")`
 
 **Tests**
+
 - Calling a `@auth_limit` endpoint 6 times returns 429 on the 6th
 - 429 response uses the standard envelope format
 
 **Done when**
+
 - [ ] Limiter and decorators importable
 - [ ] Rate-limit enforcement test passes
 
 ---
 
 ### T-009 SQLModel base mixins + BaseRepository
+
 > HTML ref: §"Architecture layers" → "Base classes" | §"Core data models"
 > needs: T-005, T-006
 
 **Goal** Reusable mixins and the generic org-scoped repository every module extends.
 
 **Build**
+
 - `backend/app/models/_mixins.py`:
+
   ```python
   def utcnow() -> datetime: return datetime.now(UTC)
 
@@ -611,6 +671,7 @@ Every task below follows this template. Read **only the current task** — each 
   ```
 
 - `backend/app/core/repository.py` — `BaseRepository[T]`:
+
   ```python
   class BaseRepository(Generic[T]):
       model: ClassVar[type[T]]
@@ -642,12 +703,14 @@ Every task below follows this template. Read **only the current task** — each 
   ```
 
 **Tests**
+
 - `tests/test_base_repository.py` using a throwaway `TestEntity` model:
   - `get()` for entity in org B by org A → `None`
   - `list_cursor` page 1 + page 2 → no duplicates, correct order
   - `create` auto-injects `org_id`; manual override of wrong `org_id` raises
 
 **Done when**
+
 - [ ] Cross-tenant isolation test passes
 - [ ] Cursor pagination test passes
 - [ ] 100% coverage on `repository.py`
@@ -655,15 +718,18 @@ Every task below follows this template. Read **only the current task** — each 
 ---
 
 ### T-009.5 EncryptedString TypeDecorator + RedactedReprMixin
+
 > HTML ref: §"Security" (column-level encryption, §0.6)
 > needs: T-003, T-005
 
 **Goal** A transparent Fernet column type that encrypts on write, decrypts on read, and supports zero-downtime key rotation. A `RedactedReprMixin` prevents encrypted values appearing in logs or Sentry via `__repr__`.
 
 **Build**
+
 - Copy `backend/app/core/encrypted_type.py` from the provided `encryption_type.py` reference implementation verbatim, then make the following adjustments:
 
   1. **Config integration** — remove `os.environ.get("ENCRYPTION_KEY")` calls. Instead, `_load_fernet()` must call `get_settings()` from `app.core.config`:
+
      ```python
      from app.core.config import get_settings
 
@@ -676,6 +742,7 @@ Every task below follows this template. Read **only the current task** — each 
              keys.append(Fernet(raw.strip().encode("ascii")))
          return MultiFernet(keys)
      ```
+
      This keeps all config access through `pydantic-settings` per §0.6.
 
   2. **Startup validation** — `_load_fernet()` is called once during the FastAPI lifespan startup (in `app/main.py`) so a bad key fails loudly at boot, not on the first DB write.
@@ -692,6 +759,7 @@ Every task below follows this template. Read **only the current task** — each 
 - Semgrep rule `no-plaintext-secret-column.yaml`: flags any `Column(Text)` or `Column(String)` whose field name ends in `_secret`, `_key`, `_token`, or `_encrypted` — forces use of `EncryptedString`.
 
 **Tests** (100% coverage on `encrypted_type.py`)
+
 - Round-trip: `EncryptedString.process_bind_param("hello", ...)` → ciphertext starts with `"gAAAAA"`; `process_result_value(ciphertext, ...)` → `"hello"`
 - `None` in → `None` out (both directions)
 - Tampered ciphertext: flip a byte in the token → `process_result_value` raises `ValueError` (not silently returns garbage)
@@ -701,6 +769,7 @@ Every task below follows this template. Read **only the current task** — each 
 - Semgrep rule flags a `Column(Text)` field named `api_secret`
 
 **Done when**
+
 - [ ] All encryption tests pass, 100% coverage
 - [ ] `TOTPSecret` model uses `EncryptedString` + `RedactedReprMixin`
 - [ ] `_load_fernet()` uses `get_settings()`, not `os.environ`
@@ -711,12 +780,14 @@ Every task below follows this template. Read **only the current task** — each 
 ---
 
 ### T-010 Alembic setup
+
 > HTML ref: §"Best practices" → "Database best practices"
 > needs: T-009
 
 **Goal** Async-aware Alembic configured for SQLModel autogenerate.
 
 **Build**
+
 - `backend/alembic.ini` — `script_location = alembic`, `sqlalchemy.url = (loaded from env)`
 - `backend/alembic/env.py`:
   - Import all models via `app.models.__init__` so autogenerate sees every table
@@ -726,21 +797,25 @@ Every task below follows this template. Read **only the current task** — each 
 - `Makefile migrate` target: `alembic upgrade head`
 
 **Tests**
+
 - `alembic upgrade head && alembic downgrade base && alembic upgrade head` exits 0 against the test DB
 
 **Done when**
+
 - [ ] Round-trip migration test passes
 - [ ] Autogenerate produces valid SQL for all mixin columns
 
 ---
 
 ### T-011 Structured logging
+
 > HTML ref: §"Observability" → "Structured logs" | §"Best practices" → "Observability discipline"
 > needs: T-003, T-007
 
 **Goal** JSON-structured logs with PII scrubbing; sensitive keys never appear in output.
 
 **Build**
+
 - `backend/app/core/logging.py`:
   - Configure Loguru with JSON serialization in non-dev envs; pretty in dev
   - Every record carries: `timestamp`, `level`, `message`, `request_id` (from contextvars), `user_id` (when bound), `org_id` (when bound)
@@ -748,24 +823,29 @@ Every task below follows this template. Read **only the current task** — each 
   - Log levels follow §0.6: `ERROR` pages someone, `WARN` reviewed, `INFO` audit trail, `DEBUG` dev-only
 
 **Tests**
+
 - `tests/test_logging.py`: logging a dict with key `"password"` → output JSON contains `"password": "***"`
 - `"token"` key scrubbed; `"user_id"` key not scrubbed
 
 **Done when**
+
 - [ ] Scrubber tests pass
 - [ ] `mypy --strict` clean
 
 ---
 
 ### T-012 Pre-commit hooks + import-linter
+
 > HTML ref: §"Best practices" → "Code quality & consistency" | §"Architecture discipline"
 > needs: T-002
 
 **Goal** Local enforcement of all §0.7 style rules + §0.1 layer discipline.
 
 **Build**
+
 - `.pre-commit-config.yaml`: `ruff check --fix`, `ruff format`, `mypy --strict`, `prettier --write`, `detect-secrets`, `check-yaml`, `end-of-file-fixer`, `trailing-whitespace`
 - `.importlinter` config:
+
   ```ini
   [importlinter]
   root_package = app
@@ -779,15 +859,18 @@ Every task below follows this template. Read **only the current task** — each 
       app.modules.*.repository
       app.models
   ```
+
 - `Makefile install-hooks`: `pre-commit install`
 - `backend/semgrep/no-os-environ.yaml`: flags `os.environ` outside `core/config.py`
 - `backend/semgrep/no-mass-assign.yaml`: flags `model.update(**` pattern
 
 **Tests**
+
 - `pre-commit run --all-files` exits 0 on current clean state
 - `import-linter` check: a mock file that imports a router from a service → fails
 
 **Done when**
+
 - [ ] `pre-commit run --all-files` clean
 - [ ] `lint-imports` catches the layer violation in the test
 
@@ -798,6 +881,7 @@ Every task below follows this template. Read **only the current task** — each 
 > HTML ref: §"Auth & sessions" (entire section)
 
 ### T-013 Auth models + migration
+
 > needs: T-009.5, T-010
 
 **Goal** All auth-related tables in one migration.
@@ -818,21 +902,25 @@ All models use `UUIDPKMixin + TimestampMixin + SoftDeleteMixin` unless noted.
 - Generate migration: `alembic revision --autogenerate -m "auth_tables"`
 
 **Tests**
+
 - Unique constraint on `(provider, provider_user_id)` enforced
 - Migration round-trip: up → down → up
 
 **Done when**
+
 - [ ] Migration applies cleanly in both directions
 - [ ] `mypy --strict` clean on `models.py`
 
 ---
 
 ### T-014 Auth cryptography utilities
+
 > needs: T-003, T-006
 
 **Goal** Every cryptographic primitive in one tested module. Nothing else does crypto.
 
 **Build**
+
 - `backend/app/modules/auth/utils.py`:
   - `hash_password(plain: str) -> str` — argon2 `PasswordHasher().hash(plain)`
   - `verify_password(plain: str, hashed: str) -> bool` — returns False on `VerifyMismatchError`; only raises on corrupt format
@@ -844,6 +932,7 @@ All models use `UUIDPKMixin + TimestampMixin + SoftDeleteMixin` unless noted.
   - `verify_url_token(token: str, max_age: int) -> dict` — raises `AuthenticationError` on bad/expired
 
 **Tests** (100% coverage required)
+
 - Round-trip JWT: encode → decode → payload matches
 - Expired JWT raises `AuthenticationError`
 - Wrong algorithm in header raises `AuthenticationError`
@@ -852,16 +941,19 @@ All models use `UUIDPKMixin + TimestampMixin + SoftDeleteMixin` unless noted.
 - URL token: round-trip; expired raises
 
 **Done when**
+
 - [ ] All utils tests pass, 100% coverage
 
 ---
 
 ### T-015 Auth schemas
+
 > needs: T-013
 
 **Goal** Request/response schemas — never the model class itself (§0.4 mass-assignment rule).
 
 **Build**
+
 - `backend/app/modules/auth/schemas.py`:
   - `RegisterRequest`: `email: EmailStr`, `password: str (min_length=12, validator: upper+lower+digit)`; reject top-1000 common passwords (embedded list)
   - `LoginRequest`: `email: EmailStr`, `password: str`
@@ -876,21 +968,25 @@ All models use `UUIDPKMixin + TimestampMixin + SoftDeleteMixin` unless noted.
   - `Verify2FARequest`: `code: str (length=6, digits only)`
 
 **Tests**
+
 - `UserPublic.model_fields` does not contain `hashed_password`
 - Password too short → `ValidationError`
 - Common password `"Password123!"` → `ValidationError`
 
 **Done when**
+
 - [ ] All schema tests pass
 
 ---
 
 ### T-016 Auth repository
+
 > needs: T-009, T-013
 
 **Goal** DB access for User, Session, and token tables. Not org-scoped (user-scoped).
 
 **Build**
+
 - `backend/app/modules/auth/repository.py`:
   - `UserRepository(session)` (no org_id — users are global):
     - `get_by_id(id) -> User | None`
@@ -911,22 +1007,26 @@ All models use `UUIDPKMixin + TimestampMixin + SoftDeleteMixin` unless noted.
   - Token repositories (`EmailVerificationTokenRepository`, `PasswordResetTokenRepository`, `MagicLinkTokenRepository`): `create`, `get_by_hash` (excludes used/expired), `mark_used`
 
 **Tests** (100% coverage)
+
 - `get_by_email` for unknown email → `None`
 - `increment_failed_login` increments correctly
 - `revoke_all_for_user` revokes all active sessions
 - Token: `get_by_hash` after `mark_used` → `None`
 
 **Done when**
+
 - [ ] All repository tests pass, 100% coverage
 
 ---
 
 ### T-017 Auth service — register + verify email
+
 > needs: T-014, T-015, T-016, T-011
 
 **Goal** User registration and email verification, with no email enumeration.
 
 **Build**
+
 - `backend/app/modules/auth/service.py`:
   - `AuthService.register(req: RegisterRequest) -> None`:
     - Look up email — if found: **do not raise** (prevents enumeration); instead log a warning and return the same outcome. Caller always responds "check your inbox."
@@ -942,22 +1042,26 @@ All models use `UUIDPKMixin + TimestampMixin + SoftDeleteMixin` unless noted.
     - Mark token used; set `email_verified_at`, `is_active=True`
 
 **Tests**
+
 - Register happy path: user created, `is_active=False`
 - Duplicate email: no exception raised; same return shape
 - Verify with expired token → `AuthenticationError`
 - Verify same token twice → `AuthenticationError` on second call
 
 **Done when**
+
 - [ ] All tests pass, 100% coverage on these methods
 
 ---
 
 ### T-018 Auth service — login + lockout
+
 > needs: T-017
 
 **Goal** Login with constant-time protection and brute-force lockout.
 
 **Build**
+
 - `AuthService.login(req: LoginRequest, ip: str, user_agent: str) -> tuple[str, str, User]`:
   - Look up user by email
   - **Always hash a dummy password** if user not found (prevents timing oracle)
@@ -968,22 +1072,26 @@ All models use `UUIDPKMixin + TimestampMixin + SoftDeleteMixin` unless noted.
   - Return `(access_token, refresh_token_plain, user)`
 
 **Tests**
+
 - Happy path: tokens returned, session created
 - Wrong password 10×: 10th attempt triggers lockout
 - Locked account: correct password still rejected
 - Unverified email: login rejected
 
 **Done when**
+
 - [ ] All lockout tests pass, 100% coverage
 
 ---
 
 ### T-019 Auth service — token refresh + theft detection
+
 > needs: T-018
 
 **Goal** Refresh token rotation; reuse of a revoked token revokes all sessions.
 
 **Build**
+
 - `AuthService.refresh(refresh_token_plain: str, ip: str, user_agent: str) -> tuple[str, str]`:
   - Hash the plain token; look up `Session`
   - If not found, `revoked_at` set, or `expires_at` past → **revoke all sessions for this user** (theft detected) → raise `AuthenticationError("session_invalid")`
@@ -991,21 +1099,25 @@ All models use `UUIDPKMixin + TimestampMixin + SoftDeleteMixin` unless noted.
   - Return `(new_access_token, new_refresh_token_plain)`
 
 **Tests**
+
 - Happy path: old session revoked, new session created
 - Reuse of revoked token: all user sessions revoked → `AuthenticationError`
 - Expired refresh: `AuthenticationError`
 
 **Done when**
+
 - [ ] Theft-detection test passes, 100% coverage
 
 ---
 
 ### T-020 Auth service — password reset + magic link
+
 > needs: T-019
 
 **Goal** Password reset and magic link flows; both protected against email enumeration.
 
 **Build**
+
 - `AuthService.request_password_reset(email: str) -> None`:
   - Look up user. If not found: return silently.
   - Create `PasswordResetToken` (1 h TTL). Enqueue reset email.
@@ -1020,23 +1132,28 @@ All models use `UUIDPKMixin + TimestampMixin + SoftDeleteMixin` unless noted.
   - Mark used. Create session → return tokens same as login.
 
 **Tests**
+
 - Enumeration: reset request for unknown email returns same shape as known email
 - Single-use: consuming twice raises on second call
 - Reset revokes all sessions
 
 **Done when**
+
 - [ ] All tests pass, 100% coverage
 
 ---
 
 ### T-021 RBAC — permissions + dependency
+
 > HTML ref: §"Auth & sessions" → "RBAC model"
 > needs: T-016, T-006
 
 **Goal** Permission enum + `require_permission` FastAPI dependency.
 
 **Build**
+
 - `backend/app/modules/auth/permissions.py`:
+
   ```python
   class Permission(str, Enum):
       MEMBERS_READ    = "members:read"
@@ -1061,69 +1178,78 @@ All models use `UUIDPKMixin + TimestampMixin + SoftDeleteMixin` unless noted.
       MemberRole.MEMBER: frozenset({MEMBERS_READ, FILES_READ}),
   }
   ```
+
 - `backend/app/core/dependencies.py`:
   - `get_current_user(token: str = Depends(oauth2_scheme), session = Depends(get_session)) -> User`: verify JWT, load user with 60 s Redis cache, reject if `is_active=False` or `deleted_at` set
   - `get_current_org(user = Depends(get_current_user), x_org_id: UUID = Header(...)) -> tuple[Organization, Membership]`: verify membership, raise `PermissionDeniedError` on mismatch
   - `require_permission(p: Permission) -> Callable`: returns dependency that checks `p in ROLE_PERMISSIONS[membership.role]`
 
 **Tests**
+
 - MEMBER calling a BILLING_MANAGE-gated endpoint → 403
 - OWNER calling same → 200
 - Missing `X-Org-ID` header → 400
 
 **Done when**
+
 - [ ] RBAC matrix test covers every role × every permission
 - [ ] 100% coverage on `permissions.py` and the three dependencies
 
 ---
 
 ### T-022 Auth router
+
 > HTML ref: §"Auth & sessions" → "Auth flows supported"
 > needs: T-017, T-018, T-019, T-020, T-021, T-007, T-008
 
 **Goal** HTTP layer for all auth flows; rate-limited; cookies set correctly.
 
 **Build**
+
 - `backend/app/modules/auth/router.py` — all under `/api/v1/auth/`:
 
-  | Method | Path | Rate limit | Notes |
-  |---|---|---|---|
-  | POST | `/register` | `auth_limit` | sets no cookie |
-  | POST | `/login` | `auth_limit` | sets `refresh_token` cookie |
-  | POST | `/refresh` | `api_limit` | reads + rotates cookie |
-  | POST | `/logout` | `api_limit` | revokes session, clears cookie |
-  | POST | `/logout-all` | `api_limit` | revokes all sessions |
-  | POST | `/verify-email` | `auth_limit` | |
-  | POST | `/forgot-password` | `sensitive_limit` | |
-  | POST | `/reset-password` | `sensitive_limit` | |
-  | POST | `/magic-link` | `sensitive_limit` | |
-  | POST | `/magic-link/consume` | `auth_limit` | |
-  | GET | `/me` | `api_limit` | |
-  | GET | `/sessions` | `api_limit` | |
-  | DELETE | `/sessions/{id}` | `api_limit` | |
+  | Method | Path                  | Rate limit        | Notes                          |
+  | ------ | --------------------- | ----------------- | ------------------------------ |
+  | POST   | `/register`           | `auth_limit`      | sets no cookie                 |
+  | POST   | `/login`              | `auth_limit`      | sets `refresh_token` cookie    |
+  | POST   | `/refresh`            | `api_limit`       | reads + rotates cookie         |
+  | POST   | `/logout`             | `api_limit`       | revokes session, clears cookie |
+  | POST   | `/logout-all`         | `api_limit`       | revokes all sessions           |
+  | POST   | `/verify-email`       | `auth_limit`      |                                |
+  | POST   | `/forgot-password`    | `sensitive_limit` |                                |
+  | POST   | `/reset-password`     | `sensitive_limit` |                                |
+  | POST   | `/magic-link`         | `sensitive_limit` |                                |
+  | POST   | `/magic-link/consume` | `auth_limit`      |                                |
+  | GET    | `/me`                 | `api_limit`       |                                |
+  | GET    | `/sessions`           | `api_limit`       |                                |
+  | DELETE | `/sessions/{id}`      | `api_limit`       |                                |
 
 - Cookie on `/login`: `httponly=True, secure=True, samesite="strict", path="/api/v1/auth"`
 - Register router in `backend/app/api/v1/__init__.py`
 
 **Tests**
+
 - `/login` response sets cookie with correct attributes (`httponly`, `secure`, `samesite=strict`)
 - 6th call to `/login` from same IP returns 429
 - `/refresh` with no cookie → 401
 - `/logout` clears cookie
 
 **Done when**
+
 - [ ] All endpoint integration tests pass
 - [ ] Cookie attribute test passes
 
 ---
 
 ### T-023 OAuth — Google + GitHub
+
 > HTML ref: §"Auth & sessions" → "Social OAuth"
 > needs: T-022
 
 **Goal** Social sign-in via `authlib`.
 
 **Build**
+
 - `backend/app/modules/auth/oauth.py`:
   - `GET /api/v1/auth/oauth/{provider}`: generate state (signed, 10 min), store in a short-lived httpOnly cookie, redirect to provider
   - `GET /api/v1/auth/oauth/{provider}/callback`: verify state cookie; exchange code; fetch profile
@@ -1132,22 +1258,26 @@ All models use `UUIDPKMixin + TimestampMixin + SoftDeleteMixin` unless noted.
   - Provider config in settings: `GOOGLE_CLIENT_ID/SECRET`, `GITHUB_CLIENT_ID/SECRET`
 
 **Tests**
+
 - Mock provider responses; state mismatch → 400
 - Existing email links account; new email creates user
 - OAuth user has `hashed_password=None`
 
 **Done when**
+
 - [ ] Tests pass with mocked provider
 
 ---
 
 ### T-024 TOTP 2FA
+
 > HTML ref: §"Auth & sessions" → "TOTP 2FA"
 > needs: T-022
 
 **Goal** Optional time-based 2FA with backup codes.
 
 **Build**
+
 - `backend/app/modules/auth/totp.py`:
   - `POST /api/v1/auth/2fa/enable`: generate TOTP secret (encrypt with `TOTP_ENCRYPTION_KEY` from settings before storing), return `{ provisioning_uri }` — not yet active
   - `POST /api/v1/auth/2fa/verify`: verify 6-digit code using `pyotp`; if valid, set `enabled_at`; generate 10 backup codes (store argon2-hashed); return backup codes **once**
@@ -1155,11 +1285,13 @@ All models use `UUIDPKMixin + TimestampMixin + SoftDeleteMixin` unless noted.
   - Modified login flow: if `totp_enabled`, `/login` returns `{ pending_2fa: true, temp_token }` (short-lived signed token, not the full access token); `POST /api/v1/auth/2fa/login` takes `{ temp_token, code }` → returns full access + refresh
 
 **Tests**
+
 - 2FA round-trip: enable → verify code → disable requires re-auth
 - Backup code single-use: using same backup code twice → second fails
 - Invalid code → `AuthenticationError`
 
 **Done when**
+
 - [ ] All 2FA tests pass
 
 ---
@@ -1169,11 +1301,13 @@ All models use `UUIDPKMixin + TimestampMixin + SoftDeleteMixin` unless noted.
 > HTML ref: §"Multi-tenancy" (entire section)
 
 ### T-025 Tenancy models + migration
+
 > needs: T-009, T-010
 
 **Goal** Organization, Membership, Invitation, OrgFeatureFlag tables.
 
 **Build**
+
 - `backend/app/modules/tenancy/models.py`:
   - `Organization` (UUID + Timestamps + SoftDelete): `name: str`, `slug: str (unique, index)`, `logo_url: str | None`, `settings: dict (JSONB, default={})`, `plan_id: UUID | None (FK plan.id, index)`, `stripe_customer_id: str | None`
   - `Membership` (UUID + Timestamps — no SoftDelete): `user_id (FK, index)`, `org_id (FK, index)`, `role: MemberRole`, `invited_by: UUID | None`; unique constraint `(user_id, org_id)`
@@ -1183,20 +1317,24 @@ All models use `UUIDPKMixin + TimestampMixin + SoftDeleteMixin` unless noted.
 - Migration: `alembic revision --autogenerate -m "tenancy_tables"`
 
 **Tests**
+
 - Migration round-trip
 - Unique constraint `(user_id, org_id)` on Membership enforced
 
 **Done when**
+
 - [ ] Migration applies cleanly both directions
 
 ---
 
 ### T-026 Tenancy repository + service
+
 > needs: T-025, T-009, T-006
 
 **Goal** Org creation, membership management, invitation flow — including "cannot demote last owner".
 
 **Build**
+
 - `backend/app/modules/tenancy/repository.py`:
   - `OrganizationRepository(session, org_id)` — extends BaseRepository; add `get_by_slug(slug) -> Org | None` (not org-scoped — justified by comment: public lookup)
   - `MembershipRepository(session, org_id)`:
@@ -1224,6 +1362,7 @@ All models use `UUIDPKMixin + TimestampMixin + SoftDeleteMixin` unless noted.
     - Reject if target is the only OWNER and new_role ≠ OWNER
 
 **Tests**
+
 - Invite + accept round-trip
 - Double-accept rejected
 - Expired invitation rejected
@@ -1231,37 +1370,42 @@ All models use `UUIDPKMixin + TimestampMixin + SoftDeleteMixin` unless noted.
 - Slug collision: second org with same name gets `-2` suffix
 
 **Done when**
+
 - [ ] All tenancy service tests pass, 100% coverage
 
 ---
 
 ### T-027 Tenancy router
+
 > needs: T-026, T-021
 
 **Goal** HTTP endpoints for orgs and memberships; cross-tenant access impossible.
 
 **Build**
+
 - `backend/app/modules/tenancy/router.py` — under `/api/v1/`:
 
-  | Method | Path | Permission required |
-  |---|---|---|
-  | POST | `/orgs` | authenticated (any) |
-  | GET | `/orgs` | authenticated (lists user's orgs) |
-  | GET | `/orgs/{id}` | membership |
-  | PATCH | `/orgs/{id}` | SETTINGS_MANAGE |
-  | GET | `/orgs/{id}/members` | MEMBERS_READ |
-  | PATCH | `/orgs/{id}/members/{mid}` | MEMBERS_MANAGE |
-  | DELETE | `/orgs/{id}/members/{mid}` | MEMBERS_MANAGE |
-  | POST | `/orgs/{id}/invitations` | MEMBERS_MANAGE |
-  | GET | `/invitations/{token}` | public (preview) |
-  | POST | `/invitations/{token}/accept` | authenticated |
+  | Method | Path                          | Permission required               |
+  | ------ | ----------------------------- | --------------------------------- |
+  | POST   | `/orgs`                       | authenticated (any)               |
+  | GET    | `/orgs`                       | authenticated (lists user's orgs) |
+  | GET    | `/orgs/{id}`                  | membership                        |
+  | PATCH  | `/orgs/{id}`                  | SETTINGS_MANAGE                   |
+  | GET    | `/orgs/{id}/members`          | MEMBERS_READ                      |
+  | PATCH  | `/orgs/{id}/members/{mid}`    | MEMBERS_MANAGE                    |
+  | DELETE | `/orgs/{id}/members/{mid}`    | MEMBERS_MANAGE                    |
+  | POST   | `/orgs/{id}/invitations`      | MEMBERS_MANAGE                    |
+  | GET    | `/invitations/{token}`        | public (preview)                  |
+  | POST   | `/invitations/{token}/accept` | authenticated                     |
 
 **Tests**
+
 - User A (org A) attempts GET `/orgs/{org_b_id}/members` → 403
 - MEMBER attempts PATCH on member role → 403
 - Full invitation round-trip via HTTP
 
 **Done when**
+
 - [ ] Cross-tenant 403 test passes
 - [ ] All endpoint tests pass
 
@@ -1272,12 +1416,15 @@ All models use `UUIDPKMixin + TimestampMixin + SoftDeleteMixin` unless noted.
 > HTML ref: §"Core data models" — `AuditEvent` | §"Best practices" → "Immutability where it matters"
 
 ### T-028 Audit model + service + migration
+
 > needs: T-025, T-005, T-010
 
 **Goal** Append-only audit log written on every mutating action.
 
 **Build**
+
 - `backend/app/modules/audit/models.py`:
+
   ```python
   class AuditEvent(SQLModel, table=True):
       id: UUID = Field(default_factory=uuid4, primary_key=True)
@@ -1304,11 +1451,13 @@ All models use `UUIDPKMixin + TimestampMixin + SoftDeleteMixin` unless noted.
 - Wire `AuditService.log(...)` calls into auth and tenancy services, replacing stubs from T-017/T-026.
 
 **Tests**
+
 - `AuditRepository` has no `update` or `soft_delete` method (assert API surface)
 - Login action produces an `AuditEvent` with `action="user.login_success"`
 - Role change produces `AuditEvent` with `diff` containing old and new role
 
 **Done when**
+
 - [ ] Immutability test passes (no update/delete methods)
 - [ ] Audit row written for login and role-change actions
 
@@ -1319,12 +1468,15 @@ All models use `UUIDPKMixin + TimestampMixin + SoftDeleteMixin` unless noted.
 > HTML ref: §"Billing" (entire section)
 
 ### T-029 Billing models + migration
+
 > needs: T-025, T-010
 
 **Goal** Plan, Subscription, WebhookEvent tables — everything billing needs.
 
 **Build**
+
 - `backend/app/modules/billing/models.py`:
+
   ```python
   class Plan(SQLModel, table=True):      # UUIDPKMixin + TimestampMixin + SoftDeleteMixin
       name: str
@@ -1356,24 +1508,29 @@ All models use `UUIDPKMixin + TimestampMixin + SoftDeleteMixin` unless noted.
       error: str | None = None
       attempt_count: int = 0
   ```
+
 - Migration: `alembic revision --autogenerate -m "billing_tables"`
 
 **Tests**
+
 - Migration round-trip
 - `org_id` unique constraint on `Subscription`
 
 **Done when**
+
 - [ ] Migration applies cleanly both directions
 
 ---
 
 ### T-030 Stripe webhook handler
+
 > HTML ref: §"Billing" → "Webhook handler pattern"
 > needs: T-029, T-028, T-003
 
 **Goal** Idempotent Stripe webhook — stores every event, processes exactly once.
 
 **Build**
+
 - `backend/app/modules/billing/webhooks.py`:
   - `POST /api/v1/billing/webhooks/stripe` (no auth — Stripe signature validates):
     1. `stripe.Webhook.construct_event(body, sig, STRIPE_WEBHOOK_SECRET)` — bad signature → 400, log warning
@@ -1388,22 +1545,26 @@ All models use `UUIDPKMixin + TimestampMixin + SoftDeleteMixin` unless noted.
     6. On success: set `processed_at`, commit
 
 **Tests**
+
 - Same event sent twice → processed exactly once (`attempt_count` never exceeds 1 on success)
 - Bad signature → 400, `WebhookEvent` not created
 - Handler exception → `error` set, `processed_at` null, returns 500
 
 **Done when**
+
 - [ ] Idempotency test passes, 100% coverage on this file
 
 ---
 
 ### T-031 Billing service + checkout endpoints
+
 > HTML ref: §"Billing" → "Plan-gating dependency" | "What's included"
 > needs: T-030, T-021
 
 **Goal** Checkout + portal redirects; `require_feature` dependency.
 
 **Build**
+
 - `backend/app/modules/billing/service.py`:
   - `BillingService.get_or_create_stripe_customer(org) -> str` (returns `stripe_customer_id`)
   - `BillingService.create_checkout_session(org, plan_slug, interval) -> str` (URL)
@@ -1411,6 +1572,7 @@ All models use `UUIDPKMixin + TimestampMixin + SoftDeleteMixin` unless noted.
   - `BillingService.handle_event(event) -> None` — dispatches webhook events
 
 - `backend/app/modules/billing/dependencies.py`:
+
   ```python
   def require_feature(feature: str, minimum: int | None = None):
       async def checker(org_sub = Depends(get_current_org_subscription)):
@@ -1430,12 +1592,14 @@ All models use `UUIDPKMixin + TimestampMixin + SoftDeleteMixin` unless noted.
   - `GET /api/v1/billing/plans` (public)
 
 **Tests**
+
 - `require_feature` with free plan denied pro feature → 402
 - Trial subscription → feature allowed
 - PAST_DUE within grace → allowed; beyond → denied
 - Mock Stripe: checkout returns URL with correct metadata `{ org_id }`
 
 **Done when**
+
 - [ ] Plan-gating tests pass, 100% coverage
 
 ---
@@ -1445,12 +1609,15 @@ All models use `UUIDPKMixin + TimestampMixin + SoftDeleteMixin` unless noted.
 > HTML ref: §"GDPR & compliance" (entire section)
 
 ### T-032 GDPR models + migration
+
 > needs: T-013, T-010
 
 **Goal** ConsentRecord (append-only) and DataExportJob tables.
 
 **Build**
+
 - `backend/app/modules/gdpr/models.py`:
+
   ```python
   class ConsentRecord(SQLModel, table=True):   # no timestamps mixin — uses ts field
       id: UUID = Field(default_factory=uuid4, primary_key=True)
@@ -1473,21 +1640,25 @@ All models use `UUIDPKMixin + TimestampMixin + SoftDeleteMixin` unless noted.
 - Migration: `alembic revision --autogenerate -m "gdpr_tables"`
 
 **Tests**
+
 - Migration round-trip
 - `ConsentRecord` repository has no `update` or `delete` method
 
 **Done when**
+
 - [ ] Migration clean; immutability assertion passes
 
 ---
 
 ### T-033 GDPR service + endpoints
+
 > HTML ref: §"GDPR & compliance" → "Endpoints" + "Data purge job"
 > needs: T-032, T-021, T-028
 
 **Goal** Data export, delete-me, and consent endpoints.
 
 **Build**
+
 - `backend/app/modules/gdpr/service.py`:
   - `GDPRService.request_export(user_id) -> DataExportJob`: create job, enqueue `export_user_data` ARQ job
   - `GDPRService.delete_me(user) -> None`: soft-delete user; enqueue `purge_user_data` ARQ job with 30-day delay (env-configurable)
@@ -1501,12 +1672,14 @@ All models use `UUIDPKMixin + TimestampMixin + SoftDeleteMixin` unless noted.
   - `POST /api/v1/me/consents`
 
 **Tests**
+
 - Export creates job in pending state
 - DELETE /me soft-deletes user
 - Consent POST twice creates two rows (append-only)
 - Missing `confirm: "DELETE"` body → 422
 
 **Done when**
+
 - [ ] All GDPR endpoint tests pass, 100% coverage
 
 ---
@@ -1516,11 +1689,13 @@ All models use `UUIDPKMixin + TimestampMixin + SoftDeleteMixin` unless noted.
 > HTML ref: §"Background jobs" (entire section)
 
 ### T-034 ARQ worker setup + APScheduler
+
 > needs: T-005, T-003
 
 **Goal** ARQ worker that shares the FastAPI DB engine; APScheduler for cron jobs.
 
 **Build**
+
 - `backend/app/workers/main.py`:
   ```python
   class WorkerSettings:
@@ -1548,21 +1723,25 @@ All models use `UUIDPKMixin + TimestampMixin + SoftDeleteMixin` unless noted.
   ```
 
 **Tests**
+
 - In-process ARQ test: enqueue a no-op job, assert it executes
 - APScheduler: each scheduled function is callable with mocked context
 
 **Done when**
+
 - [ ] No-op job round-trips
 - [ ] Scheduler functions callable in isolation
 
 ---
 
 ### T-035 Email job (Resend + templates)
+
 > needs: T-034, T-003
 
 **Goal** Async email delivery with Jinja2 templates; retry on transient errors.
 
 **Build**
+
 - `backend/app/workers/jobs/email.py`:
   - `send_email(ctx, *, to: str, template: str, context: dict) -> None`:
     - Render `backend/app/templates/email/{template}.html.j2`
@@ -1578,20 +1757,24 @@ All models use `UUIDPKMixin + TimestampMixin + SoftDeleteMixin` unless noted.
   - `welcome.html.j2` — post-verify welcome
 
 **Tests**
+
 - Mock Resend: verify template renders with context; verify retry on simulated 503
 
 **Done when**
+
 - [ ] Retry test passes with mock
 
 ---
 
 ### T-036 GDPR purge job
+
 > HTML ref: §"GDPR & compliance" → "Data purge job"
 > needs: T-034, T-033
 
 **Goal** Hard-delete all user data in dependency order after grace period.
 
 **Build**
+
 - `backend/app/workers/jobs/gdpr.py`:
   - `purge_user_data(ctx, *, user_id: UUID) -> None`:
     - Verify user still soft-deleted (abort if not — allows cancellation during grace)
@@ -1600,19 +1783,23 @@ All models use `UUIDPKMixin + TimestampMixin + SoftDeleteMixin` unless noted.
     - After commit: detach Stripe customer (update `org` if org has no other members, or just remove `stripe_customer_id`)
 
 **Tests**
+
 - After `purge_user_data`: parameterized sweep of all 14 tables confirms zero rows referencing the `user_id`
 
 **Done when**
+
 - [ ] Purge completeness test green (all 14 tables checked)
 
 ---
 
 ### T-037 Export job
+
 > needs: T-034, T-032
 
 **Goal** Generate a JSON zip of all user data and email a download link.
 
 **Build**
+
 - `backend/app/workers/jobs/gdpr.py` (extend):
   - `export_user_data(ctx, *, user_id: UUID, job_id: UUID) -> None`:
     - Collect: User record, Sessions, OAuthAccounts, ConsentRecords, AuditEvents (where actor_id = user_id), Notifications, Memberships, StoredFile metadata
@@ -1621,10 +1808,12 @@ All models use `UUIDPKMixin + TimestampMixin + SoftDeleteMixin` unless noted.
     - Enqueue `send_email` with `download_link` template
 
 **Tests**
+
 - Export produces a zip containing all expected keys
 - `DataExportJob.status` transitions to `"ready"`
 
 **Done when**
+
 - [ ] Export completeness test green
 
 ---
@@ -1634,16 +1823,19 @@ All models use `UUIDPKMixin + TimestampMixin + SoftDeleteMixin` unless noted.
 > HTML ref: §"Shared packages"
 
 ### T-038 Shared packages scaffold
+
 > needs: T-001
 
 **Goal** Six shared packages buildable and importable from apps.
 
 **Build**
 For each of `packages/{ui,api-client,types,hooks,validation,utils}`:
+
 - `package.json`: name `@forge/<name>`, `"type": "module"`, build with `tsup`, export from `src/index.ts`
 - `tsconfig.json`: extends root, `strict: true`, `noUncheckedIndexedAccess: true`
 
 - `packages/types/src/index.ts` — initial exports:
+
   ```typescript
   export enum Permission { MEMBERS_READ="members:read", ... }  // matches backend
   export enum MemberRole { OWNER="owner", ADMIN="admin", MEMBER="member" }
@@ -1663,22 +1855,26 @@ For each of `packages/{ui,api-client,types,hooks,validation,utils}`:
   - Must have zero JSX imports (enforced by `eslint-plugin-no-restricted-imports`)
 
 **Tests**
+
 - `pnpm -r build` succeeds
 - `apps/web` can `import { cn } from "@forge/utils"` without error
 
 **Done when**
+
 - [ ] `pnpm -r build` clean
 - [ ] Import smoke test passes
 
 ---
 
 ### T-039 API client generation
+
 > HTML ref: §"Shared packages" → "API client generation"
 > needs: T-038, T-002
 
 **Goal** Auto-generated typed API client; `build` never proceeds with stale types.
 
 **Build**
+
 - `packages/api-client/openapi-ts.config.ts`:
   ```typescript
   export default defineConfig({
@@ -1686,7 +1882,7 @@ For each of `packages/{ui,api-client,types,hooks,validation,utils}`:
     output: { path: "src/generated", format: "esm" },
     client: "fetch",
     plugins: ["@hey-api/sdk", "@tanstack/react-query"],
-  })
+  });
   ```
 - `packages/api-client/src/client.ts`: configure base URL from `VITE_API_URL`; include `credentials: "include"` for cookie-based refresh
 - `packages/api-client/package.json` script: `"generate": "openapi-ts"`
@@ -1694,10 +1890,12 @@ For each of `packages/{ui,api-client,types,hooks,validation,utils}`:
 - `turbo.json`: `build` pipeline `dependsOn: ["gen-client", "^build"]`
 
 **Tests**
+
 - `make gen-client` succeeds with local backend running
 - Generated `src/generated/` contains typed functions matching the OpenAPI routes
 
 **Done when**
+
 - [ ] Client regenerates cleanly
 - [ ] `apps/web` imports a generated function with correct TypeScript types
 
@@ -1708,11 +1906,13 @@ For each of `packages/{ui,api-client,types,hooks,validation,utils}`:
 > HTML ref: §"React web app" (entire section)
 
 ### T-040 Vite + React skeleton
+
 > needs: T-038
 
 **Goal** Strict TypeScript Vite app with Tailwind and ESLint configured.
 
 **Build**
+
 - `apps/web/package.json`: React 18, Vite 5, TanStack Router, TanStack Query v5, React Hook Form, Zod, shadcn/ui, lucide-react, sonner (toasts)
 - `apps/web/tsconfig.json`: `strict: true`, `noUncheckedIndexedAccess: true`, `exactOptionalPropertyTypes: true`
 - `apps/web/eslint.config.ts`: `@typescript-eslint/strict-type-checked`, custom rule banning `dangerouslySetInnerHTML`
@@ -1720,21 +1920,25 @@ For each of `packages/{ui,api-client,types,hooks,validation,utils}`:
 - Tailwind configured; `apps/web/src/main.tsx` renders a styled placeholder
 
 **Tests**
+
 - `pnpm --filter web type-check` clean
 - `pnpm --filter web lint` clean
 
 **Done when**
+
 - [ ] `pnpm --filter web dev` serves without error
 - [ ] Type-check and lint clean
 
 ---
 
 ### T-041 UI component library (shadcn)
+
 > needs: T-040, T-038
 
 **Goal** Shared component library in `packages/ui`, re-exported for the web app.
 
 **Build**
+
 - Initialize shadcn in `packages/ui`
 - Install components: `Button`, `Input`, `Label`, `Form`, `Card`, `Dialog`, `Tabs`, `Table`, `Badge`, `Avatar`, `DropdownMenu`, `Skeleton`, `Alert`, `Separator`, `Tooltip`
 - Toast via `sonner` (not shadcn's built-in — simpler API)
@@ -1742,21 +1946,25 @@ For each of `packages/{ui,api-client,types,hooks,validation,utils}`:
 - `apps/web` adds `@forge/ui` as workspace dep
 
 **Tests**
+
 - `pnpm --filter web` can render `<Button>` without TS errors
 - `pnpm -r build` clean
 
 **Done when**
+
 - [ ] Button renders in app; build clean
 
 ---
 
 ### T-042 TanStack Router + route structure
+
 > HTML ref: §"React web app" → "Route guards" | "Core pages built in Phase 1"
 > needs: T-040, T-039
 
 **Goal** Type-safe routing with auth guards and lazy-loaded feature routes.
 
 **Build**
+
 - `apps/web/src/router.tsx` + file-based routes:
   ```
   /login, /register, /verify-email, /forgot-password,
@@ -1776,22 +1984,26 @@ For each of `packages/{ui,api-client,types,hooks,validation,utils}`:
 - `apps/web/src/main.tsx`: `QueryClientProvider` wrapping `RouterProvider`
 
 **Tests**
+
 - Navigate to `/_app/` without auth cookie → redirected to `/login`
 - Navigate with valid auth context → renders dashboard
 
 **Done when**
+
 - [ ] Auth guard redirect test passes
 - [ ] `pnpm type-check` clean (TanStack Router generates types)
 
 ---
 
 ### T-043 Auth feature — all auth pages
+
 > HTML ref: §"React web app" → "Auth flows"
 > needs: T-042, T-041, T-038
 
 **Goal** All Phase-1 auth UI flows.
 
 **Build**
+
 - `apps/web/src/features/auth/`:
   - `LoginPage`: email + password form + Google/GitHub buttons; on success sets query cache + navigates to `/_app/`
   - `RegisterPage`: email + password; on success shows "check your inbox"
@@ -1806,23 +2018,27 @@ For each of `packages/{ui,api-client,types,hooks,validation,utils}`:
 - A11y: every input has a `<label>`, errors announced via `aria-live`, focus managed on navigation
 
 **Tests** (Vitest + React Testing Library)
+
 - Login: invalid email → validation error shown; success → API called
 - Register: short password → blocked by Zod
 - A11y: `axe-core` scan on each page returns no violations
 
 **Done when**
+
 - [ ] All form tests pass
 - [ ] axe-core clean on all auth pages
 
 ---
 
 ### T-044 App shell + settings pages
+
 > HTML ref: §"React web app" → "App shell" | §"Core pages built in Phase 1"
 > needs: T-043, T-027, T-031
 
 **Goal** Authenticated app shell with org switcher and all Phase-1 settings tabs.
 
 **Build**
+
 - `apps/web/src/layouts/AppLayout.tsx`: sidebar (logo, nav, org switcher, user menu), topbar (breadcrumbs, notification bell stub)
 - Org switcher: lists user's orgs from `/api/v1/orgs`, sets `X-Org-ID` header on all subsequent requests
 - Settings tabs:
@@ -1835,10 +2051,12 @@ For each of `packages/{ui,api-client,types,hooks,validation,utils}`:
 - `useFeatureFlag(flag: string)` hook: reads `org.plan.features[flag]`
 
 **Tests**
+
 - Members tab: `MEMBER` role → "Invite" button hidden; `OWNER` → visible
 - Settings tabs render correct loading + empty + error states
 
 **Done when**
+
 - [ ] Permission-gated UI test passes
 - [ ] All settings tabs render without errors
 
@@ -1849,32 +2067,38 @@ For each of `packages/{ui,api-client,types,hooks,validation,utils}`:
 > HTML ref: §"React Native (Expo)" (entire section)
 
 ### T-045 Expo app skeleton
+
 > needs: T-038
 
 **Goal** Expo + Expo Router app with NativeWind and TanStack Query.
 
 **Build**
+
 - `apps/mobile/package.json`: Expo SDK 52, Expo Router 4, NativeWind, TanStack Query, `expo-secure-store`, `expo-local-authentication`, `expo-notifications`
 - `apps/mobile/app/_layout.tsx`: `QueryClientProvider` + auth check
 - NativeWind configured; `tsconfig.json` strict
 - A11y default: `eslint-plugin-react-native-a11y` — every `Pressable` requires `accessibilityLabel`
 
 **Tests**
+
 - `pnpm --filter mobile type-check` clean
 
 **Done when**
+
 - [ ] Expo Go shows a "Hello ForgeSaaS" screen
 - [ ] Type-check clean
 
 ---
 
 ### T-046 Mobile auth — secure token storage + auto-refresh
+
 > HTML ref: §"React Native" → "Auth token handling on mobile"
 > needs: T-045, T-039
 
 **Goal** Tokens stored in Keychain/Keystore; 401 automatically triggers refresh.
 
 **Build**
+
 - `apps/mobile/src/lib/auth.ts`:
   - `login(email, password)`: call API, store `access_token` + `refresh_token` in `expo-secure-store`
   - `logout()`: clear secure store entries
@@ -1886,20 +2110,24 @@ For each of `packages/{ui,api-client,types,hooks,validation,utils}`:
   - **Never** `AsyncStorage` for tokens
 
 **Tests**
+
 - Mock `expo-secure-store`; simulate 401 → verify refresh called → verify retry
 
 **Done when**
+
 - [ ] Interceptor refresh test passes
 
 ---
 
 ### T-047 Mobile auth screens + deep links
+
 > HTML ref: §"React Native" → "Native-specific"
 > needs: T-046
 
 **Goal** Auth screens at parity with web Phase 1; deep links for magic links and OAuth.
 
 **Build**
+
 - `apps/mobile/app/(auth)/`: login, register, verify-email, forgot-password, magic-link
 - `apps/mobile/app/(app)/`: dashboard placeholder, settings placeholder
 - Deep links via Expo Router:
@@ -1910,9 +2138,11 @@ For each of `packages/{ui,api-client,types,hooks,validation,utils}`:
 - Shared Zod schemas from `@forge/validation` for all forms
 
 **Tests**
+
 - Deep link `forge://verify-email/abc` navigates to verify screen with token `"abc"`
 
 **Done when**
+
 - [ ] Deep link routing test passes
 - [ ] Auth flows work on iOS Simulator + Android emulator
 
@@ -1923,12 +2153,15 @@ For each of `packages/{ui,api-client,types,hooks,validation,utils}`:
 > HTML ref: §"Testing strategy" (entire section)
 
 ### T-048 Backend test infrastructure
+
 > needs: T-005, T-009
 
 **Goal** testcontainers-based real DB/Redis fixtures usable by every subsequent test file.
 
 **Build**
+
 - `backend/tests/conftest.py`:
+
   ```python
   @pytest.fixture(scope="session")
   async def engine():
@@ -1956,23 +2189,28 @@ For each of `packages/{ui,api-client,types,hooks,validation,utils}`:
       # factory: creates user + org + membership, returns client with Bearer token
       ...
   ```
+
 - `backend/pytest.ini`: `asyncio_mode = "auto"`, `testpaths = ["tests"]`
 
 **Tests**
+
 - Smoke: `authed_client` GETs `/api/v1/auth/me` → 200
 
 **Done when**
+
 - [ ] Smoke test passes against real Postgres + Redis containers
 
 ---
 
 ### T-049 Cross-tenant isolation sweep
+
 > HTML ref: §"Testing strategy" → "What must have tests" | §"OWASP" → A01
 > needs: T-048, T-027, T-031
 
 **Goal** Parameterized test proving every org-scoped endpoint returns 403/404 cross-tenant.
 
 **Build**
+
 - `backend/tests/security/test_tenant_isolation.py`:
   - Create `org_a` + `user_a`; create `org_b` + `user_b`
   - Parameterize over every endpoint that takes an org-scoped resource ID
@@ -1982,44 +2220,52 @@ For each of `packages/{ui,api-client,types,hooks,validation,utils}`:
 **Tests** (this file IS the test)
 
 **Done when**
+
 - [ ] Every org-scoped endpoint covered by the sweep
 - [ ] All assertions pass
 
 ---
 
 ### T-050 Schemathesis contract test
+
 > HTML ref: §"Testing strategy" → "Contract — auto-generated"
 > needs: T-048
 
 **Goal** Fuzz every OpenAPI endpoint for schema conformance and unexpected 500s.
 
 **Build**
+
 - `backend/tests/contract/test_schemathesis.py`:
   - `schemathesis.from_asgi(app, base_url="http://test")`
   - All endpoints: response matches declared schema; no 500 on valid inputs
   - Auth-required endpoints get a bearer token via a `schemathesis` hook
 
 **Done when**
+
 - [ ] `schemathesis` run is clean with no failures
 
 ---
 
 ### T-051 Frontend test setup
+
 > HTML ref: §"Testing strategy" → "Frontend & mobile testing"
 > needs: T-043
 
 **Goal** Vitest + RTL + MSW + axe-core for the web app.
 
 **Build**
+
 - `apps/web/vitest.config.ts`: jsdom, `@testing-library/jest-dom`
 - `apps/web/src/test/setup.ts`: MSW server setup; `jest-axe` matcher `toHaveNoViolations`
 - `apps/web/src/test/render.tsx`: custom render with `QueryClientProvider` + `RouterProvider`
 - MSW handlers stub all generated API client endpoints
 
 **Tests**
+
 - Login form: invalid email → error; success → API stub called
 
 **Done when**
+
 - [ ] Login form test passes
 - [ ] axe-core passes on login page
 
@@ -2030,11 +2276,13 @@ For each of `packages/{ui,api-client,types,hooks,validation,utils}`:
 > HTML ref: §"CI/CD pipeline" (entire section)
 
 ### T-052 CI — lint + type-check job
+
 > needs: T-012
 
 **Goal** Fast first CI gate; fails before tests even start if style is broken.
 
 **Build**
+
 - `.github/workflows/ci.yml` — job `lint`:
   ```yaml
   on: [push, pull_request]
@@ -2054,17 +2302,20 @@ For each of `packages/{ui,api-client,types,hooks,validation,utils}`:
 - Cache: `~/.cache/pip` and pnpm store
 
 **Done when**
+
 - [ ] Workflow green on clean commit
 - [ ] Workflow red when a lint violation is committed
 
 ---
 
 ### T-053 CI — test job
+
 > needs: T-048, T-051, T-052
 
 **Goal** Run backend + frontend tests in CI with real dependencies.
 
 **Build**
+
 - `.github/workflows/ci.yml` — job `test` (runs after `lint`):
   ```yaml
   test:
@@ -2079,31 +2330,34 @@ For each of `packages/{ui,api-client,types,hooks,validation,utils}`:
         options: --health-cmd "redis-cli ping"
     steps:
       - run: pytest --cov=app --cov-fail-under=85
-               --cov-branch tests/ -x
+          --cov-branch tests/ -x
       - run: pnpm --filter web gen-client
       - run: pnpm --filter web test --run
       - run: schemathesis run http://localhost:8000/openapi.json
-               --validate-schema=true --checks=all
+          --validate-schema=true --checks=all
   ```
 
 **Done when**
+
 - [ ] Workflow green on clean repo
 
 ---
 
 ### T-054 CI — security scans job
+
 > HTML ref: §"OWASP & security testing" → "Security tooling in the pipeline"
 > needs: T-052
 
 **Goal** Automated security gates per OWASP tooling requirements.
 
 **Build**
+
 - `.github/workflows/ci.yml` — job `security` (parallel with `test`):
   ```yaml
   security:
     needs: lint
     steps:
-      - run: bandit -r app/ -ll          # only medium+ severity
+      - run: bandit -r app/ -ll # only medium+ severity
       - run: semgrep --config auto --error
       - run: pip-audit --strict
       - run: npm audit --audit-level=high
@@ -2114,25 +2368,28 @@ For each of `packages/{ui,api-client,types,hooks,validation,utils}`:
 - Cache: Trivy DB, Semgrep rules
 
 **Done when**
+
 - [ ] Security job green on clean repo
 - [ ] Security job red when a known-bad pattern is introduced
 
 ---
 
 ### T-055 CI — build + deploy job
+
 > HTML ref: §"CI/CD pipeline" → "Pipeline stages" 4 + 5
 > needs: T-053, T-054
 
 **Goal** Docker image build + rolling deploy with health gate; rollback on failure.
 
 **Build**
+
 - `backend/Dockerfile`: multi-stage, non-root user, pinned base image `python:3.12-slim`
 - `.github/workflows/ci.yml` — job `build` (needs: test + security):
   ```yaml
   build:
     needs: [test, security]
     steps:
-      - run: turbo build             # gen-client runs first
+      - run: turbo build # gen-client runs first
       - run: docker build -t $IMAGE --label "git-sha=$GITHUB_SHA" .
       - run: trivy image $IMAGE --exit-code 1 --severity HIGH,CRITICAL
       - run: docker push $IMAGE
@@ -2143,7 +2400,7 @@ For each of `packages/{ui,api-client,types,hooks,validation,utils}`:
     if: github.ref == 'refs/heads/main'
     needs: build
     steps:
-      - run: alembic upgrade head    # fail = abort, no deploy
+      - run: alembic upgrade head # fail = abort, no deploy
       - run: rolling-deploy --image $IMAGE --health /health/ready
       - run: smoke-test || (rollback && exit 1)
       - run: playwright test --project=staging
@@ -2151,6 +2408,7 @@ For each of `packages/{ui,api-client,types,hooks,validation,utils}`:
 - Branch protection: `main` requires green CI + 1 approval, linear history, no direct push
 
 **Done when**
+
 - [ ] Build job produces a pushed image
 - [ ] Deploy aborts if migrations fail
 - [ ] Rollback executes if smoke test fails
@@ -2162,11 +2420,13 @@ For each of `packages/{ui,api-client,types,hooks,validation,utils}`:
 > HTML ref: §"Local dev & config" → "Onboarding a new developer"
 
 ### T-056 Seed script + make targets
+
 > needs: T-029, T-025
 
 **Goal** `make seed` produces a working local environment: superadmin + demo plans + demo org.
 
 **Build**
+
 - `backend/app/core/seed.py`:
   - Creates `Plan(slug="free", features={seats:3, storage_gb:1, api_calls:1000})` and `Plan(slug="pro", features={seats:25, storage_gb:50, api_calls:100000})`
   - Creates superadmin user `admin@forge.local` / `DevPassword123!`
@@ -2179,10 +2439,12 @@ For each of `packages/{ui,api-client,types,hooks,validation,utils}`:
   - `new-module`: copies `backend/app/modules/_template/` to target, renames placeholders
 
 **Tests**
+
 - `make seed` run twice → no duplicate rows
 - Second run exits 0
 
 **Done when**
+
 - [ ] Idempotent seed test passes
 - [ ] Full `make dev` → `curl /health/ready` → 200 chain works
 
@@ -2191,12 +2453,14 @@ For each of `packages/{ui,api-client,types,hooks,validation,utils}`:
 ## N · Phase 1 verification
 
 ### T-057 End-to-end smoke runbook
+
 > HTML ref: §"Launch checklist" (entire section)
 > needs: all Phase 1 tasks
 
 **Goal** Document and execute the Phase 1 acceptance flow. This is the gate to Phase 2.
 
 **Build**
+
 - `docs/runbooks/phase1-verification.md` documenting exact steps:
   1. `git clone && make dev` — all services healthy
   2. `make seed` — superadmin and plans created
@@ -2216,6 +2480,7 @@ For each of `packages/{ui,api-client,types,hooks,validation,utils}`:
 - Execute the runbook manually; document any failures
 
 **Phase 1 complete when ALL of the following are true:**
+
 - [ ] Runbook executes without intervention
 - [ ] `pytest --cov` reports ≥85% overall and **100% on `auth/`, `billing/`, `tenancy/`, `gdpr/`**
 - [ ] CI jobs `lint`, `test`, `security`, `build` all green on `main`
@@ -2231,7 +2496,7 @@ For each of `packages/{ui,api-client,types,hooks,validation,utils}`:
 
 > **Prerequisite:** T-057 (Phase 1 end-to-end verification) complete and green.
 >
-> **Why this phase exists:** Phase 1 built a working product. This phase restructures it so it can become a *template* — the root from which every future product is forked. It must happen before Phase 2, because Phase 2 is the first phase that adds optional modules. Retrofitting the module toggle system onto a codebase that wasn't designed for it is significantly harder than adding it now.
+> **Why this phase exists:** Phase 1 built a working product. This phase restructures it so it can become a _template_ — the root from which every future product is forked. It must happen before Phase 2, because Phase 2 is the first phase that adds optional modules. Retrofitting the module toggle system onto a codebase that wasn't designed for it is significantly harder than adding it now.
 >
 > **Phase 1.5 acceptance criterion:** You can fork the repo, disable billing and file storage in one config file, run `make dev`, and get a fully working product — correct routes, correct schema, correct UI — with no Stripe keys and no file-storage tables anywhere.
 
@@ -2242,51 +2507,65 @@ For each of `packages/{ui,api-client,types,hooks,validation,utils}`:
 > Ref: conversation §"The core mechanic" and §"Making conflicts rare"
 
 ### T-058 Upstream remote conventions + TEMPLATE.md
+
 > needs: T-057
 
 **Goal** Establish the Git conventions that keep template code and product code cleanly separated so that `git merge upstream/main` is low-friction forever.
 
 **Build**
+
 - `TEMPLATE.md` at repo root — the contract every product must read before forking:
+
   ```markdown
   # ForgeSaaS Template Contract
 
   ## Files the template owns (never edit in a product)
+
   Every file not listed below. Template updates will overwrite them.
   Resolve merge conflicts by taking the template version unless you have
   a documented reason not to.
 
   ## Files the product owns (template never touches)
-  - product.config.py          — module toggles + branding
-  - product.config.ts          — frontend module flags + branding
-  - .env.product.example       — product-specific env vars
-  - apps/web/src/routes/_product/   — product-specific routes
-  - backend/app/modules/            — product-specific modules (0100+ migration prefix)
-  - CHANGELOG.product.md       — product-level changelog
-  - README.md                  — overwrite freely
+
+  - product.config.py — module toggles + branding
+  - product.config.ts — frontend module flags + branding
+  - .env.product.example — product-specific env vars
+  - apps/web/src/routes/\_product/ — product-specific routes
+  - backend/app/modules/ — product-specific modules (0100+ migration prefix)
+  - CHANGELOG.product.md — product-level changelog
+  - README.md — overwrite freely
 
   ## Migration prefix convention
-  Template:  0001 – 0099
-  Products:  assign yourself a prefix block in this file and document it here:
-    | Product      | Prefix range |
-    |--------------|-------------|
-    | (your name)  | 0100 – 0199 |
+
+  Template: 0001 – 0099
+  Products: assign yourself a prefix block in this file and document it here:
+  | Product | Prefix range |
+  |--------------|-------------|
+  | (your name) | 0100 – 0199 |
 
   ## Pulling template updates
+
   git fetch upstream
-  git merge upstream/vX.Y.Z     # always merge a tag, never upstream/main directly
+  git merge upstream/vX.Y.Z # always merge a tag, never upstream/main directly
+
   # Resolve conflicts; take template version unless product.config.py says otherwise
-  make dev && make test         # verify before pushing
+
+  make dev && make test # verify before pushing
   ```
 
 - `CHANGELOG.md` at repo root — template-level changelog, one entry per tag:
+
   ```markdown
   ## [Unreleased]
 
   ## [1.0.0] — Phase 1 complete
+
   ### Added
+
   - Auth, tenancy, billing, GDPR, background jobs, web + mobile shells, CI/CD
+
   ### Conflict risk for products
+
   - Low — first release, no products exist yet
   ```
 
@@ -2295,6 +2574,7 @@ For each of `packages/{ui,api-client,types,hooks,validation,utils}`:
   - `check-template-drift` — `git log upstream/main ^HEAD --oneline` (shows unmerged template commits)
 
 - `.github/CODEOWNERS`:
+
   ```
   # Template core — requires template-maintainer approval in product PRs
   /backend/app/core/          @your-org/template-maintainers
@@ -2308,9 +2588,11 @@ For each of `packages/{ui,api-client,types,hooks,validation,utils}`:
   ```
 
 **Tests**
+
 - `make check-template-drift` exits 0 on a fresh clone (no unmerged upstream commits)
 
 **Done when**
+
 - [ ] `TEMPLATE.md` documents the full contract
 - [ ] `CHANGELOG.md` has the v1.0.0 entry
 - [ ] Both Makefile targets work
@@ -2319,12 +2601,15 @@ For each of `packages/{ui,api-client,types,hooks,validation,utils}`:
 ---
 
 ### T-059 Product config files
+
 > needs: T-058
 
 **Goal** Create the two product-owned config files (Python + TypeScript) that every product customises. The template ships working defaults; products override only what they need.
 
 **Build**
+
 - `backend/product.config.py`:
+
   ```python
   """
   Product configuration — this file is owned by the product, not the template.
@@ -2358,13 +2643,14 @@ For each of `packages/{ui,api-client,types,hooks,validation,utils}`:
   ```
 
 - `product.config.ts`:
+
   ```typescript
   /**
    * Product configuration — owned by the product, not the template.
    * Keep in sync with backend/product.config.py.
    * The template never modifies this file.
    */
-  import type { ProductConfig } from "@forge/types"
+  import type { ProductConfig } from "@forge/types";
 
   export const config = {
     name: "ForgeSaaS",
@@ -2372,29 +2658,31 @@ For each of `packages/{ui,api-client,types,hooks,validation,utils}`:
     logoUrl: "/logo.svg",
     supportEmail: "support@example.com",
     modules: {
-      billing:          true,
-      notifications:    true,
-      fileStorage:      true,
-      featureFlags:     true,
-      gdpr:             true,
-      admin:            true,
-      oauth:            true,
-      totp2fa:          true,
-      multiOrg:         true,
-      usageMetering:    false,
+      billing: true,
+      notifications: true,
+      fileStorage: true,
+      featureFlags: true,
+      gdpr: true,
+      admin: true,
+      oauth: true,
+      totp2fa: true,
+      multiOrg: true,
+      usageMetering: false,
       outboundWebhooks: false,
     },
-  } satisfies ProductConfig
+  } satisfies ProductConfig;
   ```
 
 - Add `ProductConfig` type to `packages/types/src/index.ts`
 - Add `.env.product.example` (empty file with a comment block explaining it is for product-specific vars)
 
 **Tests**
+
 - `product.config.py` imports cleanly: `python -c "from product.config import MODULES"`
 - `product.config.ts` satisfies the `ProductConfig` type: `pnpm type-check` clean
 
 **Done when**
+
 - [ ] Both config files present and importable
 - [ ] `ProductConfig` type exported from `@forge/types`
 
@@ -2405,12 +2693,15 @@ For each of `packages/{ui,api-client,types,hooks,validation,utils}`:
 > Ref: conversation §"How it works at each layer"
 
 ### T-060 Backend module registry + loader
+
 > needs: T-059, T-003
 
 **Goal** The single source of truth for which modules are active. Validates dependency rules at startup. Every subsequent module registers here.
 
 **Build**
+
 - `backend/app/core/modules.py`:
+
   ```python
   from __future__ import annotations
   from dataclasses import dataclass, field
@@ -2443,6 +2734,7 @@ For each of `packages/{ui,api-client,types,hooks,validation,utils}`:
   ```
 
 - `backend/app/core/module_loader.py`:
+
   ```python
   from functools import lru_cache
   from app.core.modules import EnabledModules, ModuleName
@@ -2479,12 +2771,14 @@ For each of `packages/{ui,api-client,types,hooks,validation,utils}`:
 - Call `get_modules()` in `app/main.py` lifespan startup (before any router is registered) so misconfiguration fails loudly at boot
 
 **Tests** (100% coverage on `module_loader.py`)
+
 - `validate_modules` with `notifications.enabled=True, billing.enabled=False` → `RuntimeError` with clear message naming both modules
 - `validate_modules` with valid config → no exception
 - `get_modules()` is cached: calling twice returns same object, product.config only imported once
 - Override via `pytest` monkeypatch: disable billing → `is_enabled("billing")` returns False
 
 **Done when**
+
 - [ ] Dependency-violation test passes with exact error message
 - [ ] Startup wires `get_modules()` call
 - [ ] 100% coverage
@@ -2492,12 +2786,15 @@ For each of `packages/{ui,api-client,types,hooks,validation,utils}`:
 ---
 
 ### T-061 Conditional router registration
+
 > needs: T-060, T-022, T-027, T-031
 
 **Goal** Routers for optional modules are only registered when their module is enabled. Disabled modules return 404 on every path — they do not exist.
 
 **Build**
+
 - Rewrite `backend/app/api/v1/__init__.py` to use `build_router()`:
+
   ```python
   from app.core.module_loader import get_modules
   from fastapi import APIRouter
@@ -2543,24 +2840,29 @@ For each of `packages/{ui,api-client,types,hooks,validation,utils}`:
   ```
 
 **Tests**
+
 - `billing=False` → `GET /api/v1/billing/plans` returns 404
-- `billing=True`  → `GET /api/v1/billing/plans` returns 200
+- `billing=True` → `GET /api/v1/billing/plans` returns 200
 - Disabled module routes are absent from `GET /openapi.json`
 - All always-on routes remain reachable regardless of module config
 
 **Done when**
+
 - [ ] All routing toggle tests pass
 - [ ] OpenAPI schema test passes
 
 ---
 
 ### T-062 Conditional Alembic migrations
+
 > needs: T-060, T-010
 
 **Goal** `alembic upgrade head` only creates tables for enabled modules. A product with billing disabled has no billing tables — ever.
 
 **Build**
+
 - Reorganise `alembic/versions/` into sub-directories by module:
+
   ```
   alembic/versions/
   ├── core/                    ← always runs
@@ -2581,6 +2883,7 @@ For each of `packages/{ui,api-client,types,hooks,validation,utils}`:
   ```
 
 - Update `alembic/env.py` to conditionally import models:
+
   ```python
   from app.core.module_loader import get_modules
 
@@ -2607,6 +2910,7 @@ For each of `packages/{ui,api-client,types,hooks,validation,utils}`:
   ```
 
 - Alembic's `include_object` hook filters migration objects by module:
+
   ```python
   # Tables that belong to each optional module
   MODULE_TABLES: dict[str, set[str]] = {
@@ -2629,12 +2933,14 @@ For each of `packages/{ui,api-client,types,hooks,validation,utils}`:
 - `Makefile migrate-plan` target: prints a summary of which module migrations will run before executing
 
 **Tests**
+
 - `billing=False` → autogenerate produces no `plan`, `subscription`, or `webhookevent` tables
-- `billing=True`  → those tables are present
+- `billing=True` → those tables are present
 - Round-trip (up → down → up) with billing disabled → clean
 - Enabling billing on an existing disabled-billing DB (run upgrade head) → billing tables created from scratch correctly
 
 **Done when**
+
 - [ ] All migration toggle tests pass
 - [ ] `make migrate-plan` shows a human-readable module summary
 - [ ] Migration directory structure matches the layout above
@@ -2642,12 +2948,15 @@ For each of `packages/{ui,api-client,types,hooks,validation,utils}`:
 ---
 
 ### T-063 Public config endpoint + frontend module awareness
+
 > needs: T-060, T-038, T-040
 
 **Goal** The backend exposes one unauthenticated endpoint that tells every frontend surface exactly which modules are active. Frontend routes, nav items, and UI sections are driven entirely by this response — no hardcoded flags.
 
 **Build**
+
 - `backend/app/api/v1/config.py`:
+
   ```python
   from app.core.module_loader import get_modules
   from app.core.config import get_settings
@@ -2681,45 +2990,46 @@ For each of `packages/{ui,api-client,types,hooks,validation,utils}`:
   - Cache-Control: `public, max-age=300` (5 min) — safe to CDN-cache
 
 - `packages/hooks/src/useModules.ts`:
+
   ```typescript
-  import { useQuery } from "@tanstack/react-query"
-  import { apiClient } from "@forge/api-client"
+  import { useQuery } from "@tanstack/react-query";
+  import { apiClient } from "@forge/api-client";
 
   export interface ActiveModules {
-    billing:          boolean
-    notifications:    boolean
-    fileStorage:      boolean
-    featureFlags:     boolean
-    gdpr:             boolean
-    admin:            boolean
-    oauth:            boolean
-    totp2fa:          boolean
-    multiOrg:         boolean
-    usageMetering:    boolean
-    outboundWebhooks: boolean
+    billing: boolean;
+    notifications: boolean;
+    fileStorage: boolean;
+    featureFlags: boolean;
+    gdpr: boolean;
+    admin: boolean;
+    oauth: boolean;
+    totp2fa: boolean;
+    multiOrg: boolean;
+    usageMetering: boolean;
+    outboundWebhooks: boolean;
   }
 
   export function useModules(): ActiveModules {
     const { data } = useQuery({
-      queryKey:  ["config"],
-      queryFn:   () => apiClient.config.getConfig(),
-      staleTime: Infinity,   // never changes at runtime — requires redeploy
-      gcTime:    Infinity,
-    })
+      queryKey: ["config"],
+      queryFn: () => apiClient.config.getConfig(),
+      staleTime: Infinity, // never changes at runtime — requires redeploy
+      gcTime: Infinity,
+    });
     // deny-by-default: if the config hasn't loaded yet, all optional modules are off
     return {
-      billing:          data?.modules.billing          ?? false,
-      notifications:    data?.modules.notifications    ?? false,
-      fileStorage:      data?.modules.file_storage     ?? false,
-      featureFlags:     data?.modules.feature_flags    ?? false,
-      gdpr:             data?.modules.gdpr             ?? false,
-      admin:            data?.modules.admin            ?? false,
-      oauth:            data?.modules.oauth            ?? false,
-      totp2fa:          data?.modules.totp_2fa         ?? false,
-      multiOrg:         data?.modules.multi_org        ?? false,
-      usageMetering:    data?.modules.usage_metering   ?? false,
+      billing: data?.modules.billing ?? false,
+      notifications: data?.modules.notifications ?? false,
+      fileStorage: data?.modules.file_storage ?? false,
+      featureFlags: data?.modules.feature_flags ?? false,
+      gdpr: data?.modules.gdpr ?? false,
+      admin: data?.modules.admin ?? false,
+      oauth: data?.modules.oauth ?? false,
+      totp2fa: data?.modules.totp_2fa ?? false,
+      multiOrg: data?.modules.multi_org ?? false,
+      usageMetering: data?.modules.usage_metering ?? false,
       outboundWebhooks: data?.modules.outbound_webhooks ?? false,
-    }
+    };
   }
   ```
   - No JSX imports (lint rule enforced per §0)
@@ -2728,6 +3038,7 @@ For each of `packages/{ui,api-client,types,hooks,validation,utils}`:
 - Mobile: identical query in `apps/mobile/src/lib/config.ts` — same endpoint, same staleTime
 
 **Tests**
+
 - `GET /api/v1/config` reflects the current module config accurately
 - `billing=False` → response has `modules.billing === false`
 - Response is accessible without an auth token
@@ -2736,6 +3047,7 @@ For each of `packages/{ui,api-client,types,hooks,validation,utils}`:
 - `useModules()` returns the correct values after mock response
 
 **Done when**
+
 - [ ] Endpoint tests pass
 - [ ] Hook deny-by-default test passes
 - [ ] `pnpm type-check` clean
@@ -2743,14 +3055,17 @@ For each of `packages/{ui,api-client,types,hooks,validation,utils}`:
 ---
 
 ### T-064 Conditional frontend routes + nav
+
 > needs: T-063, T-042, T-044
 
 **Goal** Disabled module routes do not exist in the router (404, not hidden). Nav items, settings tabs, and login options are derived from `useModules()` — zero hardcoded conditionals scattered through the codebase.
 
 **Build**
+
 - `apps/web/src/router.tsx` — replace hardcoded route list with module-aware builder:
+
   ```typescript
-  import { useModules } from "@forge/hooks"
+  import { useModules } from "@forge/hooks";
 
   // Called once at app startup after config is fetched
   export function buildRoutes(modules: ActiveModules) {
@@ -2770,17 +3085,18 @@ For each of `packages/{ui,api-client,types,hooks,validation,utils}`:
       settingsMembersRoute,
 
       // Conditional routes — absent entirely if module is off
-      ...(modules.billing          ? [settingsBillingRoute, upgradeRoute]             : []),
-      ...(modules.notifications    ? [settingsNotificationsRoute]                     : []),
-      ...(modules.fileStorage      ? [settingsFilesRoute, filesRoute]                 : []),
-      ...(modules.gdpr             ? [dataPrivacyRoute]                               : []),
-      ...(modules.admin            ? [adminRoute]                                     : []),
-      ...(modules.oauth            ? [oauthCallbackRoute]                             : []),
-    ]
+      ...(modules.billing ? [settingsBillingRoute, upgradeRoute] : []),
+      ...(modules.notifications ? [settingsNotificationsRoute] : []),
+      ...(modules.fileStorage ? [settingsFilesRoute, filesRoute] : []),
+      ...(modules.gdpr ? [dataPrivacyRoute] : []),
+      ...(modules.admin ? [adminRoute] : []),
+      ...(modules.oauth ? [oauthCallbackRoute] : []),
+    ];
   }
   ```
 
 - `apps/web/src/layouts/AppLayout.tsx` — sidebar nav derived from modules:
+
   ```typescript
   export function AppLayout() {
     const modules = useModules()
@@ -2797,6 +3113,7 @@ For each of `packages/{ui,api-client,types,hooks,validation,utils}`:
   ```
 
 - `apps/web/src/features/auth/LoginPage.tsx` — OAuth buttons only when `modules.oauth`:
+
   ```typescript
   const modules = useModules()
   // ...
@@ -2815,6 +3132,7 @@ For each of `packages/{ui,api-client,types,hooks,validation,utils}`:
 - Org switcher in sidebar only when `modules.multiOrg`
 
 **Tests** (Vitest + RTL)
+
 - `modules.billing=false` → Settings renders without Billing tab; navigating to `/settings/billing` is a 404
 - `modules.oauth=false` → Login page renders without OAuth buttons
 - `modules.multiOrg=false` → Org switcher absent from sidebar
@@ -2822,6 +3140,7 @@ For each of `packages/{ui,api-client,types,hooks,validation,utils}`:
 - A11y: axe-core clean on login with oauth disabled and oauth enabled
 
 **Done when**
+
 - [ ] All conditional route tests pass
 - [ ] All conditional nav tests pass
 - [ ] Zero hardcoded `if (BILLING_ENABLED)` — all conditions go through `useModules()`
@@ -2829,12 +3148,15 @@ For each of `packages/{ui,api-client,types,hooks,validation,utils}`:
 ---
 
 ### T-065 Billing-disabled graceful fallback
+
 > needs: T-064, T-031, T-036
 
 **Goal** When billing is disabled, `require_feature()` becomes a no-op (everything allowed), `plan_id` on Organization is ignored, and the seed script skips Plan creation. No code path should crash when Stripe keys are absent.
 
 **Build**
+
 - `backend/app/modules/billing/dependencies.py` — update `require_feature`:
+
   ```python
   def require_feature(feature: str, minimum: int | None = None):
       async def checker(org = Depends(get_current_org)):
@@ -2847,13 +3169,16 @@ For each of `packages/{ui,api-client,types,hooks,validation,utils}`:
   ```
 
 - `backend/app/core/config.py` — Stripe keys become optional when billing is disabled:
+
   ```python
   STRIPE_SECRET_KEY:    str | None = None
   STRIPE_WEBHOOK_SECRET: str | None = None
   ```
+
   Startup validation: if `billing.enabled` and either key is `None` → `RuntimeError`. If `billing.disabled` and keys are absent → silently skip.
 
 - `backend/app/core/seed.py` — skip Plan creation when billing is disabled:
+
   ```python
   from app.core.module_loader import is_enabled
 
@@ -2867,24 +3192,29 @@ For each of `packages/{ui,api-client,types,hooks,validation,utils}`:
 - `backend/app/modules/tenancy/models.py` — `Organization.plan_id` is already nullable (`UUID | None`); document explicitly that it is intentionally null in non-billing products
 
 **Tests**
+
 - `billing=False`, no Stripe keys in env → app starts and passes `/health/ready`
 - `billing=False` → `require_feature("anything")` returns without raising
 - `billing=True`, `STRIPE_SECRET_KEY=None` → startup raises with clear message
 - Seed with `billing=False` → no Plan rows created, no error
 
 **Done when**
+
 - [ ] App starts cleanly with `billing=False` and no Stripe env vars
 - [ ] All graceful-fallback tests pass
 
 ---
 
 ### T-066 Module toggle smoke test + updated runbook
+
 > needs: T-058, T-059, T-060, T-061, T-062, T-063, T-064, T-065
 
 **Goal** Prove the toggle system works end-to-end with two representative configurations before Phase 2 adds more modules.
 
 **Build**
+
 - `backend/tests/modules/test_module_toggles.py` — parametrized test matrix:
+
   ```python
   MODULE_CONFIGS = [
       # (config_name, modules_override, expected_absent_routes, expected_absent_tables)
@@ -2917,27 +3247,31 @@ For each of `packages/{ui,api-client,types,hooks,validation,utils}`:
   ```
 
 - `docs/runbooks/module-toggle-guide.md`:
+
   ```markdown
   # Module toggle guide
 
   ## Disabling billing (example: internal tool, no Stripe)
+
   1. In `backend/product.config.py`:
-       billing=ModuleConfig(enabled=False),
-       notifications=ModuleConfig(enabled=True),   # OK — notifications works standalone
+     billing=ModuleConfig(enabled=False),
+     notifications=ModuleConfig(enabled=True), # OK — notifications works standalone
   2. In `product.config.ts`: set `billing: false, notifications: true`
   3. Remove STRIPE_SECRET_KEY and STRIPE_WEBHOOK_SECRET from .env
-  4. `make migrate`  — billing tables skipped
-  5. `make dev`      — confirm /health/ready returns 200
+  4. `make migrate` — billing tables skipped
+  5. `make dev` — confirm /health/ready returns 200
   6. `GET /api/v1/config` — confirm modules.billing === false
   7. Open the web app — confirm Billing tab absent from Settings
 
   ## Re-enabling a disabled module on an existing product
+
   1. Set enabled=True in product.config.py and product.config.ts
   2. `make migrate` — module's tables created from existing migrations
-  3. `make seed`    — module's seed data created if applicable
+  3. `make seed` — module's seed data created if applicable
   4. Redeploy
 
   ## Adding a new product-specific module
+
   1. `make new-module NAME=invoices`
   2. Add INVOICES = ModuleConfig(enabled=True) to product.config.py
   3. Register router conditionally in build_router() using is_enabled("invoices")
@@ -2953,6 +3287,7 @@ For each of `packages/{ui,api-client,types,hooks,validation,utils}`:
 **Tests** — the parametrized matrix above covers this task's requirements
 
 **Done when**
+
 - [ ] All three config scenarios in the test matrix pass
 - [ ] Runbook documents the toggle workflow for disabling and re-enabling
 - [ ] `make new-module` generates a module that registers itself correctly in `build_router()`
@@ -2964,12 +3299,15 @@ For each of `packages/{ui,api-client,types,hooks,validation,utils}`:
 > Why now: every task from Phase 2 onwards adds user-facing strings (notification copy, email templates, billing UI, file management). Establishing i18n here means each new string is added the right way from the start. Retrofitting i18n after Phase 2 means rewriting every email template, every notification body, and every UI string.
 
 ### T-067 Shared i18n package + key conventions
+
 > needs: T-038 (shared packages exist), T-059 (product config)
 
 **Goal** A single source-of-truth translation package consumed by backend, web, and mobile. English locale is fully populated; one additional locale (Finnish) seeded as a worked example.
 
 **Build**
+
 - New workspace package `packages/i18n/`:
+
   ```
   packages/i18n/
   ├── package.json              # name: @forge/i18n
@@ -3001,26 +3339,31 @@ For each of `packages/{ui,api-client,types,hooks,validation,utils}`:
   - Source-of-truth English keys are required before adding any other locale
 
 - `SUPPORTED_LOCALES` is overridable in `product.config.py` and `product.config.ts`:
+
   ```python
   # product.config.py
   SUPPORTED_LOCALES = ["en", "fi"]        # control which locales ship in this product
   DEFAULT_LOCALE = "en"
   ```
+
   Locales not in the list are not bundled by web/mobile and not loadable by the backend.
 
 - `scripts/generate-types.ts` walks `locales/en/` and emits a `keys.ts` exporting:
+
   ```typescript
   export type TranslationKey =
     | "common.button.save"
     | "common.button.cancel"
-    | "auth.login.email_label"
-    // ... auto-generated from every leaf key in locales/en/*.json
+    | "auth.login.email_label";
+  // ... auto-generated from every leaf key in locales/en/*.json
   ```
+
   This makes typos in translation keys a TypeScript error.
 
 - Migration of existing strings: Phase 1 emails (`packages/email-templates` from T-106 if reached, else the Jinja templates from T-035) are scanned; every visible English string moves to `locales/en/emails.json`. The templates reference the keys, not the strings.
 
 **Tests**
+
 - `pnpm --filter @forge/i18n build` produces valid JSON for every locale
 - `keys.ts` is regenerated and matches `locales/en/`
 - A missing key in `fi` falls back to the `en` value (not the key string)
@@ -3028,6 +3371,7 @@ For each of `packages/{ui,api-client,types,hooks,validation,utils}`:
 - ICU pluralisation: `t("messages.count", {count: 1})` → "1 message", `count: 5` → "5 messages"
 
 **Done when**
+
 - [ ] `@forge/i18n` builds cleanly
 - [ ] Both `en` and `fi` locales present (fi may be partial — worked example, not full coverage)
 - [ ] Type generation works and is wired into the turbo pipeline
@@ -3036,12 +3380,15 @@ For each of `packages/{ui,api-client,types,hooks,validation,utils}`:
 ---
 
 ### T-068 Backend i18n — locale resolution + retrofit of Phase 1 strings
+
 > needs: T-067, T-006, T-007
 
 **Goal** Backend resolves the user's locale per request and uses it for every user-facing string (errors, emails, validation). Phase 1's hardcoded English is migrated to translation keys.
 
 **Build**
+
 - `backend/app/core/i18n.py`:
+
   ```python
   _translations: dict[str, dict[str, Any]] = {}   # loaded once at startup
 
@@ -3060,6 +3407,7 @@ For each of `packages/{ui,api-client,types,hooks,validation,utils}`:
   ```
 
 - `backend/app/middleware/locale.py`:
+
   ```python
   async def resolve_locale(request: Request, call_next):
       """Resolves locale in this order, attaches to request.state.locale:
@@ -3068,11 +3416,13 @@ For each of `packages/{ui,api-client,types,hooks,validation,utils}`:
       3. DEFAULT_LOCALE
       """
   ```
+
   Registered after auth middleware so user.locale takes precedence when available.
 
 - New dependency `get_locale(request: Request) -> str` for use in routers.
 
 - `DomainError` extended to carry a translation key, not a hardcoded English message:
+
   ```python
   class DomainError(Exception):
       status_code: int = 400
@@ -3083,6 +3433,7 @@ For each of `packages/{ui,api-client,types,hooks,validation,utils}`:
                    *, fallback: str = "An error occurred",
                    details: dict | None = None): ...
   ```
+
   The global exception handler from T-006 now calls `t(error.message_key, locale=request.state.locale)` and falls back to `error.fallback` if the key is missing.
 
 - Update T-006 subclasses: `PlanLimitError("errors.plan_limit_reached", fallback="Plan limit reached")` etc. All existing English literals retrofit to keys defined in `locales/en/errors.json`.
@@ -3097,6 +3448,7 @@ For each of `packages/{ui,api-client,types,hooks,validation,utils}`:
 - Backfill: every email template subject/body, every `DomainError` raise, every validation message in Pydantic schemas (use `Field(... description="users.email.invalid")` pattern or a translation hook on the global validation handler) — all converted.
 
 **Tests**
+
 - `resolve_locale` middleware: authenticated user with `locale="fi"` → `request.state.locale == "fi"`
 - `Accept-Language: fi,en;q=0.5` → resolves to `fi` if `fi` in SUPPORTED_LOCALES, else `en`
 - `Accept-Language: de` (not supported) → falls back to default
@@ -3107,6 +3459,7 @@ For each of `packages/{ui,api-client,types,hooks,validation,utils}`:
 - 100% coverage on `i18n.py` and the locale middleware
 
 **Done when**
+
 - [ ] All Phase 1 user-facing strings live in `@forge/i18n` keys
 - [ ] No hardcoded English in error messages, email templates, or validation messages
 - [ ] Locale resolution test matrix passes
@@ -3116,11 +3469,13 @@ For each of `packages/{ui,api-client,types,hooks,validation,utils}`:
 ---
 
 ### T-069 Web i18n — react-i18next + language switcher + retrofit
+
 > needs: T-067, T-043, T-044
 
 **Goal** The web app reads translations from `@forge/i18n`, switches language live, persists the user's choice, and Phase 1 UI strings are migrated.
 
 **Build**
+
 - `apps/web/src/i18n.ts`:
   - Initialise `react-i18next` with `@forge/i18n` as the resource source
   - Backend `/config` response provides the supported locale list at runtime
@@ -3129,18 +3484,21 @@ For each of `packages/{ui,api-client,types,hooks,validation,utils}`:
   - Suspense mode disabled — locale resources are bundled, not lazy-loaded for the first locale; additional locales lazy-load on switch
 
 - `packages/hooks/src/useLocale.ts`:
+
   ```typescript
   export function useLocale(): {
-    locale: string
-    supportedLocales: string[]
-    setLocale: (locale: string) => Promise<void>   // updates User.locale + i18n
-  }
+    locale: string;
+    supportedLocales: string[];
+    setLocale: (locale: string) => Promise<void>; // updates User.locale + i18n
+  };
   ```
+
   Persists by calling `PATCH /api/v1/me { locale }` so the choice survives device changes. No JSX in this package (lint rule).
 
 - Language switcher component in `packages/ui/`:
+
   ```tsx
-  <LocaleSwitcher />   // dropdown of supported locales with native names
+  <LocaleSwitcher /> // dropdown of supported locales with native names
   ```
 
 - Settings → Profile page: language preference dropdown using `<LocaleSwitcher />`.
@@ -3154,6 +3512,7 @@ For each of `packages/{ui,api-client,types,hooks,validation,utils}`:
 - `apps/web/eslint.config.ts`: enable `react/jsx-no-literals` for JSX children (with the `// i18n-ok` escape hatch documented).
 
 **Tests**
+
 - Vitest + RTL: render login page → assert `screen.getByLabelText(t("auth.login.email_label", { lng: "en" }))`
 - **First-visit detection:** mock `navigator.language = "fi-FI"`, render the app with no localStorage and no auth → app initialises in Finnish; `<html lang="fi">` attribute set correctly
 - **Unsupported system language falls back:** mock `navigator.language = "de-DE"` with `SUPPORTED_LOCALES = ["en", "fi"]` → app initialises in English (DEFAULT_LOCALE)
@@ -3163,6 +3522,7 @@ For each of `packages/{ui,api-client,types,hooks,validation,utils}`:
 - Lint guard: a deliberate `<button>Save</button>` literal in test fixture fails lint
 
 **Done when**
+
 - [ ] All Phase 1 web auth + settings strings live in `@forge/i18n`
 - [ ] Language switcher works end-to-end against the backend
 - [ ] User's choice persists across sessions and devices (stored on `User.locale`)
@@ -3172,11 +3532,13 @@ For each of `packages/{ui,api-client,types,hooks,validation,utils}`:
 ---
 
 ### T-070 Mobile i18n — expo-localization + retrofit
+
 > needs: T-067, T-052
 
 **Goal** Mobile auto-detects device locale on first launch, allows manual override in settings, and shares the exact same translation keys as web.
 
 **Build**
+
 - `apps/mobile/src/lib/i18n.ts`:
   - Same `react-i18next` setup as web, with mobile-specific detector
   - First-launch flow: `expo-localization.getLocales()[0].languageCode` → match against `SUPPORTED_LOCALES` from `/config` → fallback to `DEFAULT_LOCALE`
@@ -3192,12 +3554,14 @@ For each of `packages/{ui,api-client,types,hooks,validation,utils}`:
 - Push notification body: backend already sends localised content (per T-068's `recipient.locale` lookup), so no client-side change needed — the notification arrives pre-translated.
 
 **Tests**
+
 - Mock `expo-localization` returning `fi` → on first launch i18n initialises in Finnish
 - User logs in with `User.locale = "en"` → app re-renders in English (user preference overrides device default)
 - Mocked system language change event → app re-renders
 - React Native ESLint rule (`react-native/no-raw-text` with allowlist for the `<Text>` component) catches literal text in non-Text components
 
 **Done when**
+
 - [ ] All Phase 1 mobile screens use `@forge/i18n` keys
 - [ ] Device locale detected on first launch
 - [ ] User profile locale overrides device locale after login
@@ -3243,13 +3607,16 @@ For each of `packages/{ui,api-client,types,hooks,validation,utils}`:
 > Architectural rule: one `Notification` model, three delivery channels. The service decides channels from user preferences. Adding a new channel later (SMS, Slack) is one new delivery method on the service — no model changes.
 
 ### T-101 Notification + PushToken models + migration
+
 > HTML ref: §"Notifications" → "Data model"
 > needs: T-010, T-025
 
 **Goal** Two new tables: `Notification` (the notification record itself) and `PushToken` (mobile device tokens for push delivery).
 
 **Build**
+
 - `backend/app/modules/notifications/models.py`:
+
   ```python
   class Notification(SQLModel, table=True):  # UUIDPKMixin + TimestampMixin + OrgScopedMixin
       user_id: UUID = Field(foreign_key="user.id", index=True)
@@ -3270,16 +3637,19 @@ For each of `packages/{ui,api-client,types,hooks,validation,utils}`:
       device_label: str | None = None
       last_used_at: datetime
   ```
+
 - Composite index on `(user_id, read_at)` for the "unread count" query (extremely hot path)
 - Composite index on `(org_id, user_id, created_at DESC, id DESC)` for cursor pagination
 - Migration: `alembic revision --autogenerate -m "notifications_tables"`
 
 **Tests**
+
 - Migration round-trip
 - `PushToken.token` unique constraint enforced
 - Insertion of two notifications for same user → both queryable
 
 **Done when**
+
 - [ ] Migration applies both directions cleanly
 - [ ] Indexes present (assert via `pg_indexes` query in test)
 - [ ] `mypy --strict` clean
@@ -3287,13 +3657,16 @@ For each of `packages/{ui,api-client,types,hooks,validation,utils}`:
 ---
 
 ### T-101.5 Notification preferences on User
+
 > HTML ref: §"Notifications" → "User preferences"
 > needs: T-013, T-101
 
 **Goal** `User.notification_preferences` JSONB already exists from T-013; this task defines the schema and migration to backfill defaults.
 
 **Build**
+
 - `backend/app/modules/notifications/preferences.py`:
+
   ```python
   DEFAULT_PREFERENCES: dict[str, dict[str, bool]] = {
       "member_invited":    {"email": True,  "in_app": True,  "push": False},
@@ -3307,6 +3680,7 @@ For each of `packages/{ui,api-client,types,hooks,validation,utils}`:
       """Return enabled channels for this user + this notification type.
       Falls back to DEFAULT_PREFERENCES if the user has not customised."""
   ```
+
 - Pydantic schema `NotificationPreferencesUpdate` for the settings page
 - Idempotent backfill job `backfill_notification_preferences(ctx)` in `app/workers/jobs/`:
   - Iterate users with empty `notification_preferences`
@@ -3314,23 +3688,27 @@ For each of `packages/{ui,api-client,types,hooks,validation,utils}`:
   - Run via `make seed` and once on first deploy
 
 **Tests**
+
 - `channels_for({}, "payment_failed")` returns `["email", "in_app", "push"]` (defaults)
 - User opts out of email for `payment_failed` → `channels_for(prefs, "payment_failed")` returns `["in_app", "push"]`
 - Backfill idempotent: running twice produces no extra writes
 
 **Done when**
+
 - [ ] Backfill job tests pass
 - [ ] All notification types from §"User preferences" represented
 
 ---
 
 ### T-102 NotificationService + email/in-app/push fan-out
+
 > HTML ref: §"Notifications" → "Delivery channels"
 > needs: T-035, T-101, T-101.5
 
 **Goal** One service method enqueues a notification; channel fan-out happens inside the service driven by user preferences.
 
 **Build**
+
 - `backend/app/modules/notifications/repository.py`:
   - `NotificationRepository(session, org_id)` extends `BaseRepository[Notification]`
   - `list_for_user(user_id, after_cursor, limit, unread_only: bool = False) -> tuple[list[Notification], cursor]`
@@ -3355,6 +3733,7 @@ For each of `packages/{ui,api-client,types,hooks,validation,utils}`:
   - Audit log entry on every send (`action="notification.sent"`, includes channels and type)
 
 **Tests**
+
 - User with email-only preference → only `send_email_job` enqueued, no push job
 - User with push enabled but no `PushToken` → push job runs but no-ops gracefully
 - Cross-tenant: `mark_read` for a notification owned by org B from a session in org A → `NotFoundError`
@@ -3363,6 +3742,7 @@ For each of `packages/{ui,api-client,types,hooks,validation,utils}`:
 - 100% coverage on `NotificationService`
 
 **Done when**
+
 - [ ] All fan-out tests pass
 - [ ] Idempotency test passes
 - [ ] 100% coverage on `service.py`
@@ -3370,12 +3750,14 @@ For each of `packages/{ui,api-client,types,hooks,validation,utils}`:
 ---
 
 ### T-103 SSE in-app notification stream
+
 > HTML ref: §"Notifications" → "In-app (SSE)"
 > needs: T-102
 
 **Goal** A single SSE endpoint streams notifications to the user's open browser tabs in real time.
 
 **Build**
+
 - `backend/app/modules/notifications/sse.py`:
   - `GET /api/v1/notifications/stream` (auth required via JWT):
     - Subscribes to Redis pub/sub channel `notif:user:{user_id}`
@@ -3391,6 +3773,7 @@ For each of `packages/{ui,api-client,types,hooks,validation,utils}`:
   - `PATCH /api/v1/me/notification-preferences` — update preferences
 
 **Tests**
+
 - SSE: publish to Redis channel → connected client receives the event within 1 s
 - Reconnect: after disconnect, no orphan subscription remains (assert Redis pubsub count)
 - 6th connection from same user → 429
@@ -3398,6 +3781,7 @@ For each of `packages/{ui,api-client,types,hooks,validation,utils}`:
 - Rate-limited: 100/min on PATCH endpoints
 
 **Done when**
+
 - [ ] SSE test green using an in-process Redis publisher
 - [ ] Connection cap test passes
 - [ ] All endpoints in standard envelope format
@@ -3405,12 +3789,14 @@ For each of `packages/{ui,api-client,types,hooks,validation,utils}`:
 ---
 
 ### T-104 Web notification center
+
 > HTML ref: §"React web app" → "Notification center + SSE feed"
 > needs: T-103, T-044
 
 **Goal** Bell icon in the topbar with unread count, dropdown feed, mark-read, mark-all-read, and the SSE subscription.
 
 **Build**
+
 - `apps/web/src/features/notifications/`:
   - `NotificationBell.tsx`: lucide-react `Bell` icon + numeric badge; opens the dropdown
   - `NotificationFeed.tsx`: virtualized list of last 50 notifications (TanStack Virtual); infinite scroll for older via cursor; each row: title, body, relative time (`formatDistanceToNow`), action button if `action_url` set
@@ -3427,6 +3813,7 @@ For each of `packages/{ui,api-client,types,hooks,validation,utils}`:
 - Toast on new notification (sonner) — only when document is visible
 
 **Tests** (Vitest + RTL + MSW)
+
 - Bell renders unread count
 - New notification via mocked SSE event appears at top
 - Mark-read clears badge; mark-all-read clears the list visually
@@ -3434,6 +3821,7 @@ For each of `packages/{ui,api-client,types,hooks,validation,utils}`:
 - Preferences page: toggle email off → API called with correct payload
 
 **Done when**
+
 - [ ] All tests pass
 - [ ] Bell + dropdown work end-to-end against the local backend
 - [ ] No JSX in `@forge/hooks` (lint check)
@@ -3441,12 +3829,14 @@ For each of `packages/{ui,api-client,types,hooks,validation,utils}`:
 ---
 
 ### T-105 Mobile push token registration + handler
+
 > HTML ref: §"React Native" → "Push notifications"
 > needs: T-102, T-047
 
 **Goal** Mobile app registers an Expo push token on first authenticated launch and handles received pushes.
 
 **Build**
+
 - `apps/mobile/src/lib/push.ts`:
   - `async function registerPushToken(): Promise<void>`:
     - Request permission via `expo-notifications`
@@ -3462,24 +3852,28 @@ For each of `packages/{ui,api-client,types,hooks,validation,utils}`:
 - `apps/mobile/src/features/notifications/`: in-app notification list screen mirroring the web feed
 
 **Tests**
+
 - Mock `expo-notifications`: token retrieval → POST called with correct payload
 - Permission denied → no POST, no error
 - Tap navigation: notification with `action_url: "/_app/settings/billing"` → router pushes the route
 - Token refresh: simulated event → second POST with new token
 
 **Done when**
+
 - [ ] All push tests pass
 - [ ] Manual smoke: physical iOS + Android device receives a test push from the backend
 
 ---
 
 ### T-106 Email templates package (React Email)
+
 > HTML ref: §"Notifications" → "Email (Resend)"
 > needs: T-035
 
 **Goal** Replace the Jinja2 templates from T-035 with type-safe React Email components, one per notification type. Better preview tooling, shared design tokens with the marketing site (Phase 4).
 
 **Build**
+
 - New workspace package `packages/email-templates`:
   - Deps: `@react-email/components`, `@react-email/render`
   - One component per template, all in `src/templates/`:
@@ -3494,11 +3888,13 @@ For each of `packages/{ui,api-client,types,hooks,validation,utils}`:
 - Preview server: `pnpm --filter @forge/email-templates dev` serves rendered previews at `localhost:3030` with hot reload
 
 **Tests**
+
 - Each template renders without error for example props
 - HTML output passes a basic email-client compatibility check (no flex/grid, table-based layout, inline styles)
 - Plain-text fallback present and non-empty
 
 **Done when**
+
 - [ ] All 10 templates render
 - [ ] Email worker switched from Jinja to React Email
 - [ ] Old Jinja templates deleted (no dead code)
@@ -3513,12 +3909,14 @@ For each of `packages/{ui,api-client,types,hooks,validation,utils}`:
 > Architectural rule: **files never proxy through the API**. Clients upload directly to object storage via presigned URLs. The API only manages metadata.
 
 ### T-110 StoredFile model + migration
+
 > HTML ref: §"File storage" → "StoredFile model"
 > needs: T-010, T-025
 
 **Goal** Single table tracking all file metadata, with virus-scan status and soft delete.
 
 **Build**
+
 - `backend/app/modules/storage/models.py`:
   ```python
   class StoredFile(SQLModel, table=True):  # UUIDPKMixin + TimestampMixin + SoftDeleteMixin + OrgScopedMixin
@@ -3538,23 +3936,28 @@ For each of `packages/{ui,api-client,types,hooks,validation,utils}`:
 - Migration: `alembic revision --autogenerate -m "stored_files"`
 
 **Tests**
+
 - Migration round-trip
 - `key` unique enforced across orgs (key includes org_id prefix so collisions impossible)
 
 **Done when**
+
 - [ ] Migration clean both directions
 - [ ] Indexes verified
 
 ---
 
 ### T-111 StorageBackend protocol + S3 / R2 / MinIO implementations
+
 > HTML ref: §"File storage" → "Storage backend interface"
 > needs: T-003
 
 **Goal** A single `StorageBackend` interface with three implementations selected by `settings.STORAGE_BACKEND`.
 
 **Build**
+
 - `backend/app/modules/storage/backend.py`:
+
   ```python
   @dataclass(frozen=True)
   class PresignedUpload:
@@ -3574,6 +3977,7 @@ For each of `packages/{ui,api-client,types,hooks,validation,utils}`:
       async def delete(self, key: str) -> None: ...
       async def exists(self, key: str) -> bool: ...
   ```
+
 - Implementations in `backend/app/modules/storage/backends/`:
   - `s3.py` — `S3Backend(bucket, region)` using `aioboto3`
   - `r2.py` — extends `S3Backend` with R2's endpoint and signature config (R2 is S3-compatible but needs `signature_version="s3v4"` and `endpoint_url` from settings)
@@ -3586,6 +3990,7 @@ For each of `packages/{ui,api-client,types,hooks,validation,utils}`:
 - Object keys are namespaced: `<org_id>/<bucket>/<uuid>/<filename>` — makes per-tenant access policies straightforward in S3/R2
 
 **Tests** (using MinIO via testcontainers)
+
 - Round-trip presign upload → PUT bytes → `head` returns metadata
 - `delete` removes the object; subsequent `exists` returns False
 - Presigned URL expires (use `freezegun` to advance time)
@@ -3594,13 +3999,14 @@ For each of `packages/{ui,api-client,types,hooks,validation,utils}`:
 
 **Presigned URL security requirements** — these are non-negotiable and must each have a dedicated test asserting the wire format, not just the happy path:
 
-- [ ] **The `content-length-range` policy condition is signed into the URL**, not enforced only by application logic. Tampering with the form field after the URL is generated must cause S3 to reject the upload. Test: generate URL with `max_bytes=1024`; attempt PUT of 2048 bytes; assert S3 returns 400 (verified against real S3/MinIO: `content-length-range` is the one POST-policy condition S3 special-cases to `400 EntityTooLarge` — every other condition below returns 403, not 400).
-- [ ] **The `Content-Type` condition is signed as an exact match**, never a wildcard or prefix. `image/jpeg` is acceptable; `image/*` is forbidden. Test: generate URL for `image/jpeg`; attempt PUT with `Content-Type: application/octet-stream`; assert S3 returns 403 (`AccessDenied`, "Invalid according to Policy: Policy Condition failed").
-- [ ] **The `x-amz-server-side-encryption: AES256` header is signed**, not optional. An upload attempt without this header must be rejected by S3. Test: generate URL; strip the encryption header from the PUT; assert S3 returns 403 (`AccessDenied`, same generic policy-condition-failed response as the Content-Type case above).
+- [ ] **The `content-length-range` policy condition is signed into the URL**, not enforced only by application logic. Tampering with the form field after the URL is generated must cause S3 to reject the upload. Test: generate URL with `max_bytes=1024`; attempt PUT of 2048 bytes; assert S3 returns 400.
+- [ ] **The `Content-Type` condition is signed as an exact match**, never a wildcard or prefix. `image/jpeg` is acceptable; `image/*` is forbidden. Test: generate URL for `image/jpeg`; attempt PUT with `Content-Type: application/octet-stream`; assert S3 returns 400.
+- [ ] **The `x-amz-server-side-encryption: AES256` header is signed**, not optional. An upload attempt without this header must be rejected by S3. Test: generate URL; strip the encryption header from the PUT; assert S3 returns 400.
 - [ ] **The exact object key is bound to the signature** — the client cannot upload to any key other than the one your service generated. Test: generate URL for key `org-a/files/uuid-1/x.jpg`; attempt PUT to `org-b/files/uuid-2/y.jpg`; assert S3 returns 403.
 - [ ] **The expiry is short and configurable**, defaulting to 600 seconds (10 min) and never exceeding 3600 (1 h) for uploads. Test: `freezegun` to 11 min in the future; attempt PUT; assert S3 returns 403.
 
 **Done when**
+
 - [ ] Backend tests green against real MinIO
 - [ ] All three implementations share the same test suite via fixture parametrisation
 - [ ] All five presigned URL security tests above pass on every backend implementation
@@ -3609,12 +4015,14 @@ For each of `packages/{ui,api-client,types,hooks,validation,utils}`:
 ---
 
 ### T-112 Presign + confirm endpoints (plan-gated)
+
 > HTML ref: §"File storage" → "Upload flow"
 > needs: T-110, T-111, T-031
 
 **Goal** Two endpoints that orchestrate the three-step upload flow; storage quota enforced from plan features.
 
 **Build**
+
 - `backend/app/modules/storage/repository.py`:
   - `StoredFileRepository(session, org_id)` extends `BaseRepository`
   - `total_bytes_for_org(self) -> int` — sum of `size_bytes` where `status="ready"` (cached 60s in Redis with explicit invalidation on file create/delete)
@@ -3646,6 +4054,7 @@ For each of `packages/{ui,api-client,types,hooks,validation,utils}`:
 - All endpoints use `require_feature("storage_gb")` to deny on free plans without storage
 
 **Tests**
+
 - Cross-tenant: org B cannot confirm or download a file owned by org A → 404
 - Quota: presign request that would exceed `plan.features.storage_gb` → 402 `PlanLimitError`
 - Per-file size cap: oversized request → 402
@@ -3664,6 +4073,7 @@ For each of `packages/{ui,api-client,types,hooks,validation,utils}`:
 - [ ] **Cross-tenant presigned URL reuse is impossible** — a presigned URL generated for org A's prefix cannot be used to upload into org B's prefix even by a member of org B with their own valid session. Test: extract URL from org A's presign response; authenticate as a user in org B; attempt PUT; assert S3 rejects via signature mismatch on key.
 
 **Done when**
+
 - [ ] All tests green
 - [ ] Cross-tenant isolation sweep (T-049) extended to include file endpoints
 - [ ] All five orchestration-layer security tests above pass
@@ -3672,12 +4082,14 @@ For each of `packages/{ui,api-client,types,hooks,validation,utils}`:
 ---
 
 ### T-113 Virus scan job
+
 > HTML ref: §"File storage" → "Upload flow" (virus_scan_job step)
 > needs: T-112, T-034
 
 **Goal** Async virus scan that updates `StoredFile.status` to `"infected"` or `"ready"`.
 
 **Build**
+
 - `backend/app/workers/jobs/virus_scan.py`:
   - `virus_scan(ctx, *, file_id: UUID) -> None`:
     1. Load `StoredFile`; abort if `status != "ready"` (already scanned or deleted)
@@ -3694,24 +4106,28 @@ For each of `packages/{ui,api-client,types,hooks,validation,utils}`:
 - Add `clamav` service to `docker-compose.prod.yml` (optional, behind a profile)
 
 **Tests**
+
 - Mock scanner returns "clean" → file stays `status="ready"`, `virus_scan_result="clean"`
 - Mock scanner returns "infected" → file `status="infected"`, object deleted from storage, notification sent
 - Scanner exception → retried 3× then `status="failed"`
 - 100% coverage on `virus_scan.py`
 
 **Done when**
+
 - [ ] All scanner outcomes tested
 - [ ] Infected files are removed from storage (not just flagged)
 
 ---
 
 ### T-114 Web file upload component
+
 > HTML ref: §"File storage" (Web feature implied)
 > needs: T-112, T-041
 
 **Goal** Reusable dropzone component in `@forge/ui` that handles the full three-step flow.
 
 **Build**
+
 - `packages/ui/src/components/FileUploader.tsx`:
   - Props: `bucket?, accept?, maxSize?, onUploaded(file: StoredFileDTO) => void`
   - Drag-and-drop zone + click-to-browse
@@ -3728,6 +4144,7 @@ For each of `packages/{ui,api-client,types,hooks,validation,utils}`:
 - Avatar upload in Settings → Profile uses the same uploader with `bucket="avatars"` and `accept="image/*"`
 
 **Tests** (Vitest + RTL + MSW)
+
 - Drop file → presign called with correct content-type and size
 - Successful upload triggers `onUploaded` callback
 - Validation error (file too large) → reject before presign called
@@ -3735,18 +4152,21 @@ For each of `packages/{ui,api-client,types,hooks,validation,utils}`:
 - A11y: axe-core clean on file picker open
 
 **Done when**
+
 - [ ] FileUploader storybook entry exists (T-150)
-- [x] Avatar upload works end-to-end
-- [x] Files page renders, downloads, deletes
+- [ ] Avatar upload works end-to-end
+- [ ] Files page renders, downloads, deletes
 
 ---
 
 ### T-115 Mobile file picker
+
 > needs: T-112, T-047
 
 **Goal** Mobile app can upload from camera roll, document picker, or in-app camera.
 
 **Build**
+
 - `apps/mobile/src/lib/uploads.ts`:
   - `pickAndUpload(options: { source: "camera" | "library" | "document", bucket?: string })` — orchestrates picker + presign + PUT + confirm
   - Permissions handled via `expo-image-picker` / `expo-document-picker`
@@ -3757,11 +4177,13 @@ For each of `packages/{ui,api-client,types,hooks,validation,utils}`:
 - Avatar upload in Profile settings: source = library, bucket = "avatars"
 
 **Tests**
-- [x] Mocked picker returning a fake URI → presign + PUT + confirm sequence runs
-- [x] Cancellation: aborting partway leaves no orphaned `StoredFile` row (call `DELETE /files/{id}` on abort)
+
+- Mocked picker returning a fake URI → presign + PUT + confirm sequence runs
+- Cancellation: aborting partway leaves no orphaned `StoredFile` row (call `DELETE /files/{id}` on abort)
 
 **Done when**
-- [ ] All three pick sources work on iOS + Android simulators (not verified in this environment — no simulator/device tooling available; orchestration logic is covered by mocked unit/component tests in `src/lib/uploads.test.ts` and `src/features/files/FilesScreen.test.tsx`, and `tsc --strict` + `eslint` are clean)
+
+- [ ] All three pick sources work on iOS + Android simulators
 
 ---
 
@@ -3772,12 +4194,14 @@ For each of `packages/{ui,api-client,types,hooks,validation,utils}`:
 > Architectural rule: two-layer flags. Plan features come from `Plan.features` (set by us, gated by billing). Per-org overrides come from `OrgFeatureFlag` (set by us via admin, or by the org's owner if exposed in settings).
 
 ### T-120 FeatureFlagService with Redis cache
+
 > HTML ref: §"Multi-tenancy" → "Feature flags" | §"Billing" → "Plan-gating dependency"
 > needs: T-025, T-031
 
 **Goal** A single source of truth for "is feature X enabled for org Y" that consolidates plan features and per-org overrides.
 
 **Build**
+
 - `backend/app/modules/feature_flags/repository.py`:
   - `OrgFeatureFlagRepository(session, org_id)` extends `BaseRepository`
   - `get_overrides(self) -> dict[str, bool]`
@@ -3799,6 +4223,7 @@ For each of `packages/{ui,api-client,types,hooks,validation,utils}`:
   - `GET /api/v1/orgs/{org_id}/feature-flags` — returns `{ flags: { name: enabled } }`, requires membership
 
 **Tests**
+
 - Flag enabled in plan + no override → True
 - Flag enabled in plan + override=False → False (override wins)
 - Flag absent from plan → False (override cannot enable it)
@@ -3807,6 +4232,7 @@ For each of `packages/{ui,api-client,types,hooks,validation,utils}`:
 - 100% coverage on service
 
 **Done when**
+
 - [ ] All resolution paths tested
 - [ ] `require_feature` migrated to use the service
 - [ ] Cache invalidation hooks added to billing webhook handlers (T-030) and override endpoints
@@ -3814,48 +4240,56 @@ For each of `packages/{ui,api-client,types,hooks,validation,utils}`:
 ---
 
 ### T-121 useFeatureFlag hook
+
 > HTML ref: §"React web app" → "Key hooks"
 > needs: T-120, T-038
 
 **Goal** Frontend hook reads the resolved flag map once per session via TanStack Query; UI gates with one-line checks.
 
 **Build**
+
 - `packages/hooks/src/useFeatureFlag.ts`:
+
   ```typescript
   export function useFeatureFlags() {
-    const { org } = useOrg()
+    const { org } = useOrg();
     return useQuery({
       queryKey: ["feature-flags", org.id],
       queryFn: () => apiClient.featureFlags.list({ orgId: org.id }),
       staleTime: 60_000,
-    })
+    });
   }
 
   export function useFeatureFlag(flag: string): boolean {
-    const { data } = useFeatureFlags()
-    return Boolean(data?.flags?.[flag])
+    const { data } = useFeatureFlags();
+    return Boolean(data?.flags?.[flag]);
   }
   ```
+
 - No JSX in `packages/hooks` (enforced by lint)
 - On org switch (via `useOrg`), the query key changes so the cache is automatically separated per-org
 
 **Tests**
+
 - Mock API returns `{ flags: { advanced_reports: true } }` → `useFeatureFlag("advanced_reports")` returns true
 - Org switch causes refetch
 - Default (loading) returns false (deny by default)
 
 **Done when**
+
 - [ ] Tests pass
 - [ ] Web app uses `useFeatureFlag` to hide a real navigation item (e.g. "Advanced reports") when disabled
 
 ---
 
 ### T-122 Admin endpoint to toggle flags
+
 > needs: T-120, T-140
 
 **Goal** Superadmin can override flags per org (without modifying the user's plan) for support and beta-testing.
 
 **Build**
+
 - Endpoints (under T-140's admin auth guard):
   - `GET /api/v1/admin/orgs/{org_id}/feature-flags` — current resolved map + per-flag override state
   - `PUT /api/v1/admin/orgs/{org_id}/feature-flags/{flag}` — body `{ enabled: bool }` → upserts override
@@ -3864,12 +4298,14 @@ For each of `packages/{ui,api-client,types,hooks,validation,utils}`:
 - Mutation invalidates the flag cache for that org
 
 **Tests**
+
 - Non-superadmin → 403
 - Set override → `useFeatureFlag` reflects within `staleTime`
 - Delete override → resolved map reverts to plan default
 - Audit event written
 
 **Done when**
+
 - [ ] Permission and audit tests pass
 - [ ] Admin UI in T-143 wires to these endpoints
 
@@ -3880,12 +4316,14 @@ For each of `packages/{ui,api-client,types,hooks,validation,utils}`:
 > HTML ref: §"Billing" → "What's included" (dunning, trial, usage metering, invoice history)
 
 ### T-130 Dunning email sequence
+
 > HTML ref: §"Billing" → "Dunning"
 > needs: T-030, T-035
 
 **Goal** On `invoice.payment_failed`, schedule a sequence of reminder emails at 1 day, 3 days, and 7 days. Stop the sequence when payment succeeds or subscription is canceled.
 
 **Build**
+
 - `backend/app/modules/billing/dunning.py`:
   - `DunningService.start(subscription_id, invoice_id) -> None`:
     1. Create `DunningCampaign` row: `{ subscription_id, invoice_id, started_at, status: "active" }`
@@ -3909,6 +4347,7 @@ For each of `packages/{ui,api-client,types,hooks,validation,utils}`:
 - Idempotent at every step: re-running same step does not re-send (check audit log for the previous send)
 
 **Tests**
+
 - `payment_failed` webhook → campaign created, 3 jobs scheduled
 - `payment_succeeded` cancels remaining jobs
 - Day-7 step on still-`past_due` sub transitions to `canceled`
@@ -3916,6 +4355,7 @@ For each of `packages/{ui,api-client,types,hooks,validation,utils}`:
 - 100% coverage on `dunning.py`
 
 **Done when**
+
 - [ ] All dunning paths tested
 - [ ] Audit events for every email sent
 - [ ] Cancel revokes queued ARQ jobs (verify via Redis inspection)
@@ -3923,11 +4363,13 @@ For each of `packages/{ui,api-client,types,hooks,validation,utils}`:
 ---
 
 ### T-131 Trial expiry warning emails
+
 > needs: T-034, T-042, T-035
 
 **Goal** Daily scheduled job sends "your trial ends in 3 days" and "1 day" emails to org owners.
 
 **Build**
+
 - `backend/app/workers/scheduler.py` (extend the APScheduler instance from T-042):
   - Job: `notify_expiring_trials` — daily at 09:00 UTC
 - `backend/app/workers/jobs/billing.py`:
@@ -3940,12 +4382,14 @@ For each of `packages/{ui,api-client,types,hooks,validation,utils}`:
   - For subs where `trial_end < now` AND `status="trialing"` AND no payment method: transition to `canceled`, send "trial expired" email
 
 **Tests** (use `freezegun`)
+
 - Sub with `trial_end = now + 3d2h` → no email
 - Sub with `trial_end = now + 3d0.5h` → 3d warning sent
 - Re-running scheduler same day → no duplicate (audit marker check)
 - Expired-trial transition test
 
 **Done when**
+
 - [ ] Time-window tests green
 - [ ] Idempotency test green
 - [ ] Manual end-to-end smoke confirms email delivered to MailHog
@@ -3953,12 +4397,14 @@ For each of `packages/{ui,api-client,types,hooks,validation,utils}`:
 ---
 
 ### T-132 UsageRecord model + report_usage job skeleton
+
 > HTML ref: §"Billing" → "Usage metering"
 > needs: T-029, T-034
 
 **Goal** A skeleton for usage-based billing — model + ARQ job stub — so adding a metered feature later is a one-day task, not a one-week one.
 
 **Build**
+
 - `backend/app/modules/billing/usage_models.py`:
   ```python
   class UsageRecord(SQLModel, table=True):  # UUIDPKMixin + TimestampMixin + OrgScopedMixin
@@ -3982,24 +4428,28 @@ For each of `packages/{ui,api-client,types,hooks,validation,utils}`:
 - Helper dependency `def record_usage(metric: str, quantity: int = 1) -> Callable` — usable as a FastAPI dependency on any metered route
 
 **Tests**
+
 - Duplicate idempotency_key within 24h → second insert rejected (unique constraint)
 - Aggregation respects time window
 - Mock Stripe: usage records reported and marked
 - 100% coverage on `usage_service.py`
 
 **Done when**
+
 - [ ] All usage tests green
 - [ ] Module README documents how to add a new metric
 
 ---
 
 ### T-133 Invoice history endpoint + UI
+
 > HTML ref: §"Billing" → "Invoice history"
 > needs: T-031
 
 **Goal** Show users their past invoices without storing them ourselves (fetch from Stripe, cache for performance).
 
 **Build**
+
 - `backend/app/modules/billing/invoices.py`:
   - `InvoiceService.list_for_org(self, *, after_cursor=None, limit=20) -> tuple[list[InvoiceDTO], cursor]`:
     - Cache key `invoices:{org_id}:{cursor or "first"}` with 5 min TTL
@@ -4012,12 +4462,14 @@ For each of `packages/{ui,api-client,types,hooks,validation,utils}`:
   - Empty state for orgs without an active subscription
 
 **Tests**
+
 - Mock Stripe list → DTOs correctly shaped
 - Cache invalidated by webhook
 - BILLING_READ permission gates the endpoint
 - Cross-tenant isolation (org A cannot see org B's invoices)
 
 **Done when**
+
 - [ ] All endpoint tests green
 - [ ] UI renders against mocked + real Stripe
 
@@ -4028,11 +4480,13 @@ For each of `packages/{ui,api-client,types,hooks,validation,utils}`:
 > HTML ref: §"Admin panel" stub in Phase 2
 
 ### T-140 is_superadmin guard
+
 > needs: T-021
 
 **Goal** A dedicated dependency separate from RBAC. Superadmin is a platform-level role (the ForgeSaaS operators), distinct from org-level roles.
 
 **Build**
+
 - `backend/app/core/dependencies.py` (extend):
   - `require_superadmin(user: User = Depends(get_current_user)) -> User`:
     - Raises `PermissionDeniedError` if `user.is_superadmin is False`
@@ -4042,56 +4496,64 @@ For each of `packages/{ui,api-client,types,hooks,validation,utils}`:
 - A separate Loguru sink writes admin actions to `admin-audit.log` in addition to the normal log stream
 
 **Tests**
+
 - Non-superadmin → 403
 - Superadmin → 200
 - Access logged with `admin_action=true` field
 - Admin endpoints not in OpenAPI schema for non-admin tokens
 
 **Done when**
+
 - [ ] Permission test passes
 - [ ] Separate admin log sink verified
 
 ---
 
 ### T-141 Admin endpoints — list orgs, list users, manual plan override
+
 > needs: T-140, T-025, T-031
 
 **Goal** Read-mostly endpoints for support operations.
 
 **Build**
+
 - `backend/app/modules/admin/router.py` — all under `/api/v1/admin/`:
 
-  | Method | Path | Purpose |
-  |---|---|---|
-  | GET | `/orgs` | Cursor list with filters: `?q=` (slug or name), `?plan=`, `?status=` |
-  | GET | `/orgs/{id}` | Full org detail including subscription, member count, file count, last activity |
-  | GET | `/users` | Cursor list with filters: `?q=` (email), `?active=` |
-  | GET | `/users/{id}` | Full user detail including all memberships, sessions, audit summary |
-  | PUT | `/orgs/{id}/plan` | Body: `{ plan_slug: str, billing_interval: ..., free_override: bool, expires_at: datetime? }` — Force-assign a plan. Records audit event with full diff |
-  | POST | `/orgs/{id}/extend-trial` | Body: `{ days: int }` — Extends trial by N days |
-  | POST | `/orgs/{id}/comp-credit` | Body: `{ amount_cents: int, reason: str }` — Issues Stripe coupon |
+  | Method | Path                      | Purpose                                                                                                                                                 |
+  | ------ | ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
+  | GET    | `/orgs`                   | Cursor list with filters: `?q=` (slug or name), `?plan=`, `?status=`                                                                                    |
+  | GET    | `/orgs/{id}`              | Full org detail including subscription, member count, file count, last activity                                                                         |
+  | GET    | `/users`                  | Cursor list with filters: `?q=` (email), `?active=`                                                                                                     |
+  | GET    | `/users/{id}`             | Full user detail including all memberships, sessions, audit summary                                                                                     |
+  | PUT    | `/orgs/{id}/plan`         | Body: `{ plan_slug: str, billing_interval: ..., free_override: bool, expires_at: datetime? }` — Force-assign a plan. Records audit event with full diff |
+  | POST   | `/orgs/{id}/extend-trial` | Body: `{ days: int }` — Extends trial by N days                                                                                                         |
+  | POST   | `/orgs/{id}/comp-credit`  | Body: `{ amount_cents: int, reason: str }` — Issues Stripe coupon                                                                                       |
 
 - All write operations record `AuditEvent` with `action="admin.<op>"`, `actor_id=superadmin.id`, full diff
 - Audit log entries for admin actions get a special `severity="elevated"` tag so they can be alerted on
 
 **Tests**
+
 - Non-superadmin → 403 for every endpoint
 - Plan override updates org and writes audit event with diff
 - Trial extension updates `subscription.trial_end`; webhook reconciliation respects manual extensions
 - Comp credit creates a Stripe coupon via mocked Stripe; audit logged
 
 **Done when**
+
 - [ ] All admin endpoints tested
 - [ ] Diff captured in every audit event
 
 ---
 
 ### T-142 User impersonation
+
 > needs: T-140, T-028
 
 **Goal** Superadmin can act as a user for support — issues a short-lived access token scoped to one user, fully audited, with a banner so it's impossible to forget you're impersonating.
 
 **Build**
+
 - `backend/app/modules/admin/impersonation.py`:
   - `POST /api/v1/admin/users/{user_id}/impersonate` — body: `{ reason: str (required, min 10 chars), duration_minutes: int (max 60) }`
     - Validates reason (free-form but stored verbatim)
@@ -4106,6 +4568,7 @@ For each of `packages/{ui,api-client,types,hooks,validation,utils}`:
 - Frontend: when access token contains `impersonator_id`, the app shell shows a fixed top banner: "Impersonating <email> — [End impersonation]". Banner is non-dismissable.
 
 **Tests**
+
 - Impersonate non-superadmin user → token issued, banner shows in frontend
 - Impersonate another superadmin → 403
 - Token refresh attempt with impersonation token → 401
@@ -4115,6 +4578,7 @@ For each of `packages/{ui,api-client,types,hooks,validation,utils}`:
 - Missing reason → 422
 
 **Done when**
+
 - [ ] All security boundary tests green
 - [ ] Audit trail complete
 - [ ] Banner visible in web UI
@@ -4122,11 +4586,13 @@ For each of `packages/{ui,api-client,types,hooks,validation,utils}`:
 ---
 
 ### T-143 Admin web UI
+
 > needs: T-141, T-142, T-122
 
 **Goal** Separate web surface for admin operations — never mixed with the user-facing app.
 
 **Build**
+
 - `apps/web/src/routes/_admin/` — separate layout (no org switcher, distinct header color, "ADMIN" badge), separate guard requiring `user.is_superadmin`
 - Pages:
   - `/_admin/` — dashboard: counts (orgs, users, MRR estimate from Stripe), recent signups, recent payment failures
@@ -4139,11 +4605,13 @@ For each of `packages/{ui,api-client,types,hooks,validation,utils}`:
 - Admin routes never appear in the user-app sidebar (separate router group)
 
 **Tests** (Vitest + RTL)
+
 - Non-superadmin navigating to `/_admin/` → redirect to user app
 - Impersonate flow: click → modal → submit → access token replaced → banner appears → "End impersonation" returns to admin
 - Search debounce and pagination work
 
 **Done when**
+
 - [ ] All admin pages render
 - [ ] Impersonation flow works end-to-end against the local backend
 - [ ] Visual distinction (color, badge) clear
@@ -4155,11 +4623,13 @@ For each of `packages/{ui,api-client,types,hooks,validation,utils}`:
 > HTML ref: §"Build phases" → "Phase 2" → "Storybook for packages/ui components"
 
 ### T-150 Storybook for packages/ui
+
 > needs: T-041, T-046 (FileUploader), T-106 (email templates)
 
 **Goal** Every public component in `packages/ui` and every email template in `packages/email-templates` has a Storybook story. New components are not merged without a story.
 
 **Build**
+
 - `packages/ui/.storybook/`:
   - `main.ts` with Vite framework, MDX support, a11y addon, viewport addon, interactions addon
   - `preview.tsx` wraps every story in: ThemeProvider (light/dark toggle), `@tanstack/react-query` test provider, Tailwind globals
@@ -4176,11 +4646,13 @@ For each of `packages/{ui,api-client,types,hooks,validation,utils}`:
 - Visual regression: chromatic config in CI (Phase 3 wires the actual snapshots; Phase 2 just configures the project)
 
 **Tests**
+
 - `pnpm --filter @forge/ui storybook:test` runs Storybook test-runner; every story renders without throwing; every interaction passes
 - A11y violations in any story → test fails
 - CI: `storybook:build` outputs static files; published to a preview URL per PR
 
 **Done when**
+
 - [ ] Every component in `packages/ui/src/components/` has a story
 - [ ] Every email template has a story
 - [ ] axe-core in test-runner passes on all stories
@@ -4191,11 +4663,13 @@ For each of `packages/{ui,api-client,types,hooks,validation,utils}`:
 ## §Phase-2 verification
 
 ### T-160 Phase 2 acceptance runbook
+
 > needs: every Phase 2 task
 
 **Goal** Document and execute the Phase 2 acceptance flow. This is the gate to Phase 3.
 
 **Build**
+
 - `docs/runbooks/phase2-verification.md` documenting exact steps:
   1. `make dev` — all services up; `make seed` — superadmin + demo plans (now includes a "Pro" plan with feature flags `advanced_reports`, `file_storage`)
   2. **Notifications happy path:** as user A, invite user B → user B receives email (MailHog) + in-app notification appears in user A's bell within 1 s (via SSE)
@@ -4211,6 +4685,7 @@ For each of `packages/{ui,api-client,types,hooks,validation,utils}`:
   12. **Storybook:** `pnpm --filter @forge/ui storybook` opens, all components render, a11y errors zero
 
 **Phase 2 complete when ALL of:**
+
 - [ ] Runbook executes without intervention
 - [ ] `pytest --cov` reports ≥85% overall, 100% on `auth/`, `billing/`, `tenancy/`, `gdpr/`, `notifications/`, `storage/`, `feature_flags/`, `admin/`
 - [ ] CI jobs (lint, test, security, build) green on `main`
@@ -4228,60 +4703,277 @@ For each of `packages/{ui,api-client,types,hooks,validation,utils}`:
 
 ## P3-A · Observability (full)
 
-| ID | Title | Needs |
-|---|---|---|
-| T-201 | Sentry SDK wired on backend (already started), web, and mobile | T-002 |
-| T-202 | Prometheus instrumentor on backend; `/metrics` on internal port only | T-002 |
-| T-203 | OpenTelemetry auto-instrumentation: FastAPI + SQLAlchemy + ARQ + Redis | T-002 |
-| T-204 | Grafana dashboards exported as JSON in `docs/grafana/` | T-202 |
+| ID    | Title                                                                                                                                                                                                                                                                                     | Needs |
+| ----- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----- |
+| T-201 | Sentry SDK wired on backend (already started), web, and mobile                                                                                                                                                                                                                            | T-002 |
+| T-202 | Prometheus instrumentor on backend; `/metrics` on internal port only                                                                                                                                                                                                                      | T-002 |
+| T-203 | OpenTelemetry auto-instrumentation: FastAPI + SQLAlchemy + ARQ + Redis                                                                                                                                                                                                                    | T-002 |
+| T-204 | Grafana dashboards exported as JSON in `docs/grafana/`                                                                                                                                                                                                                                    | T-202 |
+| T-205 | Postgres slow query observability: enable `pg_stat_statements`, export as Prometheus metrics, alert rule for p95 query latency > 500ms per statement; slow query hall-of-shame dashboard                                                                                                  | T-202 |
+| T-206 | Circuit breakers on external calls (Stripe, Resend, S3, virus scanner, push provider): `tenacity` retry with exponential backoff, `pybreaker` circuit that opens after 5 consecutive failures; degraded-mode fallback documented per integration; metrics exported for open circuit count | T-002 |
 
 ## P3-B · OWASP hardening
 
-| ID | Title | Needs |
-|---|---|---|
-| T-210 | OWASP ZAP baseline scan in CI against ephemeral deploy | T-055 |
-| T-211 | Nightly ZAP full active scan against staging (separate workflow) | T-210 |
-| T-212 | `import-linter` already in T-012 — verify all 10 OWASP mappings have passing tests | T-049 |
-| T-213 | ASVS L2 checklist document in `docs/adr/0001-security-baseline.md` | — |
+| ID    | Title                                                                                     | Needs        |
+| ----- | ----------------------------------------------------------------------------------------- | ------------ |
+| T-210 | OWASP ZAP baseline scan in CI against ephemeral deploy                                    | T-055        |
+| T-211 | Nightly ZAP full active scan against staging (separate workflow)                          | T-210        |
+| T-212 | `import-linter` already in T-012 — verify all 10 OWASP mappings have passing tests        | T-049        |
+| T-213 | ASVS L2 checklist document in `docs/adr/0001-security-baseline.md`                        | —            |
+| T-214 | Pentest readiness runbook `docs/runbooks/pentest-prep.md` — see §"Pentest guidance" below | T-210, T-211 |
+
+**Pentest guidance** — read before commissioning any external security engagement.
+
+Pentesting is not one thing. Before spending money, pick the right tier for your stage.
+
+| Trigger                                                                | Recommended tier                                                                                            | Rough cost      |
+| ---------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- | --------------- |
+| First deployment, no paying customers yet                              | Automated CI tooling only (already in the plan: T-054, T-210, T-211, T-049, T-050). No external engagement. | £0              |
+| Real users, want ongoing scrutiny                                      | Private bug bounty on HackerOne or Intigriti, scoped to auth + billing + file access                        | £500–£3000 / yr |
+| Pre-enterprise sales or pre-fundraise                                  | Time-boxed pentest from a boutique firm (3–5 days)                                                          | £3000–£6000     |
+| Enterprise procurement requires a report; regulated data; annual audit | Full formal pentest from a reputable firm (2–4 weeks) with executive summary suitable for sharing           | £8000–£25,000   |
+| Handling actual payment cards                                          | Not applicable — the template uses Stripe Checkout (hosted). Cards never touch your infrastructure.         |                 |
+
+T-214 builds the runbook that reduces the cost and improves the value of any manual engagement, whichever tier you choose:
+
+- **Scope document** — what's in scope (`/api/v1/*`, web app, mobile app), what's out (Stripe-hosted pages, S3 storage internals, third-party integrations)
+- **Test account credentials** — pre-provisioned pentest accounts on staging with realistic data volumes, one per role (OWNER, ADMIN, MEMBER, superadmin)
+- **Sensitive-endpoint inventory** — auth flows, payment endpoints, admin routes, impersonation, GDPR export/delete
+- **Known-issues list** — anything you're aware of that would otherwise waste testers' time re-discovering
+- **Staging environment details** — separate from prod, populated with synthetic data, credentials rotated after engagement
+- **Communication channel** — dedicated Slack/email for the engagement, escalation contact for critical findings
+- **Remediation SLA policy** — critical = 24h, high = 7d, medium = 30d, low = next release
+- **Report template** — what you'll do with findings, who reviews, how they get tracked to closure (audit log or issue tracker)
+
+Doing this prep well means a 5-day engagement finds real bugs instead of spending day 1 asking basic questions.
 
 ## P3-C · Comprehensive E2E + load
 
-| ID | Title | Needs |
-|---|---|---|
+| ID    | Title                                                                       | Needs |
+| ----- | --------------------------------------------------------------------------- | ----- |
 | T-220 | Playwright E2E: signup → verify → invite → upgrade across Chromium + WebKit | T-044 |
-| T-221 | axe-core a11y gate in Playwright on all key pages | T-220 |
-| T-222 | Maestro mobile E2E: login, deep link, logout | T-047 |
+| T-221 | axe-core a11y gate in Playwright on all key pages                           | T-220 |
+| T-222 | Maestro mobile E2E: login, deep link, logout                                | T-047 |
 | T-223 | k6 load scripts in `tests/load/`; p95 < 300 ms and error rate < 1% asserted | T-048 |
-| T-224 | Visual regression via Playwright snapshots on dashboard + settings | T-220 |
+| T-224 | Visual regression via Playwright snapshots on dashboard + settings          | T-220 |
 
 ## P3-D · i18n expansion + advanced
 
 > Foundation already in place from T-067–T-070. This section adds languages, RTL, and translator tooling.
 
-| ID | Title | Needs |
-|---|---|---|
-| T-230 | Add 3 more locales (e.g. de, es, fr) — full translation coverage of all `@forge/i18n` keys; CI check that no locale has >5% missing keys | T-067 |
-| T-231 | RTL (right-to-left) support: add `ar` or `he`; verify Tailwind RTL utilities work in `packages/ui`; `<html dir="rtl">` toggling via i18n | T-069 |
-| T-232 | Translator workflow: export missing keys to CSV/PO, integrate with Crowdin/Lokalise (or document a manual workflow); CI check that source-of-truth `en` is the only locale with 100% keys | T-067 |
-| T-233 | Locale-aware URL routing on web: `/en/settings`, `/fi/settings` paths; canonical + `hreflang` (required by T-305 SEO) | T-069 |
-| T-234 | Locale-aware push notifications on mobile: backend already localises by `recipient.locale`; verify with end-to-end test against both `en` and `fi` users | T-068, T-105 |
+| ID    | Title                                                                                                                                                                                     | Needs        |
+| ----- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------ |
+| T-230 | Add 3 more locales (e.g. de, es, fr) — full translation coverage of all `@forge/i18n` keys; CI check that no locale has >5% missing keys                                                  | T-067        |
+| T-231 | RTL (right-to-left) support: add `ar` or `he`; verify Tailwind RTL utilities work in `packages/ui`; `<html dir="rtl">` toggling via i18n                                                  | T-069        |
+| T-232 | Translator workflow: export missing keys to CSV/PO, integrate with Crowdin/Lokalise (or document a manual workflow); CI check that source-of-truth `en` is the only locale with 100% keys | T-067        |
+| T-233 | Locale-aware URL routing on web: `/en/settings`, `/fi/settings` paths; canonical + `hreflang` (required by T-305 SEO)                                                                     | T-069        |
+| T-234 | Locale-aware push notifications on mobile: backend already localises by `recipient.locale`; verify with end-to-end test against both `en` and `fi` users                                  | T-068, T-105 |
 
 ## P3-E · Performance tuning
 
-| ID | Title | Needs |
-|---|---|---|
-| T-240 | Redis cache layer explicitly on `get_current_user` and org settings (already started in T-021) — add invalidation tests | T-021 |
-| T-241 | TanStack Virtual on member list + notification list | T-044 |
-| T-242 | Per-route bundle budget assertions via `vite-plugin-bundle-analyzer` + size-limit | T-040 |
-| T-243 | pytest query-count fixture: assert no unexpected N+1 queries in list endpoints | T-048 |
+| ID    | Title                                                                                                                                                                                                                                                                                                                                                                                       | Needs          |
+| ----- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------- |
+| T-240 | Redis cache layer explicitly on `get_current_user` and org settings (already started in T-021) — add invalidation tests                                                                                                                                                                                                                                                                     | T-021          |
+| T-241 | TanStack Virtual on member list + notification list                                                                                                                                                                                                                                                                                                                                         | T-044          |
+| T-242 | Per-route bundle budget assertions via `vite-plugin-bundle-analyzer` + size-limit                                                                                                                                                                                                                                                                                                           | T-040          |
+| T-243 | pytest query-count fixture: assert no unexpected N+1 queries in list endpoints                                                                                                                                                                                                                                                                                                              | T-048          |
+| T-244 | PgBouncer in transaction mode in front of Postgres in `docker-compose.prod.yml`: pool size sized to `max_connections * 0.8`, health-checked, documented tradeoff of transaction pooling vs prepared statements (asyncpg statement cache disabled or moved server-side)                                                                                                                      | T-005          |
+| T-245 | Production-ready `EncryptedString` key rotation job (upgrade T-009.5's stub): batched cursor-scan of every `EncryptedString` column across every table, restartable via `JobRecord` progress checkpoints, dry-run mode, progress metrics exported, per-batch commit with configurable batch size; runbook `docs/runbooks/encryption-key-rotation.md` walks through the operation end-to-end | T-009.5, T-034 |
+| T-246 | (Optional, scale-triggered) Read replica plumbing: two SQLAlchemy engines (`read_engine`, `write_engine`) selected per request via a `use_read_replica` flag on repository methods; document the consistency implications; ADR captures when to actually enable this                                                                                                                        | T-005          |
 
 ## P3-F · Module scaffold
 
-| ID | Title | Needs |
-|---|---|---|
-| T-250 | `backend/app/modules/_template/` with README, all 5 files stubbed | T-009 |
-| T-251 | `make new-module NAME=foo` target that copies + renames the template | T-250 |
-| T-252 | ADR template in `docs/adr/_template.md`; runbook template in `docs/runbooks/_template.md` | — |
+| ID    | Title                                                                                     | Needs |
+| ----- | ----------------------------------------------------------------------------------------- | ----- |
+| T-250 | `backend/app/modules/_template/` with README, all 5 files stubbed                         | T-009 |
+| T-251 | `make new-module NAME=foo` target that copies + renames the template                      | T-250 |
+| T-252 | ADR template in `docs/adr/_template.md`; runbook template in `docs/runbooks/_template.md` | —     |
+
+## P3-G · Support tooling & operator features
+
+> Everything here hardens operational quality: safer impersonation, better support-tool integration, global product controls.
+
+### T-260 Impersonation destructive-action blocklist (server-side)
+
+> Hardens T-142. Applies uniformly to web and mobile impersonation sessions.
+> needs: T-142
+
+**Goal** During an active impersonation session, the server refuses actions that would produce user-visible side effects the real user didn't intend. Prevents a support agent from accidentally sending an email, marking notifications read, changing password, or issuing charges _as_ the real user.
+
+**Build**
+
+- `backend/app/core/dependencies.py` — add `reject_during_impersonation(action_kind: Literal["destructive","notifying","billing","data_mutation"])`:
+  ```python
+  def reject_during_impersonation(kind: str) -> Callable:
+      async def checker(request: Request):
+          if request.state.principal.impersonator_id:
+              raise PermissionDeniedError(
+                  f"Action '{kind}' is blocked during impersonation. "
+                  f"End impersonation to perform this action as yourself."
+              )
+      return checker
+  ```
+- **Blocklist categories** and where they apply:
+  - `notifying` — outbound email/push sends (`/notifications/*`, `/auth/forgot-password`, `/auth/magic-link`, invitation resends). Also: silent suppression of push notifications on the impersonated user's registered devices for any action performed during impersonation
+  - `billing` — checkout session creation, subscription changes, portal session, any endpoint that could produce a charge
+  - `data_mutation` — password change, 2FA disable, email change, account deletion, org deletion
+  - `notification_read_state` — marking notifications read (silent state pollution)
+- Impersonation-token JWTs carry `impersonator_id` claim (already in T-142); the dependency checks presence of that claim
+- Every blocked attempt writes an audit event with `action="impersonation.blocked"` — useful signal for support-tool improvement
+
+**Tests**
+
+- Impersonation session attempting `POST /auth/forgot-password` → 403; audit event written
+- Impersonation session attempting `POST /billing/checkout-session` → 403
+- Impersonation session attempting `PATCH /notifications/{id}/read` → 403
+- Non-impersonation session performing same actions → succeeds
+- Every destructive endpoint is covered by the parametrised test matrix (mirror of T-049 cross-tenant sweep)
+
+**Done when**
+
+- [ ] Every destructive endpoint in the codebase has `Depends(reject_during_impersonation(...))` or an explicit `# impersonation-ok: <reason>` comment
+- [ ] Parametrised block-matrix test covers every category
+- [ ] Push notification suppression verified end-to-end
+
+---
+
+### T-261 Mobile impersonation via deep-link handoff
+
+> needs: T-142, T-260, T-047
+
+**Goal** Superadmin reproduces mobile-specific issues on their own device without needing physical access to the user's phone.
+
+**Build**
+
+- Backend endpoint `POST /api/v1/admin/impersonate/mobile-handoff`:
+  - Requires an active impersonation session (must have already called T-142's impersonate endpoint)
+  - Issues a one-time exchange token (short random string, 2 minute TTL, Redis-stored keyed by hash) that maps to the impersonation JWT
+  - Returns `{ deep_link: "forge://impersonate?token=<exchange_token>&user_email=<email>", expires_at }`
+- Admin web UI adds "Handoff to my mobile" button next to existing "Impersonate" button — displays the deep link as a QR code + copyable text
+- Mobile app:
+  - Deep-link handler for `forge://impersonate` navigates to a `ImpersonateConfirmScreen`
+  - Confirmation screen displays the user email (from the query param — informational only, real identity comes from the exchange), the reason from the original impersonation request, and duration remaining
+  - "Confirm" calls `POST /api/v1/admin/impersonate/mobile-exchange` with the exchange token → receives the actual access token → stores in secure store with a `IS_IMPERSONATION_SESSION` flag
+  - "Cancel" invalidates the exchange token immediately
+- Mobile app during impersonation:
+  - Persistent red banner across every screen: "Impersonating <email> · <mm:ss remaining> · [End]"
+  - Banner is non-dismissable
+  - Push notification registration for the impersonated user is _not_ updated to the superadmin's device (prevents leaking pushes)
+  - App state does not persist across cold restart when in impersonation mode (secure-store flag is cleared on app launch if it exists)
+  - "End impersonation" clears secure store and returns to login (not to the superadmin's previous session — mobile has one session per install)
+
+**Tests**
+
+- Exchange token single-use (second attempt to exchange → 401)
+- Exchange token expires in 2 minutes (freezegun-advance → 401)
+- Cold-restart clears impersonation state
+- Banner visible on every screen
+- Push notification triggered by impersonated user's normal activity fires to their real devices, not the superadmin's device
+- Destructive actions blocked (verified via T-260's blocklist)
+- Audit event `impersonation.mobile_handoff` records the exchange
+- Audit event `impersonation.mobile_ended` records when superadmin ends
+
+**Done when**
+
+- [ ] Handoff works end-to-end from admin web to iOS Simulator + Android emulator
+- [ ] Push-suppression test proves no leak to superadmin device
+- [ ] Runbook `docs/runbooks/mobile-impersonation.md` documents when to use mobile handoff vs regular impersonation vs screen-share alternatives
+
+---
+
+### T-262 Support integration hook (SupportContext)
+
+> needs: T-021 (get_current_user), T-025 (org context)
+
+**Goal** A thin, tool-agnostic layer that surfaces the user's context to whichever support tool a product picks (Intercom, Crisp, Plain, HelpScout, or none). The template never depends on a specific tool.
+
+**Build**
+
+- `packages/hooks/src/useSupportContext.ts`:
+
+  ```typescript
+  export interface SupportContext {
+    userId: string;
+    email: string;
+    fullName: string | null;
+    orgId: string;
+    orgName: string;
+    plan: string | null;
+    subscriptionStatus: string | null;
+    signupAt: string;
+    locale: string;
+    isImpersonating: boolean; // suppress support-tool identity if true
+  }
+
+  export function useSupportContext(): SupportContext | null;
+  ```
+  - Returns null while auth is loading, so support widgets don't flash unauthenticated
+  - Returns `isImpersonating: true` when in an impersonation session — the wrapper below should suppress identity in that case so the superadmin's actions don't pollute the real user's support history
+
+- Product-side wrapper example (documented, not implemented in template): `apps/web/src/features/support/SupportWidget.tsx` reads `useSupportContext()` and calls e.g. `window.Intercom("boot", { user_id: ctx.userId, ... })`
+- Backend endpoint `GET /api/v1/me/support-context` — same fields, returned via API for the mobile app (which cannot use JavaScript widgets; usually opens a `mailto:` with pre-populated context or launches a chat app SDK)
+- `product.config.py` adds:
+  ```python
+  SUPPORT_TOOL: Literal["none", "intercom", "crisp", "plain", "helpscout", "custom"] = "none"
+  SUPPORT_URL: str | None = None    # fallback: opens as mailto: or web URL
+  ```
+  Web app renders a "Contact support" link/button in the sidebar; behaviour depends on `SUPPORT_TOOL`
+
+**Tests**
+
+- `useSupportContext()` returns null while unauthenticated
+- During impersonation: `isImpersonating: true`
+- Mobile: `GET /me/support-context` returns fields correctly
+- Cross-tenant safety: user in org A cannot receive org B's context
+
+**Done when**
+
+- [ ] Hook + endpoint working
+- [ ] `product.config.py` `SUPPORT_TOOL` option honoured on web + mobile
+- [ ] Docs `docs/runbooks/support-tool-integration.md` show how to wire Intercom, Crisp, Plain
+
+---
+
+### T-263 ProductSettings singleton — global runtime toggles
+
+> needs: T-140 (superadmin guard), T-063 (public config endpoint)
+
+**Goal** Global switches an operator can flip without a redeploy: maintenance mode, feature-wide kill switches, banner announcements. Distinct from `product.config.py` (deploy-time) and `OrgFeatureFlag` (per-org).
+
+**Build**
+
+- `backend/app/modules/product_settings/models.py`:
+  ```python
+  class ProductSettings(SQLModel, table=True):
+      id: int = Field(default=1, primary_key=True)   # singleton — always 1
+      settings: dict = Field(sa_column=Column(JSONB, default=dict))
+      updated_at: datetime = Field(default_factory=utcnow)
+      updated_by: UUID | None
+  ```
+  Migration ensures a single row with id=1 exists on first upgrade.
+- `ProductSettingsService`:
+  - `get(key: str) -> Any` — Redis-cached with 60s TTL, invalidated on write
+  - `set(key: str, value: Any, actor: User) -> None` — superadmin only, audit-logged
+  - Well-known keys (documented, not hard-coded): `maintenance_mode: bool`, `maintenance_message: str`, `signup_disabled: bool`, `global_banner: {type, message, dismissible}`, `emergency_kill_switch: dict[str, bool]` (per-module)
+- Middleware `check_maintenance_mode` (registered before routers):
+  - If `maintenance_mode=True`, all non-admin, non-health endpoints return 503 with `{"error": {"code": "maintenance", "message": settings.maintenance_message}}`
+  - Admin endpoints and `/health/*` remain reachable so operators can end maintenance
+- `GET /api/v1/config` (from T-063) extended: includes `banner: {...}` if `global_banner` set; the frontend renders it above the app shell
+- Admin UI: dedicated `/_admin/settings/product` page with editable form for well-known keys + raw JSON edit for advanced use
+
+**Tests**
+
+- Toggle `maintenance_mode=True` → all user endpoints return 503; admin endpoints remain 200; health remains 200
+- Global banner appears in `GET /config`; disappears on unset
+- Cache invalidation: setting a value updates `GET /config` within 60s (or immediately with explicit invalidation)
+- Non-superadmin `PATCH /admin/settings/product` → 403
+- Audit event written on every settings change with diff
+
+**Done when**
+
+- [ ] Maintenance mode works end-to-end (test flip and verify user impact)
+- [ ] Banner shows/hides via GET /config on web + mobile
+- [ ] Runbook `docs/runbooks/maintenance-mode.md` documents the incident-response flow
 
 ---
 
@@ -4291,46 +4983,46 @@ For each of `packages/{ui,api-client,types,hooks,validation,utils}`:
 
 ## P4-A · Marketing site + SEO
 
-| ID | Title | Needs |
-|---|---|---|
-| T-300 | New `apps/marketing` — Next.js (or Astro — write ADR for choice); shares `@forge/ui` | T-038 |
-| T-301 | Pages: landing, pricing, features, blog (MDX), docs (MDX), privacy, terms | T-300 |
-| T-302 | SEO component: typed meta + Open Graph + Twitter card; one import per page | T-301 |
-| T-303 | JSON-LD: `Organization`, `SoftwareApplication`, `Product` (pricing), `FAQPage` | T-301 |
+| ID    | Title                                                                                     | Needs |
+| ----- | ----------------------------------------------------------------------------------------- | ----- |
+| T-300 | New `apps/marketing` — Next.js (or Astro — write ADR for choice); shares `@forge/ui`      | T-038 |
+| T-301 | Pages: landing, pricing, features, blog (MDX), docs (MDX), privacy, terms                 | T-300 |
+| T-302 | SEO component: typed meta + Open Graph + Twitter card; one import per page                | T-301 |
+| T-303 | JSON-LD: `Organization`, `SoftwareApplication`, `Product` (pricing), `FAQPage`            | T-301 |
 | T-304 | Auto-generated `sitemap.xml` + `robots.txt` (allow marketing, disallow `/app` and `/api`) | T-301 |
-| T-305 | `hreflang` per locale; locale in path `/en`, `/fi` | T-304 |
-| T-306 | Lighthouse CI in pipeline: LCP < 2.5 s, INP < 200 ms, CLS < 0.1, SEO ≥ 95 | T-304 |
+| T-305 | `hreflang` per locale; locale in path `/en`, `/fi`                                        | T-304 |
+| T-306 | Lighthouse CI in pipeline: LCP < 2.5 s, INP < 200 ms, CLS < 0.1, SEO ≥ 95                 | T-304 |
 
 ## P4-B · Public API keys
 
-| ID | Title | Needs |
-|---|---|---|
+| ID    | Title                                                                                 | Needs |
+| ----- | ------------------------------------------------------------------------------------- | ----- |
 | T-310 | `ApiKey` model: org-scoped, SHA-256 hashed, scopes list, `last_used_at`, `expires_at` | T-010 |
-| T-311 | API key auth dependency (alternative to JWT Bearer) | T-310 |
-| T-312 | Per-key rate limiting (separate from user limits) | T-311 |
-| T-313 | API key management UI in org settings | T-311 |
+| T-311 | API key auth dependency (alternative to JWT Bearer)                                   | T-310 |
+| T-312 | Per-key rate limiting (separate from user limits)                                     | T-311 |
+| T-313 | API key management UI in org settings                                                 | T-311 |
 
 ## P4-C · Outbound webhooks
 
-| ID | Title | Needs |
-|---|---|---|
+| ID    | Title                                                                               | Needs |
+| ----- | ----------------------------------------------------------------------------------- | ----- |
 | T-320 | `WebhookEndpoint` + `WebhookDelivery` models; HMAC signing with per-endpoint secret | T-010 |
-| T-321 | Delivery ARQ job with retry schedule: 1 m, 5 m, 30 m, 2 h, 12 h | T-034 |
-| T-322 | Webhook UI: add endpoint, delivery log, replay | T-320 |
+| T-321 | Delivery ARQ job with retry schedule: 1 m, 5 m, 30 m, 2 h, 12 h                     | T-034 |
+| T-322 | Webhook UI: add endpoint, delivery log, replay                                      | T-320 |
 
 ## P4-D · Enterprise SSO
 
-| ID | Title | Needs |
-|---|---|---|
-| T-330 | ADR: SAML vs OIDC priority + library choice | — |
+| ID    | Title                                                   | Needs |
+| ----- | ------------------------------------------------------- | ----- |
+| T-330 | ADR: SAML vs OIDC priority + library choice             | —     |
 | T-331 | OIDC SP via authlib (already a dep); per-org IdP config | T-025 |
-| T-332 | SAML 2.0 SP via `python3-saml` | T-330 |
+| T-332 | SAML 2.0 SP via `python3-saml`                          | T-330 |
 
 ## P4-E · Multi-tenancy upgrade path
 
-| ID | Title | Needs |
-|---|---|---|
-| T-340 | ADR: row-level (current) vs schema-per-tenant — criteria + decision | — |
+| ID    | Title                                                                                  | Needs |
+| ----- | -------------------------------------------------------------------------------------- | ----- |
+| T-340 | ADR: row-level (current) vs schema-per-tenant — criteria + decision                    | —     |
 | T-341 | Schema-per-tenant tooling: `search_path` session middleware, migration per-org tooling | T-340 |
 
 ---
@@ -4365,4 +5057,4 @@ Copy this into your working context and tick each item:
 
 ---
 
-*End of plan. Start with T-001. Do not skip ahead. The checklist in §7 is the last thing you read before marking a task done.*
+_End of plan. Start with T-001. Do not skip ahead. The checklist in §7 is the last thing you read before marking a task done._

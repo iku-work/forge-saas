@@ -27,7 +27,7 @@ calling Phase 1 done.
 2. `docker compose exec backend alembic upgrade head` — applies cleanly to
    `5e0f22f854e6 (head)`.
 3. `docker compose exec backend python -m app.core.seed` — creates the free/
-   pro plans, `admin@forge.local` superadmin, and the `Forge Demo` org.
+   pro plans, `admin@example.com` superadmin, and the `Forge Demo` org.
    Running it a second time is a no-op (idempotent, exits 0).
 4. `POST /api/v1/auth/register` with a new email — `200`, envelope `data: null`.
 5. Open `http://localhost:8025` (MailHog) — a "Verify your email address"
