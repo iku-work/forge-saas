@@ -28,7 +28,13 @@ dependencies = [
     "loguru>=0.7",
     "sentry-sdk[fastapi]>=2.15",
     "opentelemetry-distro>=0.48b0",
-    "prometheus-fastapi-instrumentator>=7.0",
+    # >=8.0.2, not just >=7.0: 8.0.0/8.0.1's routing._get_route_name assumes
+    # include_router() eagerly flattens child routes into APIRoute objects
+    # with a .path attribute. This FastAPI's (0.137.2) include_router() wraps
+    # sub-routers in a lazy _IncludedRouter instead (same quirk already noted
+    # for router.routes in T-061) -- 8.0.0/8.0.1 crash with AttributeError on
+    # every single request once the middleware is actually wired in (T-202).
+    "prometheus-fastapi-instrumentator>=8.0.2",
     "boto3>=1.35",
     "itsdangerous>=2.2",
     "httpx>=0.27",

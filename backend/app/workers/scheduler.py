@@ -18,9 +18,11 @@ from typing import Any
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
+from apscheduler.triggers.interval import IntervalTrigger
 from redis.asyncio import Redis
 
 from app.core.db import async_session_factory
+from app.core.metrics import ACTIVE_SESSIONS_REDIS_KEY
 from app.models._mixins import utcnow
 from app.modules.auth.repository import (
     EmailVerificationTokenRepository,
@@ -88,6 +90,16 @@ async def expire_data_export_urls(ctx: dict[str, Any]) -> None:  # noqa: ARG001
     logger.info("expire_data_export_urls: expired %d data export jobs", expired)
 
 
+async def refresh_active_sessions_gauge(redis_client: Redis) -> None:
+    # T-202's forge_active_sessions gauge lives in the backend process (it
+    # serves /metrics), but this count is computed here in the worker -- the
+    # only thing bridging the two processes is Redis: this job writes the
+    # count, and app.core.metrics reads it back synchronously at scrape time.
+    async with async_session_factory() as session:
+        count = await SessionRepository(session).count_active()
+    await redis_client.set(ACTIVE_SESSIONS_REDIS_KEY, str(count))
+
+
 def create_scheduler(redis_client: Redis) -> AsyncIOScheduler:
     scheduler = AsyncIOScheduler(timezone="UTC")
     _add_locked_job(
@@ -138,6 +150,20 @@ def create_scheduler(redis_client: Redis) -> AsyncIOScheduler:
         report_usage_to_stripe,
         "report_usage_to_stripe",
         CronTrigger(minute="*/15", timezone="UTC"),
+    )
+
+    async def _run_refresh_active_sessions_gauge() -> None:
+        await with_distributed_lock(
+            redis_client,
+            "refresh_active_sessions_gauge",
+            lambda: refresh_active_sessions_gauge(redis_client),
+        )
+
+    scheduler.add_job(
+        _run_refresh_active_sessions_gauge,
+        trigger=IntervalTrigger(seconds=60, timezone="UTC"),
+        id="refresh_active_sessions_gauge",
+        replace_existing=True,
     )
     return scheduler
 

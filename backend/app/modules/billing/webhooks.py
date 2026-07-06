@@ -26,6 +26,7 @@ from app.core.config import get_settings
 from app.core.db import get_session
 from app.core.dependencies import get_redis
 from app.core.exceptions import DomainError
+from app.core.metrics import FORGE_STRIPE_WEBHOOK_SECONDS
 from app.modules.billing.repository import WebhookEventRepository
 from app.modules.billing.service import BillingService
 
@@ -57,29 +58,30 @@ async def stripe_webhook(
             "errors.invalid_webhook_signature", fallback="Invalid webhook signature"
         ) from exc
 
-    repo = WebhookEventRepository(session)
-    existing = await repo.get_by_id(stripe_event["id"])
-    if existing is not None and existing.processed_at is not None:
+    with FORGE_STRIPE_WEBHOOK_SECONDS.time():
+        repo = WebhookEventRepository(session)
+        existing = await repo.get_by_id(stripe_event["id"])
+        if existing is not None and existing.processed_at is not None:
+            return Response(status_code=200)
+
+        if existing is None:
+            existing = await repo.create(
+                event_id=stripe_event["id"],
+                event_type=stripe_event["type"],
+                payload=stripe_event.to_dict(),
+            )
+            await session.commit()
+
+        try:
+            # Broad except is intentional: any failure here must be recorded so
+            # Stripe's retry re-runs handle_event, then re-raised so the global
+            # handler logs it and responds 500.
+            await BillingService(session, redis).handle_event(existing)
+        except Exception as exc:
+            await repo.mark_failed(existing, error=str(exc))
+            await session.commit()
+            raise
+
+        await repo.mark_processed(existing)
+        await session.commit()
         return Response(status_code=200)
-
-    if existing is None:
-        existing = await repo.create(
-            event_id=stripe_event["id"],
-            event_type=stripe_event["type"],
-            payload=stripe_event.to_dict(),
-        )
-        await session.commit()
-
-    try:
-        # Broad except is intentional: any failure here must be recorded so
-        # Stripe's retry re-runs handle_event, then re-raised so the global
-        # handler logs it and responds 500.
-        await BillingService(session, redis).handle_event(existing)
-    except Exception as exc:
-        await repo.mark_failed(existing, error=str(exc))
-        await session.commit()
-        raise
-
-    await repo.mark_processed(existing)
-    await session.commit()
-    return Response(status_code=200)

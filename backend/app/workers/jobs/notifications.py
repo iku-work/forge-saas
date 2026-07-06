@@ -29,6 +29,7 @@ from sqlalchemy import CursorResult, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.db import async_session_factory
+from app.core.metrics import FORGE_PUSH_SENT_TOTAL
 from app.models._mixins import utcnow
 from app.modules.auth.models import User
 from app.modules.notifications.models import Notification
@@ -100,11 +101,14 @@ async def send_push(
             sentry_sdk.capture_exception(exc)
             return
 
+        sent_count = 0
         for push_token, receipt in zip(tokens, receipts, strict=False):
-            if receipt.get("status") != "error":
+            if receipt.get("status") == "error":
+                if receipt.get("details", {}).get("error") == _EXPO_DEVICE_NOT_REGISTERED:
+                    await token_repo.deactivate(push_token.token)
                 continue
-            if receipt.get("details", {}).get("error") == _EXPO_DEVICE_NOT_REGISTERED:
-                await token_repo.deactivate(push_token.token)
+            sent_count += 1
+        FORGE_PUSH_SENT_TOTAL.inc(sent_count)
 
         notification.push_sent_at = utcnow()
         await session.commit()

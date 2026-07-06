@@ -11,7 +11,7 @@ from datetime import datetime
 from typing import Any, ClassVar, Protocol, cast
 from uuid import UUID
 
-from sqlalchemy import CursorResult, delete, select, tuple_
+from sqlalchemy import CursorResult, delete, func, select, tuple_
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import NotFoundError
@@ -176,6 +176,16 @@ class SessionRepository:
         )
         result = await self.session.execute(stmt)
         return list(result.scalars().all())
+
+    async def count_active(self) -> int:
+        m = cast("Any", SessionModel)
+        stmt = (
+            select(func.count())
+            .select_from(SessionModel)
+            .where(m.revoked_at.is_(None), m.expires_at > utcnow())
+        )
+        result = await self.session.execute(stmt)
+        return result.scalar_one()
 
     async def prune_expired(self) -> int:
         m = cast("Any", SessionModel)

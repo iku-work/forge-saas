@@ -20,6 +20,7 @@ from app.core.handlers import register_exception_handlers
 from app.core.i18n import load_translations
 from app.core.jobs import dispose_pool as dispose_jobs_pool
 from app.core.logging import configure_logging
+from app.core.metrics import init_metrics
 from app.core.module_loader import get_modules
 from app.core.sentry import init_sentry
 from app.middleware.impersonation import ImpersonationContextMiddleware
@@ -71,6 +72,7 @@ app.add_middleware(
     allow_headers=["Authorization", "Content-Type", "X-Org-ID"],
 )
 app.include_router(build_router())
+init_metrics(app)
 
 
 def _custom_openapi() -> dict[str, Any]:

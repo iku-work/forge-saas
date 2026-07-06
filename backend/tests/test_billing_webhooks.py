@@ -29,6 +29,7 @@ from uuid import uuid4
 import httpx
 import pytest
 from httpx import ASGITransport
+from prometheus_client import REGISTRY
 from sqlalchemy.ext.asyncio import (
     AsyncEngine,
     AsyncSession,
@@ -249,6 +250,21 @@ async def test_handler_exception_records_error_and_returns_500(
     assert stored.processed_at is None
     assert stored.error == "boom"
     assert stored.attempt_count == 1
+
+
+# --- metrics (T-202) -----------------------------------------------------------------
+
+
+async def test_webhook_call_observes_stripe_webhook_duration_histogram(
+    client: httpx.AsyncClient,
+) -> None:
+    before = REGISTRY.get_sample_value("forge_stripe_webhook_seconds_count") or 0.0
+
+    response = await _post_webhook(client, _stripe_event(event_id=f"evt_{uuid4().hex}"))
+
+    assert response.status_code == 200
+    after = REGISTRY.get_sample_value("forge_stripe_webhook_seconds_count")
+    assert after == before + 1
 
 
 async def test_retry_after_failure_succeeds_and_marks_processed(

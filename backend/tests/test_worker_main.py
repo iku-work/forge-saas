@@ -121,6 +121,7 @@ async def test_worker_startup_wires_redis_and_starts_scheduler() -> None:
             "notify_expiring_trials",
             "expire_trials_to_inactive",
             "report_usage_to_stripe",
+            "refresh_active_sessions_gauge",
         }
     finally:
         await worker_shutdown(ctx)

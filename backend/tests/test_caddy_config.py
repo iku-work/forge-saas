@@ -16,3 +16,13 @@ def test_caddyfile_dev_uses_internal_tls() -> None:
 def test_caddyfile_dev_redirects_http_to_https_with_301() -> None:
     content = (REPO_ROOT / "Caddyfile").read_text()
     assert "redir https://localhost{uri} 301" in content
+
+
+def test_caddyfile_prod_blocks_public_metrics_access() -> None:
+    content = (REPO_ROOT / "Caddyfile.prod").read_text()
+    assert "respond /metrics 404" in content
+
+
+def test_caddyfile_dev_blocks_public_metrics_access() -> None:
+    content = (REPO_ROOT / "Caddyfile").read_text()
+    assert "respond /metrics 404" in content

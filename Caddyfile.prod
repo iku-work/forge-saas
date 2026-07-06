@@ -1,4 +1,5 @@
 {$DOMAIN} {
+	respond /metrics 404
 	reverse_proxy backend:8000
 	# Caddy auto-obtains and renews Let's Encrypt cert — no config needed
 	encode gzip zstd

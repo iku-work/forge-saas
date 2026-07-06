@@ -45,6 +45,7 @@ from sqlmodel import SQLModel
 from testcontainers.postgres import PostgresContainer
 from testcontainers.redis import RedisContainer
 
+from app.core.metrics import ACTIVE_SESSIONS_REDIS_KEY
 from app.modules.auth.models import (
     EmailVerificationToken,
     MagicLinkToken,
@@ -68,6 +69,7 @@ from app.workers.scheduler import (
     cleanup_expired_tokens,
     create_scheduler,
     expire_data_export_urls,
+    refresh_active_sessions_gauge,
     sync_expiring_trials,
     with_distributed_lock,
 )
@@ -330,6 +332,37 @@ async def test_expire_data_export_urls_expires_only_ready_past_expiry(
         assert refetched_pending.status == "pending"
 
 
+# --- refresh_active_sessions_gauge -----------------------------------------------
+
+
+async def test_refresh_active_sessions_gauge_writes_active_count_to_redis(
+    session: AsyncSession, redis_client: Redis
+) -> None:
+    user = await _seed_user(session)
+    repo = SessionRepository(session)
+    await repo.create(
+        user_id=user.id,
+        token_hash="active",
+        device_label=None,
+        ip_address="127.0.0.1",
+        user_agent="pytest",
+        expires_at=_future(),
+    )
+    await repo.create(
+        user_id=user.id,
+        token_hash="expired",
+        device_label=None,
+        ip_address="127.0.0.1",
+        user_agent="pytest",
+        expires_at=_past(),
+    )
+    await session.commit()
+
+    await refresh_active_sessions_gauge(redis_client)
+
+    assert await redis_client.get(ACTIVE_SESSIONS_REDIS_KEY) == b"1"
+
+
 # --- with_distributed_lock ------------------------------------------------------
 
 
@@ -412,6 +445,7 @@ async def test_create_scheduler_registers_all_jobs_in_utc(redis_client: Redis) -
         "notify_expiring_trials",
         "expire_trials_to_inactive",
         "report_usage_to_stripe",
+        "refresh_active_sessions_gauge",
     }
     assert "hour='*/6'" in repr(jobs_by_id["cleanup_expired_sessions"].trigger)
     assert "hour='8'" in repr(jobs_by_id["sync_expiring_trials"].trigger)
@@ -420,6 +454,7 @@ async def test_create_scheduler_registers_all_jobs_in_utc(redis_client: Redis) -
     assert "hour=" not in repr(jobs_by_id["cleanup_expired_tokens"].trigger)
     assert "hour=" not in repr(jobs_by_id["expire_data_export_urls"].trigger)
     assert "minute='*/15'" in repr(jobs_by_id["report_usage_to_stripe"].trigger)
+    assert "seconds=60" in repr(jobs_by_id["refresh_active_sessions_gauge"].trigger)
     for job in jobs_by_id.values():
         assert "timezone='UTC'" in repr(job.trigger)
 
@@ -440,3 +475,23 @@ async def test_create_scheduler_job_runs_the_underlying_function_under_the_lock(
     await registered_job.func()
 
     assert calls == [{}]
+
+
+async def test_refresh_active_sessions_gauge_job_runs_under_the_lock(
+    redis_client: Redis, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    calls: list[Redis] = []
+
+    async def fake_refresh_active_sessions_gauge(client: Redis) -> None:
+        calls.append(client)
+
+    monkeypatch.setattr(
+        scheduler_module, "refresh_active_sessions_gauge", fake_refresh_active_sessions_gauge
+    )
+    scheduler = create_scheduler(redis_client)
+    registered_job = scheduler.get_job("refresh_active_sessions_gauge")
+    assert registered_job is not None
+
+    await registered_job.func()
+
+    assert calls == [redis_client]

@@ -45,6 +45,7 @@ from resend.exceptions import ResendError
 
 from app.core.config import get_settings
 from app.core.i18n import get_default_locale, t
+from app.core.metrics import FORGE_EMAILS_SENT_TOTAL
 from app.core.module_loader import get_branding
 
 logger = logging.getLogger(__name__)
@@ -145,6 +146,7 @@ async def send_email(
 
     if settings.EMAIL_BACKEND == "smtp":
         await _send_via_smtp(to=to, subject=subject, html=html, text=text)
+        FORGE_EMAILS_SENT_TOTAL.inc()
         return
 
     resend.api_key = settings.RESEND_API_KEY
@@ -172,4 +174,5 @@ async def send_email(
             sentry_sdk.capture_exception(exc)
             return
         else:
+            FORGE_EMAILS_SENT_TOTAL.inc()
             return
