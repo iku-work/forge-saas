@@ -4700,94 +4700,1065 @@ For each of `packages/{ui,api-client,types,hooks,validation,utils}`:
 # Phase 3 — Hardening
 
 > HTML ref: §"Build phases" → "Phase 3"
+>
+> **Prerequisite:** T-160 (Phase 2 acceptance runbook) is complete and green. Do not start Phase 3 until every Phase 2 acceptance path passes without intervention.
+>
+> **Phase 3 acceptance criterion:** (1) An error thrown on backend, web, or mobile lands in Sentry with a request ID; a request can be followed from HTTP span → DB span → job span in traces; Grafana dashboards render from committed JSON. (2) ZAP baseline scan, OWASP Top 10 test mapping, and the ASVS L2 checklist are green in CI. (3) The full signup → verify → invite → upgrade flow passes in Playwright on Chromium + WebKit, in Maestro on mobile, under k6 load within latency budgets, and with zero axe-core violations. (4) The app ships in five+ locales including one RTL locale. (5) No list endpoint issues N+1 queries and no route exceeds its bundle budget. (6) `make new-module NAME=foo` produces a module that passes lint + mypy out of the box. Each item has an automated check — Phase 3 "done" is a green pipeline, not a claim.
+
+---
 
 ## P3-A · Observability (full)
 
-| ID    | Title                                                                                                                                                                                                                                                                                     | Needs |
-| ----- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----- |
-| T-201 | Sentry SDK wired on backend (already started), web, and mobile                                                                                                                                                                                                                            | T-002 |
-| T-202 | Prometheus instrumentor on backend; `/metrics` on internal port only                                                                                                                                                                                                                      | T-002 |
-| T-203 | OpenTelemetry auto-instrumentation: FastAPI + SQLAlchemy + ARQ + Redis                                                                                                                                                                                                                    | T-002 |
-| T-204 | Grafana dashboards exported as JSON in `docs/grafana/`                                                                                                                                                                                                                                    | T-202 |
-| T-205 | Postgres slow query observability: enable `pg_stat_statements`, export as Prometheus metrics, alert rule for p95 query latency > 500ms per statement; slow query hall-of-shame dashboard                                                                                                  | T-202 |
-| T-206 | Circuit breakers on external calls (Stripe, Resend, S3, virus scanner, push provider): `tenacity` retry with exponential backoff, `pybreaker` circuit that opens after 5 consecutive failures; degraded-mode fallback documented per integration; metrics exported for open circuit count | T-002 |
+> HTML ref: §"Observability" (entire section)
+>
+> The three pillars — logs (done in T-011), metrics, traces — plus error tracking and resilience. Rule of thumb: every incident postmortem question ("what happened, to whom, how slow, which dependency") must be answerable from a dashboard, not from a shell session.
+
+### T-201 Sentry SDK wired on backend, web, and mobile
+
+> HTML ref: §"Observability" → "Request ID middleware" (Sentry tag integration)
+> needs: T-002, T-040, T-045
+
+**Goal** Errors on all three platforms report to Sentry with release, environment, and request ID — and never contain PII or secrets.
+
+**Build**
+
+- Backend — `backend/app/core/sentry.py`, called from the app factory **before** middleware registration:
+  - `sentry_sdk.init(dsn=settings.SENTRY_DSN, environment=settings.ENVIRONMENT, release=app_version, send_default_pii=False, traces_sample_rate=settings.SENTRY_TRACES_SAMPLE_RATE)`
+  - Init is a no-op when `SENTRY_DSN` is unset (dev default) — the rest of the app must not care
+  - `before_send` hook reuses the T-011 scrubber key list (`password`, `token`, `secret`, `api_key`, `authorization`, `cookie`) to redact event payloads and breadcrumbs
+  - New settings: `SENTRY_TRACES_SAMPLE_RATE: float = 0.1` (+ `.env.example` entry)
+  - Note: the global handler (T-006) already calls `sentry_sdk.capture_exception` and T-007 sets the `request_id` tag — with the SDK initialised those now actually deliver. Verify both still work; do not double-report (the FastAPI integration also captures unhandled exceptions — configure the handler to only capture what the integration misses, or disable the integration's duplicate capture).
+- Web — `apps/web/src/lib/sentry.ts`:
+  - `@sentry/react` init gated on `import.meta.env.VITE_SENTRY_DSN`; `environment` + `release` from build-time env
+  - Top-level `<ErrorBoundary>` with a branded fallback page ("Something went wrong · Reload") — never a white screen
+  - Source maps uploaded via the Sentry Vite plugin, CI builds only (auth token from CI secret; plugin disabled locally)
+- Mobile — `apps/mobile/`:
+  - `@sentry/react-native` with the Expo config plugin; init in the root layout, gated on env
+  - Release tagging compatible with OTA updates (`release` = app version + update ID) so stack traces map to the right bundle
+- All three: user context set to `{ id: user_id }` only — never email or name
+
+**Tests**
+
+- Backend: `before_send` given an event containing `"password": "hunter2"` in extra → value replaced with `"***"`
+- Backend: init with `SENTRY_DSN=None` → app boots, no SDK calls fail
+- Backend: endpoint raising `RuntimeError` → exactly one Sentry event captured (assert via `sentry_sdk` test transport), tagged with `request_id`
+- Web: rendering a component that throws inside the boundary shows the fallback page (Vitest + RTL)
+
+**Done when**
+
+- [ ] A thrown test error on each platform appears in Sentry (verify once against a real DSN, then rely on transport tests)
+- [ ] Scrubber test passes — no secret keys in any event
+- [ ] Source maps resolve web stack traces in the Sentry UI
+- [ ] `mypy --strict` / `tsc --strict` clean
+
+---
+
+### T-202 Prometheus metrics — `/metrics` on internal network only
+
+> HTML ref: §"Observability" → "Metrics (Prometheus)" | "Health endpoints"
+> needs: T-002
+
+**Goal** RED metrics (rate, errors, duration) for every endpoint plus app-specific gauges, scrapeable inside the Docker network but unreachable from the public edge.
+
+**Build**
+
+- `backend/app/core/metrics.py`:
+  - `prometheus-fastapi-instrumentator` (already pinned in T-002 deps): `Instrumentator().instrument(app).expose(app, endpoint="/metrics", include_in_schema=False)`
+  - Custom collectors, registered here and updated where the data lives:
+    - `forge_db_pool_used` / `forge_db_pool_size` gauges (read from `engine.pool.checkedout()` / `.size()`)
+    - `forge_arq_queue_depth` gauge (Redis `LLEN` on the ARQ queue key, sampled by a collector callback)
+    - `forge_active_sessions` gauge (count of non-revoked, non-expired `Session` rows — refreshed by a 60 s APScheduler job, not per-scrape)
+    - `forge_stripe_webhook_seconds` histogram — wrap the T-030 webhook handler
+    - `forge_emails_sent_total` / `forge_push_sent_total` counters in the respective jobs
+- Edge lockout — `/metrics` must never be public:
+  - `Caddyfile` and `Caddyfile.prod`: `respond /metrics 404` before the `reverse_proxy` directive
+  - `docker-compose.prod.yml`: backend port stays internal to `forge-net`; only Caddy publishes ports
+- Metric label discipline: route templates (`/api/v1/users/{id}`), never raw paths — no per-UUID label cardinality explosions
+
+**Tests**
+
+- Direct ASGI request to `/metrics` → 200, `text/plain` Prometheus format, contains `forge_db_pool_size`
+- Request through Caddy to `https://localhost/metrics` → 404 (integration, dev compose)
+- CI grep: both Caddyfiles contain the `respond /metrics 404` rule (same pattern as the T-004.5 redirect grep)
+- Stripe webhook test asserts the histogram observed a sample
+
+**Done when**
+
+- [ ] `/metrics` scrapeable from inside `forge-net`, 404 via Caddy
+- [ ] All five custom metric families present in output
+- [ ] No high-cardinality labels (assert label values for the request metric are route templates)
+
+---
+
+### T-203 OpenTelemetry auto-instrumentation — FastAPI + SQLAlchemy + ARQ + Redis
+
+> HTML ref: §"Observability" → "Traces (OpenTelemetry)"
+> needs: T-002, T-011
+
+**Goal** One request produces one trace: HTTP server span → DB query spans → Redis spans; background jobs produce their own root spans. Exporter is vendor-neutral and switched by a single env var.
+
+**Build**
+
+- `backend/app/core/tracing.py`, called from the app factory:
+  - `TracerProvider` with resource attrs `service.name="forge-backend"`, `service.version`, `deployment.environment`
+  - OTLP exporter configured from standard `OTEL_EXPORTER_OTLP_ENDPOINT` env var; when unset, tracing is a no-op (dev default) — document that Tempo, Jaeger, and Honeycomb all speak OTLP
+  - Parent-based ratio sampler, rate from `OTEL_TRACES_SAMPLER_ARG` (default `0.1`)
+  - Instrument: `FastAPIInstrumentor`, `SQLAlchemyInstrumentor` (on the async engine's sync core), `RedisInstrumentor`
+- ARQ has no official instrumentation — wrap job execution in the worker (T-034's `WorkerSettings.on_job_start` / custom runner): span name `arq.<job_name>`, attributes `job.id`, `job.try`, `job.queue`
+- Log/trace correlation: inject `trace_id` + `span_id` into Loguru records (extend the T-011 configuration) so a log line can be pasted into the trace viewer
+- `request_id` (T-007) set as a span attribute on the server span
+
+**Tests**
+
+- Using the in-memory span exporter: one API call that reads the DB → a server span with ≥1 child span of kind CLIENT with `db.system="postgresql"`
+- Enqueue + run a test ARQ job → root span `arq.<name>` with the job attributes
+- `OTEL_EXPORTER_OTLP_ENDPOINT` unset → no exporter configured, app boots, zero overhead beyond no-op tracer
+- A log record emitted inside a traced request contains the active `trace_id`
+
+**Done when**
+
+- [ ] Span tree test passes (HTTP → DB parent/child relationship asserted)
+- [ ] ARQ job spans emitted
+- [ ] Trace/log correlation test passes
+- [ ] `mypy --strict` clean
+
+---
+
+### T-204 Grafana dashboards exported as JSON
+
+> HTML ref: §"Observability" → "Metrics (Prometheus)"
+> needs: T-202
+
+**Goal** Dashboards are code: committed JSON that any Grafana instance can import, plus a local compose profile to view them during development.
+
+**Build**
+
+- `docs/grafana/` dashboards (datasource as a `${DS_PROMETHEUS}` template variable, never a hardcoded UID):
+  - `api-overview.json` — request rate, error rate (4xx/5xx split), p50/p95/p99 latency by route, in-flight requests
+  - `workers.json` — ARQ queue depth, job duration by name, job failure rate, emails/push sent
+  - `database.json` — pool usage vs size, connection wait, (slow-query panels land in T-205)
+  - `business.json` — active sessions, signups/day, webhook processing time
+- Optional local stack — `docker-compose.yml` profile `observability`:
+  - `prom/prometheus` scraping `backend:8000/metrics` (config in `docs/grafana/prometheus.yml`)
+  - `grafana/grafana` with provisioning mounts auto-loading the four dashboards + datasource
+  - `make observe` target: `docker compose --profile observability up -d`
+- README in `docs/grafana/` — how to import into a managed Grafana, how to regenerate JSON after editing (export → strip `id`/`uid` → commit)
+
+**Tests**
+
+- CI script: every `docs/grafana/*.json` parses, declares `${DS_PROMETHEUS}`, and contains no hardcoded datasource UID
+- Smoke (documented, run once locally): `make observe` → Grafana at `:3001` renders all four dashboards with live data
+
+**Done when**
+
+- [ ] Four dashboards committed and CI-validated
+- [ ] `make observe` shows live request data end-to-end
+- [ ] README documents the export-and-commit loop
+
+---
+
+### T-205 Postgres slow-query observability — `pg_stat_statements`
+
+> HTML ref: §"Observability" → "Metrics (Prometheus)" | §"Best practices" → "Database best practices"
+> needs: T-202, T-204
+
+**Goal** The slowest statements in the system are visible on a dashboard and alert before users complain.
+
+**Build**
+
+- Enable the extension:
+  - `docker-compose.yml` + `docker-compose.prod.yml`: postgres `command: -c shared_preload_libraries=pg_stat_statements -c pg_stat_statements.track=all`
+  - Migration: `op.execute(sa.text("CREATE EXTENSION IF NOT EXISTS pg_stat_statements"))` — raw SQL justified per §0.3 (DDL not expressible in SQLAlchemy); `downgrade()` drops the extension
+- `prometheuscommunity/postgres-exporter` service (compose `observability` profile + prod):
+  - Custom queries file `docs/grafana/postgres-exporter-queries.yaml` exporting per-statement `calls`, `mean_exec_time`, `total_exec_time`, `rows` for the top 50 statements by total time
+  - Note honestly: `pg_stat_statements` exposes mean/max, not true p95 — the p95 alert target from the plan is implemented as **mean > 500 ms sustained**, with the k6 suite (T-223) owning true end-to-end p95
+- Prometheus alert rule file `docs/grafana/alerts.yml`: statement with `calls > 100` and `mean_exec_time > 500ms` for 15 min → warning; validated with `promtool check rules` in CI
+- "Hall of shame" panel added to `database.json` (T-204): top 10 statements by total time, with query text
+- Runbook `docs/runbooks/slow-queries.md`: how to read the dashboard, `EXPLAIN ANALYZE` workflow, when to add an index vs rewrite vs cache
+
+**Tests**
+
+- Migration round-trip (extension created and dropped)
+- Integration: after running the test suite against the dev stack, `SELECT count(*) FROM pg_stat_statements` > 0
+- CI: `promtool check rules docs/grafana/alerts.yml` exits 0
+
+**Done when**
+
+- [ ] Extension live in dev + prod compose
+- [ ] Exporter metrics visible in Prometheus; hall-of-shame panel renders
+- [ ] Alert rule validated in CI; runbook written
+
+---
+
+### T-206 Circuit breakers on all external calls
+
+> HTML ref: §"Best practices" → "Error handling" (degraded modes)
+> needs: T-002, T-030, T-035, T-111, T-113
+
+**Goal** A slow or dead third party (Stripe, Resend, S3, virus scanner, Expo push) degrades one feature — it never cascades into request-path timeouts or a worker pile-up.
+
+**Build**
+
+- `backend/app/core/resilience.py`:
+
+  ```python
+  # One named breaker per integration, module-level registry
+  BREAKERS: dict[str, pybreaker.CircuitBreaker] = {
+      "stripe": ..., "resend": ..., "s3": ..., "virus_scanner": ..., "expo_push": ...,
+  }  # fail_max=5, reset_timeout=30s
+
+  def resilient(integration: str, *, retries: int = 3) -> Callable:
+      """Decorator: tenacity retry (exponential 0.5s→4s, retry ONLY on
+      transient errors — timeouts, connection errors, 5xx) wrapped inside
+      the integration's circuit breaker. Open breaker raises
+      ExternalServiceUnavailableError without attempting the call."""
+  ```
+
+- New exception `ExternalServiceUnavailableError(DomainError)`: `status_code=503`, `code="service_unavailable"`, message names the degraded feature, not the vendor internals
+- Retry discipline: never retry non-idempotent calls without an idempotency key — §0.4 already mandates keys on Stripe, webhooks, and email sends; assert the decorator is only applied to call sites that pass one
+- Apply to every outbound call site: Stripe API calls (T-031), Resend send (T-035), S3/R2/MinIO operations (T-111), virus scanner (T-113), Expo push (T-105)
+- Metrics (registered via T-202): `forge_breaker_state{integration}` gauge (0 closed / 1 half-open / 2 open), `forge_breaker_open_total{integration}` counter, `forge_external_call_seconds{integration}` histogram
+- Degraded-mode behaviour, implemented and documented in `docs/runbooks/degraded-mode.md`:
+  - **Stripe down** — checkout/portal endpoints return 503 envelope; webhooks are safe (Stripe retries for days)
+  - **Resend down** — email jobs re-queue with ARQ backoff; emails delayed, never dropped
+  - **S3 down** — presign/download return 503; existing metadata unaffected
+  - **Virus scanner down** — uploads stay `pending_scan` and undownloadable; scan job retries
+  - **Expo push down** — push dropped after retries; in-app + email channels unaffected
+
+**Tests**
+
+- 5 consecutive simulated failures → breaker opens → 6th call raises `ExternalServiceUnavailableError` **without** invoking the wrapped function
+- After `reset_timeout` (freezegun / injected clock) → half-open → one success closes it
+- Retry fires on `httpx.TimeoutException`, does **not** fire on a 400 response
+- Open `resend` breaker → email job re-queued, not marked failed
+- Metrics reflect open/close transitions
+
+**Done when**
+
+- [ ] All five integrations wrapped; grep test asserts no bare outbound `httpx`/SDK call outside `resilience`-decorated call sites
+- [ ] Breaker lifecycle tests pass, 100% coverage on `resilience.py`
+- [ ] Degraded-mode runbook covers all five integrations
+
+---
 
 ## P3-B · OWASP hardening
 
-| ID    | Title                                                                                     | Needs        |
-| ----- | ----------------------------------------------------------------------------------------- | ------------ |
-| T-210 | OWASP ZAP baseline scan in CI against ephemeral deploy                                    | T-055        |
-| T-211 | Nightly ZAP full active scan against staging (separate workflow)                          | T-210        |
-| T-212 | `import-linter` already in T-012 — verify all 10 OWASP mappings have passing tests        | T-049        |
-| T-213 | ASVS L2 checklist document in `docs/adr/0001-security-baseline.md`                        | —            |
-| T-214 | Pentest readiness runbook `docs/runbooks/pentest-prep.md` — see §"Pentest guidance" below | T-210, T-211 |
+> HTML ref: §"OWASP & security testing" (entire section)
+>
+> Security is verified continuously, not audited once. T-054 already runs SAST (Bandit, Semgrep), dependency scans, and secrets scanning. This section adds DAST, proves the OWASP Top 10 mapping with tests, and produces the documents a real engagement needs.
 
-**Pentest guidance** — read before commissioning any external security engagement.
+### T-210 OWASP ZAP baseline scan in CI against an ephemeral deploy
 
-Pentesting is not one thing. Before spending money, pick the right tier for your stage.
+> HTML ref: §"OWASP & security testing" → "DAST — OWASP ZAP"
+> needs: T-055
 
-| Trigger                                                                | Recommended tier                                                                                            | Rough cost      |
-| ---------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- | --------------- |
-| First deployment, no paying customers yet                              | Automated CI tooling only (already in the plan: T-054, T-210, T-211, T-049, T-050). No external engagement. | £0              |
-| Real users, want ongoing scrutiny                                      | Private bug bounty on HackerOne or Intigriti, scoped to auth + billing + file access                        | £500–£3000 / yr |
-| Pre-enterprise sales or pre-fundraise                                  | Time-boxed pentest from a boutique firm (3–5 days)                                                          | £3000–£6000     |
-| Enterprise procurement requires a report; regulated data; annual audit | Full formal pentest from a reputable firm (2–4 weeks) with executive summary suitable for sharing           | £8000–£25,000   |
-| Handling actual payment cards                                          | Not applicable — the template uses Stripe Checkout (hosted). Cards never touch your infrastructure.         |                 |
+**Goal** Every PR gets a passive DAST pass against a real running instance — missing headers, cookie flags, and info leaks fail the build before review.
 
-T-214 builds the runbook that reduces the cost and improves the value of any manual engagement, whichever tier you choose:
+**Build**
 
-- **Scope document** — what's in scope (`/api/v1/*`, web app, mobile app), what's out (Stripe-hosted pages, S3 storage internals, third-party integrations)
-- **Test account credentials** — pre-provisioned pentest accounts on staging with realistic data volumes, one per role (OWNER, ADMIN, MEMBER, superadmin)
-- **Sensitive-endpoint inventory** — auth flows, payment endpoints, admin routes, impersonation, GDPR export/delete
-- **Known-issues list** — anything you're aware of that would otherwise waste testers' time re-discovering
-- **Staging environment details** — separate from prod, populated with synthetic data, credentials rotated after engagement
-- **Communication channel** — dedicated Slack/email for the engagement, escalation contact for critical findings
-- **Remediation SLA policy** — critical = 24h, high = 7d, medium = 30d, low = next release
-- **Report template** — what you'll do with findings, who reviews, how they get tracked to closure (audit log or issue tracker)
+- CI job `zap-baseline` in the security workflow (needs the compose stack, so runs after build):
+  - Boot the ephemeral stack: `docker compose up -d` (backend + Caddy + Postgres + Redis + MinIO + Mailhog), seed via `make seed`, wait for `/health/ready`
+  - Run `ghcr.io/zaproxy/zaproxy:stable zap-baseline.py -t https://caddy -c .zap/baseline.conf -r zap-report.html` on the compose network (trusting the dev cert)
+  - Fail the job on any FAIL; WARNs allowed only if listed in `.zap/baseline.conf` with a dated justification comment
+  - Upload `zap-report.html` as a workflow artifact
+- `.zap/baseline.conf` starts empty except documented ignores (e.g. Mailhog UI if scanned) — every ignore has an owner and reason
+- Scan scope: the app origin only; explicitly exclude `/metrics` (returns 404 via Caddy anyway, per T-202)
 
-Doing this prep well means a 5-day engagement finds real bugs instead of spending day 1 asking basic questions.
+**Tests**
+
+- One-time verification on a throwaway branch: comment out the `security_headers` middleware → ZAP job fails (proves the gate bites); revert
+- Steady state: job green on `main`
+
+**Done when**
+
+- [ ] `zap-baseline` job green in CI on a real PR
+- [ ] Header-removal canary run demonstrated failure once (link the red run in the PR description)
+- [ ] Report artifact downloadable from the workflow run
+
+---
+
+### T-211 Nightly ZAP full active scan against staging
+
+> HTML ref: §"OWASP & security testing" → "DAST — OWASP ZAP"
+> needs: T-210
+
+**Goal** The aggressive scan (active attacks, fuzzing) runs where it can't hurt anyone: nightly, against staging, authenticated.
+
+**Build**
+
+- `.github/workflows/zap-full.yml`: `schedule: cron "0 3 * * *"` + `workflow_dispatch`
+- ZAP Automation Framework plan (`.zap/full-scan.yaml`):
+  - Target: staging URL from a repo variable
+  - Authentication: dedicated `zap-scanner@<staging-domain>` user (MEMBER role, own org, synthetic data) logging in via the real `/api/v1/auth/login` flow; session token refreshed by the plan
+  - Active scan policy: default minus DoS-category rules (staging is shared)
+  - Out of scope: Stripe-hosted pages, Mailhog, `/metrics`, GDPR delete endpoint for the scanner's own account (it would lock itself out)
+- Findings handling: new alerts above LOW open a GitHub issue (one per alert type, deduped by fingerprint) labeled `security`; report artifact retained 90 days
+- Scanner credentials rotated by the same process as other staging secrets; documented in the workflow README header
+
+**Tests**
+
+- `workflow_dispatch` run completes end-to-end: authenticates (assert ≥1 authenticated request in the report), scans, uploads report
+- Deduplication: re-running against unchanged staging opens no duplicate issues
+
+**Done when**
+
+- [ ] Nightly run green (or red with real findings triaged as issues)
+- [ ] Authenticated coverage confirmed in the report
+- [ ] Runbook note: what to do when the nightly scan finds something (severity → SLA from T-214)
+
+---
+
+### T-212 OWASP Top 10 test mapping — verified in CI
+
+> HTML ref: §"OWASP & security testing" → "OWASP Top 10 — mitigation & test mapping"
+> needs: T-049
+
+**Goal** The claim "every OWASP Top 10 risk has a test proving its mitigation" becomes machine-checked, not a table in a document that drifts.
+
+**Build**
+
+- `docs/security/owasp-top10.md`: the mapping table from the HTML plan (A01–A10 → mitigation in this codebase → test file), kept human-readable
+- Pytest marker: `@pytest.mark.owasp("A01")` applied to the existing tests that prove each mitigation:
+  - A01 broken access control → T-049 cross-tenant sweep + RBAC matrix (T-021)
+  - A02 crypto failures → T-011 log-scrubber tests, T-007 HSTS header test, T-009.5 encryption tests
+  - A03 injection → T-050 Schemathesis run + Semgrep raw-SQL rule (CI presence check)
+  - A04 insecure design → T-008/T-022 rate-limit tests, T-018 lockout tests
+  - A05 misconfiguration → T-007 header tests, T-003 wildcard-CORS startup guard
+  - A06 vulnerable components → CI presence check: T-054 audit jobs exist and are non-optional
+  - A07 auth failures → T-019 rotation + theft detection, T-024 TOTP, T-018 lockout
+  - A08 integrity failures → T-030 webhook bad-signature test, lockfile-unchanged CI check
+  - A09 logging failures → T-028 audit-row-on-sensitive-action tests
+  - A10 SSRF → **new code**: `backend/app/core/url_guard.py` `validate_outbound_url(url)` rejecting private ranges (RFC 1918, loopback, link-local, `169.254.169.254` metadata), non-http(s) schemes, and DNS-rebinding via resolved-IP check — built now, consumed by Phase 4 outbound webhooks (T-32x)
+- CI step `owasp-map-check`: script asserts every category A01–A10 has ≥1 **passing** test carrying its marker (`pytest -m owasp` + a collect step that fails on a missing category); also fails if `owasp-top10.md` references a test file that no longer exists
+
+**Tests**
+
+- `url_guard` unit tests: `http://localhost`, `http://10.0.0.1`, `http://169.254.169.254/latest/meta-data`, `file:///etc/passwd`, hostname resolving to a private IP → all rejected; `https://example.com` accepted
+- Meta-test: removing a marker from any category makes `owasp-map-check` fail (verified once on a branch)
+
+**Done when**
+
+- [ ] All 10 categories carry passing marked tests; CI check green
+- [ ] `url_guard.py` at 100% coverage
+- [ ] `docs/security/owasp-top10.md` cross-checked by CI
+
+---
+
+### T-213 ASVS L2 checklist — `docs/adr/0001-security-baseline.md`
+
+> HTML ref: §"OWASP & security testing" → "Beyond the Top 10"
+> needs: T-212
+
+**Goal** A written, evidence-linked security baseline: which ASVS Level 2 requirements the template meets, which it deliberately doesn't, and why.
+
+**Build**
+
+- `docs/adr/0001-security-baseline.md` in ADR format (context / decision / consequences), containing the checklist:
+  - One row per applicable ASVS 4.0 L2 requirement across chapters V1 (architecture), V2 (auth), V3 (sessions), V4 (access control), V5 (validation), V6 (crypto), V7 (logging), V8 (data protection), V9 (communications), V12 (files), V13 (API), V14 (config)
+  - Columns: requirement · status (`met` / `partial` / `n/a`) · evidence — a repo-relative link to the code, test, or config that satisfies it
+  - `n/a` rows carry one-line reasons (e.g. V11 business logic — product-specific, template documents the pattern only)
+  - `partial` rows each name a follow-up task ID (existing or newly filed at the bottom of this document)
+- This is the document referenced by T-214's pentest scope and by enterprise security questionnaires — write it for an external reader
+
+**Tests**
+
+- CI link-check script: every evidence link in the checklist resolves to an existing file (same mechanism as T-212's doc check)
+
+**Done when**
+
+- [ ] Every applicable L2 requirement has a row; zero rows with empty status
+- [ ] Every `met` row links real evidence; every `partial` row names a follow-up
+- [ ] Link-check green in CI
+
+---
+
+### T-214 Pentest readiness runbook
+
+> HTML ref: §"OWASP & security testing" → "Penetration testing before real money"
+> needs: T-210, T-211, T-213
+
+**Goal** When a manual security engagement happens, day 1 is spent finding bugs — not asking basic questions.
+
+**Pentest guidance** — read before commissioning any external security engagement. Pentesting is not one thing; pick the right tier for your stage:
+
+| Trigger                                                                | Recommended tier                                                                                             | Rough cost      |
+| ---------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ | --------------- |
+| First deployment, no paying customers yet                              | Automated CI tooling only (already in the plan: T-054, T-210, T-211, T-049, T-050). No external engagement.  | £0              |
+| Real users, want ongoing scrutiny                                      | Private bug bounty on HackerOne or Intigriti, scoped to auth + billing + file access                         | £500–£3000 / yr |
+| Pre-enterprise sales or pre-fundraise                                  | Time-boxed pentest from a boutique firm (3–5 days)                                                           | £3000–£6000     |
+| Enterprise procurement requires a report; regulated data; annual audit | Full formal pentest from a reputable firm (2–4 weeks) with executive summary suitable for sharing            | £8000–£25,000   |
+| Handling actual payment cards                                          | Not applicable — the template uses Stripe Checkout (hosted). Cards never touch your infrastructure.          |                 |
+
+**Build**
+
+- `docs/runbooks/pentest-prep.md` containing:
+  - **Scope document** — in scope: `/api/v1/*`, web app, mobile app; out of scope: Stripe-hosted pages, S3 storage internals, third-party integrations
+  - **Test account provisioning** — a `make pentest-accounts` seed target creating one staging account per role (OWNER, ADMIN, MEMBER, superadmin) with realistic data volumes; credentials delivered out-of-band, rotated after the engagement
+  - **Sensitive-endpoint inventory** — auth flows, payment endpoints, admin routes, impersonation (T-142/T-260/T-261), GDPR export/delete — generated from the OpenAPI schema, tagged
+  - **Known-issues list** — anything already known (link the `security`-labeled issues from T-211) so testers don't waste time re-discovering it
+  - **Staging environment details** — separate from prod, synthetic data only, snapshot/restore procedure
+  - **Communication channel** — dedicated contact + escalation path for critical findings
+  - **Remediation SLA policy** — critical = 24 h, high = 7 d, medium = 30 d, low = next release
+  - **Report handling** — findings tracked to closure as issues, closure evidence linked, retest confirmation recorded
+- Cross-link: ASVS checklist (T-213) attached as the baseline claim the testers try to break
+
+**Tests**
+
+- `make pentest-accounts` creates the four accounts on a fresh staging seed, idempotently (documentation-level verification; no CI gate beyond the target existing)
+
+**Done when**
+
+- [ ] Runbook complete — someone unfamiliar with the project could brief a pentest firm from it alone
+- [ ] `make pentest-accounts` works against staging
+- [ ] SLA policy agreed and written down
+
+---
 
 ## P3-C · Comprehensive E2E + load
 
-| ID    | Title                                                                       | Needs |
-| ----- | --------------------------------------------------------------------------- | ----- |
-| T-220 | Playwright E2E: signup → verify → invite → upgrade across Chromium + WebKit | T-044 |
-| T-221 | axe-core a11y gate in Playwright on all key pages                           | T-220 |
-| T-222 | Maestro mobile E2E: login, deep link, logout                                | T-047 |
-| T-223 | k6 load scripts in `tests/load/`; p95 < 300 ms and error rate < 1% asserted | T-048 |
-| T-224 | Visual regression via Playwright snapshots on dashboard + settings          | T-220 |
+> HTML ref: §"Testing strategy" → "The test pyramid" (E2E + load rows), "Frontend & mobile testing", "Load & resilience"
+>
+> The money paths get browser/device-level coverage; everything else stays at unit/integration level. E2E suites are small and ruthless — a flaky E2E test gets fixed or deleted the week it flakes.
+
+### T-220 Playwright E2E — signup → verify → invite → upgrade (Chromium + WebKit)
+
+> HTML ref: §"Testing strategy" → "E2E web — Playwright"
+> needs: T-044, T-056
+
+**Goal** The Phase 1 acceptance flow — the one that must never break — runs as a browser test on every PR, on two engines.
+
+**Build**
+
+- `apps/web/e2e/` with `playwright.config.ts`: projects `chromium` + `webkit`, base URL `https://localhost` (dev Caddy cert trusted via `ignoreHTTPSErrors` in config), retries 1 in CI, trace on first retry
+- Helpers:
+  - `mailhog.ts` — poll Mailhog's API (`:8025/api/v2/search?kind=to&query=<email>`) for the verification / invitation email, extract the action link
+  - `stripe.ts` — two upgrade strategies behind an env switch:
+    - default (every PR): stub the payment by POSTing a signed `checkout.session.completed` test event to the T-030 webhook endpoint (reuse the webhook test fixtures) and asserting the UI reflects the paid plan
+    - `STRIPE_E2E=1` (nightly): drive the real Stripe Checkout test-mode page with card `4242 4242 4242 4242`
+- The spec, one continuous journey with unique per-run emails:
+  1. Register → "check your inbox" screen
+  2. Fetch verification email via Mailhog → visit link → logged-in dashboard
+  3. Create org → invite `teammate+<run>@example.com`
+  4. Second browser context: fetch invite email, accept, assert membership visible to both sides
+  5. Upgrade to paid plan → assert plan badge + gated feature unlocked
+- Selectors: `data-testid` only — add them to the app where missing; no text or CSS-path selectors
+- CI job `e2e-web` (in the test workflow, needs the compose stack): boots stack, seeds, runs both projects, uploads traces on failure
+
+**Tests**
+
+- The suite is the test. Additionally: a deliberately broken invite flow on a throwaway branch fails the job (one-time gate verification)
+
+**Done when**
+
+- [ ] Full journey green on Chromium + WebKit in CI
+- [ ] Zero non-`data-testid` selectors (lint rule or grep in CI)
+- [ ] Failure artifacts (trace, screenshot) uploaded and usable
+
+---
+
+### T-221 axe-core accessibility gate in Playwright
+
+> HTML ref: §"Testing strategy" → "Accessibility — axe-core"
+> needs: T-220
+
+**Goal** WCAG A/AA violations fail the build — accessibility is a test, not a hope.
+
+**Build**
+
+- `@axe-core/playwright` scan step appended to the E2E suite, run against each key page in its realistic state: login, register, dashboard, members list (with data), billing/plan page, settings, notification center (open), file upload
+- Fail on any violation with impact `serious` or `critical`; `moderate` and below reported as annotations
+- `apps/web/e2e/a11y-allowlist.ts`: rule/selector pairs that are explicitly accepted, each with a `// a11y-ok: <reason + date>` comment — empty allowlist is the goal
+- Scan both color schemes if the app has a dark mode; include the RTL locale once T-231 lands (add a follow-up marker)
+
+**Tests**
+
+- Meta-verification once: add `aria-hidden="true"` to the login form on a throwaway branch → job fails
+
+**Done when**
+
+- [ ] All key pages scanned in CI, zero serious/critical violations
+- [ ] Allowlist empty or every entry justified and dated
+
+---
+
+### T-222 Maestro mobile E2E — login, deep link, logout
+
+> HTML ref: §"Testing strategy" → "E2E mobile — Maestro"
+> needs: T-047
+
+**Goal** The three mobile flows that break most often — auth, deep links, session teardown — verified on a real emulator.
+
+**Build**
+
+- `.maestro/` flows:
+  - `login.yaml` — launch → login with seeded credentials → dashboard visible
+  - `deep-link.yaml` — open a magic-link/invite deep link (`forge://…`) cold and warm → correct screen with correct state
+  - `logout.yaml` — logout → secure store cleared (assert login screen on relaunch, no auto-login)
+- Seeded test user dedicated to mobile E2E (`make seed` addition), pointing the app at the local backend via env
+- CI: run on a macOS runner with the iOS Simulator (or Maestro Cloud if a device farm is preferred — write the choice down); nightly rather than per-PR (emulator boot cost), `workflow_dispatch` for on-demand
+- Document local usage in `apps/mobile/README.md`: `maestro test .maestro/` against the dev stack
+
+**Tests**
+
+- The flows are the tests; each asserts on visible UI state, not timing sleeps (use Maestro's `assertVisible` with timeouts)
+
+**Done when**
+
+- [ ] All three flows green locally on iOS Simulator + Android emulator
+- [ ] Nightly CI job green
+- [ ] Cold-start deep link verified (app killed, link opens correct screen after auth)
+
+---
+
+### T-223 k6 load scripts with asserted budgets
+
+> HTML ref: §"Testing strategy" → "Load & resilience"
+> needs: T-048, T-056
+
+**Goal** A latency regression fails a pipeline, not a launch. p95 < 300 ms and error rate < 1% are asserted, not eyeballed.
+
+**Build**
+
+- `tests/load/` k6 scripts modelling realistic traffic:
+  - `login-burst.js` — spike of logins (rate-limit-aware: distinct virtual users, not one hammered account)
+  - `browse.js` — authenticated list pagination: members, notifications, files (cursor-follows-cursor)
+  - `presign.js` — file presign + confirm loop
+  - `mixed.js` — weighted combination approximating production (80% reads / 15% writes / 5% auth), ramping 0 → 50 VUs → hold 3 min
+- Shared thresholds in every script:
+  ```javascript
+  thresholds: {
+    http_req_duration: ["p(95)<300"],
+    http_req_failed:   ["rate<0.01"],
+  }
+  ```
+- Data setup: `make seed-load` creates orgs with realistic volumes (1k members, 10k notifications) so pagination is actually exercised
+- `make load-test` runs the suite against the local compose stack; CI runs it **nightly** against a dedicated compose stack on a consistent runner class (per-PR runs on shared runners produce noise, not signal — say so in the README)
+- Results exported as a JSON summary artifact; a trend note is appended to `tests/load/RESULTS.md` per run
+
+**Tests**
+
+- Thresholds present in every script (CI grep); nightly run green against seeded stack
+
+**Done when**
+
+- [ ] All four scripts pass budgets against the seeded local stack
+- [ ] Nightly CI job wired with artifacts
+- [ ] README explains why load gates are nightly, not per-PR
+
+---
+
+### T-224 Visual regression — Playwright snapshots on dashboard + settings
+
+> HTML ref: §"Testing strategy" → "Visual regression — Playwright snapshots"
+> needs: T-220
+
+**Goal** Unintended UI changes on the two most-seen pages are caught by pixel comparison, with a sane update workflow so the suite doesn't rot.
+
+**Build**
+
+- `toHaveScreenshot()` specs for: dashboard (seeded, deterministic data), settings (profile + org tabs), and the app shell at mobile viewport (375px) + desktop (1280px)
+- Determinism rules:
+  - dynamic regions masked (`mask:` option): avatars, timestamps, notification badges
+  - animations disabled (`reducedMotion: "reduce"` + CSS override), fonts loaded before capture
+  - fixed seed data — snapshots never depend on run order
+- Baselines committed per browser/platform under `apps/web/e2e/__screenshots__/`; CI compares with `maxDiffPixelRatio: 0.01`
+- Update workflow documented in the spec file header: `pnpm e2e --update-snapshots` locally, reviewer eyeballs the diff in the PR — baseline changes must be intentional and visible in review
+
+**Tests**
+
+- Suite green twice in a row on CI (proves determinism, not just correctness)
+
+**Done when**
+
+- [ ] Snapshots stable across two consecutive CI runs
+- [ ] A deliberate 2px layout change fails the job (verified once)
+- [ ] Update workflow documented
+
+---
 
 ## P3-D · i18n expansion + advanced
 
-> Foundation already in place from T-067–T-070. This section adds languages, RTL, and translator tooling.
+> HTML ref: §"Build phases" → "Phase 3" (i18n row)
+>
+> Foundation already in place from T-067–T-070 (`en` + `fi`, server-side locale resolution, localised emails). This section adds languages, RTL, translator tooling, and locale-aware routing. §0.11 remains binding: any hardcoded string found during this work is a defect to fix, not to note.
 
-| ID    | Title                                                                                                                                                                                     | Needs        |
-| ----- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------ |
-| T-230 | Add 3 more locales (e.g. de, es, fr) — full translation coverage of all `@forge/i18n` keys; CI check that no locale has >5% missing keys                                                  | T-067        |
-| T-231 | RTL (right-to-left) support: add `ar` or `he`; verify Tailwind RTL utilities work in `packages/ui`; `<html dir="rtl">` toggling via i18n                                                  | T-069        |
-| T-232 | Translator workflow: export missing keys to CSV/PO, integrate with Crowdin/Lokalise (or document a manual workflow); CI check that source-of-truth `en` is the only locale with 100% keys | T-067        |
-| T-233 | Locale-aware URL routing on web: `/en/settings`, `/fi/settings` paths; canonical + `hreflang` (required by T-305 SEO)                                                                     | T-069        |
-| T-234 | Locale-aware push notifications on mobile: backend already localises by `recipient.locale`; verify with end-to-end test against both `en` and `fi` users                                  | T-068, T-105 |
+### T-230 Three more locales — de, es, fr
+
+> needs: T-067
+
+**Goal** The template ships with six locales (`en`, `fi`, `de`, `es`, `fr` + the T-231 RTL locale), and CI guarantees no locale silently rots.
+
+**Build**
+
+- Full translation of every `@forge/i18n` key into `de`, `es`, `fr` under `packages/i18n/locales/<locale>/` — namespace files mirror `en/` exactly
+- Machine-translate first pass is acceptable **if** flagged: untranslated-quality keys carry a `"__review": true` sibling marker file listing keys needing human review; the goal state is zero markers
+- `packages/i18n/scripts/check-locales.ts`:
+  - For every non-`en` locale: fail if >5% of `en` keys are missing
+  - Fail on **orphan keys** (present in a locale but absent from `en`)
+  - Fail if any `en` value is empty
+  - Wired into `pnpm lint` and CI
+- Locale metadata registry in `packages/i18n/src/locales.ts`: `{ code, nativeName, dir }` — the language switcher (T-069) and mobile picker (T-070) render from this, no hardcoded lists
+- Pluralisation spot-check: keys using count-based plurals verified for each new language's plural rules (German/French/Spanish differ from English in zero/one handling)
+
+**Tests**
+
+- `check-locales` passes for all locales; deliberately deleting 6% of `de` keys fails it
+- Orphan-key detection: adding a `de`-only key fails
+- Language switcher shows all six locales from the registry; switching to `de` renders a known translated string
+
+**Done when**
+
+- [ ] All locales ≥95% coverage, CI-enforced
+- [ ] Zero orphan keys
+- [ ] Switcher + mobile picker driven by the registry
+
+---
+
+### T-231 RTL support — add `ar`, verify layout flips
+
+> needs: T-069, T-230
+
+**Goal** One right-to-left locale (`ar`) works correctly across web and `packages/ui` — proving the layout system is direction-safe, not just translated.
+
+**Build**
+
+- `ar` locale added per T-230 conventions (`dir: "rtl"` in the locale registry)
+- Web: `<html dir>` set reactively from the active locale's `dir` (i18next `languageChanged` listener); persisted across reloads
+- `packages/ui` sweep: replace physical direction utilities with logical ones — `ml-*/mr-*` → `ms-*/me-*`, `pl-*/pr-*` → `ps-*/pe-*`, `left-*/right-*` → `start-*/end-*` where the intent is reading-direction-relative (deliberate physical positioning, e.g. a close button pinned top-right in both directions, gets a `/* rtl-ok: <reason> */` comment)
+- ESLint/grep CI rule: physical direction classes in `packages/ui` and `apps/web` require the `rtl-ok` annotation
+- Directional icons (chevrons, arrows, "back") flip via a `useDirection()` hook from `packages/hooks`
+- Mobile: document `I18nManager` behaviour (RTL on native requires app restart); enable and verify the auth + settings screens; full mobile RTL polish may be deferred with a written note, web may not
+
+**Tests**
+
+- Switching to `ar` sets `dir="rtl"` on `<html>` (Playwright assertion)
+- Visual snapshot (T-224 mechanism) of dashboard + settings in `ar` — sidebar, nav, and text alignment mirrored
+- CI grep: zero unannotated physical direction classes in `packages/ui`
+- axe-core pass (T-221) on the `ar` locale
+
+**Done when**
+
+- [ ] Dashboard + settings render correctly mirrored in `ar`
+- [ ] Logical-properties rule enforced in CI
+- [ ] RTL snapshots committed as baselines
+
+---
+
+### T-232 Translator workflow — export, import, source-of-truth checks
+
+> needs: T-067, T-230
+
+**Goal** A non-developer can translate the product without touching git, and the developer loop for getting those translations back in is one command.
+
+**Build**
+
+- `pnpm i18n:export [--locale de] [--missing-only]` → writes `i18n-export/<locale>.csv` (columns: key, en value, current translation, context/namespace) — CSV because every tool and every human can open it; also emit gettext `.po` for tool compatibility
+- `pnpm i18n:import i18n-export/de.csv` → merges back into the locale JSONs, preserving key order, failing on unknown keys
+- TMS integration: document (not implement) the Crowdin and Lokalise setups in `docs/runbooks/translations.md` — config file examples, sync direction (repo is the source of truth for `en`, TMS is upstream for translations), and the manual CSV loop as the zero-dependency fallback
+- Source-of-truth CI checks (extends T-230's `check-locales`):
+  - `en` is the **only** locale required at 100% — a key added to any other locale first is an orphan (already failing per T-230)
+  - export/import round-trip is lossless: `export → import` produces zero diff (CI job on the `en` locale)
+
+**Tests**
+
+- Round-trip test: export `de`, re-import unchanged, `git diff --exit-code` clean
+- Import with an unknown key → exits non-zero with the offending key named
+- `--missing-only` export contains exactly the keys absent from the target locale
+
+**Done when**
+
+- [ ] Export + import commands work and are documented
+- [ ] Round-trip CI check green
+- [ ] `docs/runbooks/translations.md` covers TMS and manual workflows
+
+---
+
+### T-233 Locale-aware URL routing on web
+
+> needs: T-069, T-042
+
+**Goal** The locale lives in the URL (`/en/settings`, `/fi/settings`) so pages are shareable, bookmarkable, and indexable per language — and T-305 (marketing SEO) can rely on the same convention.
+
+**Build**
+
+- TanStack Router: top-level `/$locale` layout route wrapping the app route tree; `$locale` validated against the T-230 registry (unknown → 404)
+- Redirect rules:
+  - `/` and any locale-less deep link → resolved locale prefix (resolution order mirrors the backend: user preference → `Accept-Language` → `en`), via a redirect route, HTTP-level where SSR/edge applies
+  - Language switcher (T-069) rewrites the current path's locale segment in place — never loses the page the user is on
+- The active URL locale wins over the stored preference for rendering (a shared `/de/...` link shows German even to an `en` user), but does not silently overwrite `User.locale` — switching explicitly does
+- `<link rel="canonical">` + `hreflang` alternates emitted per page via a small head component (required by T-305; app pages behind auth get canonical only, `noindex` stays on)
+- Auth redirects, invite links, and email deep links updated to carry the locale segment; legacy locale-less links keep working via the redirect rule (backwards compatibility test)
+
+**Tests**
+
+- `/settings` visited by a `fi` user → redirected to `/fi/settings`
+- `/de/settings` renders German regardless of stored preference; explicit switch updates `User.locale`
+- Unknown locale `/xx/settings` → 404
+- Old bookmarked locale-less URL → 301/redirect to prefixed equivalent
+- Switcher preserves path + query across locale change
+
+**Done when**
+
+- [ ] All routes locale-prefixed; redirects cover legacy links
+- [ ] hreflang/canonical component emits correct alternates
+- [ ] E2E (T-220) still green with prefixed URLs
+
+---
+
+### T-234 Locale-aware push notifications — verified end-to-end
+
+> needs: T-068, T-105
+
+**Goal** Prove (don't assume) that a push notification reaches each recipient in their own language — the full chain from event to Expo payload.
+
+**Build**
+
+- Audit the chain built in T-068/T-102/T-105: event → `NotificationService` fan-out → per-recipient locale lookup (`User.locale`) → translated title/body via backend `t()` → Expo payload. Fix any point where the sender's locale, `request.state.locale`, or a default leaks into another recipient's message (the classic bug: translating once before the fan-out loop instead of per recipient)
+- Localise at **send time** per recipient, matching the email rule in §0.11
+- Push payload carries `"locale"` in its data dict so the mobile client can localise any client-side rendering consistently
+- Integration test fixture: capture outbound Expo API calls (mock transport) and assert on payload content
+
+**Tests**
+
+- Org with user A (`locale="en"`) and user B (`locale="fi"`); trigger one `payment_failed` event notifying both → A's push title is the English string, B's is the Finnish string, from the same event
+- Recipient with an unsupported stored locale falls back to English (never raw key strings)
+- Recipient locale changes between event creation and job execution → job uses the locale at send time
+- In-app + email channels for the same event are also per-recipient localised (regression net around T-102)
+
+**Done when**
+
+- [ ] Mixed-locale fan-out test passes
+- [ ] Fallback + late-change tests pass
+- [ ] Any bug found in the audit is fixed with its own regression test
+
+---
 
 ## P3-E · Performance tuning
 
-| ID    | Title                                                                                                                                                                                                                                                                                                                                                                                       | Needs          |
-| ----- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------- |
-| T-240 | Redis cache layer explicitly on `get_current_user` and org settings (already started in T-021) — add invalidation tests                                                                                                                                                                                                                                                                     | T-021          |
-| T-241 | TanStack Virtual on member list + notification list                                                                                                                                                                                                                                                                                                                                         | T-044          |
-| T-242 | Per-route bundle budget assertions via `vite-plugin-bundle-analyzer` + size-limit                                                                                                                                                                                                                                                                                                           | T-040          |
-| T-243 | pytest query-count fixture: assert no unexpected N+1 queries in list endpoints                                                                                                                                                                                                                                                                                                              | T-048          |
-| T-244 | PgBouncer in transaction mode in front of Postgres in `docker-compose.prod.yml`: pool size sized to `max_connections * 0.8`, health-checked, documented tradeoff of transaction pooling vs prepared statements (asyncpg statement cache disabled or moved server-side)                                                                                                                      | T-005          |
-| T-245 | Production-ready `EncryptedString` key rotation job (upgrade T-009.5's stub): batched cursor-scan of every `EncryptedString` column across every table, restartable via `JobRecord` progress checkpoints, dry-run mode, progress metrics exported, per-batch commit with configurable batch size; runbook `docs/runbooks/encryption-key-rotation.md` walks through the operation end-to-end | T-009.5, T-034 |
-| T-246 | (Optional, scale-triggered) Read replica plumbing: two SQLAlchemy engines (`read_engine`, `write_engine`) selected per request via a `use_read_replica` flag on repository methods; document the consistency implications; ADR captures when to actually enable this                                                                                                                        | T-005          |
+> HTML ref: §"Build phases" → "Phase 3" (performance row) | §"Best practices" → "Performance"
+>
+> §0.9 already mandates async everywhere, ARQ for slow work, and Redis on hot reads. This section verifies those claims with tests and budgets, and adds the infrastructure pieces (PgBouncer, key rotation at scale) that only matter under load.
+
+### T-240 Redis cache layer — invalidation proven by tests
+
+> needs: T-021
+
+**Goal** The three hot reads (current user, org settings, plan features) are cached with 60 s TTL and — the part that actually breaks in production — invalidated correctly on every write path.
+
+**Build**
+
+- `get_current_user` cache exists from T-021 (`core/dependencies.py`, with `invalidate_user_cache`). This task completes the set:
+  - `backend/app/core/cache.py`: small typed helper — `cached_json(key, ttl=60)` get/set + `invalidate(key)`; all cache keys defined in one module (`cache_keys.py`-style constants), never inline f-strings at call sites
+  - Org settings cache (`org:{org_id}:settings`) read in `get_current_org`; plan features cache (`org:{org_id}:plan`) read by the billing/feature-gate path
+- Invalidation matrix — every write that must bust each key, enumerated and wired:
+  - user cache: profile update, locale change, deactivation, role/permission change, `is_superadmin` flip, GDPR delete
+  - org settings: org update, org deletion
+  - plan features: subscription change (checkout completed, plan override T-141, dunning downgrade), feature-flag toggle (T-122)
+- Serialization: cached payloads are versioned (`{"v": 1, ...}`) — a deserialization mismatch is a cache miss, never an exception
+- Redis unavailable → cache layer degrades to direct DB reads (log a warning, don't 500) — consistent with T-206's philosophy
+
+**Tests**
+
+- Query-count proof (uses T-243's fixture): two consecutive `get_current_user` calls → second issues zero DB queries
+- Each row of the invalidation matrix: write → immediately read → fresh value (parametrised test over the matrix)
+- Deactivated user is rejected on the next request, not after TTL expiry (security-relevant invalidation)
+- Versioned-payload mismatch → treated as miss
+- Redis down (mock) → reads still succeed from DB
+
+**Done when**
+
+- [ ] All three caches live with the invalidation matrix fully tested
+- [ ] Deactivation propagates immediately
+- [ ] No inline cache-key strings (grep check)
+
+---
+
+### T-241 TanStack Virtual on member list + notification list
+
+> needs: T-044, T-104
+
+**Goal** The two lists that grow unboundedly render a constant number of DOM nodes regardless of data size.
+
+**Build**
+
+- `@tanstack/react-virtual` (confirmed-clean family per §0.12 — still pin latest) on:
+  - members list (T-044 settings/members page)
+  - notification center list (T-104)
+- Integration with the existing cursor-based `useInfiniteQuery`: virtualizer range end nearing the loaded count triggers `fetchNextPage` — scroll position is the pagination driver
+- Preserve semantics: row height measurement for variable-height notification items, `role="list"` / `role="listitem"` on the scroll container contents, keyboard navigation (arrow keys move focus through virtual rows without scroll jank)
+- Scroll restoration on back-navigation (TanStack Router scroll restoration + virtualizer `initialOffset`)
+
+**Tests**
+
+- Render with 1,000 seeded items → DOM contains < 50 row nodes (RTL assertion on the container)
+- Scrolling to the bottom of loaded data triggers exactly one next-page fetch (MSW)
+- Keyboard: focus moves through rows across a virtualization boundary
+- axe-core (T-221) still passes on both pages with virtualization active
+
+**Done when**
+
+- [ ] Both lists virtualized, DOM-node budget asserted in tests
+- [ ] Infinite scroll + a11y + scroll restoration verified
+- [ ] No regression in the T-224 snapshots
+
+---
+
+### T-242 Per-route bundle budgets in CI
+
+> needs: T-040
+
+**Goal** Bundle growth is a reviewed decision, not an accident discovered in Lighthouse six months later.
+
+**Build**
+
+- `size-limit` (with the file preset) configured in `apps/web/package.json` against the built output:
+  - initial JS for the entry route (login) — budget ~150 KB gzipped
+  - each lazy route chunk (dashboard, settings, billing, notifications, admin) — per-chunk budgets set from current size + 10% headroom
+  - total CSS budget
+- Budgets are explicit numbers committed in config — raising one requires editing the file in the PR, which is the point
+- `rollup-plugin-visualizer` wired into the build (`pnpm build --analyze`) emitting `stats.html`; CI uploads it as an artifact on every build so regressions are diagnosable without reproducing locally
+- CI job `bundle-budget` in the frontend workflow: build → `size-limit` → fail on any exceeded budget, printing the per-chunk delta table
+- `docs/runbooks/bundle-budget.md`: what to do when the gate fails (analyze artifact → lazy-load / replace dep / consciously raise budget with reviewer sign-off)
+
+**Tests**
+
+- CI job green at current sizes; deliberately importing a large lib eagerly on a throwaway branch fails it (one-time verification)
+
+**Done when**
+
+- [ ] Budgets committed for entry + every lazy chunk
+- [ ] `stats.html` artifact on every CI build
+- [ ] Gate failure verified once, runbook written
+
+---
+
+### T-243 pytest query-count fixture — N+1 detection on every list endpoint
+
+> needs: T-048
+
+**Goal** An N+1 query introduced on any list endpoint fails a test with a diff of the executed SQL — the day it's introduced, not when the table grows.
+
+**Build**
+
+- `backend/tests/fixtures/query_counter.py`:
+
+  ```python
+  @asynccontextmanager
+  async def assert_max_queries(session, n: int):
+      """Counts statements via SQLAlchemy's before_cursor_execute event
+      on the test connection. On failure, prints every captured statement
+      so the N+1 is visible in the diff, not just a number."""
+  ```
+
+- Parametrised test module `tests/test_query_budgets.py` covering every list endpoint (members, invitations, notifications, files, invoices T-133, audit log, admin directory T-141):
+  - Seed 3 items → record query count; seed 30 items → assert count is **identical** (constant-query property — stronger and less brittle than a magic number)
+  - Budget registry: `{endpoint: max_queries}` dict in the test module; a new list endpoint without an entry fails a meta-check (mirrors the T-049 sweep pattern)
+- Fix any N+1 found while wiring this: the usual suspects are relationship access after list load — fix with `selectinload` per §0.3 (never `joinedload` for collections)
+
+**Tests**
+
+- The suite is the deliverable; plus: meta-check fails when a new `list_`-style route lacks a budget entry (verified by adding a dummy route in the test)
+
+**Done when**
+
+- [ ] Constant-query property holds on every list endpoint
+- [ ] Every N+1 found is fixed with `selectinload` and stays covered
+- [ ] Meta-check guards future endpoints
+
+---
+
+### T-244 PgBouncer in transaction mode (prod)
+
+> needs: T-005
+
+**Goal** Connection count to Postgres stays flat as backend replicas scale — without breaking asyncpg.
+
+**Build**
+
+- `docker-compose.prod.yml`: `pgbouncer` service (bitnami/pgbouncer or edoburu image — pick and pin):
+  - `pool_mode=transaction`; `default_pool_size` sized to `max_connections * 0.8` minus a superuser reserve; auth via userlist file from env
+  - healthcheck (`psql -c 'SHOW POOLS'` or TCP), backend `depends_on` pgbouncer healthy
+  - backend `DATABASE_URL` points at pgbouncer; **Alembic migrations connect directly to Postgres** (session-level locks + DDL don't mix with transaction pooling) — separate `MIGRATIONS_DATABASE_URL` setting, defaulting to `DATABASE_URL` in dev
+- The asyncpg tradeoff, handled not hand-waved: transaction pooling breaks server-side prepared statement reuse across connections →
+  - `create_async_engine(..., connect_args={"statement_cache_size": 0})` when `PGBOUNCER_ENABLED=true` (new setting)
+  - documented in `docs/adr/0002-pgbouncer.md`: why transaction mode, the prepared-statement tradeoff, measured overhead, and the alternative (server-side cache in newer asyncpg) if it becomes a bottleneck
+- Dev compose stays direct-to-Postgres — one less moving part locally
+
+**Tests**
+
+- Prod-compose integration (CI service matrix or dedicated job): app boots through pgbouncer, `/health/ready` 200, a request that opens two sequential transactions succeeds
+- With `statement_cache_size=0`: repeated identical queries succeed (no `DuplicatePreparedStatementError`)
+- Migration path: `alembic upgrade head` via `MIGRATIONS_DATABASE_URL` succeeds while app traffic flows through pgbouncer
+
+**Done when**
+
+- [ ] Prod stack runs all traffic through pgbouncer, migrations direct
+- [ ] Prepared-statement regression test passes
+- [ ] ADR documents the tradeoff with numbers
+
+---
+
+### T-245 Production-ready encryption key rotation job
+
+> needs: T-009.5, T-034
+
+**Goal** Rotating `ENCRYPTION_KEY` on a database with millions of encrypted rows is a routine, observable, resumable operation — upgrade T-009.5's stub to the real thing.
+
+**Build**
+
+- `backend/app/workers/jobs/encryption.py`, rewritten:
+  - **Column discovery**: walk SQLModel metadata for every column whose type is `EncryptedString` — no hardcoded table list; new encrypted columns are picked up automatically
+  - **Batched cursor scan** per (table, column): keyset pagination on PK (no OFFSET, §0.3), `batch_size` configurable (default 500), per-batch commit
+  - **Checkpointing**: progress (`table`, `column`, `last_pk`, counts) persisted via `JobRecord` (T-034) after every batch — a crashed or redeployed worker resumes from the checkpoint, and re-running is idempotent (already-current ciphertext is skipped by token-prefix check)
+  - **Dry-run mode**: counts rows needing re-encryption per column, writes nothing, prints the work estimate
+  - **Metrics** (T-202): `forge_reencrypt_rows_total{table,column}`, `forge_reencrypt_remaining` gauge, batch duration histogram
+  - **Throttle**: configurable inter-batch sleep so the job never saturates the pool (§0.9: `max=20`)
+- `docs/runbooks/encryption-key-rotation.md`, the operation end-to-end:
+  1. Generate new key → set as `ENCRYPTION_KEY`, demote old key to `ENCRYPTION_KEY_OLD` → deploy (MultiFernet reads both)
+  2. Dry-run → review counts
+  3. Run job → watch the `remaining` gauge → handle a mid-run crash (resume) and a mid-run rollback (keys unchanged, safe)
+  4. Verify zero rows remain on old key → remove `ENCRYPTION_KEY_OLD` → deploy
+  5. Rollback story at every step
+
+**Tests**
+
+- Discovery finds all `EncryptedString` columns (assert against known models; add a throwaway model → it's discovered)
+- Rotation: 1,500 rows under key A → run with key B primary → all decrypt under B alone; job report matches
+- Resume: kill after batch 1 (simulated) → re-run → completes without re-processing batch 1 (checkpoint assert)
+- Dry-run writes nothing (query-count/mutation assert)
+- Mixed state mid-rotation: reads of not-yet-rotated rows still succeed via MultiFernet
+
+**Done when**
+
+- [ ] Stub replaced; discovery, checkpointing, dry-run, metrics all tested
+- [ ] Runbook walks the full rotation including crash recovery
+- [ ] 100% coverage on the job module
+
+---
+
+### T-246 Read-replica plumbing (optional — scale-triggered)
+
+> needs: T-005
+
+**Goal** The code path for routing reads to a replica exists and is tested against a single database — so enabling a real replica later is an infra change, not a refactor. **Do not provision an actual replica now.**
+
+**Build**
+
+- `backend/app/core/db.py`: `write_engine` (existing) + `read_engine` — when `READ_REPLICA_URL` (new optional setting) is unset, both names bind to the same engine; zero behaviour change by default
+- Session routing: `get_session(read_only: bool = False)` — explicit opt-in per repository method via a `use_read_replica=True` argument on safe read methods (`list_cursor`, `get` on non-auth paths); **never** implicit by HTTP verb
+- Hard rules, documented in the code and the ADR:
+  - auth reads (sessions, tokens, permissions) always hit the primary — replication lag on auth is a security bug
+  - read-your-writes flows (create → immediately list) stay on the primary within the request
+- `docs/adr/0003-read-replica.md`: replication-lag consistency implications, which query classes are lag-tolerant, and the activation trigger (sustained primary CPU > 60% from read traffic, or pool exhaustion from reads — with dashboard links from T-204/T-205), plus the activation checklist
+
+**Tests**
+
+- `READ_REPLICA_URL` unset → both engines are the same object; all existing tests pass unchanged
+- With a second testcontainers Postgres as a fake replica: `use_read_replica=True` queries hit it (assert via connection inspection); auth repository queries hit the primary regardless
+- Flag on a mutating method → raises at definition time (misuse guard)
+
+**Done when**
+
+- [ ] Plumbing merged, default-off, zero behaviour change (full suite green with flag unset)
+- [ ] Routing + auth-pinning tests pass
+- [ ] ADR captures when to actually enable this
+
+---
 
 ## P3-F · Module scaffold
 
-| ID    | Title                                                                                     | Needs |
-| ----- | ----------------------------------------------------------------------------------------- | ----- |
-| T-250 | `backend/app/modules/_template/` with README, all 5 files stubbed                         | T-009 |
-| T-251 | `make new-module NAME=foo` target that copies + renames the template                      | T-250 |
-| T-252 | ADR template in `docs/adr/_template.md`; runbook template in `docs/runbooks/_template.md` | —     |
+> HTML ref: §"Extending the template" (entire section)
+>
+> The measure of the template is how fast "new idea" becomes "first endpoint". This section makes the module pattern copyable in one command and gives decisions and operations their standing document types.
+
+### T-250 `_template` module — all five files, working example
+
+> needs: T-009, T-021
+
+**Goal** `backend/app/modules/_template/` (currently an empty `.gitkeep`) becomes a complete, compilable reference module demonstrating every §0 law in ~200 lines.
+
+**Build**
+
+- The five files per §2 module anatomy, using `__MODULE_NAME__` / `__ModelName__` placeholders where the generator will substitute, around one example org-scoped entity `Item`:
+  - `models.py` — `Item` with `UUIDPKMixin + TimestampMixin + SoftDeleteMixin + OrgScopedMixin`, one indexed filter column
+  - `schemas.py` — separate `ItemCreateRequest` / `ItemUpdateRequest` / `ItemPublic` (§0.4: no mass assignment)
+  - `repository.py` — extends `BaseRepository[Item]`; one custom query method showing the org-scope + soft-delete pattern
+  - `service.py` — create/list/update/delete raising typed `DomainError`s; one plan-limit check example (`PlanLimitError`)
+  - `router.py` — CRUD under `/api/v1/__MODULE_NAME__/`, envelope responses, `require_permission` gates, cursor pagination, `api_limit`
+  - `README.md` — public interface, events emitted, and a checklist of what to customise after generating
+- Matching test template `backend/tests/modules/_template_test.py.tmpl`: cross-tenant isolation test, RBAC gate test, cursor pagination test — the non-negotiables from §0.8 pre-written
+- Exclusions verified, not assumed: `_template` is skipped by the module registry/loader (T-060 — confirm the underscore convention is enforced there), by router registration (T-061), and by Alembic autogenerate (T-062) — add explicit guards if any relies on convention alone
+- The template code itself passes `ruff` + `mypy --strict` (placeholders chosen to be valid identifiers)
+
+**Tests**
+
+- `ruff check` + `mypy --strict` pass on `_template/` as-is
+- App boots with the template present: no `_template` routes in the OpenAPI schema, no `item` table in autogenerate output
+- Registry test: `_template` absent from loaded modules
+
+**Done when**
+
+- [ ] All five files + README + test template exist and are lint/type-clean
+- [ ] Exclusion from registry, routing, and migrations proven by tests
+- [ ] Example demonstrates envelope, RBAC, cursor pagination, org-scoping, and typed errors
+
+---
+
+### T-251 `make new-module NAME=foo` — generation, not just copying
+
+> needs: T-250
+
+**Goal** One command turns the template into a registered, tested, compiling module — the existing naive `cp -r` target grows the renaming and guidance that make it actually usable.
+
+**Build**
+
+- Upgrade the `new-module` Makefile target (delegating to `backend/scripts/new_module.py` — logic in Python, not shell):
+  1. Validate `NAME` (snake_case, not a reserved/existing module name; clear error otherwise)
+  2. Copy `_template/` → `modules/<name>/`, substituting `__MODULE_NAME__` → `<name>`, `__ModelName__` → `<Name>` in file contents
+  3. Copy the test template → `tests/modules/test_<name>.py` with the same substitution
+  4. Print the manual follow-ups it deliberately does **not** do (each with file:line pointers): register in the module registry (T-060), add to `product.config` toggles (T-059), run `alembic revision --autogenerate -m "<name>_tables"`, rename `Item` to the real entity
+- Generated module must pass `ruff` + `mypy --strict` and its generated tests immediately (against the generic `Item` entity) — a broken starting point poisons every future module
+- `docs/runbooks/new-module.md`: the full loop from `make new-module` to first deployed endpoint, including the §"Extending the template" workflow from the HTML plan
+
+**Tests**
+
+- CI smoke: `make new-module NAME=zztest` → generated module passes `ruff`, `mypy --strict`, and its own tests; then cleaned up (temp workspace)
+- `make new-module` without `NAME`, with `NAME=Foo-Bar`, with `NAME=auth` → each fails with a usable message
+- Substitution completeness: no literal `__MODULE_NAME__` remains anywhere in the generated output (grep)
+
+**Done when**
+
+- [ ] Generated module is green (lint + types + tests) with zero manual edits
+- [ ] Follow-up checklist printed with accurate pointers
+- [ ] CI smoke test guards the generator itself
+
+---
+
+### T-252 ADR + runbook templates
+
+> needs: —
+
+**Goal** Decisions and operations each have a standing document type with a template, an index, and a lifecycle — so the docs habit survives contact with deadlines.
+
+**Build**
+
+- `docs/adr/_template.md`: number/title · status (`proposed` / `accepted` / `superseded by ADR-NNN`) · date · context · decision · consequences (positive **and** negative) · alternatives considered. Kept to one page — an ADR that takes >30 min to write doesn't get written
+- `docs/adr/README.md`: index table (number · title · status · date) + the rule for what deserves an ADR: any decision that is expensive to reverse or that a future maintainer will ask "why on earth" about
+- Backfill the ADRs this plan already owes, even if brief: 0001 security baseline (T-213), 0002 PgBouncer (T-244), 0003 read replica (T-246), 0004 marketing framework choice (placeholder — decided in T-300)
+- `docs/runbooks/_template.md`: trigger (when to reach for this) · pre-checks · steps with expected output per step · verification · rollback · escalation. Retrofit heading structure onto the existing runbooks (deploy-render, module-toggle-guide, degraded-mode, maintenance-mode, etc.) without rewriting their content
+- CI check: every `docs/adr/*.md` (except template/README) carries a status line; index is regenerated or verified by script so it can't drift
+
+**Tests**
+
+- CI: ADR status-line + index-consistency script green; a statusless ADR fails it
+
+**Done when**
+
+- [ ] Both templates committed; ADR index live
+- [ ] Owed ADRs exist (0001–0004, placeholders allowed where the decision is pending)
+- [ ] Existing runbooks follow the template's heading structure
+
+---
 
 ## P3-G · Support tooling & operator features
 
