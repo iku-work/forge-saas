@@ -19,6 +19,7 @@ from fastapi import Depends, Header, Request
 from fastapi.security import OAuth2PasswordBearer
 from loguru import logger
 from redis.asyncio import Redis
+from sentry_sdk import set_user as set_sentry_user
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.db import get_session
@@ -104,6 +105,11 @@ async def get_current_user(
             raise AuthenticationError("errors.user_not_found", fallback="User not found")
         await redis.set(cache_key, fetched.model_dump_json(), ex=_USER_CACHE_TTL_SECONDS)
         user = fetched
+
+    # T-201: id only, never email or name -- Sentry events raised for the
+    # rest of this request (including by a nested dependency) get tagged
+    # with whichever user this call resolved.
+    set_sentry_user({"id": str(user.id)})
 
     # Set as soon as a user is resolved -- a known user's preferred locale
     # always wins over the Accept-Language fallback app.middleware.locale.

@@ -55,6 +55,10 @@
     "not_a_member": "Et ole tämän organisaation jäsen.",
     "org_id_required": "Tätä toimintoa varten on valittava organisaatio."
   },
+  "error_boundary": {
+    "title": "Jokin meni pieleen",
+    "reload": "Lataa uudelleen"
+  },
   "impersonation": {
     "banner": "Esiinnyt käyttäjänä {email}",
     "end": "Lopeta esiintyminen"

@@ -21,6 +21,7 @@ from app.core.i18n import load_translations
 from app.core.jobs import dispose_pool as dispose_jobs_pool
 from app.core.logging import configure_logging
 from app.core.module_loader import get_modules
+from app.core.sentry import init_sentry
 from app.middleware.impersonation import ImpersonationContextMiddleware
 from app.middleware.locale import LocaleMiddleware
 from app.middleware.rate_limit import register_rate_limiting
@@ -44,6 +45,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
 settings = get_settings()
 configure_logging(settings=settings)
+init_sentry(settings)  # before any middleware so its exceptions are reportable too
 get_modules()  # validates product.config.py dependency rules before any router is registered
 validate_stripe_keys(settings)  # T-065: billing-disabled products may omit Stripe keys entirely
 load_translations()  # T-068: populates the i18n cache before any request can hit t()

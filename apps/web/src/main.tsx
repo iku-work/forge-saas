@@ -5,7 +5,10 @@ import { createRoot } from "react-dom/client";
 import "./index.css";
 import { AppRoot } from "./AppRoot";
 import { initI18n } from "./i18n";
+import { initSentry } from "./lib/sentry";
 import { createAppRouter } from "./router";
+
+initSentry();
 
 const queryClient = new QueryClient();
 const router = createAppRouter(queryClient);

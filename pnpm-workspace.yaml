@@ -2,6 +2,11 @@ packages:
   - "apps/*"
   - "packages/*"
 allowBuilds:
+  # Native binary downloader for the sentry-cli binary that @sentry/vite-plugin
+  # (T-201) shells out to when uploading source maps -- CI-only (see
+  # apps/web/vite.config.ts), but the postinstall still needs to fetch the
+  # platform binary at install time regardless.
+  '@sentry/cli': true
   # Native binary downloader for tsup's (and, via @storybook/test-runner's
   # jest dependency chain, jest's) swc transform -- already trusted
   # transitively before T-150 added storybook tooling, now needs its own
@@ -23,6 +28,8 @@ allowBuilds:
 minimumReleaseAgeExclude:
   - "@tanstack/query-core@5.101.1"
   - "@tanstack/react-query@5.101.1"
+  - '@sentry/expo-upload-sourcemaps@8.17.2'
+  - '@sentry/react-native@8.17.2'
 overrides:
   "@tanstack/react-router": ">=1.170.4"
   "@tanstack/react-router-devtools": ">=1.167.0"

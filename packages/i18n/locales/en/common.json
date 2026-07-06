@@ -61,6 +61,10 @@
     "not_a_member": "You're not a member of this organization.",
     "org_id_required": "An organization must be selected for this action."
   },
+  "error_boundary": {
+    "title": "Something went wrong",
+    "reload": "Reload"
+  },
   "impersonation": {
     "banner": "Impersonating {email}",
     "end": "End impersonation"

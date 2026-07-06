@@ -15,7 +15,8 @@
           "photosPermission": "Allow $(PRODUCT_NAME) to access your photos to attach files.",
           "cameraPermission": "Allow $(PRODUCT_NAME) to access your camera to attach files."
         }
-      ]
+      ],
+      "@sentry/react-native/expo"
     ],
     "experiments": {
       "typedRoutes": true

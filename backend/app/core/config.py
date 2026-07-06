@@ -42,6 +42,7 @@ class Settings(BaseSettings):
     SMTP_HOST: str = "localhost"
     SMTP_PORT: int = 1025
     SENTRY_DSN: str | None = None
+    SENTRY_TRACES_SAMPLE_RATE: float = 0.1
 
     # Social OAuth (T-023) — blank disables that provider's /auth/oauth/{provider} route
     GOOGLE_CLIENT_ID: str = ""

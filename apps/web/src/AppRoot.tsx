@@ -7,7 +7,9 @@ import { onSessionExpired } from "@forge/api-client";
 import { useAuth } from "@forge/hooks";
 
 import { applyProfileLocale } from "./i18n";
+import { AppErrorBoundary } from "./layouts/AppErrorBoundary";
 import { ImpersonationBanner } from "./layouts/ImpersonationBanner";
+import { setSentryUser } from "./lib/sentry";
 import type { AppRouter } from "./router";
 
 interface AppRootProps {
@@ -43,33 +45,42 @@ export function AppRoot({ router, queryClient }: AppRootProps) {
     });
   }, [isLoading, user]);
 
+  // T-201: id only, never email or name -- kept in sync with whichever
+  // account (real or impersonated) the rest of this component tree is
+  // currently rendering for.
+  useEffect(() => {
+    setSentryUser(user ? { id: user.id } : null);
+  }, [user]);
+
   return (
-    <QueryClientProvider client={queryClient}>
-      {/* T-142: rendered above both branches below so it's visible during
-          the loading state too, not just once the router mounts -- an
-          impersonation session should never have a moment where the banner
-          isn't there. */}
-      {isImpersonating && user ? (
-        <ImpersonationBanner
-          email={user.email}
-          onEnd={() => {
-            // T-143: ending impersonation returns the superadmin to the
-            // admin panel they started it from, rather than leaving them on
-            // whatever page of the impersonated user's app they happened to
-            // be viewing.
-            void endImpersonation().then(() => router.navigate({ to: "/admin" }));
-          }}
-        />
-      ) : null}
-      {isLoading || !localeReady ? (
-        <div className="flex min-h-screen items-center justify-center">
-          <span className="text-sm text-muted-foreground">
-            {t("common.status.loading")}
-          </span>
-        </div>
-      ) : (
-        <RouterProvider router={router} context={{ auth: { user } }} />
-      )}
-    </QueryClientProvider>
+    <AppErrorBoundary>
+      <QueryClientProvider client={queryClient}>
+        {/* T-142: rendered above both branches below so it's visible during
+            the loading state too, not just once the router mounts -- an
+            impersonation session should never have a moment where the banner
+            isn't there. */}
+        {isImpersonating && user ? (
+          <ImpersonationBanner
+            email={user.email}
+            onEnd={() => {
+              // T-143: ending impersonation returns the superadmin to the
+              // admin panel they started it from, rather than leaving them on
+              // whatever page of the impersonated user's app they happened to
+              // be viewing.
+              void endImpersonation().then(() => router.navigate({ to: "/admin" }));
+            }}
+          />
+        ) : null}
+        {isLoading || !localeReady ? (
+          <div className="flex min-h-screen items-center justify-center">
+            <span className="text-sm text-muted-foreground">
+              {t("common.status.loading")}
+            </span>
+          </div>
+        ) : (
+          <RouterProvider router={router} context={{ auth: { user } }} />
+        )}
+      </QueryClientProvider>
+    </AppErrorBoundary>
   );
 }
