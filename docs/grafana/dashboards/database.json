@@ -66,11 +66,54 @@
     {
       "id": 3,
       "type": "text",
-      "title": "Connection wait / slow queries — deferred",
-      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 8 },
+      "title": "Connection wait — deferred",
+      "gridPos": { "h": 4, "w": 24, "x": 0, "y": 8 },
       "options": {
         "mode": "markdown",
-        "content": "No connection-wait-time metric is currently emitted (only pool used/size gauges from T-202). The \"hall of shame\" slow-query panel (top statements by total time, via `pg_stat_statements`) lands here in T-205, which depends on this dashboard already existing."
+        "content": "No connection-wait-time metric is currently emitted (only the pool used/size gauges from T-202)."
+      }
+    },
+    {
+      "id": 4,
+      "type": "table",
+      "title": "Hall of shame — top 10 statements by total execution time",
+      "gridPos": { "h": 10, "w": 24, "x": 0, "y": 12 },
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": { "defaults": { "unit": "ms" }, "overrides": [] },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "expr": "topk(10, pg_stat_statements_total_exec_time)",
+          "format": "table",
+          "instant": true,
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "type": "timeseries",
+      "title": "Mean execution time by statement",
+      "gridPos": { "h": 8, "w": 14, "x": 0, "y": 22 },
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": { "defaults": { "unit": "ms" }, "overrides": [] },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "expr": "pg_stat_statements_mean_exec_time > 100",
+          "legendFormat": "{{queryid}}",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "type": "text",
+      "title": "About this data",
+      "gridPos": { "h": 8, "w": 10, "x": 14, "y": 22 },
+      "options": {
+        "mode": "markdown",
+        "content": "`pg_stat_statements` (T-205) exposes **mean**/max execution time per normalized statement, not a true percentile. The alert in `docs/grafana/alerts.yml` fires on mean execution time > 500ms sustained over 15m with 100+ calls, as a pragmatic stand-in — true end-to-end p95 is owned by the k6 load-test suite (T-223). See `docs/runbooks/slow-queries.md` for how to act on this panel."
       }
     }
   ]

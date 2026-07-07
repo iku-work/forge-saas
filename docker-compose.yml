@@ -11,6 +11,16 @@ volumes:
 services:
   postgres:
     image: postgres:16-alpine
+    # T-205: pg_stat_statements must be preloaded at postmaster start --
+    # CREATE EXTENSION alone (the migration) only registers the catalog
+    # objects; without this flag, querying the view raises "pg_stat_statements
+    # must be loaded via shared_preload_libraries".
+    command:
+      - postgres
+      - -c
+      - shared_preload_libraries=pg_stat_statements
+      - -c
+      - pg_stat_statements.track=all
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
@@ -185,6 +195,28 @@ services:
     profiles: ["observability"]
     volumes:
       - ./docs/grafana/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      # T-205: rule_files: [alerts.yml] in prometheus.yml resolves relative
+      # to that file's own directory, so this must land alongside it.
+      - ./docs/grafana/alerts.yml:/etc/prometheus/alerts.yml:ro
+    networks:
+      - forge-net
+
+  # T-205: exports pg_stat_statements as Prometheus metrics for
+  # database.json's "hall of shame" panel and alerts.yml's slow-query alert.
+  # Same observability profile as prometheus/grafana above -- never started
+  # by `make dev`.
+  postgres-exporter:
+    image: prometheuscommunity/postgres-exporter:v0.15.0
+    profiles: ["observability"]
+    environment:
+      DATA_SOURCE_NAME: "postgresql://postgres:postgres@postgres:5432/forge?sslmode=disable"
+    command:
+      - "--extend.query-path=/etc/postgres_exporter/queries.yaml"
+    volumes:
+      - ./docs/grafana/postgres-exporter-queries.yaml:/etc/postgres_exporter/queries.yaml:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
     networks:
       - forge-net
 

@@ -1,8 +1,16 @@
 global:
   scrape_interval: 15s
 
+rule_files:
+  - alerts.yml
+
 scrape_configs:
   - job_name: forge-backend
     metrics_path: /metrics
     static_configs:
       - targets: ["backend:8000"]
+  # T-205: prometheuscommunity/postgres-exporter (docker-compose.yml's
+  # observability profile) exposing pg_stat_statements per statement.
+  - job_name: forge-postgres
+    static_configs:
+      - targets: ["postgres-exporter:9187"]

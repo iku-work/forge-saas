@@ -12,6 +12,14 @@ services:
   postgres:
     image: postgres:16-alpine
     restart: unless-stopped
+    # T-205: pg_stat_statements must be preloaded at postmaster start -- see
+    # the identical comment on docker-compose.yml's postgres service.
+    command:
+      - postgres
+      - -c
+      - shared_preload_libraries=pg_stat_statements
+      - -c
+      - pg_stat_statements.track=all
     env_file:
       - ./backend/.env
     volumes:
@@ -73,6 +81,30 @@ services:
       postgres:
         condition: service_healthy
       redis:
+        condition: service_healthy
+    networks:
+      - forge-net
+
+  # T-205: exports pg_stat_statements so an external Prometheus (scraping
+  # inside forge-net, same internal-only reachability model as backend's
+  # /metrics -- see app/core/metrics.py) can page on sustained slow queries
+  # via docs/grafana/alerts.yml. Always on, unlike the dev-only
+  # docker-compose.yml copy which sits behind the `observability` profile:
+  # there's no local Prometheus/Grafana pair here to gate it behind.
+  postgres-exporter:
+    image: prometheuscommunity/postgres-exporter:v0.15.0
+    restart: unless-stopped
+    # Its own env file (copied from .env.postgres-exporter.example), not
+    # ./backend/.env -- Settings' extra="forbid" would refuse to boot the
+    # backend if an undeclared key like DATA_SOURCE_NAME landed in that file.
+    env_file:
+      - ./.env.postgres-exporter
+    volumes:
+      - ./docs/grafana/postgres-exporter-queries.yaml:/etc/postgres_exporter/queries.yaml:ro
+    command:
+      - "--extend.query-path=/etc/postgres_exporter/queries.yaml"
+    depends_on:
+      postgres:
         condition: service_healthy
     networks:
       - forge-net

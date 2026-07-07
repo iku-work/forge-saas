@@ -1,0 +1,51 @@
+# T-205: prometheuscommunity/postgres-exporter custom query, loaded via
+# `--extend.query-path=/etc/postgres_exporter/queries.yaml` (see
+# docker-compose.yml's `postgres-exporter` service, observability profile,
+# and docker-compose.prod.yml's always-on one). The top-level key becomes the
+# metric name prefix verbatim (no extra "pg_" is added by the exporter), so
+# "pg_stat_statements" here produces "pg_stat_statements_calls",
+# "pg_stat_statements_mean_exec_time", etc. -- exactly the names
+# docs/grafana/dashboards/database.json's hall-of-shame panel and
+# docs/grafana/alerts.yml query.
+#
+# Requires the `pg_stat_statements` extension (backend/alembic/versions/core/
+# a1c9f3e7b2d4_pg_stat_statements.py) AND the library preloaded via
+# `shared_preload_libraries` (the postgres `command` in both compose files) --
+# without the preload, querying this view raises "pg_stat_statements must be
+# loaded via shared_preload_libraries", which surfaces as this exporter query
+# failing (visible in its own /metrics as pg_exporter_last_scrape_error).
+pg_stat_statements:
+  query: |
+    SELECT
+      pg_get_userbyid(userid) AS user,
+      queryid::text AS queryid,
+      left(query, 200) AS query,
+      calls,
+      mean_exec_time,
+      total_exec_time,
+      rows
+    FROM pg_stat_statements
+    ORDER BY total_exec_time DESC
+    LIMIT 50
+  metrics:
+    - user:
+        usage: "LABEL"
+        description: "Role that executed the statement"
+    - queryid:
+        usage: "LABEL"
+        description: "Stable per-normalized-statement identifier"
+    - query:
+        usage: "LABEL"
+        description: "Normalized statement text, truncated to 200 chars"
+    - calls:
+        usage: "COUNTER"
+        description: "Number of times this statement has been executed"
+    - mean_exec_time:
+        usage: "GAUGE"
+        description: "Mean time spent executing the statement, in milliseconds"
+    - total_exec_time:
+        usage: "COUNTER"
+        description: "Total time spent executing the statement, in milliseconds"
+    - rows:
+        usage: "COUNTER"
+        description: "Total number of rows retrieved or affected by the statement"

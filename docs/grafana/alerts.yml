@@ -1,0 +1,25 @@
+# T-205: validated in CI with `promtool check rules` (see
+# backend/tests/test_prometheus_alerts.py) and loaded by a local Prometheus
+# via `rule_files` (docs/grafana/prometheus.yml) when running `make observe`.
+#
+# pg_stat_statements exposes mean/max execution time per normalized
+# statement, not a true percentile -- there is no way to compute a real p95
+# from it. The plan's p95 target is implemented here as a pragmatic stand-in:
+# **mean execution time > 500ms, sustained for 15 minutes, on a statement
+# called often enough (>100 times) to matter**. True end-to-end p95 (as
+# actually experienced by callers) is owned by the k6 load-test suite
+# (T-223), not this alert.
+groups:
+  - name: forge-slow-queries
+    rules:
+      - alert: SlowQuerySustained
+        expr: pg_stat_statements_mean_exec_time > 500 and pg_stat_statements_calls > 100
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Statement {{ $labels.queryid }} averaging {{ $value }}ms over 100+ calls"
+          description: >-
+            {{ $labels.query }} has averaged over 500ms per execution for at
+            least 15 minutes, called over 100 times. See
+            docs/runbooks/slow-queries.md for the EXPLAIN ANALYZE workflow.
