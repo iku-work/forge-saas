@@ -174,3 +174,42 @@ services:
         condition: service_healthy
     networks:
       - forge-net
+
+  # T-204: local Grafana/Prometheus stack for viewing docs/grafana/*.json
+  # against live data -- `make observe`. Never started by default (`make dev`
+  # doesn't touch this profile); scrapes the same backend:8000/metrics T-202
+  # locks out of the public edge, but this stack itself stays inside
+  # forge-net too (Grafana's port is the only one published).
+  prometheus:
+    image: prom/prometheus:v2.55.1
+    profiles: ["observability"]
+    volumes:
+      - ./docs/grafana/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    networks:
+      - forge-net
+
+  grafana:
+    image: grafana/grafana:11.3.1
+    profiles: ["observability"]
+    environment:
+      # Anonymous admin access is a dev-only convenience (same class of
+      # decision as minio's static MINIO_KMS_SECRET_KEY above) -- this stack
+      # is never reachable outside forge-net/the published Grafana port.
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Admin
+    volumes:
+      - ./docs/grafana/provisioning:/etc/grafana/provisioning:ro
+      # Mounted at a path outside (not nested under) the read-only
+      # provisioning mount above, and referenced by its absolute path from
+      # dashboards.yml's `options.path` -- nesting a second bind mount
+      # inside an already-:ro-mounted parent directory fails to create its
+      # own mountpoint under Docker Desktop's Linux VM (confirmed
+      # empirically), since that subdirectory doesn't exist on the host
+      # side of the parent mount.
+      - ./docs/grafana/dashboards:/etc/grafana/dashboards-json:ro
+    ports:
+      - "3001:3000"
+    depends_on:
+      - prometheus
+    networks:
+      - forge-net

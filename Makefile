@@ -1,4 +1,4 @@
-.PHONY: dev test lint migrate migrate-plan gen-client seed new-module install-hooks down update-from-template check-template-drift
+.PHONY: dev test lint migrate migrate-plan gen-client seed new-module install-hooks down update-from-template check-template-drift observe
 
 TEMPLATE_VERSION ?= main
 
@@ -64,6 +64,10 @@ new-module:
 
 install-hooks:
 	pre-commit install
+
+observe:
+	docker compose --profile observability up -d
+	@echo "Grafana: http://localhost:3001 (anonymous admin access, dev only)"
 
 update-from-template:
 	git fetch upstream

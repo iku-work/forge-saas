@@ -35,6 +35,8 @@ def test_metrics_endpoint_returns_prometheus_text_format() -> None:
     assert "forge_stripe_webhook_seconds" in response.text
     assert "forge_emails_sent_total" in response.text
     assert "forge_push_sent_total" in response.text
+    # Powers T-204's api-overview.json "in-flight requests" panel.
+    assert "http_requests_inprogress" in response.text
 
 
 def test_metrics_endpoint_excluded_from_openapi_schema() -> None:

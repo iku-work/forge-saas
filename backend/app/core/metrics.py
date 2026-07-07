@@ -102,4 +102,9 @@ FORGE_ACTIVE_SESSIONS.set_function(_read_active_sessions)
 
 
 def init_metrics(app: FastAPI) -> None:
-    Instrumentator().instrument(app).expose(app, endpoint="/metrics", include_in_schema=False)
+    # should_instrument_requests_inprogress: powers the "in-flight requests"
+    # panel on T-204's api-overview.json dashboard -- off by default in this
+    # instrumentator version, so it must be requested explicitly.
+    Instrumentator(should_instrument_requests_inprogress=True).instrument(app).expose(
+        app, endpoint="/metrics", include_in_schema=False
+    )
