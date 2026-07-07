@@ -45,6 +45,7 @@ from sqlmodel import SQLModel
 
 from app.core.config import get_settings
 from app.core.db import async_session_factory
+from app.core.tracing import trace_job
 from app.models._mixins import utcnow
 from app.modules.audit.models import AuditEvent
 from app.modules.auth.models import (
@@ -84,6 +85,7 @@ _DELETE_BY_USER: tuple[tuple[type[SQLModel], str], ...] = (
 )
 
 
+@trace_job
 async def purge_user_data(
     ctx: dict[str, Any],  # noqa: ARG001 -- ARQ calling convention; registered in app.workers.main
     *,
@@ -149,6 +151,7 @@ async def _detach_orphaned_org_billing(org_ids: list[UUID]) -> None:
 # --- export_user_data (T-037) ------------------------------------------------
 
 
+@trace_job
 async def export_user_data(
     ctx: dict[str, Any],
     *,

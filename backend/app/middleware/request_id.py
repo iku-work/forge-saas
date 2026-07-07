@@ -3,6 +3,7 @@ from uuid import uuid4
 
 import sentry_sdk
 from loguru import logger
+from opentelemetry import trace
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from starlette.responses import Response
@@ -19,6 +20,7 @@ class RequestIDMiddleware(BaseHTTPMiddleware):
         request_id = request.headers.get(REQUEST_ID_HEADER) or str(uuid4())
         request.state.request_id = request_id
         sentry_sdk.set_tag("request_id", request_id)
+        trace.get_current_span().set_attribute("request_id", request_id)
         with logger.contextualize(request_id=request_id):
             response = await call_next(request)
         response.headers[REQUEST_ID_HEADER] = request_id

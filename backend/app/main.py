@@ -23,6 +23,7 @@ from app.core.logging import configure_logging
 from app.core.metrics import init_metrics
 from app.core.module_loader import get_modules
 from app.core.sentry import init_sentry
+from app.core.tracing import configure_tracing
 from app.middleware.impersonation import ImpersonationContextMiddleware
 from app.middleware.locale import LocaleMiddleware
 from app.middleware.rate_limit import register_rate_limiting
@@ -73,6 +74,7 @@ app.add_middleware(
 )
 app.include_router(build_router())
 init_metrics(app)
+configure_tracing(app, settings)
 
 
 def _custom_openapi() -> dict[str, Any]:

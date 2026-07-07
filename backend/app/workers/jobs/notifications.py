@@ -30,6 +30,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.db import async_session_factory
 from app.core.metrics import FORGE_PUSH_SENT_TOTAL
+from app.core.tracing import trace_job
 from app.models._mixins import utcnow
 from app.modules.auth.models import User
 from app.modules.notifications.models import Notification
@@ -52,6 +53,7 @@ async def backfill_notification_preferences_for_session(session: AsyncSession) -
     return cast("CursorResult[Any]", result).rowcount
 
 
+@trace_job
 async def backfill_notification_preferences(
     ctx: dict[str, Any],  # noqa: ARG001 -- ARQ calling convention
 ) -> None:
@@ -70,6 +72,7 @@ def _expo_message(token: str, notification: Notification) -> dict[str, Any]:
     }
 
 
+@trace_job
 async def send_push(
     ctx: dict[str, Any],  # noqa: ARG001 -- ARQ calling convention; registered in app.workers.main
     *,

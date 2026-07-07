@@ -47,6 +47,7 @@ from app.core.config import get_settings
 from app.core.i18n import get_default_locale, t
 from app.core.metrics import FORGE_EMAILS_SENT_TOTAL
 from app.core.module_loader import get_branding
+from app.core.tracing import trace_job
 
 logger = logging.getLogger(__name__)
 
@@ -131,6 +132,7 @@ async def _send_via_smtp(*, to: str, subject: str, html: str, text: str) -> None
     await asyncio.to_thread(_send)
 
 
+@trace_job
 async def send_email(
     ctx: dict[str, Any],  # noqa: ARG001 -- ARQ calling convention; registered in app.workers.main
     *,

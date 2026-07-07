@@ -27,6 +27,7 @@ from uuid import UUID
 import sentry_sdk
 
 from app.core.db import async_session_factory
+from app.core.tracing import trace_job
 from app.modules.audit.service import AuditService
 from app.modules.notifications.service import NotificationService
 from app.modules.storage.backend import get_storage_backend
@@ -43,6 +44,7 @@ _BACKOFF_BASE_SECONDS = 1.0
 _DOWNLOAD_EXPIRES_IN_SECONDS = 300  # the scan window
 
 
+@trace_job
 async def virus_scan(
     ctx: dict[str, Any],
     *,

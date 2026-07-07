@@ -16,6 +16,7 @@ from sqlalchemy import text
 from app.core.config import get_settings
 from app.core.db import async_session_factory
 from app.core.encrypted_type import get_shared_fernet
+from app.core.tracing import trace_job
 
 if TYPE_CHECKING:
     from uuid import UUID
@@ -56,6 +57,7 @@ def _reencrypted_value(raw_value: str | None, primary: Fernet, all_keys: MultiFe
     return primary.encrypt(plaintext_bytes).decode("ascii")
 
 
+@trace_job
 async def reencrypt_column_job(
     ctx: dict[str, Any],  # noqa: ARG001 -- ARQ calling convention; wired up in T-034
     *,

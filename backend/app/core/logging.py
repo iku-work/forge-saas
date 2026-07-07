@@ -21,6 +21,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from loguru import logger
+from opentelemetry import trace
 
 from app.core.config import Settings, get_settings
 
@@ -59,6 +60,22 @@ def _scrubbed_extra(record: "Record") -> dict[str, object]:
     return scrubbed if isinstance(scrubbed, dict) else {}
 
 
+def _active_trace_ids() -> dict[str, str]:
+    """
+    T-203: so a log line emitted inside a traced request/job can be pasted
+    straight into the trace viewer. Empty outside any span (no active
+    request/job, or tracing's OTLP endpoint unset) -- get_span_context() on
+    the no-op span INVALID_SPAN present in that case reports is_valid=False.
+    """
+    span_context = trace.get_current_span().get_span_context()
+    if not span_context.is_valid:
+        return {}
+    return {
+        "trace_id": format(span_context.trace_id, "032x"),
+        "span_id": format(span_context.span_id, "016x"),
+    }
+
+
 def _exception_text(exc: "RecordException") -> str:
     return "".join(traceback.format_exception(exc.type, exc.value, exc.traceback))
 
@@ -69,6 +86,7 @@ def _json_sink(message: "Message") -> None:
         "timestamp": record["time"].isoformat(),
         "level": record["level"].name,
         "message": record["message"],
+        **_active_trace_ids(),
         **_scrubbed_extra(record),
     }
     exception = record["exception"]
@@ -79,7 +97,7 @@ def _json_sink(message: "Message") -> None:
 
 def _pretty_sink(message: "Message") -> None:
     record = message.record
-    extra = _scrubbed_extra(record)
+    extra: dict[str, object] = {**_active_trace_ids(), **_scrubbed_extra(record)}
     extra_str = " ".join(f"{key}={value}" for key, value in extra.items())
     line = f"{record['time'].isoformat()} | {record['level'].name:<8} | {record['message']}"
     if extra_str:

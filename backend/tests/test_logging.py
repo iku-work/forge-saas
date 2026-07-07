@@ -4,6 +4,8 @@ from pathlib import Path
 
 import pytest
 from loguru import logger
+from opentelemetry.sdk.trace import TracerProvider
+from opentelemetry.sdk.trace.sampling import ALWAYS_ON
 
 from app.core.config import Settings
 from app.core.logging import _is_sensitive_key, _scrub, configure_logging
@@ -72,6 +74,36 @@ def test_request_id_from_contextvars_is_carried_into_output(
 
     record = _last_json_line(capsys.readouterr().err)
     assert record["request_id"] == "req-123"
+
+
+def test_active_span_trace_and_span_id_are_carried_into_output(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    # T-203: a log line emitted inside a traced request/job can be pasted
+    # straight into the trace viewer. A standalone TracerProvider (not the
+    # process-wide one app.main's configure_tracing sets) is enough here --
+    # opentelemetry.trace.get_current_span() reads whatever span is active in
+    # context regardless of which provider created it.
+    configure_logging(settings=_staging_settings())
+    tracer = TracerProvider(sampler=ALWAYS_ON).get_tracer("test")
+
+    with tracer.start_as_current_span("test-span") as span:
+        logger.info("inside span")
+        span_context = span.get_span_context()
+
+    record = _last_json_line(capsys.readouterr().err)
+    assert record["trace_id"] == format(span_context.trace_id, "032x")
+    assert record["span_id"] == format(span_context.span_id, "016x")
+
+
+def test_no_trace_id_outside_any_span(capsys: pytest.CaptureFixture[str]) -> None:
+    configure_logging(settings=_staging_settings())
+
+    logger.info("no active span")
+
+    record = _last_json_line(capsys.readouterr().err)
+    assert "trace_id" not in record
+    assert "span_id" not in record
 
 
 def test_nested_secret_is_scrubbed_recursively(capsys: pytest.CaptureFixture[str]) -> None:

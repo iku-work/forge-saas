@@ -61,6 +61,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core import jobs
 from app.core.config import get_settings
 from app.core.db import async_session_factory
+from app.core.tracing import trace_job
 from app.models._mixins import utcnow
 from app.modules.audit.service import AuditService
 from app.modules.auth.models import User
@@ -102,6 +103,7 @@ def _format_amount(amount_cents: int, currency: str) -> str:
     return f"{amount} {currency.upper()}"
 
 
+@trace_job
 async def send_dunning_email(
     ctx: dict[str, Any],  # noqa: ARG001 -- ARQ calling convention; registered in app.workers.main
     *,

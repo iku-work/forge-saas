@@ -28,6 +28,22 @@ dependencies = [
     "loguru>=0.7",
     "sentry-sdk[fastapi]>=2.15",
     "opentelemetry-distro>=0.48b0",
+    # Pinned exactly, not >=: semgrep (a dev dependency below) pins
+    # opentelemetry-api/sdk/exporter-otlp-proto-http to ~=1.37.0 and
+    # opentelemetry-instrumentation-requests/threading to ~=0.58b0, and (since
+    # every contrib package here shares one opentelemetry-instrumentation
+    # core) that transitively caps opentelemetry-api at 1.37.x -- there is no
+    # published opentelemetry-instrumentation-fastapi release that both fixes
+    # the _get_route_details() bug worked around in tracing.py's
+    # _patch_fastapi_partial_match_bug() (needs >=0.64b0, i.e. api>=1.43.0)
+    # and satisfies semgrep's cap. Letting these three float to a newer
+    # contrib release drags opentelemetry-api/sdk/instrumentation along with
+    # them and `pip check` starts reporting conflicting requirements against
+    # semgrep's own pins.
+    "opentelemetry-instrumentation-fastapi==0.58b0",
+    "opentelemetry-instrumentation-sqlalchemy==0.58b0",
+    "opentelemetry-instrumentation-redis==0.58b0",
+    "opentelemetry-exporter-otlp-proto-http==1.37.0",
     # >=8.0.2, not just >=7.0: 8.0.0/8.0.1's routing._get_route_name assumes
     # include_router() eagerly flattens child routes into APIRoute objects
     # with a .path attribute. This FastAPI's (0.137.2) include_router() wraps
