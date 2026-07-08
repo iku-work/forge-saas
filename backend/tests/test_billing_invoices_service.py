@@ -8,8 +8,11 @@ last returned invoice's id (Stripe's own `starting_after` cursor -- see the
 module docstring), and `invalidate` only clears the calling org's cached
 pages, never another org's.
 
-stripe.Invoice.list is monkeypatched -- this file verifies InvoiceService's
-own request/cache/DTO logic, not Stripe's contract. Same real-Postgres +
+stripe.Invoice.list_async is monkeypatched -- this file verifies
+InvoiceService's own request/cache/DTO logic, not Stripe's contract. T-206
+switched this call site onto stripe's `_async` method variant (wrapped in
+app.core.resilience's async `@resilient("stripe")`), so the monkeypatched
+replacements below are themselves `async def`. Same real-Postgres +
 real-Redis testcontainers pattern as test_billing_checkout.py.
 """
 
@@ -119,10 +122,10 @@ async def test_list_for_org_returns_empty_without_calling_stripe_when_no_custome
 ) -> None:
     org = await _make_org(session)
 
-    def _list(**_kwargs: object) -> _FakeInvoiceList:
-        raise AssertionError("stripe.Invoice.list should not be called")
+    async def _list(**_kwargs: object) -> _FakeInvoiceList:
+        raise AssertionError("stripe.Invoice.list_async should not be called")
 
-    monkeypatch.setattr(stripe.Invoice, "list", _list)
+    monkeypatch.setattr(stripe.Invoice, "list_async", _list)
 
     items, next_cursor = await service.list_for_org(org)
 
@@ -137,11 +140,11 @@ async def test_list_for_org_maps_stripe_fields_onto_dto(
     service: InvoiceService, session: AsyncSession, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     org = await _make_org(session, stripe_customer_id="cus_1")
-    monkeypatch.setattr(
-        stripe.Invoice,
-        "list",
-        lambda **_kwargs: _FakeInvoiceList([_invoice("in_1")], has_more=False),
-    )
+
+    async def _list(**_kwargs: object) -> _FakeInvoiceList:
+        return _FakeInvoiceList([_invoice("in_1")], has_more=False)
+
+    monkeypatch.setattr(stripe.Invoice, "list_async", _list)
 
     items, next_cursor = await service.list_for_org(org)
 
@@ -161,11 +164,11 @@ async def test_list_for_org_next_cursor_is_last_invoice_id_when_has_more(
     service: InvoiceService, session: AsyncSession, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     org = await _make_org(session, stripe_customer_id="cus_1")
-    monkeypatch.setattr(
-        stripe.Invoice,
-        "list",
-        lambda **_kwargs: _FakeInvoiceList([_invoice("in_1"), _invoice("in_2")], has_more=True),
-    )
+
+    async def _list(**_kwargs: object) -> _FakeInvoiceList:
+        return _FakeInvoiceList([_invoice("in_1"), _invoice("in_2")], has_more=True)
+
+    monkeypatch.setattr(stripe.Invoice, "list_async", _list)
 
     _items, next_cursor = await service.list_for_org(org)
 
@@ -178,11 +181,11 @@ async def test_list_for_org_passes_customer_and_cursor_to_stripe(
     org = await _make_org(session, stripe_customer_id="cus_1")
     captured: dict[str, Any] = {}
 
-    def _list(**kwargs: object) -> _FakeInvoiceList:
+    async def _list(**kwargs: object) -> _FakeInvoiceList:
         captured.update(kwargs)
         return _FakeInvoiceList([], has_more=False)
 
-    monkeypatch.setattr(stripe.Invoice, "list", _list)
+    monkeypatch.setattr(stripe.Invoice, "list_async", _list)
 
     await service.list_for_org(org, after_cursor="in_1", limit=10)
 
@@ -200,12 +203,12 @@ async def test_list_for_org_second_call_uses_cache_not_stripe(
     org = await _make_org(session, stripe_customer_id="cus_1")
     call_count = 0
 
-    def _list(**_kwargs: object) -> _FakeInvoiceList:
+    async def _list(**_kwargs: object) -> _FakeInvoiceList:
         nonlocal call_count
         call_count += 1
         return _FakeInvoiceList([_invoice("in_1")], has_more=False)
 
-    monkeypatch.setattr(stripe.Invoice, "list", _list)
+    monkeypatch.setattr(stripe.Invoice, "list_async", _list)
 
     first_items, _ = await service.list_for_org(org)
     second_items, _ = await service.list_for_org(org)
@@ -220,12 +223,12 @@ async def test_list_for_org_different_cursor_is_a_separate_cache_entry(
     org = await _make_org(session, stripe_customer_id="cus_1")
     call_count = 0
 
-    def _list(**_kwargs: object) -> _FakeInvoiceList:
+    async def _list(**_kwargs: object) -> _FakeInvoiceList:
         nonlocal call_count
         call_count += 1
         return _FakeInvoiceList([_invoice(f"in_{call_count}")], has_more=False)
 
-    monkeypatch.setattr(stripe.Invoice, "list", _list)
+    monkeypatch.setattr(stripe.Invoice, "list_async", _list)
 
     await service.list_for_org(org, after_cursor=None)
     await service.list_for_org(org, after_cursor="in_1")
@@ -241,11 +244,11 @@ async def test_invalidate_clears_only_the_target_orgs_cache(
 ) -> None:
     org_a = await _make_org(session, stripe_customer_id="cus_a")
     org_b = await _make_org(session, stripe_customer_id="cus_b")
-    monkeypatch.setattr(
-        stripe.Invoice,
-        "list",
-        lambda **_kwargs: _FakeInvoiceList([_invoice("in_1")], has_more=False),
-    )
+
+    async def _list(**_kwargs: object) -> _FakeInvoiceList:
+        return _FakeInvoiceList([_invoice("in_1")], has_more=False)
+
+    monkeypatch.setattr(stripe.Invoice, "list_async", _list)
 
     await service.list_for_org(org_a)
     await service.list_for_org(org_b)

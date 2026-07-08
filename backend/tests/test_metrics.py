@@ -106,10 +106,16 @@ def test_default_registry_has_no_duplicate_forge_metric_names() -> None:
     # collector (would raise ValueError at import time, not at test time --
     # this just documents/pins that importing app.main is the only place
     # these get created).
-    names = [
-        sample.name
+    #
+    # Keyed by (name, labels), not name alone: a labeled counter like
+    # forge_breaker_open_total{integration=...} (T-206) legitimately emits
+    # one same-named sample per label combination once other tests in the
+    # full suite have touched more than one integration's breaker -- that's
+    # multiple samples of one registered metric, not a double-registration.
+    samples = [
+        (sample.name, tuple(sorted(sample.labels.items())))
         for metric_family in REGISTRY.collect()
         for sample in metric_family.samples
         if sample.name.startswith("forge_") and sample.name.endswith(("_total", "_count"))
     ]
-    assert len(names) == len(set(names))
+    assert len(samples) == len(set(samples))

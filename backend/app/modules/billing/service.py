@@ -33,6 +33,17 @@ deletion -- since either means there's nothing left to remind the org about.
 T-133: both invoice.* handlers also invalidate InvoiceService's cache for the
 affected org, since a status flip (open -> paid, or open -> past_due) changes
 what the cached invoice list's `status` field should read.
+
+T-206: every outbound Stripe call below goes through app.core.resilience's
+`@resilient("stripe")` and, correspondingly, stripe's own `_async` method
+variants rather than their sync equivalents -- a blocking sync call inside an
+`async def` would still stall the event loop regardless of the decorator.
+Each decorated function makes exactly one real Stripe call so the shared
+"stripe" breaker's failure count matches "one breaker failure per outbound
+Stripe call", not per higher-level operation; `create_checkout_session`/
+`create_portal_session` call `get_or_create_stripe_customer` (its own
+decorated unit) and then their own decorated single-call helper, rather than
+wrapping the whole method a second time, to avoid nested retry storms.
 """
 
 import logging
@@ -46,6 +57,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
 from app.core.exceptions import DomainError, NotFoundError
+from app.core.resilience import resilient
 from app.modules.audit.service import AuditService
 from app.modules.billing.dunning import DunningService
 from app.modules.billing.invoices import InvoiceService
@@ -59,6 +71,35 @@ logger = logging.getLogger(__name__)
 
 def _epoch_to_datetime(value: int | None) -> datetime | None:
     return datetime.fromtimestamp(value, tz=UTC) if value is not None else None
+
+
+@resilient("stripe")
+async def _create_checkout_session_stripe(
+    *, customer_id: str, price_id: str, org_id: str, domain: str
+) -> stripe.checkout.Session:
+    return await stripe.checkout.Session.create_async(
+        customer=customer_id,
+        mode="subscription",
+        line_items=[{"price": price_id, "quantity": 1}],
+        success_url=f"https://{domain}/billing?checkout=success",
+        cancel_url=f"https://{domain}/billing?checkout=canceled",
+        metadata={"org_id": org_id},
+        # The webhook handler (_handle_subscription_upserted) reads org_id
+        # off the *Subscription* object's metadata, not the Checkout
+        # Session's -- subscription_data.metadata is what Stripe copies onto
+        # the Subscription it creates.
+        subscription_data={"metadata": {"org_id": org_id}},
+    )
+
+
+@resilient("stripe")
+async def _create_portal_session_stripe(
+    *, customer_id: str, domain: str
+) -> stripe.billing_portal.Session:
+    return await stripe.billing_portal.Session.create_async(
+        customer=customer_id,
+        return_url=f"https://{domain}/billing",
+    )
 
 
 class BillingService:
@@ -155,11 +196,14 @@ class BillingService:
 
     # --- checkout / portal / customer (T-031) ----------------------------------------
 
+    @resilient("stripe")
     async def get_or_create_stripe_customer(self, org: Organization) -> str:
         if org.stripe_customer_id is not None:
             return org.stripe_customer_id
 
-        customer = stripe.Customer.create(name=org.name, metadata={"org_id": str(org.id)})
+        customer = await stripe.Customer.create_async(
+            name=org.name, metadata={"org_id": str(org.id)}
+        )
         org.stripe_customer_id = customer.id
         await self._session.flush()
         return customer.id
@@ -181,18 +225,8 @@ class BillingService:
         customer_id = await self.get_or_create_stripe_customer(org)
         domain = get_settings().DOMAIN
 
-        checkout_session = stripe.checkout.Session.create(
-            customer=customer_id,
-            mode="subscription",
-            line_items=[{"price": price_id, "quantity": 1}],
-            success_url=f"https://{domain}/billing?checkout=success",
-            cancel_url=f"https://{domain}/billing?checkout=canceled",
-            metadata={"org_id": str(org.id)},
-            # The webhook handler (_handle_subscription_upserted) reads
-            # org_id off the *Subscription* object's metadata, not the
-            # Checkout Session's -- subscription_data.metadata is what
-            # Stripe copies onto the Subscription it creates.
-            subscription_data={"metadata": {"org_id": str(org.id)}},
+        checkout_session = await _create_checkout_session_stripe(
+            customer_id=customer_id, price_id=price_id, org_id=str(org.id), domain=domain
         )
         if checkout_session.url is None:
             raise DomainError(
@@ -204,10 +238,7 @@ class BillingService:
         customer_id = await self.get_or_create_stripe_customer(org)
         domain = get_settings().DOMAIN
 
-        portal_session = stripe.billing_portal.Session.create(
-            customer=customer_id,
-            return_url=f"https://{domain}/billing",
-        )
+        portal_session = await _create_portal_session_stripe(customer_id=customer_id, domain=domain)
         return portal_session.url
 
     async def get_subscription(self, org_id: UUID) -> Subscription | None:

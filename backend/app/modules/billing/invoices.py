@@ -16,6 +16,11 @@ identity, and the webhook handler that calls `invalidate` only ever has an
 `org_id` (off the Subscription row), never a loaded Organization -- so
 `invalidate` takes a bare UUID and `list_for_org` takes the Organization
 the router already resolved via `get_current_org`.
+
+T-206: the actual Stripe call is pulled out into `_list_stripe_invoices`,
+decorated with `@resilient("stripe")` and using `stripe.Invoice.list_async`
+-- kept separate from `list_for_org` itself so a breaker retry only ever
+re-runs the one Stripe call, not the surrounding Redis cache read/write.
 """
 
 import json
@@ -27,6 +32,7 @@ from redis.asyncio import Redis
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
+from app.core.resilience import resilient
 from app.core.schemas import AppBaseModel
 from app.modules.tenancy.models import Organization
 
@@ -70,6 +76,17 @@ def _to_dto(invoice: stripe.Invoice) -> InvoiceDTO:
     )
 
 
+@resilient("stripe")
+async def _list_stripe_invoices(
+    *, customer_id: str, limit: int, after_cursor: str | None
+) -> stripe.ListObject[stripe.Invoice]:
+    if after_cursor is not None:
+        return await stripe.Invoice.list_async(
+            customer=customer_id, limit=limit, starting_after=after_cursor
+        )
+    return await stripe.Invoice.list_async(customer=customer_id, limit=limit)
+
+
 class InvoiceService:
     def __init__(self, session: AsyncSession, redis: Redis) -> None:
         self._session = session
@@ -89,12 +106,8 @@ class InvoiceService:
         if org.stripe_customer_id is None:
             return [], None
 
-        stripe_invoices = (
-            stripe.Invoice.list(
-                customer=org.stripe_customer_id, limit=limit, starting_after=after_cursor
-            )
-            if after_cursor is not None
-            else stripe.Invoice.list(customer=org.stripe_customer_id, limit=limit)
+        stripe_invoices = await _list_stripe_invoices(
+            customer_id=org.stripe_customer_id, limit=limit, after_cursor=after_cursor
         )
 
         items = [_to_dto(invoice) for invoice in stripe_invoices.data]

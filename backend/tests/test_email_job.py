@@ -7,12 +7,15 @@ escaping, brand colors, template content) is covered by that package's own
 vitest suite (packages/email-templates/src/render.test.ts); this file only
 covers send_email's own responsibilities: invoking `_render` with the right
 template/context/locale, computing the subject from @forge/i18n's catalog,
-retrying transient (5xx / network) Resend failures with backoff, giving up
-after _MAX_ATTEMPTS without retrying a permanent (4xx) failure, never
-raising on a final *delivery* failure (logged + reported to Sentry instead),
-and -- unlike a delivery failure -- letting a renderer failure propagate
-(see _render's own docstring note in email.py for why). Also covers the
-EMAIL_BACKEND="smtp" path used to reach MailHog in dev.
+retrying transient (5xx / network) Resend failures (T-206's
+app.core.resilience `@resilient("resend")`, exercised here rather than
+mocked, since it's the actual retry mechanism now), giving up without
+retrying a permanent (4xx) failure, never raising on a final *delivery*
+failure (logged + reported to Sentry instead), re-queuing the whole job via
+arq.worker.Retry once the "resend" breaker itself trips open, and -- unlike
+a delivery failure -- letting a renderer failure propagate (see _render's
+own docstring note in email.py for why). Also covers the EMAIL_BACKEND="smtp"
+path used to reach MailHog in dev.
 """
 
 import json
@@ -21,6 +24,7 @@ from typing import Any
 from unittest.mock import AsyncMock, Mock
 
 import pytest
+from arq.worker import Retry
 from resend.exceptions import ResendError
 
 from app.core.config import get_settings
@@ -35,13 +39,6 @@ class _FakeProcess:
 
     async def communicate(self) -> tuple[bytes, bytes]:
         return self.stdout, self.stderr
-
-
-@pytest.fixture(autouse=True)
-def mock_sleep(monkeypatch: pytest.MonkeyPatch) -> AsyncMock:
-    sleep = AsyncMock()
-    monkeypatch.setattr(email_job.asyncio, "sleep", sleep)
-    return sleep
 
 
 @pytest.fixture
@@ -80,13 +77,6 @@ def _validation_error() -> ResendError:
         message="invalid `to` field",
         suggested_action="fix the request",
     )
-
-
-def test_is_retryable_returns_false_for_unparseable_code() -> None:
-    exc = ResendError(
-        code="not-a-status-code", error_type="weird", message="?", suggested_action="?"
-    )
-    assert email_job._is_retryable(exc) is False
 
 
 # --- _email_renderer_cli_path: dual-path resolution (mirrors app.core.i18n) --
@@ -246,12 +236,11 @@ async def test_render_failure_propagates_and_never_reaches_resend(
     send.assert_not_called()
 
 
-# --- Resend retry/backoff ------------------------------------------------------
+# --- Resend retry/backoff (T-206: app.core.resilience's @resilient("resend")) --
 
 
 async def test_retries_on_transient_error_then_succeeds(
     monkeypatch: pytest.MonkeyPatch,
-    mock_sleep: AsyncMock,
     mock_render: AsyncMock,
     captured_sentry: Mock,
 ) -> None:
@@ -263,7 +252,6 @@ async def test_retries_on_transient_error_then_succeeds(
     )
 
     assert send.await_count == 2
-    mock_sleep.assert_awaited_once()
     # _render is called once per send_email invocation, not once per Resend
     # attempt -- a retried delivery resends the same already-rendered html.
     mock_render.assert_awaited_once()
@@ -272,7 +260,6 @@ async def test_retries_on_transient_error_then_succeeds(
 
 async def test_retries_network_error_classified_as_transient(
     monkeypatch: pytest.MonkeyPatch,
-    mock_sleep: AsyncMock,
     mock_render: AsyncMock,
     captured_sentry: Mock,
 ) -> None:
@@ -284,14 +271,12 @@ async def test_retries_network_error_classified_as_transient(
     )
 
     assert send.await_count == 2
-    mock_sleep.assert_awaited_once()
     mock_render.assert_awaited_once()
     captured_sentry.assert_not_called()
 
 
 async def test_gives_up_after_max_attempts_without_raising(
     monkeypatch: pytest.MonkeyPatch,
-    mock_sleep: AsyncMock,
     mock_render: AsyncMock,
     captured_sentry: Mock,
 ) -> None:
@@ -302,15 +287,13 @@ async def test_gives_up_after_max_attempts_without_raising(
         {}, to="dave@example.com", template="password_reset", context={"reset_url": "https://x/r"}
     )
 
-    assert send.await_count == email_job._MAX_ATTEMPTS
-    assert mock_sleep.await_count == email_job._MAX_ATTEMPTS - 1
+    assert send.await_count == 3  # resilient()'s default retries
     mock_render.assert_awaited_once()
     captured_sentry.assert_called_once()
 
 
 async def test_permanent_error_fails_fast_without_retrying(
     monkeypatch: pytest.MonkeyPatch,
-    mock_sleep: AsyncMock,
     mock_render: AsyncMock,
     captured_sentry: Mock,
 ) -> None:
@@ -325,9 +308,38 @@ async def test_permanent_error_fails_fast_without_retrying(
     )
 
     send.assert_awaited_once()
-    mock_sleep.assert_not_awaited()
     mock_render.assert_awaited_once()
     captured_sentry.assert_called_once()
+
+
+async def test_breaker_open_requeues_the_job_instead_of_dropping_the_email(
+    monkeypatch: pytest.MonkeyPatch,
+    mock_render: AsyncMock,  # noqa: ARG001 -- required so send_email skips the real Node subprocess
+    captured_sentry: Mock,
+) -> None:
+    send = AsyncMock(side_effect=_server_error(503))
+    monkeypatch.setattr(email_job.resend.Emails, "send_async", send)
+
+    # 5 separate send_email calls, each exhausting its own internal retries
+    # and failing -- exactly enough real (transient) failures to trip the
+    # shared "resend" breaker (fail_max=5). Each behaves like
+    # test_gives_up_after_max_attempts_without_raising above.
+    for i in range(5):
+        await email_job.send_email(
+            {}, to=f"user{i}@example.com", template="password_reset", context={"reset_url": "x"}
+        )
+    captured_sentry.reset_mock()
+    send.reset_mock()
+
+    with pytest.raises(Retry) as exc_info:
+        await email_job.send_email(
+            {}, to="last@example.com", template="password_reset", context={"reset_url": "x"}
+        )
+
+    assert exc_info.value.defer_score == email_job._RESEND_RETRY_DEFER_SECONDS * 1000
+    # The breaker rejected the call outright -- Resend was never even hit.
+    send.assert_not_called()
+    captured_sentry.assert_not_called()
 
 
 # --- SMTP backend (dev / MailHog) ---------------------------------------------

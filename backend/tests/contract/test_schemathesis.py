@@ -143,19 +143,21 @@ def _stub_health_dependencies() -> Generator[None, None, None]:
 
 @pytest.fixture(autouse=True)
 def _stub_stripe(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(
-        stripe.Customer, "create", lambda **_kwargs: _FakeStripeObject(id="cus_contract_test")
-    )
-    monkeypatch.setattr(
-        stripe.checkout.Session,
-        "create",
-        lambda **_kwargs: _FakeStripeObject(url="https://checkout.stripe.com/contract-test"),
-    )
-    monkeypatch.setattr(
-        stripe.billing_portal.Session,
-        "create",
-        lambda **_kwargs: _FakeStripeObject(url="https://billing.stripe.com/contract-test"),
-    )
+    # T-206 switched app.modules.billing.service onto stripe's `_async`
+    # method variants (so they can be wrapped in app.core.resilience's
+    # async @resilient("stripe")) -- stub those, not the sync originals.
+    async def _customer_create(**_kwargs: object) -> _FakeStripeObject:
+        return _FakeStripeObject(id="cus_contract_test")
+
+    async def _checkout_create(**_kwargs: object) -> _FakeStripeObject:
+        return _FakeStripeObject(url="https://checkout.stripe.com/contract-test")
+
+    async def _portal_create(**_kwargs: object) -> _FakeStripeObject:
+        return _FakeStripeObject(url="https://billing.stripe.com/contract-test")
+
+    monkeypatch.setattr(stripe.Customer, "create_async", _customer_create)
+    monkeypatch.setattr(stripe.checkout.Session, "create_async", _checkout_create)
+    monkeypatch.setattr(stripe.billing_portal.Session, "create_async", _portal_create)
 
 
 @schema.parametrize()

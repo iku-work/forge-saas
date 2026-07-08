@@ -61,3 +61,20 @@ class RateLimitError(DomainError):
     status_code = 429
     code = "rate_limited"
     default_message_key = "errors.rate_limited"
+
+
+class ExternalServiceUnavailableError(DomainError):
+    """Raised by app.core.resilience.resilient() when an integration's
+    circuit breaker is open. Names the degraded *feature* (e.g. "Billing"),
+    never the vendor internals (e.g. "Stripe") -- callers shouldn't learn
+    which third party is having trouble."""
+
+    status_code = 503
+    code = "service_unavailable"
+    default_message_key = "errors.service_unavailable"
+
+    def __init__(self, feature: str) -> None:
+        super().__init__(
+            fallback=f"{feature} is temporarily unavailable. Please try again shortly.",
+            params={"feature": feature},
+        )

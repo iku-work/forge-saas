@@ -8,11 +8,15 @@ subscription_data.metadata, since _handle_subscription_upserted (T-030)
 reads org_id off the *Subscription* object's metadata, not the Checkout
 Session's, and create_portal_session reuses the same customer resolution.
 
-stripe.Customer.create / stripe.checkout.Session.create /
-stripe.billing_portal.Session.create are monkeypatched rather than hitting
-Stripe's network -- these tests verify the *request* this service builds,
-not Stripe's response handling (that's test_billing_webhooks.py's job).
-Same real-Postgres testcontainers pattern as test_billing_service.py.
+stripe.Customer.create_async / stripe.checkout.Session.create_async /
+stripe.billing_portal.Session.create_async are monkeypatched rather than
+hitting Stripe's network -- these tests verify the *request* this service
+builds, not Stripe's response handling (that's test_billing_webhooks.py's
+job). T-206 switched these call sites onto stripe's `_async` method variants
+(so they can be wrapped in app.core.resilience's async `@resilient("stripe")`
+without blocking the event loop), so the monkeypatched replacements below are
+themselves `async def`. Same real-Postgres testcontainers pattern as
+test_billing_service.py.
 """
 
 from collections.abc import AsyncGenerator
@@ -122,12 +126,12 @@ async def test_creates_customer_when_org_has_none(
 ) -> None:
     call_count = 0
 
-    def _create(**_kwargs: object) -> _FakeCustomer:
+    async def _create(**_kwargs: object) -> _FakeCustomer:
         nonlocal call_count
         call_count += 1
         return _FakeCustomer(customer_id="cus_new")
 
-    monkeypatch.setattr(stripe.Customer, "create", _create)
+    monkeypatch.setattr(stripe.Customer, "create_async", _create)
 
     customer_id = await service.get_or_create_stripe_customer(org)
 
@@ -141,10 +145,10 @@ async def test_reuses_existing_customer_without_calling_stripe(
 ) -> None:
     org.stripe_customer_id = "cus_existing"
 
-    def _create(**_kwargs: object) -> _FakeCustomer:
-        raise AssertionError("stripe.Customer.create should not be called")
+    async def _create(**_kwargs: object) -> _FakeCustomer:
+        raise AssertionError("stripe.Customer.create_async should not be called")
 
-    monkeypatch.setattr(stripe.Customer, "create", _create)
+    monkeypatch.setattr(stripe.Customer, "create_async", _create)
 
     customer_id = await service.get_or_create_stripe_customer(org)
 
@@ -170,13 +174,16 @@ async def test_checkout_session_builds_request_with_org_metadata(
     plan = await _make_plan(session)
     captured: dict[str, Any] = {}
 
-    monkeypatch.setattr(stripe.Customer, "create", lambda **_kwargs: _FakeCustomer("cus_1"))
+    async def _customer_create(**_kwargs: object) -> _FakeCustomer:
+        return _FakeCustomer("cus_1")
 
-    def _checkout_create(**kwargs: object) -> _FakeCheckoutSession:
+    monkeypatch.setattr(stripe.Customer, "create_async", _customer_create)
+
+    async def _checkout_create(**kwargs: object) -> _FakeCheckoutSession:
         captured.update(kwargs)
         return _FakeCheckoutSession(url="https://checkout.stripe.com/test")
 
-    monkeypatch.setattr(stripe.checkout.Session, "create", _checkout_create)
+    monkeypatch.setattr(stripe.checkout.Session, "create_async", _checkout_create)
 
     url = await service.create_checkout_session(org, plan.slug, "monthly")
 
@@ -197,13 +204,16 @@ async def test_checkout_session_yearly_interval_uses_yearly_price(
     plan = await _make_plan(session)
     captured: dict[str, Any] = {}
 
-    monkeypatch.setattr(stripe.Customer, "create", lambda **_kwargs: _FakeCustomer("cus_1"))
+    async def _customer_create(**_kwargs: object) -> _FakeCustomer:
+        return _FakeCustomer("cus_1")
 
-    def _checkout_create(**kwargs: object) -> _FakeCheckoutSession:
+    monkeypatch.setattr(stripe.Customer, "create_async", _customer_create)
+
+    async def _checkout_create(**kwargs: object) -> _FakeCheckoutSession:
         captured.update(kwargs)
         return _FakeCheckoutSession(url="https://checkout.stripe.com/test")
 
-    monkeypatch.setattr(stripe.checkout.Session, "create", _checkout_create)
+    monkeypatch.setattr(stripe.checkout.Session, "create_async", _checkout_create)
 
     await service.create_checkout_session(org, plan.slug, "yearly")
 
@@ -217,10 +227,15 @@ async def test_checkout_session_no_url_raises_domain_error(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     plan = await _make_plan(session)
-    monkeypatch.setattr(stripe.Customer, "create", lambda **_kwargs: _FakeCustomer("cus_1"))
-    monkeypatch.setattr(
-        stripe.checkout.Session, "create", lambda **_kwargs: _FakeCheckoutSession(url=None)
-    )
+
+    async def _customer_create(**_kwargs: object) -> _FakeCustomer:
+        return _FakeCustomer("cus_1")
+
+    async def _checkout_create(**_kwargs: object) -> _FakeCheckoutSession:
+        return _FakeCheckoutSession(url=None)
+
+    monkeypatch.setattr(stripe.Customer, "create_async", _customer_create)
+    monkeypatch.setattr(stripe.checkout.Session, "create_async", _checkout_create)
 
     with pytest.raises(DomainError):
         await service.create_checkout_session(org, plan.slug, "monthly")
@@ -235,11 +250,11 @@ async def test_portal_session_builds_request_with_customer(
     org.stripe_customer_id = "cus_existing"
     captured: dict[str, Any] = {}
 
-    def _portal_create(**kwargs: object) -> _FakePortalSession:
+    async def _portal_create(**kwargs: object) -> _FakePortalSession:
         captured.update(kwargs)
         return _FakePortalSession(url="https://billing.stripe.com/portal/test")
 
-    monkeypatch.setattr(stripe.billing_portal.Session, "create", _portal_create)
+    monkeypatch.setattr(stripe.billing_portal.Session, "create_async", _portal_create)
 
     url = await service.create_portal_session(org)
 

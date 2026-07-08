@@ -9,6 +9,12 @@ the constructor arguments selecting those three knobs differ per provider.
 Every synchronous boto3 call is off-loaded to a thread via asyncio.to_thread
 so it doesn't block the event loop -- see backend.py's own module docstring
 for why this project uses boto3 (sync) rather than aioboto3.
+
+T-206: `presign_upload`/`presign_download`/`head`/`delete` are each wrapped in
+`@resilient("s3")` -- one breaker failure per real network round-trip.
+`exists()` deliberately isn't decorated itself: it just calls `head()`, which
+is already decorated, and double-wrapping would count one logical call
+twice against the shared "s3" breaker.
 """
 
 from __future__ import annotations
@@ -22,6 +28,7 @@ import boto3
 from botocore.client import Config as BotoConfig
 from botocore.exceptions import ClientError
 
+from app.core.resilience import resilient
 from app.modules.storage.backend import PresignedUpload
 
 _SSE_ALGORITHM = "AES256"
@@ -59,6 +66,7 @@ class S3Backend:
             config=BotoConfig(**config_kwargs) if config_kwargs else None,
         )
 
+    @resilient("s3")
     async def presign_upload(
         self, key: str, content_type: str, max_bytes: int, expires_in: int = 600
     ) -> PresignedUpload:
@@ -89,6 +97,7 @@ class S3Backend:
             expires_at=datetime.now(UTC) + timedelta(seconds=expires_in),
         )
 
+    @resilient("s3")
     async def presign_download(
         self, key: str, expires_in: int = 3600, *, filename: str | None = None
     ) -> str:
@@ -103,6 +112,7 @@ class S3Backend:
 
         return await asyncio.to_thread(_presign)
 
+    @resilient("s3")
     async def head(self, key: str) -> dict[str, Any] | None:
         def _head() -> dict[str, Any] | None:
             try:
@@ -116,6 +126,7 @@ class S3Backend:
 
         return await asyncio.to_thread(_head)
 
+    @resilient("s3")
     async def delete(self, key: str) -> None:
         await asyncio.to_thread(self._client.delete_object, Bucket=self._bucket, Key=key)
 

@@ -17,6 +17,15 @@ Expo's HTTP push API directly (httpx) rather than through a dedicated SDK --
 one endpoint's worth of POST + response-parsing doesn't justify a new
 dependency, the same "no abstraction ahead of need" call app.workers.jobs.email
 makes for Resend.
+
+T-206: the actual POST to Expo's push API (`_post_to_expo`) goes through
+app.core.resilience's `@resilient("expo_push")`. Both a transient failure
+that survives every retry and an already-open "expo_push" breaker are
+treated identically by send_push -- logged + reported to Sentry, no
+re-queue -- per T-206's own degraded-mode contract ("Expo push down -- push
+dropped after retries; in-app + email channels unaffected"), unlike Resend's
+or the virus scanner's re-queue-via-arq.worker.Retry behavior: a missed push
+has no user-facing recovery path worth delaying the rest of the queue for.
 """
 
 import logging
@@ -29,7 +38,9 @@ from sqlalchemy import CursorResult, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.db import async_session_factory
+from app.core.exceptions import ExternalServiceUnavailableError
 from app.core.metrics import FORGE_PUSH_SENT_TOTAL
+from app.core.resilience import resilient
 from app.core.tracing import trace_job
 from app.models._mixins import utcnow
 from app.modules.auth.models import User
@@ -72,6 +83,15 @@ def _expo_message(token: str, notification: Notification) -> dict[str, Any]:
     }
 
 
+@resilient("expo_push")
+async def _post_to_expo(messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    async with httpx.AsyncClient(timeout=10) as client:
+        response = await client.post(_EXPO_PUSH_URL, json=messages)
+        response.raise_for_status()
+        result: list[dict[str, Any]] = response.json().get("data", [])
+        return result
+
+
 @trace_job
 async def send_push(
     ctx: dict[str, Any],  # noqa: ARG001 -- ARQ calling convention; registered in app.workers.main
@@ -93,13 +113,9 @@ async def send_push(
             return
 
         try:
-            async with httpx.AsyncClient(timeout=10) as client:
-                response = await client.post(
-                    _EXPO_PUSH_URL, json=[_expo_message(t.token, notification) for t in tokens]
-                )
-                response.raise_for_status()
-                receipts = response.json().get("data", [])
-        except httpx.HTTPError as exc:
+            receipts = await _post_to_expo([_expo_message(t.token, notification) for t in tokens])
+        except (httpx.HTTPError, ExternalServiceUnavailableError) as exc:
+            # Dropped, not re-queued -- see module docstring.
             logger.warning("send_push: Expo push API request failed: %s", exc)
             sentry_sdk.capture_exception(exc)
             return

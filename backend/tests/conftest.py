@@ -21,7 +21,7 @@ from sqlalchemy.pool import NullPool
 from testcontainers.postgres import PostgresContainer
 from testcontainers.redis import RedisContainer
 
-from app.core import encrypted_type
+from app.core import encrypted_type, resilience
 from app.core import jobs as jobs_module
 from app.core.config import get_settings
 from app.core.db import get_session
@@ -45,6 +45,27 @@ def _settings_env(monkeypatch: pytest.MonkeyPatch) -> None:
         if value is not None:
             monkeypatch.setenv(key, value)
     get_settings.cache_clear()
+
+
+@pytest.fixture(autouse=True)
+def _fast_resilience_retries(monkeypatch: pytest.MonkeyPatch) -> None:
+    # app.core.resilience.resilient()'s tenacity backoff (0.5s -> 4s) reads
+    # these two module constants as plain globals at call time, not as bound
+    # defaults -- shrinking them here makes every @resilient()-wrapped retry
+    # in the whole suite near-instant without changing retry *behavior*.
+    monkeypatch.setattr(resilience, "_RETRY_MULTIPLIER_SECONDS", 0.001)
+    monkeypatch.setattr(resilience, "_RETRY_MAX_WAIT_SECONDS", 0.002)
+
+
+@pytest.fixture(autouse=True)
+def _reset_breakers() -> Generator[None]:
+    # app.core.resilience.BREAKERS is module-level, shared state (one
+    # CircuitBreaker instance per integration, reused by every call site) --
+    # reset around every test so one test tripping a breaker never leaks into
+    # the next.
+    resilience.reset_all_breakers()
+    yield
+    resilience.reset_all_breakers()
 
 
 @pytest.fixture(autouse=True)

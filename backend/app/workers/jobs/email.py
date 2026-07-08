@@ -3,18 +3,28 @@ ARQ job: renders an email via packages/email-templates (T-106 -- React Email,
 replacing T-035's Jinja2 templates) and sends it via Resend, or via plain SMTP
 to MailHog when settings.EMAIL_BACKEND == "smtp" (the docker-compose
 `mailhog` service -- lets local dev actually see verification/reset/invite
-emails without a real Resend account). A failed Resend send retries up to
-_MAX_ATTEMPTS times with exponential backoff, but only for transient
-failures -- 5xx responses and network errors, both of which the Resend SDK
-surfaces as ResendError (see resend.async_request.AsyncRequest.make_request,
-which wraps every httpx exception into ResendError(error_type="HttpClientError")).
-A 4xx (bad recipient, bad template params) is a permanent failure and isn't
-retried. Either way, a final failure is logged + reported to Sentry and the
-job returns normally rather than raising -- the worker's max_jobs=20 means
-other queued emails run concurrently regardless, but a raised exception here
-would still mark this job "failed" for no operational benefit, since there's
-no human waiting synchronously on an email send. The SMTP path isn't
-retried -- MailHog is a local dev-only catcher, not a real delivery channel.
+emails without a real Resend account). Either way, a final delivery failure
+is logged + reported to Sentry and the job returns normally rather than
+raising -- the worker's max_jobs=20 means other queued emails run
+concurrently regardless, but a raised exception here would still mark this
+job "failed" for no operational benefit, since there's no human waiting
+synchronously on an email send. The SMTP path isn't retried -- MailHog is a
+local dev-only catcher, not a real delivery channel.
+
+T-206: the actual Resend call (`_send_via_resend`) goes through
+app.core.resilience's `@resilient("resend")` -- transient failures (5xx,
+network errors, both of which the Resend SDK surfaces as ResendError; see
+resend.async_request.AsyncRequest.make_request, which wraps every httpx
+exception into ResendError(error_type="HttpClientError")) are retried a few
+times inline, and once the shared "resend" breaker has actually tripped
+(repeated transient failures across *many* send_email calls, not just this
+one), the ExternalServiceUnavailableError it raises is turned into an
+arq.worker.Retry here -- the whole job gets re-queued with backoff rather
+than the email being dropped, per T-206's "Resend down -- email jobs
+re-queue with ARQ backoff; emails delayed, never dropped" degraded-mode
+contract. A permanent (4xx) failure is neither retried nor re-queued -- it's
+logged + reported to Sentry and the job still returns normally, same as
+before.
 
 Rendering itself is *not* wrapped in that same forgiving retry/swallow logic:
 a renderer failure (unknown template name, a missing/un-built cli.js, no
@@ -41,12 +51,15 @@ from typing import Any
 
 import resend
 import sentry_sdk
+from arq.worker import Retry
 from resend.exceptions import ResendError
 
 from app.core.config import get_settings
+from app.core.exceptions import ExternalServiceUnavailableError
 from app.core.i18n import get_default_locale, t
 from app.core.metrics import FORGE_EMAILS_SENT_TOTAL
 from app.core.module_loader import get_branding
+from app.core.resilience import resilient
 from app.core.tracing import trace_job
 
 logger = logging.getLogger(__name__)
@@ -100,18 +113,10 @@ async def _render(*, template: str, context: dict[str, Any], locale: str) -> tup
     return rendered["html"], rendered["text"]
 
 
-_MAX_ATTEMPTS = 3
-_BACKOFF_BASE_SECONDS = 1.0
-_SERVER_ERROR_STATUS_THRESHOLD = 500
-
-
-def _is_retryable(exc: ResendError) -> bool:
-    if exc.error_type == "HttpClientError":  # network failure -- see module docstring
-        return True
-    try:
-        return int(exc.code) >= _SERVER_ERROR_STATUS_THRESHOLD
-    except (TypeError, ValueError):
-        return False
+# >= app.core.resilience's reset_timeout (30s): re-queuing sooner than the
+# breaker could possibly have recovered would just spend an ARQ retry on
+# another guaranteed CircuitBreakerError.
+_RESEND_RETRY_DEFER_SECONDS = 30
 
 
 async def _send_via_smtp(*, to: str, subject: str, html: str, text: str) -> None:
@@ -130,6 +135,19 @@ async def _send_via_smtp(*, to: str, subject: str, html: str, text: str) -> None
     # smtplib is synchronous -- offloaded to a thread so it doesn't block the
     # worker's event loop, same as app.workers.jobs.gdpr's boto3 upload.
     await asyncio.to_thread(_send)
+
+
+@resilient("resend")
+async def _send_via_resend(*, to: str, subject: str, html: str, text: str) -> None:
+    await resend.Emails.send_async(
+        {
+            "from": get_settings().EMAIL_FROM_ADDRESS,
+            "to": to,
+            "subject": subject,
+            "html": html,
+            "text": text,
+        }
+    )
 
 
 @trace_job
@@ -152,29 +170,15 @@ async def send_email(
         return
 
     resend.api_key = settings.RESEND_API_KEY
-    for attempt in range(1, _MAX_ATTEMPTS + 1):
-        try:
-            await resend.Emails.send_async(
-                {
-                    "from": settings.EMAIL_FROM_ADDRESS,
-                    "to": to,
-                    "subject": subject,
-                    "html": html,
-                    "text": text,
-                }
-            )
-        except ResendError as exc:
-            if _is_retryable(exc) and attempt < _MAX_ATTEMPTS:
-                await asyncio.sleep(_BACKOFF_BASE_SECONDS * 2 ** (attempt - 1))
-                continue
-            logger.exception(
-                "send_email: giving up after %d attempt(s) (to=%s, template=%s)",
-                attempt,
-                to,
-                template,
-            )
-            sentry_sdk.capture_exception(exc)
-            return
-        else:
-            FORGE_EMAILS_SENT_TOTAL.inc()
-            return
+    try:
+        await _send_via_resend(to=to, subject=subject, html=html, text=text)
+    except ExternalServiceUnavailableError:
+        # The "resend" breaker is open -- re-queue the whole job rather than
+        # dropping the email; see module docstring.
+        raise Retry(defer=_RESEND_RETRY_DEFER_SECONDS) from None
+    except ResendError as exc:
+        logger.exception("send_email: giving up (to=%s, template=%s)", to, template)
+        sentry_sdk.capture_exception(exc)
+        return
+    else:
+        FORGE_EMAILS_SENT_TOTAL.inc()

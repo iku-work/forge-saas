@@ -25,6 +25,7 @@ from sqlalchemy.ext.asyncio import (
 from sqlmodel import SQLModel
 from testcontainers.postgres import PostgresContainer
 
+from app.core.resilience import BREAKERS
 from app.modules.auth.models import User
 from app.modules.billing.models import Plan
 from app.modules.notifications.models import Notification, PushToken
@@ -274,6 +275,45 @@ async def test_transport_failure_does_not_raise_and_leaves_push_sent_at_unset(
     )
 
     await send_push({}, user_id=user.id, notification_id=notification.id)
+
+    assert len(captured_sentry) == 1
+    async with session_factory() as verify_session:
+        refreshed = await verify_session.get(Notification, notification.id)
+        assert refreshed is not None
+        assert refreshed.push_sent_at is None
+
+
+async def test_breaker_open_drops_the_push_without_raising(
+    session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    monkeypatch.setattr(
+        notifications_job_module.httpx, "AsyncClient", lambda *_a, **_kw: _FailingAsyncClient()
+    )
+    captured_sentry: list[Exception] = []
+    monkeypatch.setattr(
+        notifications_job_module.sentry_sdk, "capture_exception", captured_sentry.append
+    )
+
+    # 5 separate notifications, each exhausting their own retries against the
+    # persistently-failing transport -- exactly enough real failures to trip
+    # the shared "expo_push" breaker (fail_max=5).
+    for _ in range(5):
+        user, org = await _make_user_and_org(session)
+        notification = await _make_notification(session, user, org)
+        await PushTokenRepository(session).register(user.id, f"ExponentPushToken[{uuid4()}]", "ios")
+        await session.commit()
+        await send_push({}, user_id=user.id, notification_id=notification.id)
+    assert BREAKERS["expo_push"].current_state == "open"
+    captured_sentry.clear()
+
+    user, org = await _make_user_and_org(session)
+    notification = await _make_notification(session, user, org)
+    await PushTokenRepository(session).register(user.id, f"ExponentPushToken[{uuid4()}]", "ios")
+    await session.commit()
+
+    await send_push({}, user_id=user.id, notification_id=notification.id)  # must not raise
 
     assert len(captured_sentry) == 1
     async with session_factory() as verify_session:

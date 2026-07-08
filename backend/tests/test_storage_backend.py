@@ -18,11 +18,13 @@ from uuid import uuid4
 
 import httpx
 import pytest
-from botocore.exceptions import ClientError
+from botocore.exceptions import ClientError, EndpointConnectionError
 from freezegun import freeze_time
 from testcontainers.minio import MinioContainer
 
 from app.core.config import get_settings
+from app.core.exceptions import ExternalServiceUnavailableError
+from app.core.resilience import BREAKERS, resilient
 from app.modules.storage.backend import PresignedUpload, get_storage_backend
 from app.modules.storage.backends.minio import MinioBackend
 from app.modules.storage.backends.r2 import R2Backend
@@ -257,6 +259,44 @@ async def test_expired_presigned_upload_is_rejected(backend: S3Backend) -> None:
 
     assert response.status_code == 403
     assert await backend.exists(key) is False
+
+
+# --- T-206: circuit breaker on S3/R2/MinIO operations ---
+
+
+async def test_head_reraises_non_not_found_client_errors_without_tripping_the_breaker(
+    minio_container: MinioContainer,
+) -> None:
+    # A 403 (wrong credentials) is a business/auth error, not "S3 is down" --
+    # app.core.resilience.is_transient_error must not classify it as
+    # transient, so it's never retried and never counts against the shared
+    # "s3" breaker (see that module's exclude predicate).
+    options = replace(_options(minio_container), secret_access_key="wrong-secret")
+    backend = MinioBackend(bucket=_BUCKET, region="us-east-1", options=options)
+
+    with pytest.raises(ClientError):
+        await backend.head("whatever.jpg")
+
+    assert BREAKERS["s3"].current_state == "closed"
+
+
+async def test_connection_failure_trips_breaker_then_raises_service_unavailable() -> None:
+    # A real backend instance isn't needed here -- this exercises
+    # app.core.resilience's shared "s3" breaker via the exact decorator
+    # S3Backend's own methods use, the same way test_resilience.py tests the
+    # "expo_push" breaker directly rather than through a real HTTP call.
+    @resilient("s3")
+    async def _always_unreachable() -> None:
+        raise EndpointConnectionError(endpoint_url="http://127.0.0.1:1")
+
+    for _ in range(5):
+        with pytest.raises(EndpointConnectionError):
+            await _always_unreachable()
+
+    with pytest.raises(ExternalServiceUnavailableError) as exc_info:
+        await _always_unreachable()
+
+    assert "File storage" in exc_info.value.fallback
 
 
 # --- get_storage_backend() factory ---

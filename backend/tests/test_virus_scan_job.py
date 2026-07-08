@@ -6,9 +6,12 @@ stays "ready", virus_scan_result="clean"), the infected outcome (status
 audit event, and a Notification(type="file_infected") fanned out to the
 uploader -- including the case where the scanner reports infected with no
 signature), and a scanner that raises ScannerError being retried up to 3x
-with backoff before the file is marked "failed" (also audit-logged) -- plus
-the case where a transient failure on the first attempt is recovered by a
-clean second attempt.
+(T-206's app.core.resilience `@resilient("virus_scanner")`, exercised here
+rather than mocked) before the file is marked "failed" (also audit-logged)
+-- plus the case where a transient failure on the first attempt is
+recovered by a clean second attempt, and the case where the shared
+"virus_scanner" breaker has actually tripped open (job re-queues via
+arq.worker.Retry, file stays untouched rather than marked "failed").
 
 Uses the same real-Postgres testcontainers pattern as test_gdpr_purge_job.py /
 test_backfill_notification_preferences_job.py: virus_scan's own
@@ -29,6 +32,7 @@ from typing import Any
 from uuid import uuid4
 
 import pytest
+from arq.worker import Retry
 from redis.asyncio import Redis
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import (
@@ -41,6 +45,7 @@ from sqlmodel import SQLModel
 from testcontainers.postgres import PostgresContainer
 from testcontainers.redis import RedisContainer
 
+from app.core.resilience import BREAKERS
 from app.modules.audit.models import AuditEvent
 from app.modules.auth.models import User
 from app.modules.billing.models import Plan
@@ -162,16 +167,6 @@ def _install_scanner(
     scanner = _FakeScanner(outcomes=list(outcomes))
     monkeypatch.setattr(virus_scan_module, "get_virus_scanner", lambda: scanner)
     return scanner
-
-
-@pytest.fixture(autouse=True)
-def _no_real_backoff(monkeypatch: pytest.MonkeyPatch) -> None:
-    # The retry loop's exponential backoff (up to 1+2=3s across 3 attempts)
-    # has no bearing on what this file verifies -- skip the real sleep.
-    async def _instant_sleep(_seconds: float) -> None:
-        return
-
-    monkeypatch.setattr(virus_scan_module.asyncio, "sleep", _instant_sleep)
 
 
 async def _make_org(session: AsyncSession) -> Organization:
@@ -395,3 +390,40 @@ async def test_scanner_recovers_after_one_transient_failure(
         assert refreshed is not None
         assert refreshed.status == "ready"
         assert refreshed.virus_scan_result == "clean"
+
+
+# --- T-206: breaker-open re-queues the job instead of marking the file failed -----------------
+
+
+async def test_breaker_open_requeues_job_and_leaves_file_untouched(
+    session: AsyncSession,
+    session_factory: async_sessionmaker[AsyncSession],
+    ctx: dict[str, Any],
+    fake_backend: _FakeBackend,  # noqa: ARG001
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # 5 separate files, each failing all 3 of their own scan attempts --
+    # exactly enough real ScannerError failures to trip the shared
+    # "virus_scanner" breaker (fail_max=5), one failure per file/job run.
+    for _ in range(5):
+        stored_file = await _seed(session)
+        _install_scanner(
+            monkeypatch, ScannerError("boom"), ScannerError("boom"), ScannerError("boom")
+        )
+        await virus_scan(ctx, file_id=stored_file.id)
+    assert BREAKERS["virus_scanner"].current_state == "open"
+
+    last_file = await _seed(session)
+    scanner = _install_scanner(monkeypatch, ScannerError("boom"))
+
+    with pytest.raises(Retry) as exc_info:
+        await virus_scan(ctx, file_id=last_file.id)
+
+    # The breaker rejected the call outright -- the scanner was never hit.
+    assert scanner.calls == 0
+    async with session_factory() as verify_session:
+        refreshed = await verify_session.get(StoredFile, last_file.id)
+        assert refreshed is not None
+        assert refreshed.status == "ready"  # untouched -- neither "failed" nor "infected"
+        assert refreshed.virus_scan_result is None
+    assert exc_info.value.defer_score == virus_scan_module._VIRUS_SCANNER_RETRY_DEFER_SECONDS * 1000

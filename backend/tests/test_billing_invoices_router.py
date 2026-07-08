@@ -7,10 +7,11 @@ Stripe's `has_more` as `meta.next_cursor` per the cursor pagination
 convention (§0.3) -- Stripe's own invoice id, not this repo's internal
 (created_at, id) cursor.
 
-stripe.Invoice.list is monkeypatched. Same real-Postgres + real-Redis
-testcontainers / httpx.AsyncClient(ASGITransport(...)) pattern as
-test_billing_router.py -- see that file's docstring for why TestClient is
-avoided.
+stripe.Invoice.list_async is monkeypatched (T-206 switched this call site
+onto stripe's `_async` method variant, see app.modules.billing.invoices).
+Same real-Postgres + real-Redis testcontainers /
+httpx.AsyncClient(ASGITransport(...)) pattern as test_billing_router.py --
+see that file's docstring for why TestClient is avoided.
 """
 
 from collections.abc import AsyncGenerator, Callable, Iterator
@@ -245,11 +246,11 @@ async def test_list_invoices_admin_can_read(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     admin = await _add_member(session, org, role=MemberRole.ADMIN)
-    monkeypatch.setattr(
-        stripe.Invoice,
-        "list",
-        lambda **_kwargs: _FakeInvoiceList([_invoice("in_1")], has_more=False),
-    )
+
+    async def _list(**_kwargs: object) -> _FakeInvoiceList:
+        return _FakeInvoiceList([_invoice("in_1")], has_more=False)
+
+    monkeypatch.setattr(stripe.Invoice, "list_async", _list)
 
     response = await client.get("/api/v1/billing/invoices", headers=_headers(admin, org))
 
@@ -263,11 +264,10 @@ async def test_list_invoices_admin_can_read(
 async def test_list_invoices_returns_next_cursor_when_stripe_has_more(
     client: httpx.AsyncClient, owner: User, org: Organization, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setattr(
-        stripe.Invoice,
-        "list",
-        lambda **_kwargs: _FakeInvoiceList([_invoice("in_1"), _invoice("in_2")], has_more=True),
-    )
+    async def _list(**_kwargs: object) -> _FakeInvoiceList:
+        return _FakeInvoiceList([_invoice("in_1"), _invoice("in_2")], has_more=True)
+
+    monkeypatch.setattr(stripe.Invoice, "list_async", _list)
 
     response = await client.get("/api/v1/billing/invoices", headers=_headers(owner, org))
 
@@ -292,11 +292,11 @@ async def test_list_invoices_resolves_customer_from_x_org_id_header_org(
 
     captured: dict[str, Any] = {}
 
-    def _list(**kwargs: object) -> _FakeInvoiceList:
+    async def _list(**kwargs: object) -> _FakeInvoiceList:
         captured.update(kwargs)
         return _FakeInvoiceList([], has_more=False)
 
-    monkeypatch.setattr(stripe.Invoice, "list", _list)
+    monkeypatch.setattr(stripe.Invoice, "list_async", _list)
 
     response = await client.get(
         "/api/v1/billing/invoices", headers=_headers(other_owner, other_org)

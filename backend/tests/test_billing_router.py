@@ -5,13 +5,14 @@ and every gated route resolves its org from the X-Org-ID header (app.core.
 dependencies' convention) rather than a path parameter, since none of these
 routes have an org_id segment.
 
-stripe.checkout.Session.create / stripe.billing_portal.Session.create /
-stripe.Customer.create are monkeypatched -- this file verifies routing,
-auth/permission gating, and envelope shape, not Stripe's request/response
-contract (see test_billing_checkout.py for that). Same real-Postgres +
-real-Redis testcontainers / httpx.AsyncClient(ASGITransport(...)) pattern as
-test_tenancy_router.py -- see that file's docstring for why TestClient is
-avoided.
+stripe.checkout.Session.create_async / stripe.billing_portal.Session.create_async /
+stripe.Customer.create_async are monkeypatched (T-206 switched these call
+sites onto stripe's `_async` method variants, see app.modules.billing.service)
+-- this file verifies routing, auth/permission gating, and envelope shape,
+not Stripe's request/response contract (see test_billing_checkout.py for
+that). Same real-Postgres + real-Redis testcontainers /
+httpx.AsyncClient(ASGITransport(...)) pattern as test_tenancy_router.py --
+see that file's docstring for why TestClient is avoided.
 """
 
 from collections.abc import AsyncGenerator, Callable, Iterator
@@ -269,12 +270,15 @@ async def test_checkout_session_owner_happy_path(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     plan = await _make_plan(session)
-    monkeypatch.setattr(stripe.Customer, "create", lambda **_kwargs: _FakeCustomer("cus_1"))
-    monkeypatch.setattr(
-        stripe.checkout.Session,
-        "create",
-        lambda **_kwargs: _FakeCheckoutSession(url="https://checkout.stripe.com/test"),
-    )
+
+    async def _customer_create(**_kwargs: object) -> _FakeCustomer:
+        return _FakeCustomer("cus_1")
+
+    async def _checkout_create(**_kwargs: object) -> _FakeCheckoutSession:
+        return _FakeCheckoutSession(url="https://checkout.stripe.com/test")
+
+    monkeypatch.setattr(stripe.Customer, "create_async", _customer_create)
+    monkeypatch.setattr(stripe.checkout.Session, "create_async", _checkout_create)
 
     response = await client.post(
         "/api/v1/billing/checkout-session",
@@ -292,7 +296,10 @@ async def test_checkout_session_unknown_plan_returns_404(
     org: Organization,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(stripe.Customer, "create", lambda **_kwargs: _FakeCustomer("cus_1"))
+    async def _customer_create(**_kwargs: object) -> _FakeCustomer:
+        return _FakeCustomer("cus_1")
+
+    monkeypatch.setattr(stripe.Customer, "create_async", _customer_create)
 
     response = await client.post(
         "/api/v1/billing/checkout-session",
@@ -330,12 +337,14 @@ async def test_portal_session_owner_happy_path(
     org: Organization,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(stripe.Customer, "create", lambda **_kwargs: _FakeCustomer("cus_1"))
-    monkeypatch.setattr(
-        stripe.billing_portal.Session,
-        "create",
-        lambda **_kwargs: _FakePortalSession(url="https://billing.stripe.com/portal/test"),
-    )
+    async def _customer_create(**_kwargs: object) -> _FakeCustomer:
+        return _FakeCustomer("cus_1")
+
+    async def _portal_create(**_kwargs: object) -> _FakePortalSession:
+        return _FakePortalSession(url="https://billing.stripe.com/portal/test")
+
+    monkeypatch.setattr(stripe.Customer, "create_async", _customer_create)
+    monkeypatch.setattr(stripe.billing_portal.Session, "create_async", _portal_create)
 
     response = await client.post("/api/v1/billing/portal-session", headers=_headers(owner, org))
 

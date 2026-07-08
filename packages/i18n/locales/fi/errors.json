@@ -60,5 +60,6 @@
   "superadmin_required": "Pääkäyttäjän oikeudet vaaditaan.",
   "token_revoked": "Tunnus on mitätöity.",
   "cannot_impersonate_superadmin": "Toista pääkäyttäjää ei voi esiintyä.",
-  "not_impersonating": "Tämä tunnus ei ole esiintymisistunto."
+  "not_impersonating": "Tämä tunnus ei ole esiintymisistunto.",
+  "service_unavailable": "{feature} ei ole tilapäisesti käytettävissä. Yritä hetken kuluttua uudelleen."
 }

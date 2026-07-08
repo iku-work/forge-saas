@@ -56,6 +56,21 @@ FORGE_EMAILS_SENT_TOTAL = Counter("forge_emails_sent_total", "Emails successfull
 FORGE_PUSH_SENT_TOTAL = Counter(
     "forge_push_sent_total", "Push notifications successfully handed off to the Expo push API"
 )
+FORGE_BREAKER_STATE = Gauge(
+    "forge_breaker_state",
+    "Circuit breaker state per integration (0=closed, 1=half-open, 2=open)",
+    ["integration"],
+)
+FORGE_BREAKER_OPEN_TOTAL = Counter(
+    "forge_breaker_open_total",
+    "Times an integration's circuit breaker has tripped open",
+    ["integration"],
+)
+FORGE_EXTERNAL_CALL_SECONDS = Histogram(
+    "forge_external_call_seconds",
+    "Time spent in a resilience.resilient()-wrapped outbound call, including its own retries",
+    ["integration"],
+)
 
 _sync_redis: redis.Redis | None = None
 

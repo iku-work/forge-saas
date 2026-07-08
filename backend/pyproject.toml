@@ -55,6 +55,13 @@ dependencies = [
     "itsdangerous>=2.2",
     "httpx>=0.27",
     "babel>=2.16", # Accept-Language negotiation (T-068)
+    "pybreaker>=1.2",
+    "tenacity>=9.0",
+    # pybreaker's asyncio support (CircuitBreaker.call_async) is built on
+    # tornado's Future -- awaitable directly from plain asyncio code since
+    # tornado 5 -- rather than a bespoke asyncio state machine; see
+    # app.core.resilience's module docstring (T-206).
+    "tornado>=6.4",
 ]
 
 [project.optional-dependencies]

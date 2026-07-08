@@ -60,5 +60,6 @@
   "superadmin_required": "Superadmin access required.",
   "token_revoked": "Token has been revoked.",
   "cannot_impersonate_superadmin": "Cannot impersonate another superadmin.",
-  "not_impersonating": "This token is not an impersonation session."
+  "not_impersonating": "This token is not an impersonation session.",
+  "service_unavailable": "{feature} is temporarily unavailable. Please try again shortly."
 }
