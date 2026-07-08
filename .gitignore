@@ -40,3 +40,7 @@ Thumbs.db
 # checked-in .zap/baseline.conf
 .zap/*.html
 .zap/zap.yaml
+
+# ZAP full scan (T-211) -- generated reports, not the checked-in
+# .zap/full-scan.yaml / .zap/scripts/
+zap-reports/

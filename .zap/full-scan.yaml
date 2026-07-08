@@ -1,0 +1,137 @@
+# ZAP Automation Framework plan (T-211) -- the aggressive, authenticated
+# counterpart to T-210's passive baseline.conf. Run nightly by
+# .github/workflows/zap-full.yml against a real staging deployment, never
+# against the throwaway compose stack T-210 uses -- active scanning sends
+# real attack payloads, which is only safe somewhere nothing else depends on.
+#
+# ${STAGING_URL} / ${ZAP_SCANNER_EMAIL} / ${ZAP_SCANNER_PASSWORD} come from
+# the workflow's process environment (docker_env_vars in zap-full.yml) --
+# the Automation Framework substitutes any ${VAR} it doesn't define itself
+# from the OS environment, per
+# https://www.zaproxy.org/docs/desktop/addons/automation-framework/environment/
+
+env:
+  contexts:
+    - name: "staging"
+      urls:
+        - "${STAGING_URL}"
+      includePaths:
+        - "${STAGING_URL}/api/v1/.*"
+      excludePaths:
+        # Real Stripe API calls -- Checkout Session objects, webhooks -- live
+        # behind these routes. An active scan fuzzing them repeatedly would
+        # spam Stripe's API and litter the Stripe dashboard with junk test
+        # objects, not find a bug in our code (Stripe Checkout is hosted;
+        # nothing here renders attacker-controlled HTML).
+        - "${STAGING_URL}/api/v1/billing/.*"
+        # T-202: internal-only; Caddy 404s this from outside already, so
+        # there's nothing here for the scanner to usefully attack.
+        - "${STAGING_URL}/metrics"
+        # The scanner is its own MEMBER-role user in its own org (see users
+        # below). If this endpoint is in scope, ZAP will eventually fuzz its
+        # way into calling it against itself and lock the scanner out of the
+        # rest of the run.
+        - "${STAGING_URL}/api/v1/me$"
+      authentication:
+        method: "json"
+        parameters:
+          loginRequestUrl: "${STAGING_URL}/api/v1/auth/login"
+          loginRequestBody: '{"email":"{%username%}","password":"{%password%}"}'
+        verification:
+          method: "response"
+          # Envelope on success: {"data":{"access_token":"...",...},"error":null,...}
+          # Envelope on failure: {"data":null,"error":{"code":"...",...},...}
+          # Starlette's JSONResponse serialises with no whitespace after ':'
+          # or ',' (separators=(",", ":")), so these match literally.
+          loggedInRegex: '\Q"access_token"\E'
+          loggedOutRegex: '\Q"error":{"code"\E'
+      sessionManagement:
+        method: "script"
+        parameters:
+          script: ".zap/scripts/bearer-session.js"
+          scriptEngine: "ECMAScript : Graal.js"
+      users:
+        - name: "zap-scanner"
+          credentials:
+            username: "${ZAP_SCANNER_EMAIL}"
+            password: "${ZAP_SCANNER_PASSWORD}"
+  parameters:
+    failOnError: true
+    failOnWarning: false
+    progressToStdout: true
+
+jobs:
+  - type: passiveScan-config
+    parameters:
+      maxAlertsPerRule: 10
+
+  # Proves authentication actually works *before* the expensive spider/active
+  # scan jobs run -- fails fast (failOnError) with a clear job name instead of
+  # burning an hour to discover every request was made as an anonymous user.
+  - type: requestor
+    parameters:
+      user: "zap-scanner"
+    requests:
+      - url: "${STAGING_URL}/api/v1/auth/me"
+        name: "authenticated smoke check"
+        method: "GET"
+        responseCode: 200
+
+  - type: spider
+    parameters:
+      context: "staging"
+      user: "zap-scanner"
+      url: "${STAGING_URL}"
+      maxDuration: 10
+
+  - type: passiveScan-wait
+    parameters:
+      maxDuration: 5
+
+  - type: activeScan
+    parameters:
+      context: "staging"
+      user: "zap-scanner"
+      maxScanDurationInMins: 120
+    policyDefinition:
+      defaultStrength: "medium"
+      defaultThreshold: "medium"
+      rules:
+        # Time-based blind SQL injection (sleep()/pg_sleep()/WAITFOR DELAY)
+        # and OS command injection (ping flood / timeout) payloads work by
+        # deliberately making the target slow or busy -- fine against T-210's
+        # disposable compose stack, not fine against staging, which is shared
+        # with whatever else is running there. Left enabled: the *non*
+        # time-based SQLi rule (40018, boolean/error/UNION-based) and every
+        # other rule in the default policy -- this is meant to be the
+        # aggressive pass, only DoS-risk techniques are carved out.
+        - id: 40019 # SQL Injection - MySQL (Time Based)
+          threshold: "off"
+        - id: 40020 # SQL Injection - Hypersonic SQL (Time Based)
+          threshold: "off"
+        - id: 40021 # SQL Injection - Oracle (Time Based)
+          threshold: "off"
+        - id: 40022 # SQL Injection - PostgreSQL (Time Based)
+          threshold: "off"
+        - id: 40024 # SQL Injection - SQLite (Time Based)
+          threshold: "off"
+        - id: 90019 # Server Side Code Injection (includes sleep()-style payloads)
+          threshold: "off"
+        - id: 90020 # Remote OS Command Injection (ping/timeout-based payloads)
+          threshold: "off"
+
+  # Machine-readable copy for the workflow's issue-filing step.
+  - type: report
+    parameters:
+      template: "traditional-json"
+      reportDir: "zap-reports"
+      reportFile: "zap-full-report"
+      reportTitle: "Nightly ZAP full active scan -- staging"
+
+  # Human-readable copy for the retained artifact.
+  - type: report
+    parameters:
+      template: "traditional-html"
+      reportDir: "zap-reports"
+      reportFile: "zap-full-report"
+      reportTitle: "Nightly ZAP full active scan -- staging"
