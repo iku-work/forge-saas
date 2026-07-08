@@ -15,7 +15,16 @@ def test_caddyfile_dev_uses_internal_tls() -> None:
 
 def test_caddyfile_dev_redirects_http_to_https_with_301() -> None:
     content = (REPO_ROOT / "Caddyfile").read_text()
-    assert "redir https://localhost{uri} 301" in content
+    assert "redir https://{host}{uri} 301" in content
+
+
+def test_caddyfile_dev_serves_caddy_hostname_for_zap() -> None:
+    # T-210: the ZAP baseline scan targets https://caddy from inside
+    # forge-net, so that hostname needs its own tls cert and a default_sni
+    # fallback for the scanner's SNI-less first probe (see Caddyfile).
+    content = (REPO_ROOT / "Caddyfile").read_text()
+    assert "localhost, caddy {" in content
+    assert "default_sni caddy" in content
 
 
 def test_caddyfile_prod_blocks_public_metrics_access() -> None:

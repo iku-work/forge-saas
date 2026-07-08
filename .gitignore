@@ -35,3 +35,8 @@ web-build/
 # OS
 .DS_Store
 Thumbs.db
+
+# ZAP (T-210) -- generated report + auto-generated automation plan, not the
+# checked-in .zap/baseline.conf
+.zap/*.html
+.zap/zap.yaml

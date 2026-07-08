@@ -445,6 +445,85 @@ jobs:
       - name: Push image
         run: docker push "$IMAGE:$GITHUB_SHA"
 
+  # T-210: passive DAST pass against a real running instance of the app --
+  # boots the same dev stack `make dev` does (minus the worker, which this
+  # passive HTTP scan never exercises) and scans it through Caddy, not the
+  # bare backend, so TLS termination and security headers are actually in
+  # the request path being tested.
+  zap-baseline:
+    needs: build
+    runs-on: ubuntu-latest
+
+    # Fixes the compose network name (<project>_forge-net) so the ZAP
+    # container below can join it by a known name regardless of what the
+    # checkout directory happens to be called on the runner.
+    env:
+      COMPOSE_PROJECT_NAME: forge-ci
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Copy test environment file
+        working-directory: backend
+        run: cp .env.test .env
+
+      - name: Boot ephemeral stack (backend + Caddy + Postgres + Redis + MinIO + Mailhog)
+        run: docker compose up -d postgres redis minio minio-init mailhog backend caddy
+
+      - name: Wait for backend
+        run: |
+          for i in $(seq 1 30); do
+            curl -sf http://localhost:8000/health && exit 0
+            sleep 2
+          done
+          echo "backend did not become ready" >&2
+          docker compose logs backend
+          exit 1
+
+      - name: Migrate + seed
+        run: |
+          docker compose exec -T backend python -m app.core.migrations
+          docker compose exec -T backend python -m app.core.seed
+
+      # Confirms the request actually reaches the backend *through* Caddy
+      # (TLS termination, security headers, the lot) before handing the URL
+      # to ZAP -- catches a broken proxy config before blaming the scanner.
+      - name: Wait for readiness through Caddy
+        run: |
+          for i in $(seq 1 30); do
+            curl -sfk https://localhost/health/ready && exit 0
+            sleep 2
+          done
+          echo "caddy/backend did not report ready" >&2
+          docker compose logs caddy backend
+          exit 1
+
+      # Runs as a container on forge-net rather than against the published
+      # host ports, and targets https://caddy (not localhost) -- "caddy" is
+      # this container's own service name on that network via compose's
+      # embedded DNS; "localhost" from inside the ZAP container would only
+      # ever resolve to itself. See the Caddyfile comment for why the site
+      # block also matches that hostname.
+      - name: ZAP baseline scan
+        run: |
+          docker run --rm \
+            --network ${{ env.COMPOSE_PROJECT_NAME }}_forge-net \
+            -v "$(pwd)/.zap:/zap/wrk:rw" \
+            -t ghcr.io/zaproxy/zaproxy:stable zap-baseline.py \
+            -t https://caddy -c baseline.conf -r zap-report.html
+
+      - name: Upload ZAP report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: zap-baseline-report
+          path: .zap/zap-report.html
+          retention-days: 30
+
+      - name: Tear down stack
+        if: always()
+        run: docker compose down -v
+
   # Dormant until RENDER_API_KEY / RENDER_BACKEND_SERVICE_ID /
   # RENDER_WORKER_SERVICE_ID / PROD_ENV_FILE / PROD_DATABASE_URL / PROD_DOMAIN
   # secrets are configured on the repo (see docs/runbooks/deploy-render.md).

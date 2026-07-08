@@ -14,6 +14,33 @@ def test_security_headers_present_on_response() -> None:
         assert response.headers[header] == value
 
 
+def test_cache_control_defaults_to_no_store() -> None:
+    with TestClient(app) as client:
+        response = client.get("/health")
+
+    assert response.headers["Cache-Control"] == "no-store"
+
+
+def test_cache_control_no_store_applied_to_404s_too() -> None:
+    # T-210: ZAP's baseline scan flagged unmatched routes (its spider probes
+    # "/", "/robots.txt", "/sitemap.xml") as storable/cacheable -- the
+    # middleware must set the default on every response, not just 2xx ones.
+    with TestClient(app) as client:
+        response = client.get("/this-route-does-not-exist")
+
+    assert response.status_code == 404
+    assert response.headers["Cache-Control"] == "no-store"
+
+
+def test_cache_control_not_overridden_when_handler_sets_its_own() -> None:
+    # api/v1/config (T-063) deliberately sets a long-lived public
+    # Cache-Control -- the security-headers default must not clobber it.
+    with TestClient(app) as client:
+        response = client.get("/api/v1/config")
+
+    assert response.headers["Cache-Control"] == "public, max-age=300"
+
+
 def test_request_id_echoed_when_provided() -> None:
     with TestClient(app) as client:
         response = client.get("/health", headers={"X-Request-ID": "client-supplied-id"})

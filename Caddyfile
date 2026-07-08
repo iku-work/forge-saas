@@ -1,9 +1,24 @@
-localhost {
+{
+	# T-210's ZAP baseline scan container connects over forge-net and, unlike
+	# every browser and curl, opens its very first TLS probe with no SNI
+	# extension at all -- confirmed with `openssl s_client -connect caddy:443`
+	# (no -servername): Caddy has no cert to offer and drops the connection
+	# with a bare "internal_error" alert. default_sni tells it which of the
+	# certs below to serve when SNI is absent, instead of failing closed.
+	default_sni caddy
+}
+
+localhost, caddy {
+	# "caddy" is the service's own name on forge-net -- the ZAP scan has no
+	# route to "localhost" (that resolves to the scanner container itself),
+	# so it targets https://caddy instead. Both hostnames need their own tls
+	# internal leaf cert, which is why they're both site addresses here
+	# rather than "localhost" alone.
 	respond /metrics 404
 	reverse_proxy backend:8000
 	tls internal
 }
 
-http://localhost {
-	redir https://localhost{uri} 301
+http://localhost, http://caddy {
+	redir https://{host}{uri} 301
 }
