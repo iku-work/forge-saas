@@ -27,6 +27,7 @@ def test_every_role_has_an_entry() -> None:
     assert set(ROLE_PERMISSIONS) == set(MemberRole)
 
 
+@pytest.mark.owasp("A01")
 @pytest.mark.parametrize("role", list(MemberRole))
 @pytest.mark.parametrize("permission", list(Permission))
 def test_rbac_matrix_matches_expected_table(role: MemberRole, permission: Permission) -> None:

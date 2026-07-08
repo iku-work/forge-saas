@@ -63,6 +63,7 @@ def service(session: AsyncSession) -> AuditService:
 # --- happy path -------------------------------------------------------------
 
 
+@pytest.mark.owasp("A09")
 async def test_log_writes_row_visible_before_commit(
     service: AuditService, session: AsyncSession
 ) -> None:

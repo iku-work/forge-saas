@@ -172,6 +172,8 @@ async def test_login_wrong_password_increments_failed_count(
     assert fetched.failed_login_count == 1
 
 
+@pytest.mark.owasp("A04")
+@pytest.mark.owasp("A07")
 async def test_login_tenth_wrong_password_triggers_lockout(
     service: AuthService, verified_user: User, user_repo: UserRepository
 ) -> None:
@@ -191,6 +193,8 @@ async def test_login_tenth_wrong_password_triggers_lockout(
     assert fetched.failed_login_count == 0
 
 
+@pytest.mark.owasp("A04")
+@pytest.mark.owasp("A07")
 async def test_login_locked_account_rejects_correct_password(
     service: AuthService, verified_user: User, user_repo: UserRepository
 ) -> None:

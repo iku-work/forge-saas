@@ -161,6 +161,7 @@ async def _post_webhook(
 # --- signature verification -------------------------------------------------------
 
 
+@pytest.mark.owasp("A08")
 async def test_bad_signature_returns_400_and_creates_no_row(
     client: httpx.AsyncClient, session: AsyncSession
 ) -> None:

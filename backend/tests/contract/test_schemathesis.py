@@ -86,6 +86,8 @@ _CHECKS = schemathesis.checks.CHECKS.get_by_names(
     ["not_a_server_error", "response_schema_conformance"]
 )
 
+pytestmark = pytest.mark.owasp("A03")
+
 
 @dataclass
 class _AuthContext:

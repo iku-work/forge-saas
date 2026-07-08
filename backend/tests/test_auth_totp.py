@@ -164,6 +164,7 @@ async def test_enable_2fa_already_enabled_raises_conflict(
 # --- verify_2fa --------------------------------------------------------------------
 
 
+@pytest.mark.owasp("A07")
 async def test_verify_2fa_happy_path_activates_and_returns_ten_backup_codes(
     service: AuthService, verified_user: User, user_repo: UserRepository
 ) -> None:

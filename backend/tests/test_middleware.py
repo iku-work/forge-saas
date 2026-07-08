@@ -1,11 +1,14 @@
 from uuid import UUID
 
+import pytest
 from fastapi.testclient import TestClient
 
 from app.main import app
 from app.middleware.security_headers import SECURITY_HEADERS
 
 
+@pytest.mark.owasp("A02")
+@pytest.mark.owasp("A05")
 def test_security_headers_present_on_response() -> None:
     with TestClient(app) as client:
         response = client.get("/health")
@@ -62,6 +65,7 @@ def test_cors_allows_configured_origin() -> None:
     assert response.headers["access-control-allow-origin"] == "http://localhost:5173"
 
 
+@pytest.mark.owasp("A05")
 def test_cors_rejects_unconfigured_origin() -> None:
     with TestClient(app) as client:
         response = client.get("/health", headers={"Origin": "https://evil.example.com"})

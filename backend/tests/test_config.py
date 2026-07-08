@@ -33,6 +33,7 @@ def test_missing_required_field_raises_validation_error(
         Settings(_env_file=None, DATABASE_URL="postgresql+asyncpg://u:p@localhost/db")
 
 
+@pytest.mark.owasp("A05")
 def test_wildcard_origin_outside_dev_raises(monkeypatch: pytest.MonkeyPatch) -> None:
     _clear_settings_env(monkeypatch)
 

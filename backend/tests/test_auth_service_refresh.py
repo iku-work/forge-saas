@@ -159,6 +159,7 @@ async def test_refresh_unknown_token_raises(service: AuthService) -> None:
         await service.refresh("not-a-real-token", _IP, _USER_AGENT)
 
 
+@pytest.mark.owasp("A07")
 async def test_refresh_reuse_of_revoked_token_raises(
     service: AuthService, verified_user: User, session_repo: SessionRepository
 ) -> None:
@@ -169,6 +170,7 @@ async def test_refresh_reuse_of_revoked_token_raises(
         await service.refresh(plain, _IP, _USER_AGENT)
 
 
+@pytest.mark.owasp("A07")
 async def test_refresh_reuse_of_revoked_token_revokes_all_user_sessions(
     service: AuthService, verified_user: User, session_repo: SessionRepository
 ) -> None:

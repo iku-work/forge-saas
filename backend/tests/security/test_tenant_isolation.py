@@ -28,6 +28,8 @@ from app.modules.auth.utils import create_access_token, hash_password
 from app.modules.tenancy.models import Membership, Organization
 from app.modules.tenancy.repository import MembershipRepository, OrganizationRepository
 
+pytestmark = pytest.mark.owasp("A01")
+
 _PASSWORD = "Correct-Horse9"
 
 

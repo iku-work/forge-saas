@@ -63,6 +63,7 @@ def client(_redis_backed_storage: RedisStorage) -> TestClient:
     return TestClient(_test_app)
 
 
+@pytest.mark.owasp("A04")
 def test_sixth_call_within_a_minute_is_rate_limited(client: TestClient) -> None:
     responses = [client.get("/limited") for _ in range(6)]
 

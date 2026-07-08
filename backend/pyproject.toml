@@ -96,6 +96,9 @@ packages = ["app"]
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
+markers = [
+    "owasp(category): proves the mitigation for an OWASP Top 10 category (A01-A10), cross-checked by tests/security/test_owasp_mapping.py and docs/security/owasp-top10.md",
+]
 
 [tool.coverage.run]
 core = "sysmon"

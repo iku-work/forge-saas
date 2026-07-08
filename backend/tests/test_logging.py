@@ -35,6 +35,7 @@ def _last_json_line(captured_err: str) -> dict[str, object]:
     return json.loads(captured_err.strip().splitlines()[-1])
 
 
+@pytest.mark.owasp("A02")
 def test_password_key_is_scrubbed_in_json_output(capsys: pytest.CaptureFixture[str]) -> None:
     configure_logging(settings=_staging_settings())
 
@@ -45,6 +46,7 @@ def test_password_key_is_scrubbed_in_json_output(capsys: pytest.CaptureFixture[s
     assert record["message"] == "login attempt"
 
 
+@pytest.mark.owasp("A02")
 def test_token_key_is_scrubbed_in_json_output(capsys: pytest.CaptureFixture[str]) -> None:
     configure_logging(settings=_staging_settings())
 

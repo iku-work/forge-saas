@@ -29,6 +29,7 @@ class _FakeSettings:
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.owasp("A02")
 def test_round_trip_encrypts_and_decrypts() -> None:
     enc_type = EncryptedString()
 
@@ -46,6 +47,7 @@ def test_none_passes_through_bind_and_result() -> None:
     assert enc_type.process_result_value(None, None) is None
 
 
+@pytest.mark.owasp("A02")
 def test_tampered_ciphertext_raises_value_error() -> None:
     enc_type = EncryptedString()
     ciphertext = enc_type.process_bind_param("hello", None)
