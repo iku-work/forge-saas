@@ -1,4 +1,4 @@
-.PHONY: dev test lint migrate migrate-plan gen-client seed new-module install-hooks down update-from-template check-template-drift observe
+.PHONY: dev test lint migrate migrate-plan gen-client seed pentest-accounts new-module install-hooks down update-from-template check-template-drift observe
 
 TEMPLATE_VERSION ?= main
 
@@ -57,6 +57,9 @@ gen-client:
 
 seed:
 	cd backend && python -m app.core.seed
+
+pentest-accounts:
+	cd backend && python -m app.core.seed_pentest
 
 new-module:
 	@test -n "$(NAME)" || (echo "Usage: make new-module NAME=foo" && exit 1)
