@@ -43,13 +43,13 @@ questionnaire) — evidence links point at real files, not at task IDs.
 
 | ID | Requirement | Status | Evidence |
 |---|---|---|---|
-| V1.1.1 | Secure SDLC addressing security at every stage | partial | CI enforces security gates on every change (`.github/workflows/ci.yml` `security` job: bandit, semgrep, trivy, pip-audit, gitleaks, trufflehog) but there's no written SDLC policy document. Follow-up: T-215. |
-| V1.1.2 | Threat modeling per design change / sprint | partial | No formal per-change threat-modeling process. Follow-up: T-215. |
+| V1.1.1 | Secure SDLC addressing security at every stage | met | `docs/security/sdlc.md` names where security fits in planning/review/CI/release, referencing the same CI gates (`.github/workflows/ci.yml` `security` job: bandit, semgrep, trivy, pip-audit, gitleaks, trufflehog). |
+| V1.1.2 | Threat modeling per design change / sprint | met | `docs/security/sdlc.md` §1 requires `docs/security/threat-model.md` to be updated in the same PR as any change touching auth/crypto/tenant isolation/a new remote service; full-ADR review on a slower, named cadence. |
 | V1.1.3 | User stories carry functional security constraints (e.g. "can't view others' data") | met | `backend/tests/security/test_tenant_isolation.py` encodes exactly this constraint as an executable, parametrized spec across 13 endpoints. |
-| V1.1.4 | Trust boundaries, components, data flows documented | partial | This ADR and `agents.md` describe module boundaries informally; no dedicated data-flow diagram. Follow-up: T-215. |
-| V1.1.5 | High-level architecture + connected remote services security-analyzed | partial | Remote services (Stripe, Resend, OAuth providers, object storage) are documented in `agents.md`, not in a security-focused architecture doc. Follow-up: T-215. |
+| V1.1.4 | Trust boundaries, components, data flows documented | met | `docs/security/threat-model.md` — dedicated data-flow diagram and a trust-boundary table (client/Caddy/backend/worker/Postgres/Redis/object storage/third parties). |
+| V1.1.5 | High-level architecture + connected remote services security-analyzed | met | `docs/security/threat-model.md` §3 — per-component trust analysis of Stripe, Resend, OAuth providers, and object storage. |
 | V1.1.6 | Centralized, reusable security controls (not duplicated per-route) | met | `backend/app/core/dependencies.py` (`require_permission`, `require_superadmin`), `backend/app/middleware/security_headers.py`, `backend/app/core/url_guard.py`, `backend/app/core/encrypted_type.py` — each is a single implementation every route/model shares. |
-| V1.1.7 | Secure coding checklist/policy available to developers | partial | `docs/security/owasp-top10.md` and this document are the closest equivalent; no standalone secure-coding checklist. Follow-up: T-215. |
+| V1.1.7 | Secure coding checklist/policy available to developers | met | `docs/security/sdlc.md` §2–§3 (secure-coding reference + reviewer checklist), alongside the existing `docs/security/owasp-top10.md`. |
 
 #### V1.2 Authentication Architecture
 
@@ -72,7 +72,7 @@ questionnaire) — evidence links point at real files, not at task IDs.
 
 | ID | Requirement | Status | Evidence |
 |---|---|---|---|
-| V1.5.1 | Input/output handling requirements defined per data type/policy | partial | Pydantic schemas + the null-byte guard define handling in code; no standalone data-handling policy doc. Follow-up: T-215. |
+| V1.5.1 | Input/output handling requirements defined per data type/policy | met | `docs/security/sdlc.md` §2 "Input/output handling policy" writes down the one-policy-per-type rule already enforced in code (`backend/app/core/schemas.py`'s `AppBaseModel`, the null-byte guard, the `Envelope` output shape). |
 | V1.5.2 | No insecure deserialization of untrusted data | met | All wire format is JSON via Pydantic/FastAPI; no `pickle` or similarly unsafe deserialization anywhere in request handling. |
 | V1.5.3 | Input validation enforced on a trusted service layer | met | `backend/app/core/schemas.py` `AppBaseModel` validates every request body before a handler runs (FastAPI dependency injection). |
 | V1.5.4 | Output encoding close to the interpreter | met | JSON-only API via the `Envelope` shape (`backend/app/core/handlers.py`); one serialization boundary, not scattered per-route encoding. |
@@ -81,7 +81,7 @@ questionnaire) — evidence links point at real files, not at task IDs.
 
 | ID | Requirement | Status | Evidence |
 |---|---|---|---|
-| V1.6.1 | Explicit key-management policy following a lifecycle standard | partial | `ENCRYPTION_KEY`/`ENCRYPTION_KEY_OLD` rotation is supported (`backend/app/core/encrypted_type.py` `MultiFernet`) but no written key-lifecycle policy exists. Follow-up: T-215. |
+| V1.6.1 | Explicit key-management policy following a lifecycle standard | met | `docs/security/key-management.md` — generation, storage/holders, rotation procedure (including the existing `ENCRYPTION_KEY_OLD`/`MultiFernet` support, `backend/app/core/encrypted_type.py`), and compromise response for every key material in use. |
 | V1.6.2 | Key material protected via vault/API, not app-held secrets | partial | Keys load from environment variables (hosting-platform secret store), not a dedicated vault/KMS. Follow-up: T-225. |
 | V1.6.3 | Keys/passwords replaceable, part of a defined re-encryption process | met | `ENCRYPTION_KEY_OLD` + `MultiFernet` (`backend/app/core/encrypted_type.py:33,50-86`) support rotation without downtime; `backend/app/workers/jobs/encryption.py` re-encrypts. |
 | V1.6.4 | Client-side secrets never used to protect sensitive data | met | All cryptography (Fernet, JWT signing, password hashing) happens server-side only, in `backend/app/core/encrypted_type.py` and `backend/app/modules/auth/utils.py`. |
@@ -91,7 +91,7 @@ questionnaire) — evidence links point at real files, not at task IDs.
 | ID | Requirement | Status | Evidence |
 |---|---|---|---|
 | V1.7.1 | Common logging format/approach across the system | met | `backend/app/core/logging.py` — single Loguru-based structured JSON config; `_InterceptHandler` forwards stdlib `logging` into the same sinks. |
-| V1.7.2 | Logs securely transmitted to a remote system for analysis | partial | Logs go to stdout/`admin-audit.log`; exceptions go to Sentry. No confirmed centralized log aggregation/SIEM pipeline. Follow-up: T-225. |
+| V1.7.2 | Logs securely transmitted to a remote system for analysis | partial | `docs/runbooks/log-shipping.md` documents what's actually true today (exceptions reach Sentry over TLS, traces reach an OTLP collector over TLS if configured) and gives the reasoned non-plan for full stdout-log aggregation: it's a hosting-platform-specific choice, not a repo default, and is deliberately deferred to whoever deploys this template rather than tracked as an open task here. |
 
 #### V1.8 Data Protection and Privacy Architecture
 
