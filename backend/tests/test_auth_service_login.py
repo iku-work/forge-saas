@@ -22,13 +22,18 @@ from testcontainers.postgres import PostgresContainer
 from app.core.exceptions import AuthenticationError
 from app.modules.audit.models import AuditEvent
 from app.modules.auth.models import Session as SessionModel
-from app.modules.auth.models import User
+from app.modules.auth.models import User, WebAuthnCredential
 from app.modules.auth.repository import SessionRepository, UserRepository
 from app.modules.auth.schemas import LoginRequest
 from app.modules.auth.service import AuthService
 from app.modules.auth.utils import hash_password
 
-_TABLES = [User.__table__, SessionModel.__table__, AuditEvent.__table__]
+_TABLES = [
+    User.__table__,
+    SessionModel.__table__,
+    AuditEvent.__table__,
+    WebAuthnCredential.__table__,
+]
 _VALID_PASSWORD = "Correct-Horse9"
 _IP = "127.0.0.1"
 _USER_AGENT = "pytest"

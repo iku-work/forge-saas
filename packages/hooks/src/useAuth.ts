@@ -21,8 +21,10 @@ import type { UserPublic } from "@forge/api-client";
 const IMPERSONATE_END_PATH = "/api/v1/admin/impersonate/end";
 
 // Thrown when /auth/login responds with a 2FA challenge instead of tokens.
-// Phase 1 has no 2FA-verification UI, so callers surface this as a regular
-// form error rather than the hook silently completing a half-login.
+// Callers (LoginPage's TwoFactorChallenge step, T-217) catch this and trade
+// tempToken for real tokens via either /auth/2fa/login or the WebAuthn
+// login/options+login pair, then hand the result to completeTwoFactorLogin
+// below.
 export class TwoFactorRequiredError extends Error {
   constructor(public readonly tempToken: string) {
     super("Two-factor authentication is required to finish signing in.");
@@ -63,6 +65,14 @@ function subscribe(listener: () => void): () => void {
 
 function getSnapshot(): AuthState {
   return state;
+}
+
+// Shared by login()'s happy path, loadImpersonatedSession, and
+// completeTwoFactorLogin -- every place that already has a real access token
+// + user pair in hand and just needs to load them into session state.
+function applySession(accessToken: string, user: UserPublic): void {
+  setAccessToken(accessToken);
+  setState({ user, isImpersonating: getImpersonatorId(accessToken) !== null });
 }
 
 // The api-client's response interceptor refreshes the access token
@@ -120,6 +130,7 @@ export interface UseAuthResult {
   register: (email: string, password: string) => Promise<void>;
   endImpersonation: () => Promise<void>;
   loadImpersonatedSession: (accessToken: string, user: UserPublic) => void;
+  completeTwoFactorLogin: (accessToken: string, user: UserPublic) => void;
 }
 
 export function useAuth(): UseAuthResult {
@@ -147,11 +158,7 @@ export function useAuth(): UseAuthResult {
       if (!payload) {
         throw new Error("Login response was empty.");
       }
-      setAccessToken(payload.access_token);
-      setState({
-        user: payload.user,
-        isImpersonating: getImpersonatorId(payload.access_token) !== null,
-      });
+      applySession(payload.access_token, payload.user);
       return payload.user;
     },
     [],
@@ -203,11 +210,19 @@ export function useAuth(): UseAuthResult {
   // repeating login()'s own state-setting logic at the call site.
   const loadImpersonatedSession = useCallback(
     (accessToken: string, impersonatedUser: UserPublic): void => {
-      setAccessToken(accessToken);
-      setState({
-        user: impersonatedUser,
-        isImpersonating: getImpersonatorId(accessToken) !== null,
-      });
+      applySession(accessToken, impersonatedUser);
+    },
+    [],
+  );
+
+  // T-217: the TwoFactorChallenge step (LoginPage) calls this once it's
+  // traded the temp_token from a TwoFactorRequiredError for real tokens --
+  // via either POST /auth/2fa/login (TOTP code/backup code) or the WebAuthn
+  // login/options+login pair -- completing the login that `login()` above
+  // deferred.
+  const completeTwoFactorLogin = useCallback(
+    (accessToken: string, user: UserPublic): void => {
+      applySession(accessToken, user);
     },
     [],
   );
@@ -221,5 +236,6 @@ export function useAuth(): UseAuthResult {
     register,
     endImpersonation,
     loadImpersonatedSession,
+    completeTwoFactorLogin,
   };
 }

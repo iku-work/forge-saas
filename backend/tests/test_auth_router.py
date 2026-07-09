@@ -46,6 +46,7 @@ from app.modules.auth.models import (
     MagicLinkToken,
     PasswordResetToken,
     User,
+    WebAuthnCredential,
 )
 from app.modules.auth.models import Session as SessionModel
 from app.modules.auth.repository import (
@@ -63,6 +64,7 @@ _TABLES = [
     EmailVerificationToken.__table__,
     PasswordResetToken.__table__,
     MagicLinkToken.__table__,
+    WebAuthnCredential.__table__,
 ]
 _VALID_PASSWORD = "Correct-Horse9"
 _REFRESH_COOKIE_NAME = "__Host-refresh_token"

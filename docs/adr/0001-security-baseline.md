@@ -169,7 +169,7 @@ questionnaire) — evidence links point at real files, not at task IDs.
 | ID | Requirement | Status | Evidence |
 |---|---|---|---|
 | V2.3.1 | System-generated secrets are random, short-lived, can't become long-term | met | Magic-link/reset tokens and TOTP backup codes use `secrets.token_urlsafe`/`token_hex` with TTLs (15 min–24 h) and are single-use. |
-| V2.3.2 | Enrollment of hardware authenticators (U2F/FIDO) supported | n/a | Not implemented — 2FA is TOTP-only. Follow-up: T-217. |
+| V2.3.2 | Enrollment of hardware authenticators (U2F/FIDO) supported | met | `POST /auth/webauthn/register/options` + `/register` (`backend/app/modules/auth/webauthn.py`, `AuthService.begin_webauthn_registration`/`complete_webauthn_registration`) register a `WebAuthnCredential` as an alternative to TOTP at the same 2FA gate in `login()`. Closed by T-217. |
 | V2.3.3 | Renewal instructions sent for time-bound authenticators | n/a | TOTP secrets don't expire; backup codes are consumed, not renewed. |
 
 #### V2.4 Credential Storage
@@ -228,9 +228,9 @@ questionnaire) — evidence links point at real files, not at task IDs.
 
 | ID | Requirement | Status | Evidence |
 |---|---|---|---|
-| V2.9.1 | Verification keys stored securely (TPM/HSM) | n/a | No cryptographic hardware authenticator (WebAuthn/client-cert) implemented. See V2.3.2, follow-up T-217. |
-| V2.9.2 | Challenge nonce ≥64 bits, unique | n/a | No cryptographic hardware authenticator implemented. |
-| V2.9.3 | Approved crypto algorithms for challenge generation/verification | n/a | No cryptographic hardware authenticator implemented. |
+| V2.9.1 | Verification keys stored securely (TPM/HSM) | met | WebAuthn's own model: the private key never leaves the authenticator's TPM/Secure Enclave/security key. `WebAuthnCredential.public_key` (`backend/app/modules/auth/models.py`) stores only the public COSE key handed back by `verify_registration_response` — the RP never sees, transmits, or stores private key material. Closed by T-217. |
+| V2.9.2 | Challenge nonce ≥64 bits, unique | met | `webauthn.generate_registration_options`/`generate_authentication_options` default to `helpers.generate_challenge()` — 64 random bytes (512 bits) via `secrets.token_bytes`, freshly generated per ceremony in `begin_webauthn_registration`/`begin_webauthn_login` (`backend/app/modules/auth/service.py`). Closed by T-217. |
+| V2.9.3 | Approved crypto algorithms for challenge generation/verification | met | `py_webauthn`'s default `supported_pub_key_algs` (EdDSA, ES256, RS256 — all FIDO/NIST-approved COSE algorithms) gate `verify_registration_response`/`verify_authentication_response`; the challenge itself is CSPRNG-generated (see V2.9.2). Closed by T-217. |
 
 #### V2.10 Service Authentication
 

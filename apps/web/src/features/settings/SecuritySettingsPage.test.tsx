@@ -16,6 +16,9 @@ import { server } from "../../test/server";
 const hooks = vi.hoisted(() => ({ useAuth: vi.fn(), useModules: vi.fn() }));
 vi.mock("@forge/hooks", () => hooks);
 
+const webauthnBrowser = vi.hoisted(() => ({ startRegistration: vi.fn() }));
+vi.mock("@simplewebauthn/browser", () => webauthnBrowser);
+
 const { SecuritySettingsPage } = await import("./SecuritySettingsPage");
 
 const API = getApiBaseUrl();
@@ -177,5 +180,80 @@ describe("SecuritySettingsPage", () => {
     expect(
       screen.queryByRole("button", { name: "Enable 2FA" }),
     ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Register a security key" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("lists registered security keys with a revoke action", async () => {
+    hooks.useAuth.mockReturnValue({ user, isLoading: false });
+    server.use(
+      http.get(`${API}/api/v1/auth/sessions`, () =>
+        HttpResponse.json(envelope([])),
+      ),
+      http.get(`${API}/api/v1/auth/webauthn/credentials`, () =>
+        HttpResponse.json(
+          envelope([
+            {
+              id: "cred-1",
+              nickname: "YubiKey",
+              aaguid: "00000000-0000-0000-0000-000000000000",
+              created_at: "2026-01-01T00:00:00Z",
+              last_used_at: null,
+            },
+          ]),
+        ),
+      ),
+    );
+
+    renderPage();
+
+    expect(await screen.findByText("YubiKey")).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Remove" }),
+    ).toBeInTheDocument();
+  });
+
+  it("registers a new security key", async () => {
+    hooks.useAuth.mockReturnValue({ user, isLoading: false });
+    webauthnBrowser.startRegistration.mockResolvedValue({
+      id: "new-cred",
+      rawId: "new-cred",
+      type: "public-key",
+      response: { clientDataJSON: "cdj", attestationObject: "ao" },
+    });
+    let registerCalled = false;
+    server.use(
+      http.get(`${API}/api/v1/auth/sessions`, () =>
+        HttpResponse.json(envelope([])),
+      ),
+      http.get(`${API}/api/v1/auth/webauthn/credentials`, () =>
+        HttpResponse.json(envelope([])),
+      ),
+      http.post(`${API}/api/v1/auth/webauthn/register`, () => {
+        registerCalled = true;
+        return HttpResponse.json(
+          envelope({
+            id: "new-cred",
+            nickname: null,
+            aaguid: "00000000-0000-0000-0000-000000000000",
+            created_at: "2026-01-01T00:00:00Z",
+            last_used_at: null,
+          }),
+        );
+      }),
+    );
+    const interaction = userEvent.setup();
+
+    renderPage();
+
+    await screen.findByText("No security keys registered.");
+    await interaction.click(
+      screen.getByRole("button", { name: "Register a security key" }),
+    );
+
+    await waitFor(() => {
+      expect(registerCalled).toBe(true);
+    });
   });
 });

@@ -24,6 +24,7 @@ from app.modules.auth.models import (
     PasswordResetToken,
     TOTPSecret,
     User,
+    WebAuthnCredential,
 )
 from app.modules.auth.models import (
     Session as SessionModel,
@@ -306,6 +307,77 @@ class TOTPSecretRepository:
         record = await self.get_by_user_id(user_id)
         if record is None:
             raise NotFoundError("errors.totp_secret_not_found", fallback="TOTP secret not found")
+        return record
+
+
+class WebAuthnCredentialRepository:
+    def __init__(self, session: AsyncSession) -> None:
+        self.session = session
+
+    async def list_for_user(self, user_id: UUID) -> list[WebAuthnCredential]:
+        m = cast("Any", WebAuthnCredential)
+        stmt = select(WebAuthnCredential).where(m.user_id == user_id)
+        result = await self.session.execute(stmt)
+        return list(result.scalars().all())
+
+    async def exists_for_user(self, user_id: UUID) -> bool:
+        m = cast("Any", WebAuthnCredential)
+        stmt = select(func.count()).select_from(WebAuthnCredential).where(m.user_id == user_id)
+        result = await self.session.execute(stmt)
+        return result.scalar_one() > 0
+
+    async def get_by_id(self, credential_id: UUID) -> WebAuthnCredential | None:
+        m = cast("Any", WebAuthnCredential)
+        stmt = select(WebAuthnCredential).where(m.id == credential_id)
+        result = await self.session.execute(stmt)
+        return result.scalar_one_or_none()
+
+    async def get_by_credential_id(self, credential_id: str) -> WebAuthnCredential | None:
+        m = cast("Any", WebAuthnCredential)
+        stmt = select(WebAuthnCredential).where(m.credential_id == credential_id)
+        result = await self.session.execute(stmt)
+        return result.scalar_one_or_none()
+
+    async def create(  # noqa: PLR0913 — matches SessionRepository.create's precedent
+        self,
+        *,
+        user_id: UUID,
+        credential_id: str,
+        public_key: str,
+        sign_count: int,
+        aaguid: str,
+        nickname: str | None,
+    ) -> WebAuthnCredential:
+        record = WebAuthnCredential(
+            user_id=user_id,
+            credential_id=credential_id,
+            public_key=public_key,
+            sign_count=sign_count,
+            aaguid=aaguid,
+            nickname=nickname,
+        )
+        self.session.add(record)
+        await self.session.flush()
+        return record
+
+    async def update_sign_count(self, credential_id: UUID, sign_count: int) -> None:
+        record = await self._get_or_raise(credential_id)
+        record.sign_count = sign_count
+        record.last_used_at = utcnow()
+        await self.session.flush()
+
+    async def delete(self, credential_id: UUID) -> None:
+        m = cast("Any", WebAuthnCredential)
+        stmt = delete(WebAuthnCredential).where(m.id == credential_id)
+        await self.session.execute(stmt)
+        await self.session.flush()
+
+    async def _get_or_raise(self, credential_id: UUID) -> WebAuthnCredential:
+        record = await self.get_by_id(credential_id)
+        if record is None:
+            raise NotFoundError(
+                "errors.webauthn_credential_not_found", fallback="Security key not found"
+            )
         return record
 
 

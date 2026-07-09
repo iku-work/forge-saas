@@ -116,7 +116,9 @@
       "totp_enabled": "Kaksivaiheinen tunnistautuminen otettiin käyttöön tilillesi.",
       "totp_disabled": "Kaksivaiheinen tunnistautuminen poistettiin käytöstä tililtäsi.",
       "oauth_linked": "Tilisi yhdistettiin kirjautumaan sisään palvelulla {provider}.",
-      "oauth_unlinked": "Tilisi yhteys palveluun {provider} poistettiin."
+      "oauth_unlinked": "Tilisi yhteys palveluun {provider} poistettiin.",
+      "webauthn_registered": "Tilillesi rekisteröitiin uusi turva-avain.",
+      "webauthn_removed": "Turva-avain poistettiin tililtäsi."
     },
     "button": "Tarkista tietoturva-asetukset",
     "footer": "Jos tämä et ollut sinä, vaihda salasanasi välittömästi ja tarkista aktiiviset istuntosi."

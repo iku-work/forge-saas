@@ -4,7 +4,8 @@ import { Link, useNavigate } from "@tanstack/react-router";
 import { useForm } from "react-hook-form";
 import { useTranslation } from "react-i18next";
 
-import { useAuth, useModules } from "@forge/hooks";
+import type { UserPublic } from "@forge/api-client";
+import { TwoFactorRequiredError, useAuth, useModules } from "@forge/hooks";
 import {
   Alert,
   AlertDescription,
@@ -24,13 +25,15 @@ import { loginSchema, type LoginInput } from "@forge/validation";
 import { AuthCard } from "./AuthCard";
 import { getErrorMessage } from "./getErrorMessage";
 import { getOAuthStartUrl } from "./oauth";
+import { TwoFactorChallenge } from "./TwoFactorChallenge";
 
 export function LoginPage() {
   const { t } = useTranslation();
-  const { login } = useAuth();
+  const { login, completeTwoFactorLogin } = useAuth();
   const modules = useModules();
   const navigate = useNavigate();
   const [formError, setFormError] = useState<string | null>(null);
+  const [tempToken, setTempToken] = useState<string | null>(null);
 
   const form = useForm<LoginInput>({
     resolver: zodResolver(loginSchema),
@@ -43,9 +46,44 @@ export function LoginPage() {
       await login(values.email, values.password);
       await navigate({ to: "/" });
     } catch (error) {
+      if (error instanceof TwoFactorRequiredError) {
+        setTempToken(error.tempToken);
+        return;
+      }
       setFormError(getErrorMessage(error, "auth.login.error_default"));
     }
   };
+
+  const handleTwoFactorSuccess = (
+    accessToken: string,
+    user: UserPublic,
+  ): void => {
+    completeTwoFactorLogin(accessToken, user);
+    // _app's beforeLoad guard (apps/web/src/routes/_app.tsx) reads
+    // context.auth.user, which AppRoot only passes into <RouterProvider>
+    // on its next render after this setState -- navigating synchronously
+    // here races that render, so the guard still sees the pre-login `null`
+    // and bounces straight back to /login. Deferring to a macrotask lets
+    // React commit AppRoot's re-render (and thus the router's new context)
+    // first.
+    setTimeout(() => {
+      void navigate({ to: "/" });
+    }, 0);
+  };
+
+  if (tempToken) {
+    return (
+      <AuthCard
+        title={t("auth.two_factor_challenge.title")}
+        description={t("auth.two_factor_challenge.description")}
+      >
+        <TwoFactorChallenge
+          tempToken={tempToken}
+          onSuccess={handleTwoFactorSuccess}
+        />
+      </AuthCard>
+    );
+  }
 
   return (
     <AuthCard

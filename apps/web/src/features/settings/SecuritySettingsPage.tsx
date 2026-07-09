@@ -1,5 +1,7 @@
 import { useState } from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
+import { startRegistration } from "@simplewebauthn/browser";
+import type { PublicKeyCredentialCreationOptionsJSON } from "@simplewebauthn/browser";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
 import { useTranslation } from "react-i18next";
@@ -9,11 +11,16 @@ import {
   changePasswordApiV1AuthChangePasswordPost,
   disable2FaApiV1Auth2FaDisablePost,
   enable2FaApiV1Auth2FaEnablePost,
+  listCredentialsApiV1AuthWebauthnCredentialsGet,
+  listCredentialsApiV1AuthWebauthnCredentialsGetQueryKey,
   listOauthAccountsApiV1AuthOauthAccountsGet,
   listOauthAccountsApiV1AuthOauthAccountsGetQueryKey,
   listSessionsApiV1AuthSessionsGet,
   listSessionsApiV1AuthSessionsGetQueryKey,
   oauthUnlinkApiV1AuthOauthProviderUnlinkPost,
+  registerApiV1AuthWebauthnRegisterPost,
+  registerOptionsApiV1AuthWebauthnRegisterOptionsPost,
+  revokeCredentialApiV1AuthWebauthnCredentialsCredentialIdDelete,
   revokeSessionApiV1AuthSessionsSessionIdDelete,
   verify2FaApiV1Auth2FaVerifyPost,
 } from "@forge/api-client";
@@ -420,6 +427,162 @@ function TwoFactorCard() {
   );
 }
 
+function SecurityKeysCard() {
+  const { t, i18n } = useTranslation();
+  const queryClient = useQueryClient();
+  const [error, setError] = useState<string | null>(null);
+  const [isRegistering, setIsRegistering] = useState(false);
+
+  // Raw SDK calls rather than the generated *Mutation()/*Options() helpers --
+  // see the comment above SessionsCard's sessionsQuery for why.
+  const credentialsQuery = useQuery({
+    queryKey: listCredentialsApiV1AuthWebauthnCredentialsGetQueryKey(),
+    queryFn: async () => {
+      const { data } = await listCredentialsApiV1AuthWebauthnCredentialsGet({
+        throwOnError: true,
+      });
+      return data;
+    },
+  });
+  const revokeCredential = useMutation({
+    mutationFn: async (credentialId: string) => {
+      await revokeCredentialApiV1AuthWebauthnCredentialsCredentialIdDelete({
+        path: { credential_id: credentialId },
+        throwOnError: true,
+      });
+    },
+  });
+
+  const handleRegister = async (): Promise<void> => {
+    setError(null);
+    setIsRegistering(true);
+    try {
+      const { data: optionsEnvelope } =
+        await registerOptionsApiV1AuthWebauthnRegisterOptionsPost({
+          throwOnError: true,
+        });
+      const optionsData = optionsEnvelope.data;
+      if (!optionsData) {
+        throw new Error("WebAuthn register options response was empty.");
+      }
+      const credential = await startRegistration({
+        optionsJSON:
+          optionsData.options as unknown as PublicKeyCredentialCreationOptionsJSON,
+      });
+      await registerApiV1AuthWebauthnRegisterPost({
+        body: {
+          challenge_token: optionsData.challenge_token,
+          credential: credential as unknown as Record<string, unknown>,
+          nickname: null,
+        },
+        throwOnError: true,
+      });
+      await queryClient.invalidateQueries({
+        queryKey: listCredentialsApiV1AuthWebauthnCredentialsGetQueryKey(),
+      });
+    } catch (caught) {
+      setError(getErrorMessage(caught, "auth.security_keys.error_register"));
+    } finally {
+      setIsRegistering(false);
+    }
+  };
+
+  const handleRevoke = async (credentialId: string): Promise<void> => {
+    setError(null);
+    try {
+      await revokeCredential.mutateAsync(credentialId);
+      await queryClient.invalidateQueries({
+        queryKey: listCredentialsApiV1AuthWebauthnCredentialsGetQueryKey(),
+      });
+    } catch (caught) {
+      setError(getErrorMessage(caught, "auth.security_keys.error_revoke"));
+    }
+  };
+
+  const credentials = credentialsQuery.data?.data ?? [];
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardDescription>{t("auth.security_keys.description")}</CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        {error ? (
+          <Alert variant="destructive">
+            <AlertDescription>{error}</AlertDescription>
+          </Alert>
+        ) : null}
+
+        {credentialsQuery.isLoading ? (
+          <Skeleton className="h-8 w-full" />
+        ) : credentialsQuery.isError ? (
+          <Alert variant="destructive">
+            <AlertDescription>
+              {getErrorMessage(
+                credentialsQuery.error,
+                "auth.security_keys.error_load",
+              )}
+            </AlertDescription>
+          </Alert>
+        ) : credentials.length === 0 ? (
+          <p className="text-sm text-muted-foreground">
+            {t("auth.security_keys.no_keys")}
+          </p>
+        ) : (
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>{t("auth.security_keys.name_col")}</TableHead>
+                <TableHead>{t("auth.security_keys.last_used_col")}</TableHead>
+                <TableHead className="text-right">
+                  {t("auth.security_keys.action_col")}
+                </TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {credentials.map((credential) => (
+                <TableRow key={credential.id}>
+                  <TableCell>
+                    {credential.nickname ?? t("auth.security_keys.unnamed_key")}
+                  </TableCell>
+                  <TableCell>
+                    {credential.last_used_at
+                      ? formatDate(credential.last_used_at, i18n.language)
+                      : t("auth.security_keys.never_used")}
+                  </TableCell>
+                  <TableCell className="text-right">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      disabled={revokeCredential.isPending}
+                      onClick={() => {
+                        void handleRevoke(credential.id);
+                      }}
+                    >
+                      {t("auth.security_keys.revoke")}
+                    </Button>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        )}
+
+        <Button
+          type="button"
+          onClick={() => {
+            void handleRegister();
+          }}
+          disabled={isRegistering}
+        >
+          {t("auth.security_keys.register")}
+        </Button>
+      </CardContent>
+    </Card>
+  );
+}
+
 function ChangePasswordCard() {
   const { t } = useTranslation();
   const [formError, setFormError] = useState<string | null>(null);
@@ -627,6 +790,7 @@ export function SecuritySettingsPage() {
       <ChangePasswordCard />
       <SessionsCard />
       {modules.totp2fa ? <TwoFactorCard /> : null}
+      {modules.totp2fa ? <SecurityKeysCard /> : null}
       {modules.oauth ? <LinkedAccountsCard /> : null}
     </div>
   );

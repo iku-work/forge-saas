@@ -40,13 +40,18 @@ from app.core.exceptions import AuthenticationError, ConflictError, NotFoundErro
 from app.main import app
 from app.middleware import rate_limit as rate_limit_module
 from app.modules.auth.models import Session as SessionModel
-from app.modules.auth.models import TOTPSecret, User
+from app.modules.auth.models import TOTPSecret, User, WebAuthnCredential
 from app.modules.auth.repository import TOTPSecretRepository, UserRepository
 from app.modules.auth.schemas import LoginRequest
 from app.modules.auth.service import AuthService, TwoFactorChallenge
 from app.modules.auth.utils import create_access_token, hash_password, sign_url_token
 
-_TABLES = [User.__table__, SessionModel.__table__, TOTPSecret.__table__]
+_TABLES = [
+    User.__table__,
+    SessionModel.__table__,
+    TOTPSecret.__table__,
+    WebAuthnCredential.__table__,
+]
 _VALID_PASSWORD = "Correct-Horse9"
 _IP = "127.0.0.1"
 _USER_AGENT = "pytest"

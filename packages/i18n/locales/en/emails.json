@@ -116,7 +116,9 @@
       "totp_enabled": "Two-factor authentication was turned on for your account.",
       "totp_disabled": "Two-factor authentication was turned off for your account.",
       "oauth_linked": "Your account was linked to sign in with {provider}.",
-      "oauth_unlinked": "Your account was unlinked from {provider}."
+      "oauth_unlinked": "Your account was unlinked from {provider}.",
+      "webauthn_registered": "A new security key was registered on your account.",
+      "webauthn_removed": "A security key was removed from your account."
     },
     "button": "Review security settings",
     "footer": "If this wasn't you, reset your password immediately and review your active sessions."

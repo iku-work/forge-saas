@@ -5,6 +5,7 @@ accept or return a model directly (§0.4's mass-assignment rule).
 """
 
 from datetime import datetime
+from typing import Any
 from uuid import UUID
 
 from pydantic import ConfigDict, EmailStr, Field, field_validator
@@ -1218,3 +1219,48 @@ class TwoFactorLoginRequest(AppBaseModel):
     # Either a 6-digit TOTP code or a single-use backup code -- no shared
     # format, so only a lower bound on length is enforced here.
     code: str = Field(min_length=6)
+
+
+class WebAuthnRegisterOptionsResponse(AppBaseModel):
+    # webauthn.helpers.options_to_json_dict()'s output, passed straight
+    # through to the browser's @simplewebauthn/browser startRegistration() --
+    # re-modeling its (many optional, all camelCase) fields here would just
+    # be a second place for the two shapes to drift apart.
+    options: dict[str, Any]
+    challenge_token: str
+
+
+class WebAuthnRegisterRequest(AppBaseModel):
+    challenge_token: str
+    # The RegistrationResponseJSON startRegistration() resolves with -- same
+    # passthrough reasoning as WebAuthnRegisterOptionsResponse.options above;
+    # verify_registration_response() accepts a plain dict directly.
+    credential: dict[str, Any]
+    nickname: str | None = Field(default=None, max_length=100)
+
+
+class WebAuthnCredentialPublic(AppBaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    nickname: str | None
+    aaguid: str
+    created_at: datetime
+    last_used_at: datetime | None
+
+
+class WebAuthnLoginOptionsRequest(AppBaseModel):
+    # The temp_token AuthService.login() (T-024) hands back when 2FA is
+    # required -- proves the password was already verified, same as
+    # TwoFactorLoginRequest.temp_token above.
+    temp_token: str
+
+
+class WebAuthnLoginOptionsResponse(AppBaseModel):
+    options: dict[str, Any]
+    challenge_token: str
+
+
+class WebAuthnLoginRequest(AppBaseModel):
+    challenge_token: str
+    credential: dict[str, Any]

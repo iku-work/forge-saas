@@ -131,6 +131,52 @@ export const handlers = [
       envelope({ access_token: "default-access-token", user: fixtureUser }),
     ),
   ),
+  http.post(`${API}/api/v1/auth/webauthn/register/options`, () =>
+    HttpResponse.json(
+      envelope({
+        options: {
+          rp: { id: "localhost", name: "ForgeSaaS" },
+          user: { id: "dXNlci1pZA", name: "jane@example.com", displayName: "jane@example.com" },
+          challenge: "Y2hhbGxlbmdl",
+          pubKeyCredParams: [{ type: "public-key", alg: -7 }],
+        },
+        challenge_token: "register-challenge-token",
+      }),
+    ),
+  ),
+  http.post(`${API}/api/v1/auth/webauthn/register`, () =>
+    HttpResponse.json(
+      envelope({
+        id: "cred-1",
+        nickname: null,
+        aaguid: "00000000-0000-0000-0000-000000000000",
+        created_at: "2026-01-01T00:00:00Z",
+        last_used_at: null,
+      }),
+    ),
+  ),
+  http.get(`${API}/api/v1/auth/webauthn/credentials`, () =>
+    HttpResponse.json(envelope([])),
+  ),
+  http.delete(`${API}/api/v1/auth/webauthn/credentials/:credentialId`, () =>
+    HttpResponse.json(envelope(null)),
+  ),
+  http.post(`${API}/api/v1/auth/webauthn/login/options`, () =>
+    HttpResponse.json(
+      envelope({
+        options: {
+          challenge: "Y2hhbGxlbmdl",
+          allowCredentials: [],
+        },
+        challenge_token: "login-challenge-token",
+      }),
+    ),
+  ),
+  http.post(`${API}/api/v1/auth/webauthn/login`, () =>
+    HttpResponse.json(
+      envelope({ access_token: "default-access-token", user: fixtureUser }),
+    ),
+  ),
   http.get(`${API}/api/v1/orgs`, () => HttpResponse.json(envelope([]))),
   http.post(`${API}/api/v1/orgs`, () =>
     HttpResponse.json(envelope(fixtureOrg)),

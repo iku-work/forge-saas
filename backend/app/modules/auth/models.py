@@ -70,6 +70,29 @@ class TOTPSecret(RedactedReprMixin, TimestampMixin, SoftDeleteMixin, SQLModel, t
     backup_codes_hash: str = Field(default="[]")  # JSON list of argon2-hashed codes
 
 
+class WebAuthnCredential(UUIDPKMixin, TimestampMixin, SQLModel, table=True):
+    """A registered hardware key or platform authenticator (T-217) -- an
+    alternative to TOTPSecret at the same "2FA enabled" gate in
+    AuthService.login(). Unlike TOTPSecret, a user may register more than
+    one, so this has its own generated id rather than user_id as its PK.
+    """
+
+    __tablename__ = "webauthn_credential"
+
+    user_id: UUID = Field(foreign_key="user.id", index=True)
+    # Base64url-encoded, per the WebAuthn/`webauthn` library's own wire
+    # format -- looked up directly against the `id` field the browser sends
+    # back on assertion, no decoding needed for the lookup itself.
+    credential_id: str = Field(unique=True, index=True)
+    # The COSE public key, base64url-encoded -- public by definition, so
+    # (unlike TOTPSecret.secret_encrypted) this needs no EncryptedString.
+    public_key: str
+    sign_count: int = Field(default=0)
+    aaguid: str
+    nickname: str | None = Field(default=None)
+    last_used_at: datetime | None = Field(default=None, sa_type=_TZ_DATETIME)  # type: ignore[call-overload]
+
+
 class EmailVerificationToken(UUIDPKMixin, TimestampMixin, SoftDeleteMixin, SQLModel, table=True):
     __tablename__ = "email_verification_token"
 

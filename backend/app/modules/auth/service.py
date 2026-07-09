@@ -1,8 +1,10 @@
 """
 Business logic for registration, email verification (T-017), login with
 brute-force lockout (T-018), refresh-token rotation with theft detection
-(T-019), password reset + magic link (T-020), and the authenticated
-change-password/OAuth-unlink/security-notification-email flows (T-216).
+(T-019), password reset + magic link (T-020), the authenticated
+change-password/OAuth-unlink/security-notification-email flows (T-216), and
+WebAuthn/FIDO2 registration + assertion as an alternative second factor
+(T-217).
 """
 
 import json
@@ -10,17 +12,27 @@ import logging
 import secrets
 from dataclasses import dataclass
 from datetime import timedelta
+from typing import Any
 from uuid import UUID, uuid4
 
 import pyotp
+import webauthn
 from sqlalchemy.ext.asyncio import AsyncSession
+from webauthn.helpers import base64url_to_bytes, bytes_to_base64url, options_to_json_dict
+from webauthn.helpers.exceptions import WebAuthnException
+from webauthn.helpers.structs import (
+    AuthenticatorSelectionCriteria,
+    PublicKeyCredentialDescriptor,
+    ResidentKeyRequirement,
+    UserVerificationRequirement,
+)
 
 from app.core import jobs
 from app.core.config import get_settings
 from app.core.exceptions import AuthenticationError, ConflictError, NotFoundError
 from app.models._mixins import utcnow
 from app.modules.audit.service import AuditService
-from app.modules.auth.models import OAuthAccount, TOTPSecret, User
+from app.modules.auth.models import OAuthAccount, TOTPSecret, User, WebAuthnCredential
 from app.modules.auth.models import Session as SessionModel
 from app.modules.auth.repository import (
     EmailVerificationTokenRepository,
@@ -30,6 +42,7 @@ from app.modules.auth.repository import (
     SessionRepository,
     TOTPSecretRepository,
     UserRepository,
+    WebAuthnCredentialRepository,
 )
 from app.modules.auth.schemas import LoginRequest, OAuthProfile, RegisterRequest
 from app.modules.auth.utils import (
@@ -62,6 +75,17 @@ _TOTP_LOGIN_PURPOSE = "2fa_login"
 _TOTP_LOGIN_TOKEN_TTL_SECONDS = 300
 _BACKUP_CODE_COUNT = 10
 
+# §T-217: hardcoded the same way enable_2fa's issuer_name is -- no dedicated
+# Settings field, since this is display-only text a user sees in their
+# authenticator's/browser's own UI, not a security boundary.
+_WEBAUTHN_RP_NAME = "ForgeSaaS"
+_WEBAUTHN_REGISTER_PURPOSE = "webauthn_register"
+_WEBAUTHN_LOGIN_PURPOSE = "webauthn_login"
+# Registration/assertion ceremonies involve a user physically touching a
+# security key -- longer-lived than the TOTP login window since a hardware
+# key fumbled on the first try shouldn't force the whole flow to restart.
+_WEBAUTHN_CHALLENGE_TTL_SECONDS = 300
+
 
 @dataclass(frozen=True, slots=True)
 class TwoFactorChallenge:
@@ -77,6 +101,7 @@ class AuthService:
         self._magic_link_tokens = MagicLinkTokenRepository(session)
         self._oauth_accounts = OAuthAccountRepository(session)
         self._totp_secrets = TOTPSecretRepository(session)
+        self._webauthn_credentials = WebAuthnCredentialRepository(session)
         self._audit = AuditService(session)
 
     async def register(self, req: RegisterRequest) -> None:
@@ -164,10 +189,16 @@ class AuthService:
 
         await self._users.reset_failed_login(user.id)
 
-        if user.totp_enabled:
+        # §T-217: a registered security key is treated as an alternative to
+        # TOTP at this same gate, not an additional required factor -- a user
+        # with only a WebAuthn credential (no TOTP) still needs to clear this
+        # challenge, just via /auth/webauthn/login instead of /auth/2fa/login.
+        has_webauthn = await self._webauthn_credentials.exists_for_user(user.id)
+        if user.totp_enabled or has_webauthn:
             # Password is correct, but that alone isn't enough to issue real
             # tokens -- temp_token only proves this much and must be traded
-            # for a code at /auth/2fa/login (confirm_login_2fa below).
+            # for a code at /auth/2fa/login (confirm_login_2fa below) or a
+            # security-key assertion at /auth/webauthn/login/options+/login.
             temp_token = sign_url_token(
                 {"user_id": str(user.id), "purpose": _TOTP_LOGIN_PURPOSE},
                 _TOTP_LOGIN_TOKEN_TTL_SECONDS,
@@ -543,6 +574,170 @@ class AuthService:
                 return True
         return False
 
+    async def list_webauthn_credentials(self, user_id: UUID) -> list[WebAuthnCredential]:
+        return await self._webauthn_credentials.list_for_user(user_id)
+
+    async def begin_webauthn_registration(self, user: User) -> tuple[dict[str, Any], str]:
+        existing = await self._webauthn_credentials.list_for_user(user.id)
+        settings = get_settings()
+        options = webauthn.generate_registration_options(
+            rp_id=settings.DOMAIN,
+            rp_name=_WEBAUTHN_RP_NAME,
+            user_name=user.email,
+            user_id=user.id.bytes,
+            exclude_credentials=[
+                PublicKeyCredentialDescriptor(id=base64url_to_bytes(c.credential_id))
+                for c in existing
+            ],
+            authenticator_selection=AuthenticatorSelectionCriteria(
+                resident_key=ResidentKeyRequirement.PREFERRED,
+                user_verification=UserVerificationRequirement.PREFERRED,
+            ),
+        )
+        challenge_token = sign_url_token(
+            {
+                "user_id": str(user.id),
+                "purpose": _WEBAUTHN_REGISTER_PURPOSE,
+                "challenge": bytes_to_base64url(options.challenge),
+            },
+            _WEBAUTHN_CHALLENGE_TTL_SECONDS,
+        )
+        return options_to_json_dict(options), challenge_token
+
+    async def complete_webauthn_registration(
+        self,
+        user: User,
+        challenge_token: str,
+        credential: dict[str, Any],
+        nickname: str | None,
+    ) -> WebAuthnCredential:
+        payload = verify_url_token(challenge_token, max_age=_WEBAUTHN_CHALLENGE_TTL_SECONDS)
+        if payload.get("purpose") != _WEBAUTHN_REGISTER_PURPOSE or payload.get("user_id") != str(
+            user.id
+        ):
+            raise AuthenticationError(
+                "errors.invalid_webauthn_challenge",
+                fallback="Invalid or expired WebAuthn challenge",
+            )
+
+        settings = get_settings()
+        try:
+            verified = webauthn.verify_registration_response(
+                credential=credential,
+                expected_challenge=base64url_to_bytes(payload["challenge"]),
+                expected_rp_id=settings.DOMAIN,
+                expected_origin=settings.FRONTEND_URL,
+            )
+        except WebAuthnException as exc:
+            raise AuthenticationError(
+                "errors.invalid_webauthn_response", fallback="Could not verify security key"
+            ) from exc
+
+        record = await self._webauthn_credentials.create(
+            user_id=user.id,
+            credential_id=bytes_to_base64url(verified.credential_id),
+            public_key=bytes_to_base64url(verified.credential_public_key),
+            sign_count=verified.sign_count,
+            aaguid=verified.aaguid,
+            nickname=nickname,
+        )
+        await self._enqueue_security_notification_email(user, "webauthn_registered")
+        return record
+
+    async def revoke_webauthn_credential(self, user_id: UUID, credential_id: UUID) -> None:
+        record = await self._webauthn_credentials.get_by_id(credential_id)
+        if record is None or record.user_id != user_id:
+            # Same shape whether the credential doesn't exist or belongs to
+            # someone else -- mirrors revoke_session's reasoning above.
+            raise NotFoundError(
+                "errors.webauthn_credential_not_found", fallback="Security key not found"
+            )
+        await self._webauthn_credentials.delete(record.id)
+        user = await self._users.get_by_id(user_id)
+        if user is not None:
+            await self._enqueue_security_notification_email(user, "webauthn_removed")
+
+    async def begin_webauthn_login(self, temp_token: str) -> tuple[dict[str, Any], str]:
+        payload = verify_url_token(temp_token, max_age=_TOTP_LOGIN_TOKEN_TTL_SECONDS)
+        if payload.get("purpose") != _TOTP_LOGIN_PURPOSE:
+            raise AuthenticationError(
+                "errors.invalid_totp_session",
+                fallback="Invalid or expired two-factor session",
+            )
+
+        user_id = UUID(payload["user_id"])
+        credentials = await self._webauthn_credentials.list_for_user(user_id)
+        if not credentials:
+            raise AuthenticationError(
+                "errors.webauthn_not_registered", fallback="No security key registered"
+            )
+
+        settings = get_settings()
+        options = webauthn.generate_authentication_options(
+            rp_id=settings.DOMAIN,
+            allow_credentials=[
+                PublicKeyCredentialDescriptor(id=base64url_to_bytes(c.credential_id))
+                for c in credentials
+            ],
+            user_verification=UserVerificationRequirement.PREFERRED,
+        )
+        challenge_token = sign_url_token(
+            {
+                "user_id": str(user_id),
+                "purpose": _WEBAUTHN_LOGIN_PURPOSE,
+                "challenge": bytes_to_base64url(options.challenge),
+            },
+            _WEBAUTHN_CHALLENGE_TTL_SECONDS,
+        )
+        return options_to_json_dict(options), challenge_token
+
+    async def complete_webauthn_login(
+        self, challenge_token: str, credential: dict[str, Any], ip: str, user_agent: str
+    ) -> tuple[str, str, User]:
+        payload = verify_url_token(challenge_token, max_age=_WEBAUTHN_CHALLENGE_TTL_SECONDS)
+        if payload.get("purpose") != _WEBAUTHN_LOGIN_PURPOSE:
+            raise AuthenticationError(
+                "errors.invalid_webauthn_challenge",
+                fallback="Invalid or expired WebAuthn challenge",
+            )
+
+        user_id = UUID(payload["user_id"])
+        user = await self._users.get_by_id(user_id)
+        record = await self._webauthn_credentials.get_by_credential_id(credential.get("id", ""))
+        if user is None or record is None or record.user_id != user_id:
+            raise AuthenticationError(
+                "errors.invalid_webauthn_response", fallback="Could not verify security key"
+            )
+
+        settings = get_settings()
+        try:
+            verified = webauthn.verify_authentication_response(
+                credential=credential,
+                expected_challenge=base64url_to_bytes(payload["challenge"]),
+                expected_rp_id=settings.DOMAIN,
+                expected_origin=settings.FRONTEND_URL,
+                credential_public_key=base64url_to_bytes(record.public_key),
+                credential_current_sign_count=record.sign_count,
+            )
+        except WebAuthnException as exc:
+            if "sign count" in str(exc):
+                # Clone-detection, same spirit as refresh-token reuse
+                # detection in refresh() (T-019): a counter that goes
+                # backwards means this credential was cloned, so every
+                # session gets revoked, not just this login attempt.
+                logger.warning(
+                    "auth.webauthn: sign-count regression detected (user_id=%s, credential_id=%s)",
+                    user_id,
+                    record.id,
+                )
+                await self._sessions.revoke_all_for_user(user_id)
+            raise AuthenticationError(
+                "errors.invalid_webauthn_response", fallback="Could not verify security key"
+            ) from exc
+
+        await self._webauthn_credentials.update_sign_count(record.id, verified.new_sign_count)
+        return await self._create_session(user, ip, user_agent)
+
     async def _enqueue_verification_email(self, user: User, token: str) -> None:
         settings = get_settings()
         await jobs.enqueue_job(
@@ -585,9 +780,10 @@ class AuthService:
     async def _enqueue_security_notification_email(
         self, user: User, event: str, *, provider: str | None = None
     ) -> None:
-        # T-216/ASVS V2.2.3, V2.5.5: fired on password change, 2FA enable/
-        # disable, and OAuth link/unlink -- `event` selects the body copy the
-        # SecurityNotification template renders (see
+        # T-216/T-217/ASVS V2.2.3, V2.5.5: fired on password change, 2FA
+        # enable/disable, OAuth link/unlink, and WebAuthn registration --
+        # `event` selects the body copy the SecurityNotification template
+        # renders (see
         # packages/email-templates/src/templates/SecurityNotification.tsx).
         settings = get_settings()
         await jobs.enqueue_job(

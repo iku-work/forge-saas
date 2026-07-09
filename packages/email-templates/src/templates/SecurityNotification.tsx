@@ -5,14 +5,16 @@ import { t } from "@forge/i18n";
 import { BaseLayout, CtaButton, exampleBranding, type Branding } from "../components/BaseLayout.js";
 
 // Mirrors the `event` literals AuthService._enqueue_security_notification_email
-// (backend/app/modules/auth/service.py, T-216) passes through as JSON --
+// (backend/app/modules/auth/service.py, T-216/T-217) passes through as JSON --
 // each maps to an `emails.security_notification.events.<event>` copy key.
 export type SecurityNotificationEvent =
   | "password_change"
   | "totp_enabled"
   | "totp_disabled"
   | "oauth_linked"
-  | "oauth_unlinked";
+  | "oauth_unlinked"
+  | "webauthn_registered"
+  | "webauthn_removed";
 
 export interface SecurityNotificationProps {
   branding: Branding;
