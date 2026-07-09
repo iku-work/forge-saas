@@ -39,7 +39,9 @@ def _translate_or_fallback(message_key: str, locale: str, fallback: str, **param
 async def domain_error_handler(request: Request, exc: Exception) -> JSONResponse:
     assert isinstance(exc, DomainError)  # noqa: S101 — Starlette dispatches by registered class
     message = _translate_or_fallback(exc.message_key, _locale(request), exc.fallback, **exc.params)
-    error = ErrorBody(code=exc.code, message=message, details=exc.details)
+    error = ErrorBody(
+        code=exc.code, message_key=exc.message_key, message=message, details=exc.details
+    )
     return _envelope_response(request, exc.status_code, error)
 
 
@@ -50,6 +52,7 @@ async def validation_error_handler(request: Request, exc: Exception) -> JSONResp
     )
     error = ErrorBody(
         code="validation_error",
+        message_key="errors.validation_failed",
         message=message,
         details={"errors": jsonable_encoder(exc.errors())},
     )
@@ -61,7 +64,7 @@ async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONR
     message = _translate_or_fallback(
         "errors.internal_error", _locale(request), "An unexpected error occurred."
     )
-    error = ErrorBody(code="internal_error", message=message)
+    error = ErrorBody(code="internal_error", message_key="errors.internal_error", message=message)
     return _envelope_response(request, 500, error)
 
 

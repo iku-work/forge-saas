@@ -19,7 +19,17 @@ class Settings(BaseSettings):
     JWT_PRIVATE_KEY: str
     JWT_PUBLIC_KEY: str
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 15
+    # T-218/ASVS V3.3.2: REFRESH_TOKEN_EXPIRE_DAYS is now the *absolute* cap on
+    # a session chain's lifetime, anchored to the original login
+    # (Session.auth_time) and never extended by refresh() -- see
+    # AuthService.refresh()'s docstring. REFRESH_TOKEN_IDLE_TIMEOUT_MINUTES is
+    # the separate idle cap: refresh() rejects a token whose session hasn't
+    # been used (rotated) within this window, even if the absolute cap hasn't
+    # been reached yet. Default is the ADR's "~12h" L2 target rather than the
+    # stricter "30min" option, to keep normal same-day usage from forcing a
+    # re-login -- set to 30 for the stricter posture.
     REFRESH_TOKEN_EXPIRE_DAYS: int = 30
+    REFRESH_TOKEN_IDLE_TIMEOUT_MINUTES: int = 720
 
     # App
     ENVIRONMENT: Literal["dev", "staging", "prod"] = "dev"

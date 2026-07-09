@@ -1,5 +1,6 @@
 import type { ReactElement } from "react";
 
+import { ChangeEmail, changeEmailExampleProps } from "./ChangeEmail.js";
 import { DownloadLink, downloadLinkExampleProps } from "./DownloadLink.js";
 import { FileUploaded, fileUploadedExampleProps } from "./FileUploaded.js";
 import { Invitation, invitationExampleProps } from "./Invitation.js";
@@ -57,6 +58,7 @@ function defineTemplate<P extends object>(
 
 export const TEMPLATES = {
   verify_email: defineTemplate(verifyEmailExampleProps, VerifyEmail),
+  change_email: defineTemplate(changeEmailExampleProps, ChangeEmail),
   password_reset: defineTemplate(passwordResetExampleProps, PasswordReset),
   magic_link: defineTemplate(magicLinkExampleProps, MagicLink),
   invitation: defineTemplate(invitationExampleProps, Invitation),

@@ -63,5 +63,9 @@
   "token_revoked": "Tunnus on mitätöity.",
   "cannot_impersonate_superadmin": "Toista pääkäyttäjää ei voi esiintyä.",
   "not_impersonating": "Tämä tunnus ei ole esiintymisistunto.",
-  "service_unavailable": "{feature} ei ole tilapäisesti käytettävissä. Yritä hetken kuluttua uudelleen."
+  "service_unavailable": "{feature} ei ole tilapäisesti käytettävissä. Yritä hetken kuluttua uudelleen.",
+  "step_up_auth_required": "Tämä toiminto edellyttää, että olet kirjautunut sisään äskettäin. Kirjaudu sisään uudelleen jatkaaksesi.",
+  "superadmin_2fa_required": "Pääkäyttäjätilien on otettava käyttöön kaksivaiheinen tunnistautuminen (autentikointisovellus tai suojausavain) ennen pääkäyttäjätoimintojen käyttöä.",
+  "email_unchanged": "Tämä on jo nykyinen sähköpostiosoitteesi.",
+  "invalid_email_change_token": "Tämä sähköpostin vaihtolinkki on virheellinen tai vanhentunut."
 }

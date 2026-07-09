@@ -46,6 +46,14 @@ class Session(UUIDPKMixin, TimestampMixin, SQLModel, table=True):
     last_seen_at: datetime = Field(sa_type=_TZ_DATETIME)  # type: ignore[call-overload]
     expires_at: datetime = Field(sa_type=_TZ_DATETIME)  # type: ignore[call-overload]
     revoked_at: datetime | None = Field(default=None, sa_type=_TZ_DATETIME)  # type: ignore[call-overload]
+    # T-218: the instant of the *real* credential check (password login, 2FA
+    # confirmation, magic link, or WebAuthn assertion) that started this
+    # session chain -- copied unchanged across every refresh()-driven
+    # rotation, unlike expires_at/last_seen_at which each rotation updates.
+    # This is what require_recent_auth (app.core.dependencies) reads via the
+    # access token's "auth_time" claim to gate step-up-protected actions,
+    # since a silent refresh must never itself count as "recent auth".
+    auth_time: datetime = Field(sa_type=_TZ_DATETIME)  # type: ignore[call-overload]
 
 
 class OAuthAccount(UUIDPKMixin, TimestampMixin, SQLModel, table=True):
@@ -68,6 +76,12 @@ class TOTPSecret(RedactedReprMixin, TimestampMixin, SoftDeleteMixin, SQLModel, t
     secret_encrypted: str = Field(sa_column=Column(EncryptedString, nullable=False))
     enabled_at: datetime | None = Field(default=None, sa_type=_TZ_DATETIME)  # type: ignore[call-overload]
     backup_codes_hash: str = Field(default="[]")  # JSON list of argon2-hashed codes
+    # T-218/ASVS V2.8.4-V2.8.5: the TOTP time-step (30s window) of the last
+    # successfully consumed code, so a code already used this window (or an
+    # earlier one) can be rejected as a replay instead of accepted again --
+    # see AuthService._verify_totp_step. `None` until the first successful
+    # verification.
+    last_consumed_step: int | None = Field(default=None)
 
 
 class WebAuthnCredential(UUIDPKMixin, TimestampMixin, SQLModel, table=True):
@@ -119,3 +133,21 @@ class MagicLinkToken(UUIDPKMixin, TimestampMixin, SoftDeleteMixin, SQLModel, tab
     expires_at: datetime = Field(sa_type=_TZ_DATETIME)  # type: ignore[call-overload]
     used_at: datetime | None = Field(default=None, sa_type=_TZ_DATETIME)  # type: ignore[call-overload]
     redirect_to: str | None = Field(default=None)
+
+
+class EmailChangeToken(UUIDPKMixin, TimestampMixin, SoftDeleteMixin, SQLModel, table=True):
+    """T-218 (minimal implementation -- see T-226's follow-up for the
+    production-ready version): proves the caller owns `new_email` before
+    AuthService.confirm_email_change() applies it to User.email. Mirrors
+    EmailVerificationToken's shape rather than embedding new_email in a
+    signed token, so a second pending request can't silently race the
+    uniqueness check confirm does at apply time.
+    """
+
+    __tablename__ = "email_change_token"
+
+    user_id: UUID = Field(foreign_key="user.id", index=True)
+    new_email: str
+    token_hash: str = Field(unique=True)  # SHA-256 hex — never the plain token
+    expires_at: datetime = Field(sa_type=_TZ_DATETIME)  # type: ignore[call-overload]
+    used_at: datetime | None = Field(default=None, sa_type=_TZ_DATETIME)  # type: ignore[call-overload]

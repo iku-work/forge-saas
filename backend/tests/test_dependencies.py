@@ -8,10 +8,12 @@ router (T-022 doesn't exist yet).
 """
 
 from collections.abc import AsyncGenerator
+from datetime import timedelta
 from types import SimpleNamespace
 from uuid import uuid4
 
 import pytest
+from freezegun import freeze_time
 from redis.asyncio import Redis
 from sqlalchemy.ext.asyncio import (
     AsyncEngine,
@@ -29,11 +31,18 @@ from app.core.dependencies import (
     get_current_user,
     get_redis,
     require_permission,
+    require_recent_auth,
     require_superadmin,
 )
-from app.core.exceptions import AuthenticationError, DomainError, PermissionDeniedError
+from app.core.exceptions import (
+    AuthenticationError,
+    DomainError,
+    PermissionDeniedError,
+    StepUpAuthRequiredError,
+)
 from app.core.migrations import build_config
 from app.core.migrations import upgrade as upgrade_migrations
+from app.models._mixins import utcnow
 from app.modules.auth.models import User
 from app.modules.auth.permissions import MemberRole, Permission
 from app.modules.auth.utils import create_access_token
@@ -299,6 +308,55 @@ async def test_require_permission_allows_owner_with_billing_manage() -> None:
     assert result is membership
 
 
+# ---- require_recent_auth (T-218) --------------------------------------------
+
+
+async def test_require_recent_auth_allows_within_window(
+    request_: Request, active_user: User, session: AsyncSession, redis_client: Redis
+) -> None:
+    token = _token_for(active_user)  # auth_time defaults to "now"
+    await get_current_user(request=request_, token=token, session=session, redis=redis_client)
+    checker = require_recent_auth(max_age_minutes=5)
+
+    await checker(request=request_, user=active_user)  # must not raise
+
+
+async def test_require_recent_auth_rejects_after_window(
+    request_: Request, active_user: User, session: AsyncSession, redis_client: Redis
+) -> None:
+    with freeze_time(utcnow()):
+        token = _token_for(active_user)
+        await get_current_user(request=request_, token=token, session=session, redis=redis_client)
+
+    checker = require_recent_auth(max_age_minutes=5)
+    with (
+        freeze_time(utcnow() + timedelta(minutes=10)),
+        pytest.raises(StepUpAuthRequiredError) as exc_info,
+    ):
+        await checker(request=request_, user=active_user)
+
+    assert exc_info.value.status_code == 403
+    assert exc_info.value.code == "step_up_auth_required"
+
+
+async def test_require_recent_auth_ignores_access_token_refresh(
+    request_: Request, active_user: User, session: AsyncSession, redis_client: Redis
+) -> None:
+    """A refreshed access token that carries forward the *original*
+    auth_time (as AuthService.refresh() does -- see Session.auth_time's
+    docstring) must not reset the step-up clock, unlike a token minted by a
+    fresh login/2FA confirmation would."""
+    stale_auth_time = utcnow() - timedelta(minutes=10)
+    refreshed_token = create_access_token(active_user.id, None, (), auth_time=stale_auth_time)
+    await get_current_user(
+        request=request_, token=refreshed_token, session=session, redis=redis_client
+    )
+    checker = require_recent_auth(max_age_minutes=5)
+
+    with pytest.raises(StepUpAuthRequiredError):
+        await checker(request=request_, user=active_user)
+
+
 # ---- require_superadmin (T-140) --------------------------------------------
 
 
@@ -314,19 +372,58 @@ def _admin_request() -> Request:
     )
 
 
-async def test_require_superadmin_denies_non_superadmin(active_user: User) -> None:
+async def test_require_superadmin_denies_non_superadmin(
+    active_user: User, session: AsyncSession
+) -> None:
     with pytest.raises(PermissionDeniedError) as exc_info:
-        await require_superadmin(request=_admin_request(), user=active_user)
+        await require_superadmin(request=_admin_request(), user=active_user, session=session)
 
     assert exc_info.value.status_code == 403
 
 
 async def test_require_superadmin_allows_superadmin(session: AsyncSession) -> None:
+    admin = User(email=f"admin-{uuid4()}@example.com", is_superadmin=True, totp_enabled=True)
+    session.add(admin)
+    await session.flush()
+
+    result = await require_superadmin(request=_admin_request(), user=admin, session=session)
+
+    assert result is admin
+
+
+# ---- require_superadmin: T-218 mandatory-2FA gate --------------------------
+
+
+async def test_require_superadmin_denies_superadmin_without_2fa(session: AsyncSession) -> None:
     admin = User(email=f"admin-{uuid4()}@example.com", is_superadmin=True)
     session.add(admin)
     await session.flush()
 
-    result = await require_superadmin(request=_admin_request(), user=admin)
+    with pytest.raises(PermissionDeniedError) as exc_info:
+        await require_superadmin(request=_admin_request(), user=admin, session=session)
+
+    assert exc_info.value.status_code == 403
+    assert exc_info.value.code == "permission_denied"
+
+
+async def test_require_superadmin_allows_superadmin_with_webauthn_only(
+    session: AsyncSession,
+) -> None:
+    from app.modules.auth.repository import WebAuthnCredentialRepository  # noqa: PLC0415
+
+    admin = User(email=f"admin-{uuid4()}@example.com", is_superadmin=True)
+    session.add(admin)
+    await session.flush()
+    await WebAuthnCredentialRepository(session).create(
+        user_id=admin.id,
+        credential_id=f"cred-{uuid4()}",
+        public_key="pub",
+        sign_count=0,
+        aaguid="00000000-0000-0000-0000-000000000000",
+        nickname=None,
+    )
+
+    result = await require_superadmin(request=_admin_request(), user=admin, session=session)
 
     assert result is admin
 
@@ -336,14 +433,14 @@ async def test_require_superadmin_logs_admin_action_with_actor_and_path(
 ) -> None:
     from loguru import logger as loguru_logger  # noqa: PLC0415
 
-    admin = User(email=f"admin-{uuid4()}@example.com", is_superadmin=True)
+    admin = User(email=f"admin-{uuid4()}@example.com", is_superadmin=True, totp_enabled=True)
     session.add(admin)
     await session.flush()
 
     records: list[dict[str, object]] = []
     sink_id = loguru_logger.add(lambda message: records.append(message.record), level="INFO")
     try:
-        await require_superadmin(request=_admin_request(), user=admin)
+        await require_superadmin(request=_admin_request(), user=admin, session=session)
     finally:
         loguru_logger.remove(sink_id)
 
@@ -355,14 +452,16 @@ async def test_require_superadmin_logs_admin_action_with_actor_and_path(
     assert extra["target"] == {"org_id": "acme"}
 
 
-async def test_require_superadmin_does_not_log_on_denial(active_user: User) -> None:
+async def test_require_superadmin_does_not_log_on_denial(
+    active_user: User, session: AsyncSession
+) -> None:
     from loguru import logger as loguru_logger  # noqa: PLC0415
 
     records: list[dict[str, object]] = []
     sink_id = loguru_logger.add(lambda message: records.append(message.record), level="INFO")
     try:
         with pytest.raises(PermissionDeniedError):
-            await require_superadmin(request=_admin_request(), user=active_user)
+            await require_superadmin(request=_admin_request(), user=active_user, session=session)
     finally:
         loguru_logger.remove(sink_id)
 

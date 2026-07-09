@@ -19,6 +19,7 @@ same test's event loop, so it needs none of those workarounds.
 
 from collections.abc import AsyncGenerator, Callable, Iterator
 from datetime import UTC, datetime, timedelta
+from typing import Any
 from uuid import uuid4
 
 import httpx
@@ -42,6 +43,7 @@ from app.core.dependencies import get_redis
 from app.main import app
 from app.middleware import rate_limit as rate_limit_module
 from app.modules.auth.models import (
+    EmailChangeToken,
     EmailVerificationToken,
     MagicLinkToken,
     PasswordResetToken,
@@ -65,6 +67,7 @@ _TABLES = [
     PasswordResetToken.__table__,
     MagicLinkToken.__table__,
     WebAuthnCredential.__table__,
+    EmailChangeToken.__table__,
 ]
 _VALID_PASSWORD = "Correct-Horse9"
 _REFRESH_COOKIE_NAME = "__Host-refresh_token"
@@ -151,6 +154,13 @@ async def verified_user(user_repo: UserRepository, session: AsyncSession) -> Use
 
 def _auth_header(user: User) -> dict[str, str]:
     token = create_access_token(user.id, None, ())
+    return {"Authorization": f"Bearer {token}"}
+
+
+def _stale_auth_header(user: User) -> dict[str, str]:
+    # T-218: auth_time well outside require_recent_auth's step-up window.
+    stale_auth_time = datetime.now(UTC) - timedelta(minutes=30)
+    token = create_access_token(user.id, None, (), auth_time=stale_auth_time)
     return {"Authorization": f"Bearer {token}"}
 
 
@@ -807,3 +817,72 @@ async def test_change_password_revokes_other_sessions_but_keeps_current_one(
     assert response.status_code == 200
     active = await session_repo.list_active_for_user(verified_user.id)
     assert len(active) == 1
+
+
+# --- /change-email / /change-email/confirm (T-218) --------------------------
+
+
+async def test_change_email_without_bearer_token_returns_401(client: httpx.AsyncClient) -> None:
+    response = await client.post("/api/v1/auth/change-email", json={"new_email": "new@example.com"})
+
+    assert response.status_code == 401
+
+
+async def test_change_email_without_recent_auth_returns_403(
+    client: httpx.AsyncClient, verified_user: User
+) -> None:
+    response = await client.post(
+        "/api/v1/auth/change-email",
+        json={"new_email": "new@example.com"},
+        headers=_stale_auth_header(verified_user),
+    )
+
+    assert response.status_code == 403
+    assert response.json()["error"]["code"] == "step_up_auth_required"
+
+
+async def test_change_email_happy_path_returns_200(
+    client: httpx.AsyncClient, verified_user: User
+) -> None:
+    response = await client.post(
+        "/api/v1/auth/change-email",
+        json={"new_email": "new@example.com"},
+        headers=_auth_header(verified_user),
+    )
+
+    assert response.status_code == 200
+
+
+async def test_confirm_email_change_happy_path_updates_email_and_allows_new_login(
+    client: httpx.AsyncClient,
+    verified_user: User,
+    enqueued_jobs: list[tuple[str, dict[str, Any]]],
+) -> None:
+    await client.post(
+        "/api/v1/auth/change-email",
+        json={"new_email": "new@example.com"},
+        headers=_auth_header(verified_user),
+    )
+    change_email_jobs = [
+        kwargs for name, kwargs in enqueued_jobs if kwargs.get("template") == "change_email"
+    ]
+    assert len(change_email_jobs) == 1
+    confirm_url: str = change_email_jobs[0]["context"]["confirm_url"]
+    plain = confirm_url.rsplit("token=", 1)[1]
+
+    response = await client.post("/api/v1/auth/change-email/confirm", json={"token": plain})
+
+    assert response.status_code == 200
+    assert response.json()["data"]["email"] == "new@example.com"
+    new_login = await client.post(
+        "/api/v1/auth/login", json={"email": "new@example.com", "password": _VALID_PASSWORD}
+    )
+    assert new_login.status_code == 200
+
+
+async def test_confirm_email_change_invalid_token_returns_401(client: httpx.AsyncClient) -> None:
+    response = await client.post(
+        "/api/v1/auth/change-email/confirm", json={"token": "not-a-real-token"}
+    )
+
+    assert response.status_code == 401

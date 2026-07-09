@@ -115,6 +115,83 @@ describe("authRetryInterceptor", () => {
     vi.unstubAllGlobals();
   });
 
+  it.each([
+    "http://localhost:8000/api/v1/auth/login",
+    "http://localhost:8000/api/v1/auth/verify-email",
+    "http://localhost:8000/api/v1/auth/reset-password",
+    "http://localhost:8000/api/v1/auth/magic-link/consume",
+    "http://localhost:8000/api/v1/auth/change-email/confirm",
+    "http://localhost:8000/api/v1/auth/2fa/login",
+    "http://localhost:8000/api/v1/auth/webauthn/login",
+    "http://localhost:8000/api/v1/auth/webauthn/login/options",
+  ])(
+    // T-218: a 401 from one of these reflects a bad credential/token *in
+    // that request* (wrong password, an expired verify/reset/magic/
+    // change-email link, a wrong 2FA/WebAuthn code) -- never the caller's
+    // own login session, even though `beforeEach` above leaves a token set
+    // in memory the same way a still-logged-in user visiting one of these
+    // links would. Must not attempt a refresh or fire onSessionExpired,
+    // since AppRoot.tsx force-navigates to /login on that signal, which
+    // would blow away whatever confirmation UI the caller was about to
+    // render (see VerifyEmailPage/ConfirmEmailChangePage).
+    "does not treat a 401 from %s as session expiry",
+    async (url) => {
+      const fetchMock = vi.fn();
+      vi.stubGlobal("fetch", fetchMock);
+
+      const listener = vi.fn();
+      const unsubscribe = onSessionExpired(listener);
+
+      const request = new Request(url, { method: "POST" });
+      const original401 = new Response(null, { status: 401 });
+
+      const result = await authRetryInterceptor(
+        original401,
+        request,
+        fakeOptions,
+      );
+
+      expect(result).toBe(original401);
+      expect(fetchMock).not.toHaveBeenCalled();
+      expect(listener).not.toHaveBeenCalled();
+      expect(getAccessToken()).toBe("old-token"); // untouched, not cleared
+
+      unsubscribe();
+      vi.unstubAllGlobals();
+    },
+  );
+
+  it("still treats a 401 on an authenticated endpoint as session expiry even when the URL contains an unrelated auth-prefixed substring", async () => {
+    // Guards the substring-matching approach above against a false
+    // negative: /api/v1/auth/2fa/login must not accidentally suppress
+    // /api/v1/auth/2fa/verify's (an authenticated, session-bearing
+    // endpoint) own session-expiry handling.
+    const fetchMock = vi.fn(() =>
+      Promise.resolve(new Response(null, { status: 401 })),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const listener = vi.fn();
+    const unsubscribe = onSessionExpired(listener);
+
+    const request = new Request("http://localhost:8000/api/v1/auth/2fa/verify", {
+      method: "POST",
+    });
+    const original401 = new Response(null, { status: 401 });
+
+    const result = await authRetryInterceptor(
+      original401,
+      request,
+      fakeOptions,
+    );
+
+    expect(result).toBe(original401);
+    expect(listener).toHaveBeenCalledTimes(1);
+
+    unsubscribe();
+    vi.unstubAllGlobals();
+  });
+
   it("shares a single refresh call across concurrent 401s", async () => {
     const fetchMock = vi.fn((url: string) => {
       if (url.includes("/auth/refresh")) {

@@ -20,6 +20,7 @@ import {
   oauthUnlinkApiV1AuthOauthProviderUnlinkPost,
   registerApiV1AuthWebauthnRegisterPost,
   registerOptionsApiV1AuthWebauthnRegisterOptionsPost,
+  requestEmailChangeApiV1AuthChangeEmailPost,
   revokeCredentialApiV1AuthWebauthnCredentialsCredentialIdDelete,
   revokeSessionApiV1AuthSessionsSessionIdDelete,
   verify2FaApiV1Auth2FaVerifyPost,
@@ -51,7 +52,12 @@ import {
   TableRow,
 } from "@forge/ui";
 import { formatDate } from "@forge/utils";
-import { changePasswordSchema, type ChangePasswordInput } from "@forge/validation";
+import {
+  changeEmailSchema,
+  changePasswordSchema,
+  type ChangeEmailInput,
+  type ChangePasswordInput,
+} from "@forge/validation";
 
 import { getErrorMessage } from "../auth/getErrorMessage";
 
@@ -690,6 +696,92 @@ function ChangePasswordCard() {
   );
 }
 
+function ChangeEmailCard() {
+  const { t } = useTranslation();
+  const [formError, setFormError] = useState<string | null>(null);
+  const [success, setSuccess] = useState(false);
+
+  // T-218 (minimal implementation -- see T-226 for the production-ready
+  // follow-up): the backend gates this request on require_recent_auth, so a
+  // session idling past that window surfaces as errors.step_up_auth_required
+  // here -- shown via getErrorMessage's normal code->copy mapping, same as
+  // any other error, rather than a dedicated re-auth prompt (T-226 territory).
+  const requestEmailChange = useMutation({
+    mutationFn: async (newEmail: string) => {
+      await requestEmailChangeApiV1AuthChangeEmailPost({
+        body: { new_email: newEmail },
+        throwOnError: true,
+      });
+    },
+  });
+
+  const form = useForm<ChangeEmailInput>({
+    resolver: zodResolver(changeEmailSchema),
+    defaultValues: { newEmail: "" },
+  });
+
+  const onSubmit = async (values: ChangeEmailInput): Promise<void> => {
+    setFormError(null);
+    setSuccess(false);
+    try {
+      await requestEmailChange.mutateAsync(values.newEmail);
+      setSuccess(true);
+      form.reset();
+    } catch (caught) {
+      setFormError(getErrorMessage(caught, "auth.change_email.error_default"));
+    }
+  };
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardDescription>{t("auth.change_email.description")}</CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        {formError ? (
+          <Alert variant="destructive">
+            <AlertDescription>{formError}</AlertDescription>
+          </Alert>
+        ) : null}
+        {success ? (
+          <Alert>
+            <AlertDescription>{t("auth.change_email.success_message")}</AlertDescription>
+          </Alert>
+        ) : null}
+
+        <Form {...form}>
+          <form
+            className="space-y-3"
+            onSubmit={(event) => {
+              void form.handleSubmit(onSubmit)(event);
+            }}
+            noValidate
+          >
+            <FormField
+              control={form.control}
+              name="newEmail"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>{t("auth.change_email.new_email_label")}</FormLabel>
+                  <FormControl>
+                    <Input type="email" autoComplete="email" {...field} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <Button type="submit" disabled={form.formState.isSubmitting}>
+              {form.formState.isSubmitting
+                ? t("auth.change_email.submit_pending")
+                : t("auth.change_email.submit")}
+            </Button>
+          </form>
+        </Form>
+      </CardContent>
+    </Card>
+  );
+}
+
 function LinkedAccountsCard() {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
@@ -788,6 +880,7 @@ export function SecuritySettingsPage() {
     <div className="max-w-xl space-y-6 p-6">
       <h1 className="text-xl font-semibold">{t("common.nav.security")}</h1>
       <ChangePasswordCard />
+      <ChangeEmailCard />
       <SessionsCard />
       {modules.totp2fa ? <TwoFactorCard /> : null}
       {modules.totp2fa ? <SecurityKeysCard /> : null}

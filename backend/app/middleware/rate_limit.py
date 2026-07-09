@@ -25,7 +25,11 @@ def _request_id(request: Request) -> str:
 
 def rate_limit_exceeded_handler(request: Request, exc: Exception) -> JSONResponse:
     assert isinstance(exc, RateLimitExceeded)  # noqa: S101 — Starlette dispatches by registered exception class
-    error = ErrorBody(code="rate_limited", message=f"Rate limit exceeded: {exc.detail}")
+    error = ErrorBody(
+        code="rate_limited",
+        message_key="errors.rate_limited",
+        message=f"Rate limit exceeded: {exc.detail}",
+    )
     envelope = Envelope[None](error=error, meta=Meta(request_id=_request_id(request)))
     return JSONResponse(status_code=429, content=envelope.model_dump(mode="json"))
 

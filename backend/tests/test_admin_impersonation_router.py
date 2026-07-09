@@ -31,12 +31,15 @@ def redis(_redis_client: Redis) -> Redis:
     return _redis_client
 
 
-async def _make_user(session: AsyncSession, *, is_superadmin: bool = False) -> User:
+async def _make_user(
+    session: AsyncSession, *, is_superadmin: bool = False, totp_enabled: bool = False
+) -> User:
     user = await UserRepository(session).create(
         email=f"user-{uuid4()}@example.com",
         hashed_password=hash_password(_PASSWORD),
         email_verified_at=datetime.now(UTC),
         is_superadmin=is_superadmin,
+        totp_enabled=totp_enabled,
     )
     await session.commit()
     return user
@@ -45,7 +48,9 @@ async def _make_user(session: AsyncSession, *, is_superadmin: bool = False) -> U
 async def _as_superadmin(
     client: httpx.AsyncClient, session: AsyncSession
 ) -> tuple[httpx.AsyncClient, User]:
-    admin = await _make_user(session, is_superadmin=True)
+    # T-218: require_superadmin now also gates on 2FA being enrolled -- see
+    # test_dependencies.py's dedicated tests for that check itself.
+    admin = await _make_user(session, is_superadmin=True, totp_enabled=True)
     token = create_access_token(admin.id, None, ())
     client.headers["Authorization"] = f"Bearer {token}"
     return client, admin

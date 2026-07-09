@@ -13,7 +13,8 @@
     "trial_ending": "Your trial is ending soon",
     "trial_expired": "Your trial has ended",
     "file_uploaded": "A new file was uploaded",
-    "security_notification": "Security alert for your account"
+    "security_notification": "Security alert for your account",
+    "change_email": "Confirm your new email address"
   },
   "footer": {
     "ignore_notice": "If you didn't request this email, you can safely ignore it."
@@ -25,6 +26,14 @@
     "button": "Verify email",
     "paste_link": "Or paste this link into your browser:",
     "expires": "This link expires in 24 hours."
+  },
+  "change_email": {
+    "title": "Confirm your new email address",
+    "greeting": "Hi",
+    "body": "You (or someone with access to your ForgeSaaS account) requested to change your account email to this address. Confirm below to complete the change.",
+    "button": "Confirm new email",
+    "paste_link": "Or paste this link into your browser:",
+    "expires": "This link expires in 1 hour. If you didn't request this, you can safely ignore this email — your account email hasn't been changed."
   },
   "password_reset": {
     "title": "Reset your password",
@@ -118,7 +127,11 @@
       "oauth_linked": "Your account was linked to sign in with {provider}.",
       "oauth_unlinked": "Your account was unlinked from {provider}.",
       "webauthn_registered": "A new security key was registered on your account.",
-      "webauthn_removed": "A security key was removed from your account."
+      "webauthn_removed": "A security key was removed from your account.",
+      "totp_replay_rejected": "A two-factor code that had already been used was rejected on your account. If this wasn't you, someone may have intercepted a code of yours.",
+      "email_change_requested": "A request was made to change your account email to {new_email}. If this wasn't you, no changes have been made yet — you can ignore this.",
+      "email_changed": "Your account email address was changed to {new_email}.",
+      "totp_disabled_by_admin": "An administrator disabled two-factor authentication on your account as part of an account-recovery request. If you didn't request this, contact support immediately."
     },
     "button": "Review security settings",
     "footer": "If this wasn't you, reset your password immediately and review your active sessions."

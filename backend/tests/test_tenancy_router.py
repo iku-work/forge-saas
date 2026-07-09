@@ -12,6 +12,7 @@ docstring for why TestClient is avoided.
 """
 
 from collections.abc import AsyncGenerator, Callable, Iterator
+from datetime import UTC, datetime, timedelta
 from typing import Any
 from uuid import uuid4
 
@@ -217,6 +218,16 @@ async def _membership_for(session: AsyncSession, user: User, org: Organization) 
 
 def _auth_header(user: User) -> dict[str, str]:
     token = create_access_token(user.id, None, ())
+    return {"Authorization": f"Bearer {token}"}
+
+
+def _stale_auth_header(user: User) -> dict[str, str]:
+    # T-218: an access token whose auth_time is well outside
+    # require_recent_auth's window -- simulates a long-idle-but-still-valid
+    # session (silent refresh keeps minting new access tokens without ever
+    # re-verifying credentials, so auth_time doesn't move with them).
+    stale_auth_time = datetime.now(UTC) - timedelta(minutes=30)
+    token = create_access_token(user.id, None, (), auth_time=stale_auth_time)
     return {"Authorization": f"Bearer {token}"}
 
 
@@ -436,6 +447,19 @@ async def test_remove_member_last_owner_returns_409(
     )
 
     assert response.status_code == 409
+
+
+async def test_remove_member_without_recent_auth_returns_403(
+    client: httpx.AsyncClient, user_a: User, session: AsyncSession, org_a: Organization
+) -> None:
+    _, target = await _add_member(session, org_a)
+
+    response = await client.delete(
+        f"/api/v1/orgs/{org_a.id}/members/{target.id}", headers=_stale_auth_header(user_a)
+    )
+
+    assert response.status_code == 403
+    assert response.json()["error"]["code"] == "step_up_auth_required"
 
 
 async def test_remove_member_cross_tenant_target_returns_404(  # noqa: PLR0913 — needs both orgs' users

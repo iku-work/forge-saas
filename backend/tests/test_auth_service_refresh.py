@@ -18,12 +18,18 @@ from sqlalchemy.ext.asyncio import (
 from sqlmodel import SQLModel
 from testcontainers.postgres import PostgresContainer
 
+from app.core.config import get_settings
 from app.core.exceptions import AuthenticationError
 from app.modules.auth.models import Session as SessionModel
 from app.modules.auth.models import User
 from app.modules.auth.repository import SessionRepository, UserRepository
 from app.modules.auth.service import AuthService
-from app.modules.auth.utils import generate_refresh_token, hash_password, hash_token
+from app.modules.auth.utils import (
+    generate_refresh_token,
+    hash_password,
+    hash_token,
+    verify_access_token,
+)
 
 _TABLES = [User.__table__, SessionModel.__table__]
 _VALID_PASSWORD = "Correct-Horse9"
@@ -197,3 +203,118 @@ async def test_refresh_expired_token_raises(
 
     with pytest.raises(AuthenticationError):
         await service.refresh(plain, _IP, _USER_AGENT)
+
+
+# --- T-218: periodic re-authentication (absolute cap + idle timeout) -------------
+
+
+async def test_refresh_expired_token_does_not_revoke_other_sessions(
+    service: AuthService, verified_user: User, session_repo: SessionRepository
+) -> None:
+    """Unlike replaying a *revoked* token (theft signal, revokes everything),
+    a session that simply outlived its absolute cap is ordinary aging -- only
+    that one chain is rejected."""
+    plain = await _issue_session(
+        session_repo, verified_user, expires_at=datetime.now(UTC) - timedelta(minutes=1)
+    )
+    other_plain = await _issue_session(session_repo, verified_user)
+
+    with pytest.raises(AuthenticationError):
+        await service.refresh(plain, _IP, _USER_AGENT)
+
+    other_session = await session_repo.get_by_token_hash(hash_token(other_plain))
+    assert other_session is not None
+    assert other_session.revoked_at is None
+
+
+async def test_refresh_propagates_auth_time_unchanged_across_rotation(
+    service: AuthService, verified_user: User, session_repo: SessionRepository
+) -> None:
+    plain = await _issue_session(session_repo, verified_user)
+    original = await session_repo.get_by_token_hash(hash_token(plain))
+    assert original is not None
+
+    access_token, new_plain = await service.refresh(plain, _IP, _USER_AGENT)
+
+    new_session = await session_repo.get_by_token_hash(hash_token(new_plain))
+    assert new_session is not None
+    assert new_session.auth_time == original.auth_time
+    assert verify_access_token(access_token).auth_time == original.auth_time
+
+
+async def test_refresh_keeps_absolute_expiry_anchored_not_sliding(
+    service: AuthService, verified_user: User, session_repo: SessionRepository
+) -> None:
+    plain = await _issue_session(session_repo, verified_user)
+    original = await session_repo.get_by_token_hash(hash_token(plain))
+    assert original is not None
+
+    _, new_plain = await service.refresh(plain, _IP, _USER_AGENT)
+
+    new_session = await session_repo.get_by_token_hash(hash_token(new_plain))
+    assert new_session is not None
+    assert new_session.expires_at == original.expires_at
+
+
+async def test_refresh_idle_timeout_rejected(
+    service: AuthService,
+    verified_user: User,
+    session_repo: SessionRepository,
+    session: AsyncSession,
+) -> None:
+    plain = await _issue_session(session_repo, verified_user)
+    stale = await session_repo.get_by_token_hash(hash_token(plain))
+    assert stale is not None
+    settings = get_settings()
+    stale.last_seen_at = datetime.now(UTC) - timedelta(
+        minutes=settings.REFRESH_TOKEN_IDLE_TIMEOUT_MINUTES + 1
+    )
+    await session.flush()
+
+    with pytest.raises(AuthenticationError):
+        await service.refresh(plain, _IP, _USER_AGENT)
+
+
+async def test_refresh_idle_timeout_does_not_revoke_other_sessions(
+    service: AuthService,
+    verified_user: User,
+    session_repo: SessionRepository,
+    session: AsyncSession,
+) -> None:
+    plain = await _issue_session(session_repo, verified_user)
+    stale = await session_repo.get_by_token_hash(hash_token(plain))
+    assert stale is not None
+    settings = get_settings()
+    stale.last_seen_at = datetime.now(UTC) - timedelta(
+        minutes=settings.REFRESH_TOKEN_IDLE_TIMEOUT_MINUTES + 1
+    )
+    await session.flush()
+    other_plain = await _issue_session(session_repo, verified_user)
+
+    with pytest.raises(AuthenticationError):
+        await service.refresh(plain, _IP, _USER_AGENT)
+
+    other_session = await session_repo.get_by_token_hash(hash_token(other_plain))
+    assert other_session is not None
+    assert other_session.revoked_at is None
+
+
+async def test_refresh_within_idle_window_succeeds(
+    service: AuthService,
+    verified_user: User,
+    session_repo: SessionRepository,
+    session: AsyncSession,
+) -> None:
+    plain = await _issue_session(session_repo, verified_user)
+    fresh = await session_repo.get_by_token_hash(hash_token(plain))
+    assert fresh is not None
+    settings = get_settings()
+    fresh.last_seen_at = datetime.now(UTC) - timedelta(
+        minutes=settings.REFRESH_TOKEN_IDLE_TIMEOUT_MINUTES - 1
+    )
+    await session.flush()
+
+    access_token, new_plain = await service.refresh(plain, _IP, _USER_AGENT)
+
+    assert access_token
+    assert new_plain

@@ -139,6 +139,7 @@ async def _seed_export_footprint(session: AsyncSession, user: User, org: Organiz
             user_agent="pytest",
             last_seen_at=datetime.now(UTC),
             expires_at=_future(),
+            auth_time=datetime.now(UTC),
         )
     )
     session.add(OAuthAccount(user_id=user.id, provider="google", provider_user_id=str(user.id)))

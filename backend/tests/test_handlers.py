@@ -51,6 +51,7 @@ def test_domain_error_returns_envelope_with_status_and_code() -> None:
     assert body["data"] is None
     assert body["error"] == {
         "code": "not_found",
+        "message_key": "errors.widget_not_found",
         "message": "widget not found",
         "details": {"id": "abc"},
     }

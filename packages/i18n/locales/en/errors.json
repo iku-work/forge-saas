@@ -63,5 +63,9 @@
   "token_revoked": "Token has been revoked.",
   "cannot_impersonate_superadmin": "Cannot impersonate another superadmin.",
   "not_impersonating": "This token is not an impersonation session.",
-  "service_unavailable": "{feature} is temporarily unavailable. Please try again shortly."
+  "service_unavailable": "{feature} is temporarily unavailable. Please try again shortly.",
+  "step_up_auth_required": "This action requires you to have signed in recently. Please log in again to continue.",
+  "superadmin_2fa_required": "Superadmin accounts must enable two-factor authentication (an authenticator app or a security key) before accessing admin features.",
+  "email_unchanged": "This is already your current email address.",
+  "invalid_email_change_token": "This email change link is invalid or has expired."
 }

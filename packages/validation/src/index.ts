@@ -40,6 +40,10 @@ export const forgotPasswordSchema = z.object({
   email: z.string().email("validation.email_invalid"),
 });
 
+export const changeEmailSchema = z.object({
+  newEmail: z.string().email("validation.email_invalid"),
+});
+
 export const magicLinkSchema = z.object({
   email: z.string().email("validation.email_invalid"),
 });
@@ -55,5 +59,6 @@ export type RegisterInput = z.infer<typeof registerSchema>;
 export type PasswordResetInput = z.infer<typeof passwordResetSchema>;
 export type ChangePasswordInput = z.infer<typeof changePasswordSchema>;
 export type ForgotPasswordInput = z.infer<typeof forgotPasswordSchema>;
+export type ChangeEmailInput = z.infer<typeof changeEmailSchema>;
 export type MagicLinkInput = z.infer<typeof magicLinkSchema>;
 export type ProfileInput = z.infer<typeof profileSchema>;

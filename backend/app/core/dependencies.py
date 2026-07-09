@@ -11,7 +11,7 @@ layer the same way app.modules.auth.service does.
 
 import json
 from collections.abc import Awaitable, Callable
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Annotated, Any
 from uuid import UUID
 
@@ -23,11 +23,17 @@ from sentry_sdk import set_user as set_sentry_user
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.db import get_session
-from app.core.exceptions import AuthenticationError, DomainError, PermissionDeniedError
+from app.core.exceptions import (
+    AuthenticationError,
+    DomainError,
+    PermissionDeniedError,
+    StepUpAuthRequiredError,
+)
 from app.core.token_blocklist import is_jti_blocked
+from app.models._mixins import utcnow
 from app.modules.auth.models import User
 from app.modules.auth.permissions import ROLE_PERMISSIONS, Permission
-from app.modules.auth.repository import UserRepository
+from app.modules.auth.repository import UserRepository, WebAuthnCredentialRepository
 from app.modules.auth.utils import verify_access_token
 from app.modules.tenancy.models import Membership, Organization
 from app.modules.tenancy.repository import MembershipRepository, OrganizationRepository
@@ -94,6 +100,10 @@ async def get_current_user(
         # revocation) lands here -- distinct from refresh-token rotation
         # (SessionRepository), which revokes a whole session, not one jti.
         raise AuthenticationError("errors.token_revoked", fallback="Token has been revoked")
+    # T-218: stashed for require_recent_auth below to read without decoding
+    # the token a second time -- FastAPI dedups get_current_user across
+    # dependencies within one request, so this always runs first.
+    request.state.auth_time = payload.auth_time
     cache_key = _user_cache_key(payload.user_id)
 
     cached = await redis.get(cache_key)
@@ -141,18 +151,36 @@ async def get_current_org(
 
 
 async def require_superadmin(
-    request: Request, user: Annotated[User, Depends(get_current_user)]
+    request: Request,
+    user: Annotated[User, Depends(get_current_user)],
+    session: Annotated[AsyncSession, Depends(get_session)],
 ) -> User:
     """
     T-140: a platform-level role, distinct from org-scoped RBAC above --
     gates every route under /api/v1/admin/. Every access (not just mutations)
     is logged with admin_action=True, which app.core.logging's dedicated
     sink routes into admin-audit.log in addition to the normal log stream.
+
+    T-218/ASVS V4.3.1: a superadmin account without a second factor enrolled
+    (TOTP or WebAuthn) is rejected outright -- the platform-operator role
+    this dependency gates is high enough value that "password alone" isn't
+    an acceptable posture for it, regardless of what an individual org's own
+    2FA policy allows its members.
     """
     if not user.is_superadmin:
         raise PermissionDeniedError(
             "errors.superadmin_required", fallback="Superadmin access required"
         )
+    if not user.totp_enabled:
+        has_webauthn = await WebAuthnCredentialRepository(session).exists_for_user(user.id)
+        if not has_webauthn:
+            raise PermissionDeniedError(
+                "errors.superadmin_2fa_required",
+                fallback=(
+                    "Superadmin accounts must enable two-factor authentication (an "
+                    "authenticator app or a security key) before accessing admin features."
+                ),
+            )
     logger.bind(
         admin_action=True,
         actor_id=str(user.id),
@@ -162,6 +190,33 @@ async def require_superadmin(
         target=dict(request.path_params) or None,
     ).info("admin.access")
     return user
+
+
+def require_recent_auth(max_age_minutes: int) -> Callable[..., Awaitable[None]]:
+    """T-218/ASVS V3.7.1/V4.3.3: gates a sensitive action on the caller's
+    session having been established (or refreshed via a *real*
+    re-authentication -- see Session.auth_time's docstring) within
+    `max_age_minutes`. A silently-refreshed access token never advances
+    auth_time, so a session idling well past this window still fails here
+    even though get_current_user itself accepts the (still otherwise valid)
+    access token.
+    """
+
+    async def checker(
+        request: Request,
+        user: Annotated[User, Depends(get_current_user)],  # noqa: ARG001 -- ensures auth_time is set
+    ) -> None:
+        auth_time: datetime = request.state.auth_time
+        if utcnow() - auth_time > timedelta(minutes=max_age_minutes):
+            raise StepUpAuthRequiredError(
+                "errors.step_up_auth_required",
+                fallback=(
+                    "This action requires you to have signed in recently. "
+                    "Please log in again to continue."
+                ),
+            )
+
+    return checker
 
 
 def require_permission(permission: Permission) -> Callable[..., Awaitable[Membership]]:

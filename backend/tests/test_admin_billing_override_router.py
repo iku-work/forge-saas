@@ -76,11 +76,13 @@ async def _make_subscription(  # noqa: PLR0913 -- test helper covers every optio
 
 
 async def _as_superadmin(client: httpx.AsyncClient, session: AsyncSession) -> httpx.AsyncClient:
+    # T-218: require_superadmin now also gates on 2FA being enrolled.
     user = await UserRepository(session).create(
         email=f"admin-{uuid4()}@example.com",
         hashed_password=hash_password(_PASSWORD),
         email_verified_at=datetime.now(UTC),
         is_superadmin=True,
+        totp_enabled=True,
     )
     await session.commit()
     token = create_access_token(user.id, None, ())

@@ -7,6 +7,7 @@ WebAuthn/FIDO2 registration + assertion as an alternative second factor
 (T-217).
 """
 
+import hmac
 import json
 import logging
 import secrets
@@ -35,6 +36,7 @@ from app.modules.audit.service import AuditService
 from app.modules.auth.models import OAuthAccount, TOTPSecret, User, WebAuthnCredential
 from app.modules.auth.models import Session as SessionModel
 from app.modules.auth.repository import (
+    EmailChangeTokenRepository,
     EmailVerificationTokenRepository,
     MagicLinkTokenRepository,
     OAuthAccountRepository,
@@ -60,6 +62,7 @@ logger = logging.getLogger(__name__)
 _EMAIL_VERIFICATION_TOKEN_TTL = timedelta(hours=24)
 _PASSWORD_RESET_TOKEN_TTL = timedelta(hours=1)
 _MAGIC_LINK_TOKEN_TTL = timedelta(minutes=15)
+_EMAIL_CHANGE_TOKEN_TTL = timedelta(hours=1)
 _MAX_FAILED_LOGIN_ATTEMPTS = 10
 _LOCKOUT_DURATION = timedelta(minutes=15)
 # Hashed once at import time so a login for an unknown email (or an
@@ -92,6 +95,21 @@ class TwoFactorChallenge:
     temp_token: str
 
 
+def _match_totp_step(secret: str, code: str) -> int | None:
+    """Returns the TOTP time-step `code` matches (current step +/- 1, i.e.
+    the same tolerance `valid_window=1` gave the old plain `.verify()` call),
+    or None if it matches none of them. Unlike `.verify()`, this identifies
+    *which* step matched, which is what makes same-step replay detection
+    possible below."""
+    totp = pyotp.TOTP(secret)
+    now = utcnow()
+    current_step = totp.timecode(now)
+    for offset in (-1, 0, 1):
+        if hmac.compare_digest(totp.at(now, offset), code):
+            return current_step + offset
+    return None
+
+
 class AuthService:
     def __init__(self, session: AsyncSession) -> None:
         self._users = UserRepository(session)
@@ -102,6 +120,7 @@ class AuthService:
         self._oauth_accounts = OAuthAccountRepository(session)
         self._totp_secrets = TOTPSecretRepository(session)
         self._webauthn_credentials = WebAuthnCredentialRepository(session)
+        self._email_change_tokens = EmailChangeTokenRepository(session)
         self._audit = AuditService(session)
 
     async def register(self, req: RegisterRequest) -> None:
@@ -218,20 +237,37 @@ class AuthService:
         return result
 
     async def _create_session(self, user: User, ip: str, user_agent: str) -> tuple[str, str, User]:
-        access_token = create_access_token(user.id, None, ())
-        refresh_plain, refresh_hash = generate_refresh_token()
         settings = get_settings()
+        now = utcnow()
+        access_token = create_access_token(user.id, None, (), auth_time=now)
+        refresh_plain, refresh_hash = generate_refresh_token()
         await self._sessions.create(
             user_id=user.id,
             token_hash=refresh_hash,
             device_label=None,
             ip_address=ip,
             user_agent=user_agent,
-            expires_at=utcnow() + timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS),
+            expires_at=now + timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS),
+            auth_time=now,
         )
         return access_token, refresh_plain, user
 
     async def refresh(self, refresh_token_plain: str, ip: str, user_agent: str) -> tuple[str, str]:
+        """T-019's theft detection, plus T-218's periodic re-authentication
+        (ASVS V3.3.2): a token can be rejected for three distinct reasons,
+        only one of which is a theft signal --
+
+        - `revoked_at` set: this exact token was already rotated away (or
+          explicitly logged out) and is being replayed -- the signature of a
+          stolen refresh token, so every session the user has gets revoked.
+        - absolute lifetime (`expires_at`, anchored to the session chain's
+          original `auth_time` and never extended by rotation) exceeded:
+          ordinary aging, not an attack -- just this one chain is rejected,
+          asking the user to log in again.
+        - idle timeout (`last_seen_at` older than
+          REFRESH_TOKEN_IDLE_TIMEOUT_MINUTES) exceeded: same as above, ordinary
+          inactivity, not an attack.
+        """
         session = await self._sessions.get_by_token_hash(hash_token(refresh_token_plain))
 
         if session is None:
@@ -240,13 +276,18 @@ class AuthService:
                 fallback="Your session is no longer valid. Please log in again.",
             )
 
-        if session.revoked_at is not None or session.expires_at <= utcnow():
-            # A revoked-or-expired token being presented again is the
-            # signature of a stolen refresh token (rotation means the
-            # legitimate client already moved on to a newer one). Revoking
-            # every session the user has -- not just this one -- is what
-            # actually kicks out an attacker replaying it from another device.
+        if session.revoked_at is not None:
             await self._sessions.revoke_all_for_user(session.user_id)
+            raise AuthenticationError(
+                "errors.session_invalid",
+                fallback="Your session is no longer valid. Please log in again.",
+            )
+
+        settings = get_settings()
+        now = utcnow()
+        idle_cutoff = now - timedelta(minutes=settings.REFRESH_TOKEN_IDLE_TIMEOUT_MINUTES)
+        if session.expires_at <= now or session.last_seen_at < idle_cutoff:
+            await self._sessions.revoke(session.id)
             raise AuthenticationError(
                 "errors.session_invalid",
                 fallback="Your session is no longer valid. Please log in again.",
@@ -254,16 +295,20 @@ class AuthService:
 
         await self._sessions.revoke(session.id)
 
-        access_token = create_access_token(session.user_id, None, ())
+        access_token = create_access_token(session.user_id, None, (), auth_time=session.auth_time)
         refresh_plain, refresh_hash = generate_refresh_token()
-        settings = get_settings()
         await self._sessions.create(
             user_id=session.user_id,
             token_hash=refresh_hash,
             device_label=session.device_label,
             ip_address=ip,
             user_agent=user_agent,
-            expires_at=utcnow() + timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS),
+            # Absolute cap stays anchored to the chain's original auth_time
+            # rather than sliding forward on every rotation -- otherwise an
+            # actively-used session would never hit the periodic-re-auth
+            # target ASVS V3.3.2 asks for.
+            expires_at=session.expires_at,
+            auth_time=session.auth_time,
         )
 
         return access_token, refresh_plain
@@ -443,6 +488,94 @@ class AuthService:
         await self._oauth_accounts.delete(account.id)
         await self._enqueue_security_notification_email(user, "oauth_unlinked", provider=provider)
 
+    async def request_email_change(self, user: User, new_email: str) -> None:
+        """T-218 (minimal implementation -- see T-226's follow-up task for the
+        production-ready version). Enumeration-safe the same way
+        request_password_reset() is: if `new_email` already belongs to a
+        *different* user, this silently no-ops rather than raising a
+        conflict, so the response an authenticated caller sees doesn't leak
+        whether an arbitrary address is registered to someone else.
+        """
+        if new_email == user.email:
+            raise ConflictError(
+                "errors.email_unchanged", fallback="This is already your current email address"
+            )
+
+        existing = await self._users.get_by_email(new_email)
+        if existing is not None:
+            logger.warning(
+                "auth.request_email_change: target address already registered "
+                "(user_id=%s, target_user_id=%s)",
+                user.id,
+                existing.id,
+            )
+            return
+
+        plain_token, token_hash = generate_refresh_token()
+        await self._email_change_tokens.create(
+            user_id=user.id,
+            new_email=new_email,
+            token_hash=token_hash,
+            expires_at=utcnow() + _EMAIL_CHANGE_TOKEN_TTL,
+        )
+        settings = get_settings()
+        await jobs.enqueue_job(
+            "send_email",
+            to=new_email,
+            template="change_email",
+            locale=user.locale,
+            context={
+                "user_name": user.full_name,
+                "confirm_url": f"{settings.FRONTEND_URL}/confirm-email-change?token={plain_token}",
+            },
+        )
+        # Notifies the *current* address too (ASVS V2.5.5) -- so a real
+        # account owner finds out about a change they didn't request even
+        # before it's confirmed, not just after.
+        await self._enqueue_security_notification_email(
+            user, "email_change_requested", new_email=new_email
+        )
+
+    async def confirm_email_change(self, token: str) -> User:
+        record = await self._email_change_tokens.get_by_hash(hash_token(token))
+        if record is None:
+            raise AuthenticationError(
+                "errors.invalid_email_change_token",
+                fallback="This email change link is invalid or has expired",
+            )
+
+        user = await self._users.get_by_id(record.user_id)
+        if user is None:
+            raise AuthenticationError(
+                "errors.invalid_email_change_token",
+                fallback="This email change link is invalid or has expired",
+            )
+
+        # Re-checked at confirm time, not just at request time -- the target
+        # address could have been claimed by someone else in the interim.
+        existing = await self._users.get_by_email(record.new_email)
+        if existing is not None and existing.id != user.id:
+            raise ConflictError(
+                "errors.conflict", fallback="This email address is no longer available"
+            )
+
+        await self._email_change_tokens.mark_used(record.id)
+        old_email = user.email
+        # Sent to the *old* address before the mutation below -- the User
+        # object this method holds and the one UserRepository.update()
+        # fetches are the same SQLAlchemy identity-mapped instance, so
+        # user.email would already read as the *new* address afterward.
+        await self._enqueue_security_notification_email(
+            user, "email_changed", new_email=record.new_email
+        )
+        updated = await self._users.update(user.id, email=record.new_email)
+        logger.info(
+            "auth.confirm_email_change: email changed (user_id=%s, old_email=%s)",
+            user.id,
+            old_email,
+        )
+        return updated
+
     async def logout(self, refresh_token_plain: str) -> None:
         session = await self._sessions.get_by_token_hash(hash_token(refresh_token_plain))
         if session is not None:
@@ -499,7 +632,7 @@ class AuthService:
                 fallback="No pending two-factor setup to verify",
             )
 
-        if not pyotp.TOTP(record.secret_encrypted).verify(code, valid_window=1):
+        if not await self._verify_totp_and_track_replay(user, record, code):
             raise AuthenticationError(
                 "errors.invalid_totp_code", fallback="Invalid two-factor code"
             )
@@ -523,7 +656,7 @@ class AuthService:
                 fallback="Two-factor authentication is not enabled",
             )
 
-        if not pyotp.TOTP(record.secret_encrypted).verify(code, valid_window=1):
+        if not await self._verify_totp_and_track_replay(user, record, code):
             raise AuthenticationError(
                 "errors.invalid_totp_code", fallback="Invalid two-factor code"
             )
@@ -556,12 +689,40 @@ class AuthService:
                 fallback="Invalid or expired two-factor session",
             )
 
-        if pyotp.TOTP(record.secret_encrypted).verify(
-            code, valid_window=1
+        if await self._verify_totp_and_track_replay(
+            user, record, code
         ) or await self._consume_backup_code(record, code):
             return await self._create_session(user, ip, user_agent)
 
         raise AuthenticationError("errors.invalid_totp_code", fallback="Invalid two-factor code")
+
+    async def _verify_totp_and_track_replay(
+        self, user: User, record: TOTPSecret, code: str
+    ) -> bool:
+        """T-218/ASVS V2.8.4-V2.8.5: wraps `_match_totp_step` with
+        replay tracking -- a code matching a step at or before the last one
+        already consumed is rejected even though it's still inside pyotp's
+        own +/-1 validity window, and every successful match advances
+        `last_consumed_step` so it can't be replayed itself. A rejected
+        replay is logged *and* notified (ASVS V2.8.5) -- unlike an ordinary
+        wrong code, this specific failure shape means someone possesses a
+        code the legitimate user already used, which is a stronger signal
+        than a typo.
+        """
+        step = _match_totp_step(record.secret_encrypted, code)
+        if step is None:
+            return False
+        if record.last_consumed_step is not None and step <= record.last_consumed_step:
+            logger.warning(
+                "auth.totp: replay rejected (user_id=%s, step=%s, last_consumed_step=%s)",
+                record.user_id,
+                step,
+                record.last_consumed_step,
+            )
+            await self._enqueue_security_notification_email(user, "totp_replay_rejected")
+            return False
+        await self._totp_secrets.mark_step_consumed(record.user_id, step)
+        return True
 
     async def _consume_backup_code(self, record: TOTPSecret, code: str) -> bool:
         hashed_codes: list[str] = json.loads(record.backup_codes_hash)
@@ -778,13 +939,21 @@ class AuthService:
         )
 
     async def _enqueue_security_notification_email(
-        self, user: User, event: str, *, provider: str | None = None
+        self,
+        user: User,
+        event: str,
+        *,
+        provider: str | None = None,
+        new_email: str | None = None,
     ) -> None:
-        # T-216/T-217/ASVS V2.2.3, V2.5.5: fired on password change, 2FA
-        # enable/disable, OAuth link/unlink, and WebAuthn registration --
-        # `event` selects the body copy the SecurityNotification template
-        # renders (see
-        # packages/email-templates/src/templates/SecurityNotification.tsx).
+        # T-216/T-217/T-218/ASVS V2.2.3, V2.5.5: fired on password change, 2FA
+        # enable/disable, OAuth link/unlink, WebAuthn registration, TOTP
+        # replay rejection, and email change request/completion -- `event`
+        # selects the body copy the SecurityNotification template renders
+        # (see packages/email-templates/src/templates/SecurityNotification.tsx).
+        # Always sent to `user.email` -- callers around an email-change flow
+        # must pass a `user` object whose `.email` still reads as whichever
+        # address (old or new) is the intended recipient at that point.
         settings = get_settings()
         await jobs.enqueue_job(
             "send_email",
@@ -795,6 +964,7 @@ class AuthService:
                 "user_name": user.full_name,
                 "event": event,
                 "provider": provider.capitalize() if provider else None,
+                "new_email": new_email,
                 "settings_url": f"{settings.FRONTEND_URL}/settings/security",
             },
         )

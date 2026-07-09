@@ -18,13 +18,19 @@ from redis.asyncio import Redis
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.db import get_session
-from app.core.dependencies import get_current_user, get_redis, invalidate_user_cache
+from app.core.dependencies import (
+    get_current_user,
+    get_redis,
+    invalidate_user_cache,
+    require_recent_auth,
+)
 from app.core.envelope import Envelope, Meta
 from app.core.exceptions import AuthenticationError
 from app.middleware.rate_limit import api_limit, auth_limit, sensitive_limit
 from app.modules.auth.models import User
 from app.modules.auth.schemas import (
     ChangePasswordRequest,
+    ConfirmEmailChangeRequest,
     LoginRequest,
     LoginResponse,
     MagicLinkConsumeRequest,
@@ -34,6 +40,7 @@ from app.modules.auth.schemas import (
     RefreshRequest,
     RefreshResponse,
     RegisterRequest,
+    RequestEmailChangeRequest,
     SessionPublic,
     TwoFactorRequiredResponse,
     UpdateMeRequest,
@@ -298,6 +305,36 @@ async def change_password(
     )
     await session.commit()
     return Envelope(data=None, meta=Meta(request_id=_request_id(request)))
+
+
+@router.post("/change-email")
+@sensitive_limit
+async def request_email_change(
+    request: Request,
+    body: RequestEmailChangeRequest,
+    user: Annotated[User, Depends(get_current_user)],
+    _recent_auth: Annotated[None, Depends(require_recent_auth(max_age_minutes=5))],
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> Envelope[None]:
+    await AuthService(session).request_email_change(user, body.new_email)
+    await session.commit()
+    return Envelope(data=None, meta=Meta(request_id=_request_id(request)))
+
+
+@router.post("/change-email/confirm")
+@auth_limit
+async def confirm_email_change(
+    request: Request,
+    body: ConfirmEmailChangeRequest,
+    session: Annotated[AsyncSession, Depends(get_session)],
+    redis: Annotated[Redis, Depends(get_redis)],
+) -> Envelope[UserPublic]:
+    updated = await AuthService(session).confirm_email_change(body.token)
+    await session.commit()
+    await invalidate_user_cache(redis, updated.id)
+    return Envelope(
+        data=UserPublic.model_validate(updated), meta=Meta(request_id=_request_id(request))
+    )
 
 
 @router.get("/sessions")

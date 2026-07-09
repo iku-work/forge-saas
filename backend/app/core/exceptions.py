@@ -57,6 +57,18 @@ class UnprocessableEntityError(DomainError):
     default_message_key = "errors.unprocessable_entity"
 
 
+class StepUpAuthRequiredError(DomainError):
+    """T-218: the caller has a valid session but it wasn't established (or
+    refreshed via a full re-authentication) recently enough for the
+    sensitive action being attempted -- distinct from PermissionDeniedError
+    so the frontend can react by prompting for re-auth instead of just
+    showing an access-denied message."""
+
+    status_code = 403
+    code = "step_up_auth_required"
+    default_message_key = "errors.step_up_auth_required"
+
+
 class RateLimitError(DomainError):
     status_code = 429
     code = "rate_limited"

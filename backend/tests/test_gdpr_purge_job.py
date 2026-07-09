@@ -180,6 +180,7 @@ async def _seed_full_footprint(session: AsyncSession, user: User, org: Organizat
             user_agent="pytest",
             last_seen_at=datetime.now(UTC),
             expires_at=_future(),
+            auth_time=datetime.now(UTC),
         )
     )
     session.add(Membership(user_id=user.id, org_id=org.id, role=MemberRole.MEMBER))

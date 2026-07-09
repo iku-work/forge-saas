@@ -192,7 +192,7 @@ questionnaire) — evidence links point at real files, not at task IDs.
 | V2.5.4 | No shared/default accounts | met | No hardcoded default admin/root credentials found; `backend/app/core/seed.py` is dev-only seed data. |
 | V2.5.5 | User notified if an auth factor is changed/replaced | met | Same fix as V2.2.3 — `_enqueue_security_notification_email` fires on 2FA enable/disable and OAuth link/unlink, not just password change. Closed by T-216. |
 | V2.5.6 | Recovery uses a secure mechanism (TOTP, offline, signed link) | met | Reset/magic-link uses `itsdangerous`-signed, single-use, time-limited tokens (`backend/app/modules/auth/utils.py:111-117`). |
-| V2.5.7 | Lost-MFA recovery re-verifies identity at enrollment level | partial | `disable_2fa` requires password + code; if a user loses both their TOTP device and all backup codes, there's no documented admin-assisted recovery path. Follow-up: T-218. |
+| V2.5.7 | Lost-MFA recovery re-verifies identity at enrollment level | met | `disable_2fa` (self-service) still requires password + code. For the actual lost-everything case, `POST /admin/users/{id}/disable-totp` (`AdminAccountRecoveryService.disable_totp_for_user`, `backend/app/modules/admin/service.py`) is a mandatory-reason, fully-audited (`severity="elevated"`) superadmin action, documented end-to-end (identity-verification steps, limitations) in `docs/runbooks/account-recovery.md`. Closed by T-218. |
 
 #### V2.6 Look-up Secret Verifier
 
@@ -220,8 +220,8 @@ questionnaire) — evidence links point at real files, not at task IDs.
 | V2.8.1 | Time-based OTP has a defined lifetime | met | `pyotp.TOTP(...).verify(code, valid_window=1)` — standard 30-second step, ±1 window (`backend/app/modules/auth/service.py`). |
 | V2.8.2 | Symmetric keys for OTP verification highly protected | met | TOTP secret stored via `EncryptedString` (Fernet, encrypted-at-rest) — an appropriate protection level for L2; HSM-backed storage is an L3 expectation. |
 | V2.8.3 | Approved crypto algorithms for OTP generation/verification | met | `pyotp` implements RFC 6238 TOTP (HMAC-SHA1), an industry-standard library. |
-| V2.8.4 | Time-based OTP usable only once within its validity window | partial | `verify(code, valid_window=1)` checks validity but doesn't by itself track whether that exact code was already consumed within the same step — a code could be replayed within its ~30s window. Follow-up: T-218. |
-| V2.8.5 | Reused time-based OTP is logged, rejected, and notified | partial | Same root cause as V2.8.4 — no replay tracking exists to log/reject/notify on. Follow-up: T-218. |
+| V2.8.4 | Time-based OTP usable only once within its validity window | met | `TOTPSecret.last_consumed_step` (added by T-218) tracks the wall-clock step of the last code actually consumed; `AuthService._verify_totp_and_track_replay` rejects any code matching that step or earlier even though it's still inside pyotp's own `valid_window=1` tolerance. Applied uniformly at every verification call site (`verify_2fa`, `disable_2fa`, `confirm_login_2fa`). Closed by T-218. |
+| V2.8.5 | Reused time-based OTP is logged, rejected, and notified | met | Same mechanism as V2.8.4 — a rejected replay is logged (`logger.warning`) and the user is emailed a `totp_replay_rejected` security-notification event, not just silently rejected. Closed by T-218. |
 | V2.8.6 | Physical OTP generator revocable, effective across sessions immediately | met | TOTP is software-based, not physical; `disable_2fa` immediately revokes, and `backend/app/core/token_blocklist.py` supports immediate session-wide invalidation. |
 
 #### V2.9 Cryptographic Verifier
@@ -263,7 +263,7 @@ questionnaire) — evidence links point at real files, not at task IDs.
 | ID | Requirement | Status | Evidence |
 |---|---|---|---|
 | V3.3.1 | Logout/expiry invalidates the token, no back-button resume | met | `logout()` revokes the session row; access tokens expire in 15 minutes; refresh-token reuse triggers full revocation (`backend/app/modules/auth/service.py:202-237`). |
-| V3.3.2 | Periodic re-authentication (L2 target: ~12h or 30min idle) | partial | Access-token TTL forces a refresh every 15 minutes, but the refresh token itself is valid 30 days with no idle-timeout or forced periodic re-auth. Follow-up: T-218. |
+| V3.3.2 | Periodic re-authentication (L2 target: ~12h or 30min idle) | met | `Session.auth_time` (added by T-218) anchors a session chain to its original login and is never extended by `refresh()`'s rotation, so `REFRESH_TOKEN_EXPIRE_DAYS` is now a true absolute cap rather than a sliding one — a session forces a fresh login after 30 days regardless of activity. A separate `REFRESH_TOKEN_IDLE_TIMEOUT_MINUTES` (default 720, i.e. 12h — the ADR's own cited L2 target) rejects a refresh whose session hasn't been used within that window; set to 30 for the stricter alternative target. `require_recent_auth` additionally gates specific sensitive actions on a 5-minute step-up window (see V3.7.1). Closed by T-218. |
 | V3.3.3 | Option to terminate all other sessions after password change | met | `confirm_password_reset` revokes all sessions (`backend/app/modules/auth/service.py:273`); `logout_all()` available on demand. |
 | V3.3.4 | Users can view/log out of all active sessions | met | `GET /api/v1/auth/sessions` + `DELETE /api/v1/auth/sessions/{id}` (`backend/app/modules/auth/router.py`), scoped to the caller and revocable individually; surfaced in Settings > Security's `SessionsCard` (`apps/web/src/features/settings/SecuritySettingsPage.tsx`). `logout_all()` remains available for "sign out everywhere". |
 
@@ -289,7 +289,7 @@ questionnaire) — evidence links point at real files, not at task IDs.
 
 | ID | Requirement | Status | Evidence |
 |---|---|---|---|
-| V3.7.1 | Full valid session or re-auth required before sensitive actions | partial | `disable_2fa` requires password re-entry, but there's no general step-up re-auth before other sensitive actions (e.g. email change, billing changes). Follow-up: T-218. |
+| V3.7.1 | Full valid session or re-auth required before sensitive actions | met | `disable_2fa` still requires password re-entry directly. The new `require_recent_auth(max_age_minutes=5)` dependency (`backend/app/core/dependencies.py`) additionally gates `POST /auth/change-email`, `POST /billing/checkout-session`, and `DELETE /orgs/{org_id}/members/{membership_id}` on the caller's session having a recent enough `auth_time` (a real login/2FA/WebAuthn event, never advanced by silent access-token refresh) — a stale session gets `403 step_up_auth_required` instead of silently succeeding. Closed by T-218. |
 
 ### V4 — Access Control
 
@@ -313,9 +313,9 @@ questionnaire) — evidence links point at real files, not at task IDs.
 
 | ID | Requirement | Status | Evidence |
 |---|---|---|---|
-| V4.3.1 | Administrative interfaces require MFA | partial | `require_superadmin` (`backend/app/core/dependencies.py:143-164`) gates on `is_superadmin` + normal login; 2FA is not mandatory for superadmin accounts. Follow-up: T-218. |
+| V4.3.1 | Administrative interfaces require MFA | met | `require_superadmin` (`backend/app/core/dependencies.py`) now also rejects a superadmin caller with neither `totp_enabled` nor a registered WebAuthn credential (`errors.superadmin_2fa_required`, 403) before the admin-audit log line is even written. Closed by T-218. |
 | V4.3.2 | No directory browsing/metadata disclosure | met | Backend is a containerized app served through Caddy; no static directory listing is configured, and `.git`/build artifacts aren't part of the runtime image. |
-| V4.3.3 | Step-up/adaptive auth or segregation of duties for high-value actions | partial | Admin impersonation has strong controls (superadmin-only, 60-minute cap, fully audited — `backend/app/modules/admin/service.py:576-648`), but general step-up auth for other high-value actions (e.g. billing changes) doesn't exist. Follow-up: T-218. |
+| V4.3.3 | Step-up/adaptive auth or segregation of duties for high-value actions | met | Admin impersonation retains its own strong controls (superadmin-only, 60-minute cap, fully audited — `backend/app/modules/admin/service.py:576-648`). General step-up auth for other high-value actions now exists too — see V3.7.1's `require_recent_auth` evidence. Closed by T-218. |
 
 ### V5 — Validation, Sanitization and Encoding
 

@@ -1264,3 +1264,13 @@ class WebAuthnLoginOptionsResponse(AppBaseModel):
 class WebAuthnLoginRequest(AppBaseModel):
     challenge_token: str
     credential: dict[str, Any]
+
+
+class RequestEmailChangeRequest(AppBaseModel):
+    # T-218 (minimal implementation -- see T-226's follow-up task for the
+    # production-ready version, e.g. re-verifying the old address too).
+    new_email: EmailStr
+
+
+class ConfirmEmailChangeRequest(AppBaseModel):
+    token: str

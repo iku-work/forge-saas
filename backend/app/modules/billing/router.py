@@ -20,7 +20,12 @@ from redis.asyncio import Redis
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.db import get_session
-from app.core.dependencies import get_current_org, get_redis, require_permission
+from app.core.dependencies import (
+    get_current_org,
+    get_redis,
+    require_permission,
+    require_recent_auth,
+)
 from app.core.envelope import Envelope, Meta
 from app.middleware.rate_limit import api_limit
 from app.modules.auth.permissions import Permission
@@ -44,13 +49,14 @@ def _request_id(request: Request) -> str:
 
 @router.post("/checkout-session")
 @api_limit
-async def create_checkout_session(  # noqa: PLR0913 — T-120 adds redis on top of the existing 5
+async def create_checkout_session(  # noqa: PLR0913 — T-120/T-218 add redis+step-up on top of the existing 5
     request: Request,
     body: CheckoutSessionRequest,
     org_and_membership: Annotated[tuple[Organization, Membership], Depends(get_current_org)],
     membership: Annotated[  # noqa: ARG001 — required to gate on BILLING_MANAGE
         Membership, Depends(require_permission(Permission.BILLING_MANAGE))
     ],
+    _recent_auth: Annotated[None, Depends(require_recent_auth(max_age_minutes=5))],
     session: Annotated[AsyncSession, Depends(get_session)],
     redis: Annotated[Redis, Depends(get_redis)],
 ) -> Envelope[CheckoutSessionResponse]:

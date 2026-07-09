@@ -138,6 +138,13 @@ class AdminImpersonateResponse(AppBaseModel):
     user: UserPublic
 
 
+# ---- T-218: admin-assisted lost-2FA recovery ---------------------------------
+
+
+class AdminDisableTotpRequest(AppBaseModel):
+    reason: str = Field(min_length=10, max_length=1000)
+
+
 # ---- T-143: dashboard + global audit feed -----------------------------------
 
 

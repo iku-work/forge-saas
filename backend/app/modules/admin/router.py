@@ -30,6 +30,7 @@ from app.modules.admin.schemas import (
     AdminAuditFeedEntry,
     AdminCompCreditRequest,
     AdminDashboardStats,
+    AdminDisableTotpRequest,
     AdminExtendTrialRequest,
     AdminFeatureFlagsResponse,
     AdminImpersonateRequest,
@@ -42,6 +43,7 @@ from app.modules.admin.schemas import (
     SetFeatureFlagOverrideRequest,
 )
 from app.modules.admin.service import (
+    AdminAccountRecoveryService,
     AdminBillingOverrideService,
     AdminDashboardService,
     AdminDirectoryService,
@@ -340,6 +342,30 @@ async def end_impersonation(
         raise AuthenticationError("errors.missing_bearer_token", fallback="Missing bearer token")
     await AdminImpersonationService(session, redis).end(
         token=token, ip=_client_ip(request), ua=request.headers.get("user-agent", "")
+    )
+    await session.commit()
+    return Envelope(data=None, meta=Meta(request_id=_request_id(request)))
+
+
+# ---- T-218: admin-assisted lost-2FA recovery ---------------------------------
+
+
+@router.post("/users/{user_id}/disable-totp")
+@api_limit
+async def disable_user_totp(
+    request: Request,
+    user_id: UUID,
+    body: AdminDisableTotpRequest,
+    superadmin: Annotated[User, Depends(require_superadmin)],
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> Envelope[None]:
+    target = await _get_user_or_404(user_id, session)
+    await AdminAccountRecoveryService(session).disable_totp_for_user(
+        target=target,
+        reason=body.reason,
+        actor_id=superadmin.id,
+        ip=_client_ip(request),
+        ua=request.headers.get("user-agent", ""),
     )
     await session.commit()
     return Envelope(data=None, meta=Meta(request_id=_request_id(request)))

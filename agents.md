@@ -5300,6 +5300,38 @@ For each of `packages/{ui,api-client,types,hooks,validation,utils}`:
 
 ---
 
+### T-226 Production-ready change-email flow
+
+> Filed by: T-218, which needed step-up re-auth to gate *something* called "email change" but found no such feature built yet. Added a minimal request/confirm implementation as part of T-218 itself (`AuthService.request_email_change`/`confirm_email_change`, `EmailChangeToken`, `POST /auth/change-email` + `/auth/change-email/confirm`, gated by `require_recent_auth`) so the step-up gate had a real endpoint to protect, but deliberately scoped it down. This task is the "do it properly" follow-up.
+> needs: T-218
+
+**Goal** Bring the minimal T-218 implementation up to the bar the rest of the auth module holds (T-216/T-217's OAuth-unlink/WebAuthn-removal flows, password reset, etc.).
+
+**Build**
+
+- Re-verification of the *old* address, not just the new one: today `request_email_change` only proves control of the new address (confirm-link email) -- ASVS V2.5.5-adjacent flows generally also want the requester to prove they're the current account holder at request time (e.g. current password), beyond just having a valid session recent enough to pass `require_recent_auth`
+- A grace/undo window: a `cancel_email_change` action reachable from the *old* address's `email_change_requested` notification, so a real owner who sees an unexpected request can stop it before the confirm link is clicked
+- Rate limiting specific to repeated change-email requests targeting the same `new_email` (distinct from the existing per-IP/per-user `sensitive_limit`) -- prevents using the confirm-email flow to spam an arbitrary inbox
+- Decide and document what happens to `email_verified_at`, active sessions, and any pending invitations tied to the old address when the change completes -- T-218's minimal version leaves all three untouched
+- Frontend: a real settings-page card (T-218 shipped none) plus the `/confirm-email-change` confirmation route, following `ChangePasswordCard`'s pattern in `apps/web/src/features/settings/SecuritySettingsPage.tsx` and `VerifyEmailPage.tsx`'s route-confirmation pattern respectively
+- Revisit whether `EmailChangeToken` should carry a device/IP fingerprint the way `Session` does, for the admin-assisted recovery / audit story
+
+**Tests**
+
+- Old-address re-verification is enforced (wrong current password rejected)
+- Cancel-from-old-address invalidates the pending token
+- Per-target-email rate limiting on repeated requests
+- Frontend: settings card submits and shows pending/confirmed state; confirmation route handles valid/expired/already-used tokens
+
+**Done when**
+
+- [ ] Old-address proof required alongside new-address proof
+- [ ] Cancel path shipped and tested
+- [ ] Frontend card + confirmation route shipped
+- [ ] ADR/task docs updated to point at this task instead of T-218 for the email-change feature itself
+
+---
+
 ## P3-C · Comprehensive E2E + load
 
 > HTML ref: §"Testing strategy" → "The test pyramid" (E2E + load rows), "Frontend & mobile testing", "Load & resilience"

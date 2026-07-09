@@ -23,7 +23,7 @@ from redis.asyncio import Redis
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.db import get_session
-from app.core.dependencies import get_current_user, get_redis
+from app.core.dependencies import get_current_user, get_redis, require_recent_auth
 from app.core.envelope import Envelope, Meta
 from app.core.exceptions import PermissionDeniedError
 from app.middleware.rate_limit import api_limit
@@ -172,6 +172,7 @@ async def remove_member(
     request: Request,
     membership_id: UUID,
     actor: Annotated[Membership, Depends(require_org_permission(Permission.MEMBERS_MANAGE))],
+    _recent_auth: Annotated[None, Depends(require_recent_auth(max_age_minutes=5))],
     session: Annotated[AsyncSession, Depends(get_session)],
 ) -> Envelope[None]:
     await TenancyService(session).remove_member(actor, membership_id)

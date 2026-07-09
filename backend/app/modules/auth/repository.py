@@ -18,6 +18,7 @@ from app.core.exceptions import NotFoundError
 from app.core.repository import DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE
 from app.models._mixins import utcnow
 from app.modules.auth.models import (
+    EmailChangeToken,
     EmailVerificationToken,
     MagicLinkToken,
     OAuthAccount,
@@ -133,6 +134,7 @@ class SessionRepository:
         ip_address: str,
         user_agent: str,
         expires_at: datetime,
+        auth_time: datetime | None = None,
     ) -> SessionModel:
         now = utcnow()
         session_obj = SessionModel(
@@ -143,6 +145,11 @@ class SessionRepository:
             user_agent=user_agent,
             last_seen_at=now,
             expires_at=expires_at,
+            # T-218: defaults to "now" for every real login-created session;
+            # refresh()'s rotation is the one caller that passes the
+            # *original* session's auth_time through explicitly, since a
+            # silent refresh doesn't re-verify credentials.
+            auth_time=auth_time or now,
         )
         self.session.add(session_obj)
         await self.session.flush()
@@ -284,6 +291,12 @@ class TOTPSecretRepository:
             record.enabled_at = None
             record.backup_codes_hash = "[]"
             record.deleted_at = None
+            # T-218: a brand-new secret has never had any of its codes
+            # consumed -- carrying the old secret's last_consumed_step
+            # forward would spuriously reject a legitimate first use of the
+            # new secret if re-enabling happens to land in the same 30s
+            # wall-clock step the old secret was last verified in.
+            record.last_consumed_step = None
         await self.session.flush()
         return record
 
@@ -296,6 +309,11 @@ class TOTPSecretRepository:
     async def update_backup_codes(self, user_id: UUID, backup_codes_hash: str) -> None:
         record = await self._get_or_raise(user_id)
         record.backup_codes_hash = backup_codes_hash
+        await self.session.flush()
+
+    async def mark_step_consumed(self, user_id: UUID, step: int) -> None:
+        record = await self._get_or_raise(user_id)
+        record.last_consumed_step = step
         await self.session.flush()
 
     async def disable(self, user_id: UUID) -> None:
@@ -452,3 +470,7 @@ class PasswordResetTokenRepository(_TokenRepository[PasswordResetToken]):
 
 class MagicLinkTokenRepository(_TokenRepository[MagicLinkToken]):
     model = MagicLinkToken
+
+
+class EmailChangeTokenRepository(_TokenRepository[EmailChangeToken]):
+    model = EmailChangeToken

@@ -23,8 +23,9 @@ import stripe
 from redis.asyncio import Redis
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core import jobs
 from app.core.config import get_settings
-from app.core.exceptions import DomainError, NotFoundError, PermissionDeniedError
+from app.core.exceptions import ConflictError, DomainError, NotFoundError, PermissionDeniedError
 from app.core.module_loader import is_enabled
 from app.core.repository import DEFAULT_PAGE_SIZE
 from app.core.token_blocklist import block_jti
@@ -48,7 +49,7 @@ from app.modules.admin.schemas import (
 from app.modules.audit.repository import AuditRepository
 from app.modules.audit.service import AuditService
 from app.modules.auth.models import User
-from app.modules.auth.repository import SessionRepository, UserRepository
+from app.modules.auth.repository import SessionRepository, TOTPSecretRepository, UserRepository
 from app.modules.auth.utils import create_access_token, verify_access_token
 from app.modules.billing.models import Subscription
 from app.modules.billing.repository import PlanRepository, SubscriptionRepository
@@ -644,4 +645,67 @@ class AdminImpersonationService:
             ip=ip,
             ua=ua,
             severity="elevated",
+        )
+
+
+class AdminAccountRecoveryService:
+    """T-218/ASVS V2.5.7: admin-assisted recovery for a user who's lost both
+    their TOTP device and every backup code. Same posture as
+    AdminImpersonationService above -- a mandatory `reason`, fully audited at
+    severity="elevated" -- since a superadmin unilaterally turning off a
+    user's second factor is exactly the kind of high-value action that
+    posture exists for.
+
+    Deliberately scoped to TOTP only, not WebAuthn: `AuthService.login()`'s
+    2FA gate already treats a registered security key as an alternative to
+    TOTP, not an additional factor (T-217), so a user who still has one
+    isn't locked out and doesn't need this path -- they can just use it.
+    Reaches directly into app.modules.auth's repositories rather than
+    AuthService itself, same justification as AdminBillingOverrideService's
+    docstring above: this is a cross-cutting admin action, not something the
+    auth module's own self-service surface should expose.
+    """
+
+    def __init__(self, session: AsyncSession) -> None:
+        self._users = UserRepository(session)
+        self._totp_secrets = TOTPSecretRepository(session)
+        self._audit = AuditService(session)
+
+    async def disable_totp_for_user(
+        self, *, target: User, reason: str, actor_id: UUID, ip: str | None, ua: str | None
+    ) -> None:
+        if not target.totp_enabled:
+            raise ConflictError(
+                "errors.totp_not_enabled", fallback="Two-factor authentication is not enabled"
+            )
+
+        record = await self._totp_secrets.get_by_user_id(target.id)
+        if record is not None:
+            await self._totp_secrets.disable(target.id)
+        await self._users.update(target.id, totp_enabled=False)
+
+        await self._audit.log(
+            action="admin.user.disable_totp",
+            resource_type="user",
+            resource_id=str(target.id),
+            org_id=None,
+            actor_id=actor_id,
+            diff={"reason": reason},
+            ip=ip,
+            ua=ua,
+            severity="elevated",
+        )
+        settings = get_settings()
+        await jobs.enqueue_job(
+            "send_email",
+            to=target.email,
+            template="security_notification",
+            locale=target.locale,
+            context={
+                "user_name": target.full_name,
+                "event": "totp_disabled_by_admin",
+                "provider": None,
+                "new_email": None,
+                "settings_url": f"{settings.FRONTEND_URL}/settings/security",
+            },
         )

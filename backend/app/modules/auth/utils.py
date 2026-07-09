@@ -49,15 +49,24 @@ class AccessTokenPayload:
     # real superadmin acting behind `user_id` (the impersonated target).
     # `None` on every ordinary login/refresh-issued token.
     impersonator_id: UUID | None = None
+    # T-218: when the underlying session's credentials were last actually
+    # verified (login/2FA/WebAuthn/magic-link) -- carried through unchanged
+    # across refresh()-driven rotations, unlike `iat` (which is this
+    # specific access token's own mint time, refreshed every 15 minutes).
+    # `require_recent_auth` (app.core.dependencies) reads this to gate
+    # step-up-protected actions. Defaults to `iat` for any token that
+    # predates this field (e.g. one already in flight during a deploy).
+    auth_time: datetime | None = None
 
 
-def create_access_token(
+def create_access_token(  # noqa: PLR0913 -- T-218 adds auth_time on top of T-142's existing impersonator_id/expire_minutes
     user_id: UUID,
     org_id: UUID | None,
     permissions: Sequence[str],
     *,
     impersonator_id: UUID | None = None,
     expire_minutes: int | None = None,
+    auth_time: datetime | None = None,
 ) -> str:
     settings = get_settings()
     now = datetime.now(UTC)
@@ -71,6 +80,10 @@ def create_access_token(
         "iat": now,
         "exp": now + timedelta(minutes=ttl_minutes),
         "jti": str(uuid4()),
+        # jose's datetime->epoch auto-conversion (in jwt.encode) only covers
+        # "exp"/"iat"/"nbf" by name, so this claim needs converting by hand
+        # or json.dumps chokes on a raw datetime.
+        "auth_time": (auth_time or now).timestamp(),
     }
     if impersonator_id is not None:
         claims["impersonator_id"] = str(impersonator_id)
@@ -86,12 +99,18 @@ def verify_access_token(token: str) -> AccessTokenPayload:
         claims = jwt.decode(token, settings.JWT_PUBLIC_KEY, algorithms=[_JWT_ALGORITHM])
         org = claims.get("org")
         impersonator_id = claims.get("impersonator_id")
+        auth_time = claims.get("auth_time")
         return AccessTokenPayload(
             user_id=UUID(claims["sub"]),
             org_id=UUID(org) if org is not None else None,
             permissions=tuple(claims.get("perms", [])),
             jti=UUID(claims["jti"]),
             impersonator_id=UUID(impersonator_id) if impersonator_id is not None else None,
+            auth_time=(
+                datetime.fromtimestamp(auth_time, tz=UTC)
+                if auth_time is not None
+                else datetime.fromtimestamp(claims["iat"], tz=UTC)
+            ),
         )
     except (JWTError, KeyError, ValueError, TypeError) as exc:
         raise AuthenticationError(

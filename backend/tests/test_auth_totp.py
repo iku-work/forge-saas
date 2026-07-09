@@ -61,6 +61,15 @@ def _current_code(secret: str) -> str:
     return pyotp.TOTP(secret).now()
 
 
+def _next_code(secret: str) -> str:
+    """A code for the *next* 30s step -- used when a test needs two
+    legitimate (non-replay) verifications of the same secret in quick
+    succession, since T-218's same-step replay tracking (AuthService.
+    _verify_totp_and_track_replay) now rejects submitting _current_code's
+    exact value twice."""
+    return pyotp.TOTP(secret).at(datetime.now(UTC), 1)
+
+
 # --- service-level fixtures (Postgres only) -------------------------------------
 
 
@@ -233,7 +242,7 @@ async def test_disable_2fa_happy_path(
 ) -> None:
     secret, _ = await _enable_and_verify(service, verified_user)
 
-    await service.disable_2fa(verified_user, _VALID_PASSWORD, _current_code(secret))
+    await service.disable_2fa(verified_user, _VALID_PASSWORD, _next_code(secret))
 
     refetched = await user_repo.get_by_id(verified_user.id)
     assert refetched is not None
@@ -248,7 +257,7 @@ async def test_disable_2fa_enqueues_security_notification_email(
     secret, _ = await _enable_and_verify(service, verified_user)
     enqueued_jobs.clear()  # drop the totp_enabled notification from _enable_and_verify
 
-    await service.disable_2fa(verified_user, _VALID_PASSWORD, _current_code(secret))
+    await service.disable_2fa(verified_user, _VALID_PASSWORD, _next_code(secret))
 
     email_jobs = [kwargs for name, kwargs in enqueued_jobs if name == "send_email"]
     assert len(email_jobs) == 1
@@ -285,7 +294,7 @@ async def test_disable_2fa_then_reenable_succeeds(
     service: AuthService, verified_user: User, user_repo: UserRepository
 ) -> None:
     secret, _ = await _enable_and_verify(service, verified_user)
-    await service.disable_2fa(verified_user, _VALID_PASSWORD, _current_code(secret))
+    await service.disable_2fa(verified_user, _VALID_PASSWORD, _next_code(secret))
 
     # Re-enabling reuses TOTPSecret's single row (PK = user_id) rather than
     # hitting a unique-constraint conflict on a second insert.
@@ -340,7 +349,7 @@ async def test_confirm_login_2fa_with_totp_code_returns_tokens(
     assert isinstance(challenge, TwoFactorChallenge)
 
     access_token, refresh_plain, user = await service.confirm_login_2fa(
-        challenge.temp_token, _current_code(secret), _IP, _USER_AGENT
+        challenge.temp_token, _next_code(secret), _IP, _USER_AGENT
     )
 
     assert access_token
@@ -400,7 +409,7 @@ async def test_confirm_login_2fa_after_2fa_disabled_raises(
         LoginRequest(email=verified_user.email, password=_VALID_PASSWORD), _IP, _USER_AGENT
     )
     assert isinstance(challenge, TwoFactorChallenge)
-    await service.disable_2fa(verified_user, _VALID_PASSWORD, _current_code(secret))
+    await service.disable_2fa(verified_user, _VALID_PASSWORD, _next_code(secret))
 
     with pytest.raises(AuthenticationError):
         await service.confirm_login_2fa(
@@ -443,6 +452,93 @@ async def test_backup_code_is_single_use(service: AuthService, verified_user: Us
     second_challenge = await _challenge()
     with pytest.raises(AuthenticationError):
         await service.confirm_login_2fa(second_challenge.temp_token, used_code, _IP, _USER_AGENT)
+
+
+# --- TOTP same-window replay tracking (T-218/ASVS V2.8.4-V2.8.5) ----------------
+
+
+async def test_totp_code_replayed_at_next_login_is_rejected(
+    service: AuthService, verified_user: User
+) -> None:
+    """The exact code consumed by verify_2fa's own enable step is replayed
+    at the very next login -- same 30s window, so it's still "valid" per
+    pyotp's own verify(), but already spent."""
+    _, secret = await service.enable_2fa(verified_user)
+    code = _current_code(secret)
+    await service.verify_2fa(verified_user, code)
+
+    challenge = await service.login(
+        LoginRequest(email=verified_user.email, password=_VALID_PASSWORD), _IP, _USER_AGENT
+    )
+    assert isinstance(challenge, TwoFactorChallenge)
+
+    with pytest.raises(AuthenticationError):
+        await service.confirm_login_2fa(challenge.temp_token, code, _IP, _USER_AGENT)
+
+
+async def test_totp_code_replayed_within_disable_is_rejected(
+    service: AuthService, verified_user: User
+) -> None:
+    secret, _ = await _enable_and_verify(service, verified_user)  # consumes the "enable" step
+    code = _next_code(secret)  # a fresh, not-yet-consumed step
+    # A legitimate first use (e.g. a fresh confirm_login_2fa) consumes this
+    # step; disable_2fa then replaying the identical code is rejected too --
+    # replay tracking is shared across every call site, not per-endpoint.
+    challenge = await service.login(
+        LoginRequest(email=verified_user.email, password=_VALID_PASSWORD), _IP, _USER_AGENT
+    )
+    assert isinstance(challenge, TwoFactorChallenge)
+    await service.confirm_login_2fa(challenge.temp_token, code, _IP, _USER_AGENT)
+
+    with pytest.raises(AuthenticationError):
+        await service.disable_2fa(verified_user, _VALID_PASSWORD, code)
+
+
+async def test_totp_replay_rejection_is_logged_and_notified(
+    service: AuthService,
+    verified_user: User,
+    enqueued_jobs: list[tuple[str, dict[str, Any]]],
+) -> None:
+    _, secret = await service.enable_2fa(verified_user)
+    code = _current_code(secret)
+    await service.verify_2fa(verified_user, code)
+    enqueued_jobs.clear()  # drop the totp_enabled notification
+
+    challenge = await service.login(
+        LoginRequest(email=verified_user.email, password=_VALID_PASSWORD), _IP, _USER_AGENT
+    )
+    assert isinstance(challenge, TwoFactorChallenge)
+    with pytest.raises(AuthenticationError):
+        await service.confirm_login_2fa(challenge.temp_token, code, _IP, _USER_AGENT)
+
+    email_jobs = [kwargs for name, kwargs in enqueued_jobs if name == "send_email"]
+    assert len(email_jobs) == 1
+    assert email_jobs[0]["template"] == "security_notification"
+    assert email_jobs[0]["context"]["event"] == "totp_replay_rejected"
+
+
+async def test_totp_replay_does_not_affect_a_different_users_secret(
+    service: AuthService, verified_user: User, user_repo: UserRepository
+) -> None:
+    other_user = await user_repo.create(
+        email="bob@example.com",
+        hashed_password=hash_password(_VALID_PASSWORD),
+        email_verified_at=datetime.now(UTC),
+    )
+    secret_a, _ = await _enable_and_verify(service, verified_user)
+    code_a = _next_code(secret_a)
+    challenge_a = await service.login(
+        LoginRequest(email=verified_user.email, password=_VALID_PASSWORD), _IP, _USER_AGENT
+    )
+    assert isinstance(challenge_a, TwoFactorChallenge)
+    await service.confirm_login_2fa(challenge_a.temp_token, code_a, _IP, _USER_AGENT)
+
+    # A fresh secret/user -- last_consumed_step lives on the TOTPSecret row,
+    # so this must succeed even though verified_user's own replay of code_a
+    # right now would be rejected.
+    _, secret_b = await service.enable_2fa(other_user)
+    backup_codes_b = await service.verify_2fa(other_user, _current_code(secret_b))
+    assert len(backup_codes_b) == 10
 
 
 # --- TOTPSecretRepository (direct) ----------------------------------------------
@@ -597,7 +693,7 @@ async def test_disable_endpoint_happy_path(client: httpx.AsyncClient, verified_u
 
     response = await client.post(
         "/api/v1/auth/2fa/disable",
-        json={"password": _VALID_PASSWORD, "code": _current_code(secret)},
+        json={"password": _VALID_PASSWORD, "code": _next_code(secret)},
         headers=headers,
     )
 
@@ -645,7 +741,7 @@ async def test_login_then_2fa_login_round_trip_sets_refresh_cookie(
     assert "set-cookie" not in login_response.headers
 
     response = await client.post(
-        "/api/v1/auth/2fa/login", json={"temp_token": temp_token, "code": _current_code(secret)}
+        "/api/v1/auth/2fa/login", json={"temp_token": temp_token, "code": _next_code(secret)}
     )
 
     assert response.status_code == 200
@@ -670,7 +766,7 @@ async def test_login_then_2fa_login_round_trip_returns_refresh_token_for_mobile(
 
     response = await client.post(
         "/api/v1/auth/2fa/login",
-        json={"temp_token": temp_token, "code": _current_code(secret)},
+        json={"temp_token": temp_token, "code": _next_code(secret)},
         headers={"X-Client-Platform": "mobile"},
     )
 

@@ -13,7 +13,8 @@
     "trial_ending": "Kokeilujaksosi on päättymässä",
     "trial_expired": "Kokeilujaksosi on päättynyt",
     "file_uploaded": "Uusi tiedosto ladattu",
-    "security_notification": "Tietoturvahälytys tilillesi"
+    "security_notification": "Tietoturvahälytys tilillesi",
+    "change_email": "Vahvista uusi sähköpostiosoitteesi"
   },
   "footer": {
     "ignore_notice": "Jos et pyytänyt tätä sähköpostia, voit jättää sen huomiotta."
@@ -25,6 +26,14 @@
     "button": "Vahvista sähköposti",
     "paste_link": "Tai liitä tämä linkki selaimeesi:",
     "expires": "Tämä linkki vanhenee 24 tunnin kuluttua."
+  },
+  "change_email": {
+    "title": "Vahvista uusi sähköpostiosoitteesi",
+    "greeting": "Hei",
+    "body": "Sinä (tai joku, jolla on pääsy ForgeSaaS-tiliisi) pyysi tilisi sähköpostiosoitteen vaihtamista tähän osoitteeseen. Vahvista alla olevasta painikkeesta viimeistelläksesi vaihdon.",
+    "button": "Vahvista uusi sähköposti",
+    "paste_link": "Tai liitä tämä linkki selaimeesi:",
+    "expires": "Tämä linkki vanhenee tunnin kuluttua. Jos et pyytänyt tätä, voit jättää tämän viestin huomiotta — tilisi sähköpostia ei ole vaihdettu."
   },
   "password_reset": {
     "title": "Vaihda salasanasi",
@@ -118,7 +127,11 @@
       "oauth_linked": "Tilisi yhdistettiin kirjautumaan sisään palvelulla {provider}.",
       "oauth_unlinked": "Tilisi yhteys palveluun {provider} poistettiin.",
       "webauthn_registered": "Tilillesi rekisteröitiin uusi turva-avain.",
-      "webauthn_removed": "Turva-avain poistettiin tililtäsi."
+      "webauthn_removed": "Turva-avain poistettiin tililtäsi.",
+      "totp_replay_rejected": "Tililläsi hylättiin jo kertaalleen käytetty kaksivaiheisen tunnistautumisen koodi. Jos tämä et ollut sinä, joku on saattanut siepata koodisi.",
+      "email_change_requested": "Tilisi sähköpostin vaihtamista osoitteeseen {new_email} pyydettiin. Jos tämä et ollut sinä, muutoksia ei ole vielä tehty — voit jättää tämän huomiotta.",
+      "email_changed": "Tilisi sähköpostiosoite vaihdettiin osoitteeksi {new_email}.",
+      "totp_disabled_by_admin": "Pääkäyttäjä poisti kaksivaiheisen tunnistautumisen käytöstä tililtäsi tilin palautuspyynnön yhteydessä. Jos et pyytänyt tätä, ota välittömästi yhteyttä tukeen."
     },
     "button": "Tarkista tietoturva-asetukset",
     "footer": "Jos tämä et ollut sinä, vaihda salasanasi välittömästi ja tarkista aktiiviset istuntosi."
