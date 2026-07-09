@@ -5114,6 +5114,192 @@ For each of `packages/{ui,api-client,types,hooks,validation,utils}`:
 
 ---
 
+### T-215 Secure-SDLC & architecture documentation
+
+> Filed by: T-213's ASVS checklist (`docs/adr/0001-security-baseline.md`) — closes rows V1.1.1, V1.1.2, V1.1.4, V1.1.5, V1.1.7, V1.5.1, V1.6.1, V1.7.2, V1.14.4
+> needs: T-213
+
+**Goal** Turn the architecture knowledge that currently only exists as prose in `agents.md` and scattered docstrings into the standalone docs ASVS V1 (Architecture, Design and Threat Modeling) expects to exist on their own.
+
+**Build**
+
+- `docs/security/sdlc.md` — the secure-SDLC policy: where security fits in planning/review/release. References the CI security gates already enforced (bandit/semgrep/trivy/pip-audit/gitleaks/trufflehog/ZAP) rather than inventing a new process on top of them
+- `docs/security/threat-model.md` — trust boundaries + a data-flow diagram: client ↔ Caddy ↔ backend ↔ Postgres/Redis/object storage/Stripe/Resend/OAuth providers
+- `docs/security/key-management.md` — lifecycle for `ENCRYPTION_KEY`/`JWT_PRIVATE_KEY`/`JWT_PUBLIC_KEY`: generation, rotation procedure (ties into the existing `ENCRYPTION_KEY_OLD`/`MultiFernet` support), who holds them
+- `docs/runbooks/log-shipping.md` — where logs go beyond stdout/`admin-audit.log`/Sentry today, and the plan (or explicit non-plan) for a centralized remote sink
+- Update `docs/adr/0001-security-baseline.md`: flip the rows listed above from `partial` to `met`, evidence links pointing at these new docs
+
+**Tests**
+
+- `backend/tests/security/test_security_baseline.py`'s link-check already covers `docs/...` paths — no test changes needed unless a new doc lives outside `docs/`/`backend/`/`.github/`
+
+**Done when**
+
+- [ ] All four docs exist and are cross-linked from `0001-security-baseline.md`
+- [ ] ADR rows updated, link-check still green
+
+---
+
+### T-216 Auth/session UX gaps
+
+> Filed by: T-213's ASVS checklist — closes rows V2.1.2, V2.1.5, V2.1.6, V2.1.8, V2.1.9, V2.1.12, V2.2.3, V2.5.5, V3.2.3, V3.3.4, V3.4.4, V3.5.1, V8.2.2, V8.2.3
+> needs: T-213
+
+**Goal** Close the concrete auth/session gaps the ASVS pass found. Most are small; the standout is that there's currently no way to change your password while logged in — only a forgot-password reset flow.
+
+**Build**
+
+- `POST /api/v1/auth/change-password` (current + new password; current re-verified via Argon2; same password-policy validation as registration; revokes other sessions on success, same as password reset)
+- `password: str = Field(min_length=12, max_length=128)` on every password-accepting schema (currently has no upper bound)
+- Reconsider `_validate_password_strength`'s upper/lower/digit composition requirement against NIST SP 800-63B / ASVS V2.1.9 (which explicitly recommends against composition rules in favor of length + breach-list checks) — either drop the composition check or write down why the template deliberately deviates from ASVS here
+- `backend/app/modules/auth/router.py`: rename the refresh cookie to use the `__Host-` prefix
+- `GET /api/v1/auth/sessions` (list caller's active sessions) + `DELETE /api/v1/auth/sessions/{id}` (revoke one, scoped to the caller)
+- `POST /api/v1/auth/oauth/{provider}/unlink` — self-service OAuth unlink
+- New email template + send on: password change, 2FA enable/disable, OAuth link/unlink
+- Frontend: password-strength meter + temporary-reveal toggle on password fields; confirm the access token is held in memory, not `localStorage`
+
+**Tests**
+
+- `backend/tests/test_auth_service.py` — change-password requires the correct current password, rejects on mismatch, revokes other sessions on success; security-notification email enqueued (mocked) on each of the three triggers
+- `backend/tests/test_auth_router.py` — session list/revoke endpoints are scoped to the caller's own sessions (can't revoke someone else's)
+
+**Done when**
+
+- [ ] Authenticated password change works end-to-end, other sessions revoked
+- [ ] `__Host-` cookie prefix live; session-list/revoke UI shipped in Settings
+- [ ] ADR rows updated
+
+---
+
+### T-217 WebAuthn/FIDO2 second factor
+
+> Filed by: T-213's ASVS checklist — closes rows V2.3.2, V2.9.1, V2.9.2, V2.9.3
+> needs: T-024, T-213
+
+**Goal** Offer a phishing-resistant second factor alongside TOTP, for users/orgs that want one.
+
+**Build**
+
+- `WebAuthnCredential` model (member ↔ credential public key, sign counter, AAGUID, nickname)
+- A WebAuthn library (e.g. `py_webauthn`) drives registration (`navigator.credentials.create`) and assertion (`navigator.credentials.get`) ceremonies — `backend/app/modules/auth/webauthn.py`
+- Router: `POST /auth/webauthn/register/options`, `POST /auth/webauthn/register`, `POST /auth/webauthn/login/options`, `POST /auth/webauthn/login`
+- Sign-counter check on every assertion — reject and alert on a counter that goes backwards (clone-detection, same spirit as the existing refresh-token reuse detection in T-019)
+- Treated as an alternative to TOTP at the same "2FA enabled" gate in `login()`, not an additional required factor
+
+**Tests**
+
+- Registration + assertion round-trip against a virtual authenticator
+- Sign-counter regression rejected
+- Existing TOTP flow unaffected when WebAuthn is unused
+
+**Done when**
+
+- [ ] A user can register a hardware key and log in with it instead of a TOTP code
+- [ ] Counter-regression test passes
+- [ ] ADR rows updated
+
+---
+
+### T-218 Step-up auth & mandatory admin 2FA
+
+> Filed by: T-213's ASVS checklist — closes rows V2.5.7, V2.8.4, V2.8.5, V3.3.2, V3.7.1, V4.3.1, V4.3.3
+> needs: T-024, T-140, T-213
+
+**Goal** Sensitive actions and superadmin access require more than "has a valid 15-minute access token."
+
+**Build**
+
+- `require_superadmin` gains a check: `user.totp_enabled or user.webauthn_enabled` required — a superadmin with no second factor is rejected with an error telling them to enable one
+- TOTP same-window replay tracking: store `(user_id, last_consumed_totp_step)`, reject a code for a step already consumed, log + notify on rejection
+- Step-up re-auth dependency (`require_recent_auth(max_age_minutes=5)`) applied to: email change, 2FA disable (already effectively has this), billing plan changes, member removal
+- Idle/periodic session policy: shorten the refresh token's max idle window or add a sliding expiry, per the ASVS L2 target (~12h or 30min idle)
+- Documented admin-assisted recovery path for a user who's lost both their TOTP device and all backup codes (superadmin action, fully audited, same posture as impersonation in T-140)
+
+**Tests**
+
+- Superadmin login without 2FA enabled is rejected with an actionable error
+- TOTP code reuse within the same 30s step is rejected and logged
+- Step-up-gated routes 403 without a recent-enough auth, succeed after re-entering credentials
+- Idle-timeout test using a frozen clock
+
+**Done when**
+
+- [ ] Superadmin accounts can't operate without 2FA enabled
+- [ ] TOTP replay-within-window rejected
+- [ ] Step-up gate covers the four listed actions
+- [ ] ADR rows updated
+
+---
+
+### T-219 Data classification & PII handling
+
+> Filed by: T-213's ASVS checklist — closes rows V1.8.1, V1.8.2, V6.1.1, V7.1.2, V7.1.3, V7.2.1, V7.2.2, V8.3.4, V8.3.8
+> needs: T-213
+
+**Goal** Replace "only the TOTP secret is classified/encrypted" with an actual, if modest, data-classification pass, and log the security events the ASVS pass found weren't being logged.
+
+**Build**
+
+- `docs/security/data-classification.md` — one row per PII-bearing column across all modules (`User.email`/`full_name`/`avatar_url`, `Membership`, GDPR `ConsentRecord`, etc.): classification (public/internal/sensitive), current protection, retention
+- Encrypt `User.full_name` via the existing `EncryptedString` — the highest-value plaintext PII column; document the remaining plaintext columns as an accepted, reasoned scope decision rather than a silent gap
+- Extend `_scrub()` in `backend/app/core/logging.py` to redact by known PII field *names* seen in practice (`email`, `full_name`), not just the existing secret-shaped key list
+- Emit an audit/security-log event on permission-denied (403 from `require_permission`) and on a failed login attempt (not just the existing lockout counter increment)
+- Apply a `GDPR_PURGE_GRACE_DAYS`-style retention/expiry to the next-highest-value data class named in the classification doc (expired sessions and GDPR-deleted users already have this)
+
+**Tests**
+
+- `backend/tests/test_logging.py` — a log record with `email`/`full_name` in `extra` gets redacted
+- A 403 from `require_permission` produces an audit-log row
+- `backend/tests/test_auth_service_login.py` — a failed login attempt produces a log/audit event, not just a counter increment
+
+**Done when**
+
+- [ ] Data-classification doc covers every PII column across every module
+- [ ] `full_name` encrypted at rest
+- [ ] Permission-denied and failed-login events logged
+- [ ] ADR rows updated
+
+---
+
+### T-225 Build/infra hardening batch
+
+> Filed by: T-213's ASVS checklist — closes rows V1.6.2, V1.9.1, V1.14.4 (shared with T-215), V2.4.5, V2.10.1, V2.10.3, V6.4.1, V6.4.2, V8.1.4, V8.1.5, V8.1.6, V9.1.2, V9.1.3, V9.2.2, V9.2.4, V12.1.3, V12.2.1, V12.3.4, V12.4.2, V13.1.5, V13.2.5, V14.2.5, V14.3.2, V14.3.3, V14.4.2, V14.5.1
+> needs: T-213
+
+**Goal** A grab-bag of smaller, mostly-independent infra/build hardening items the ASVS pass found. Grouped into one task because each is too small to justify its own task, not because they share an implementation.
+
+**Build**
+
+- SBOM: a `syft`/`cyclonedx-py` step in CI, uploaded as a workflow artifact
+- Content-sniffing file-type validation on upload confirm (e.g. `python-magic` against the first N bytes, cross-checked against the declared `Content-Type`)
+- File-count quota per org, alongside the existing byte quota
+- `Content-Disposition: attachment` on API responses; explicit 406/415 rejection of unexpected `Content-Type`
+- Confirm + document whether `/docs`/`/redoc` are disabled outside `dev`
+- Confirm the `Server` header is stripped/replaced at the Caddy edge
+- Confirm `sslmode=require` on `DATABASE_URL`/`REDIS_URL` outside `dev`
+- Confirm OCSP stapling is active on Caddy's ACME certs
+- TLS cipher-suite/version check added to the `zap-baseline`/`zap-full` CI jobs (or a dedicated `testssl.sh`/`sslyze` step)
+- Documented and actually-tested backup/restore runbook for the managed Postgres instance
+- Move `ENCRYPTION_KEY`/`JWT_PRIVATE_KEY`/etc. to a secrets vault/KMS where the hosting platform supports one, instead of plain env vars
+- Add a secret pepper (vault-held) on top of Argon2's per-hash salt
+- Reflective-File-Download-safe headers on file download responses
+- Fail prod deploys where `VIRUS_SCANNER=noop`
+- Request-anomaly alerting (Prometheus alert rule on abnormal per-user/per-IP request volume)
+- Confirm/require TLS between the backend and Postgres/Redis within the Docker network
+- Log/alert on requests using an HTTP method not valid for the matched route
+
+**Tests**
+
+- One test per mechanical check where feasible: content-sniffing rejects a mislabeled file, file-count quota enforced, SBOM artifact produced, `/docs` 404s outside dev, deploy fails fast on `VIRUS_SCANNER=noop` in prod config
+- TLS/OCSP/cipher-suite items are infra-verification, not unit-testable — documented as a one-time manual verification + CI scan instead
+
+**Done when**
+
+- [ ] Each bullet above is either implemented or has a documented reason it's deferred further
+- [ ] `docs/adr/0001-security-baseline.md` rows updated (`partial` → `met` for whichever land; the rest stay `partial` with an explicit note on what's still pending)
+
+---
+
 ## P3-C · Comprehensive E2E + load
 
 > HTML ref: §"Testing strategy" → "The test pyramid" (E2E + load rows), "Frontend & mobile testing", "Load & resilience"
