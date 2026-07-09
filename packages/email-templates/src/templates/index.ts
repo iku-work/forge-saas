@@ -8,6 +8,10 @@ import { MemberInvited, memberInvitedExampleProps } from "./MemberInvited.js";
 import { PasswordReset, passwordResetExampleProps } from "./PasswordReset.js";
 import { PaymentFailed, paymentFailedExampleProps } from "./PaymentFailed.js";
 import {
+  SecurityNotification,
+  securityNotificationExampleProps,
+} from "./SecurityNotification.js";
+import {
   SubscriptionExpiring,
   subscriptionExpiringExampleProps,
 } from "./SubscriptionExpiring.js";
@@ -68,6 +72,7 @@ export const TEMPLATES = {
   trial_ending: defineTemplate(trialEndingExampleProps, TrialEnding),
   trial_expired: defineTemplate(trialExpiredExampleProps, TrialExpired),
   file_uploaded: defineTemplate(fileUploadedExampleProps, FileUploaded),
+  security_notification: defineTemplate(securityNotificationExampleProps, SecurityNotification),
 } satisfies Record<string, TemplateEntry>;
 
 export type TemplateName = keyof typeof TEMPLATES;

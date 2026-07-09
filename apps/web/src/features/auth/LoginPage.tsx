@@ -16,6 +16,7 @@ import {
   FormLabel,
   FormMessage,
   Input,
+  PasswordInput,
   Separator,
 } from "@forge/ui";
 import { loginSchema, type LoginInput } from "@forge/validation";
@@ -107,11 +108,7 @@ export function LoginPage() {
               <FormItem>
                 <FormLabel>{t("auth.login.password_label")}</FormLabel>
                 <FormControl>
-                  <Input
-                    type="password"
-                    autoComplete="current-password"
-                    {...field}
-                  />
+                  <PasswordInput autoComplete="current-password" {...field} />
                 </FormControl>
                 <FormMessage />
               </FormItem>

@@ -30,6 +30,8 @@
   "invalid_magic_link": "This sign-in link is invalid or has expired.",
   "oauth_no_linked_user": "This OAuth account is not linked to a user.",
   "oauth_email_not_verified": "Your OAuth provider did not report a verified email address.",
+  "oauth_account_not_linked": "No linked account for this provider.",
+  "oauth_last_auth_method": "Can't unlink your only sign-in method. Set a password first.",
   "totp_already_enabled": "Two-factor authentication is already enabled.",
   "totp_setup_not_pending": "There is no pending two-factor setup to verify.",
   "invalid_totp_code": "Invalid two-factor code.",

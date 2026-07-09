@@ -14,6 +14,7 @@ storage swapped to a disposable Redis the same way test_auth_router.py does.
 
 from collections.abc import AsyncGenerator, Callable, Iterator
 from datetime import UTC, datetime
+from typing import Any
 from uuid import uuid4
 
 import httpx
@@ -179,6 +180,21 @@ async def test_verify_2fa_happy_path_activates_and_returns_ten_backup_codes(
     assert refetched.totp_enabled is True
 
 
+async def test_verify_2fa_enqueues_security_notification_email(
+    service: AuthService,
+    verified_user: User,
+    enqueued_jobs: list[tuple[str, dict[str, Any]]],
+) -> None:
+    _, secret = await service.enable_2fa(verified_user)
+
+    await service.verify_2fa(verified_user, _current_code(secret))
+
+    email_jobs = [kwargs for name, kwargs in enqueued_jobs if name == "send_email"]
+    assert len(email_jobs) == 1
+    assert email_jobs[0]["template"] == "security_notification"
+    assert email_jobs[0]["context"]["event"] == "totp_enabled"
+
+
 async def test_verify_2fa_invalid_code_raises_authentication_error(
     service: AuthService, verified_user: User
 ) -> None:
@@ -217,6 +233,22 @@ async def test_disable_2fa_happy_path(
     refetched = await user_repo.get_by_id(verified_user.id)
     assert refetched is not None
     assert refetched.totp_enabled is False
+
+
+async def test_disable_2fa_enqueues_security_notification_email(
+    service: AuthService,
+    verified_user: User,
+    enqueued_jobs: list[tuple[str, dict[str, Any]]],
+) -> None:
+    secret, _ = await _enable_and_verify(service, verified_user)
+    enqueued_jobs.clear()  # drop the totp_enabled notification from _enable_and_verify
+
+    await service.disable_2fa(verified_user, _VALID_PASSWORD, _current_code(secret))
+
+    email_jobs = [kwargs for name, kwargs in enqueued_jobs if name == "send_email"]
+    assert len(email_jobs) == 1
+    assert email_jobs[0]["template"] == "security_notification"
+    assert email_jobs[0]["context"]["event"] == "totp_disabled"
 
 
 async def test_disable_2fa_wrong_password_raises_authentication_error(

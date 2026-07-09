@@ -3,11 +3,10 @@
   "email_invalid": "Enter a valid email address.",
   "password": {
     "min_length": "Password must be at least 12 characters",
-    "uppercase": "Password must contain an uppercase letter",
-    "lowercase": "Password must contain a lowercase letter",
-    "digit": "Password must contain a digit",
+    "max_length": "Password must be at most 128 characters",
     "common_password": "Password is too common — choose something less guessable"
   },
+  "current_password_required": "Enter your current password.",
   "code_digits_only": "Digits only.",
   "code_length": "Enter the 6-digit code.",
   "org_name_required": "Organization name is required.",

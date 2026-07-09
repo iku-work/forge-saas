@@ -9,6 +9,10 @@ import { memberInvitedExampleProps, MemberInvited } from "./MemberInvited.js";
 import { passwordResetExampleProps, PasswordReset } from "./PasswordReset.js";
 import { paymentFailedExampleProps, PaymentFailed } from "./PaymentFailed.js";
 import {
+  SecurityNotification,
+  securityNotificationExampleProps,
+} from "./SecurityNotification.js";
+import {
   SubscriptionExpiring,
   subscriptionExpiringExampleProps,
 } from "./SubscriptionExpiring.js";
@@ -104,4 +108,11 @@ export const TrialExpiredStory: Story = {
 export const FileUploadedStory: Story = {
   name: "File Uploaded",
   render: () => <EmailPreview element={<FileUploaded {...fileUploadedExampleProps} />} />,
+};
+
+export const SecurityNotificationStory: Story = {
+  name: "Security Notification",
+  render: () => (
+    <EmailPreview element={<SecurityNotification {...securityNotificationExampleProps} />} />
+  ),
 };

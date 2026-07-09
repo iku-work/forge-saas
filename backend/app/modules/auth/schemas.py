@@ -4,7 +4,6 @@ the SQLModel table classes in app.modules.auth.models — a router must never
 accept or return a model directly (§0.4's mass-assignment rule).
 """
 
-import re
 from datetime import datetime
 from uuid import UUID
 
@@ -1026,14 +1025,16 @@ _COMMON_PASSWORDS: frozenset[str] = frozenset(
 # base word ("password") it's trivially derived from.
 _TRAILING_NOISE_CHARS = "0123456789!@#$%^&*()_+-="
 
+# T-216: no composition rule (no forced upper/lower/digit) — ASVS 4.0.3
+# V2.1.9 recommends against composition requirements in favor of length +
+# breach-list checks (NIST SP 800-63B agrees: composition rules push users
+# toward predictable patterns like "Password1" without meaningfully
+# increasing entropy). The min_length=12 Field constraint below plus this
+# denylist check are the whole policy now.
+_PASSWORD_MAX_LENGTH = 128
+
 
 def _validate_password_strength(password: str) -> str:
-    if not re.search(r"[A-Z]", password):
-        raise ValueError("Password must contain an uppercase letter")
-    if not re.search(r"[a-z]", password):
-        raise ValueError("Password must contain a lowercase letter")
-    if not re.search(r"\d", password):
-        raise ValueError("Password must contain a digit")
     lowered = password.lower()
     if lowered in _COMMON_PASSWORDS or lowered.rstrip(_TRAILING_NOISE_CHARS) in _COMMON_PASSWORDS:
         raise ValueError("Password is too common — choose something less guessable")
@@ -1042,14 +1043,17 @@ def _validate_password_strength(password: str) -> str:
 
 class RegisterRequest(AppBaseModel):
     email: EmailStr
-    password: str = Field(min_length=12)
+    # max_length caps the input handed to Argon2 -- hashing is deliberately
+    # expensive per character batch, so an unbounded password is a cheap
+    # DoS lever (ASVS V2.1.2).
+    password: str = Field(min_length=12, max_length=_PASSWORD_MAX_LENGTH)
 
     _check_password_strength = field_validator("password")(_validate_password_strength)
 
 
 class LoginRequest(AppBaseModel):
     email: EmailStr
-    password: str
+    password: str = Field(max_length=_PASSWORD_MAX_LENGTH)
 
 
 class UserPublic(AppBaseModel):
@@ -1135,7 +1139,17 @@ class PasswordResetRequest(AppBaseModel):
 
 class PasswordResetConfirmRequest(AppBaseModel):
     token: str
-    new_password: str = Field(min_length=12)
+    new_password: str = Field(min_length=12, max_length=_PASSWORD_MAX_LENGTH)
+
+    _check_password_strength = field_validator("new_password")(_validate_password_strength)
+
+
+class ChangePasswordRequest(AppBaseModel):
+    # T-216: the authenticated counterpart to PasswordResetConfirmRequest --
+    # requires proving you already know the current password (ASVS V2.1.6)
+    # rather than a possession-of-inbox proof.
+    current_password: str = Field(max_length=_PASSWORD_MAX_LENGTH)
+    new_password: str = Field(min_length=12, max_length=_PASSWORD_MAX_LENGTH)
 
     _check_password_strength = field_validator("new_password")(_validate_password_strength)
 
@@ -1150,6 +1164,16 @@ class MagicLinkConsumeRequest(AppBaseModel):
 
 class VerifyEmailRequest(AppBaseModel):
     token: str
+
+
+class OAuthAccountPublic(AppBaseModel):
+    # T-216: backs the Settings > Security "linked accounts" list -- lets the
+    # frontend show which providers are connected without exposing
+    # provider_user_id (an external account identifier, not meant for the UI).
+    model_config = ConfigDict(from_attributes=True)
+
+    provider: str
+    created_at: datetime
 
 
 class OAuthProfile(AppBaseModel):
@@ -1180,7 +1204,7 @@ class Verify2FAResponse(AppBaseModel):
 
 
 class Disable2FARequest(AppBaseModel):
-    password: str
+    password: str = Field(max_length=_PASSWORD_MAX_LENGTH)
     code: str = Field(pattern=r"^\d{6}$")
 
 

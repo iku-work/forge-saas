@@ -19,6 +19,7 @@ authlib plumbing, which the router-level fakes never touch.
 from collections.abc import AsyncGenerator, Callable, Iterator
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
+from typing import Any
 
 import httpx
 import pytest
@@ -53,7 +54,7 @@ from app.modules.auth.oauth import (
 from app.modules.auth.repository import OAuthAccountRepository, UserRepository
 from app.modules.auth.schemas import OAuthProfile
 from app.modules.auth.service import AuthService
-from app.modules.auth.utils import hash_password
+from app.modules.auth.utils import create_access_token, hash_password
 
 _TABLES = [User.__table__, SessionModel.__table__, OAuthAccount.__table__]
 _VALID_PASSWORD = "Correct-Horse9"
@@ -480,10 +481,231 @@ async def test_oauth_callback_sets_refresh_cookie_and_clears_state_cookie(
     )
 
     cookies = response.headers.get_list("set-cookie")
-    refresh_cookie = next(c for c in cookies if c.startswith("refresh_token="))
+    refresh_cookie = next(c for c in cookies if c.startswith("__Host-refresh_token="))
     assert "HttpOnly" in refresh_cookie
     state_clear_cookie = next(c for c in cookies if c.startswith("oauth_state="))
     assert "Max-Age=0" in state_clear_cookie
+
+
+# --- GET /auth/oauth/accounts (T-216) ------------------------------------------
+
+
+def _auth_header(user: User) -> dict[str, str]:
+    token = create_access_token(user.id, None, ())
+    return {"Authorization": f"Bearer {token}"}
+
+
+async def test_list_oauth_accounts_without_bearer_token_returns_401(
+    client: httpx.AsyncClient,
+) -> None:
+    response = await client.get("/api/v1/auth/oauth/accounts")
+
+    assert response.status_code == 401
+
+
+async def test_list_oauth_accounts_returns_linked_providers(
+    client: httpx.AsyncClient,
+    user_repo: UserRepository,
+    oauth_account_repo: OAuthAccountRepository,
+    session: AsyncSession,
+) -> None:
+    user = await user_repo.create(
+        email="listed@example.com",
+        hashed_password=hash_password(_VALID_PASSWORD),
+        email_verified_at=datetime.now(UTC),
+    )
+    await oauth_account_repo.create(user_id=user.id, provider="google", provider_user_id="g-list-1")
+    await session.commit()
+
+    response = await client.get("/api/v1/auth/oauth/accounts", headers=_auth_header(user))
+
+    assert response.status_code == 200
+    providers = [account["provider"] for account in response.json()["data"]]
+    assert providers == ["google"]
+
+
+async def test_list_oauth_accounts_empty_when_none_linked(
+    client: httpx.AsyncClient, user_repo: UserRepository, session: AsyncSession
+) -> None:
+    user = await user_repo.create(
+        email="nolinks@example.com",
+        hashed_password=hash_password(_VALID_PASSWORD),
+        email_verified_at=datetime.now(UTC),
+    )
+    await session.commit()
+
+    response = await client.get("/api/v1/auth/oauth/accounts", headers=_auth_header(user))
+
+    assert response.status_code == 200
+    assert response.json()["data"] == []
+
+
+# --- POST /auth/oauth/{provider}/unlink (T-216) --------------------------------
+
+
+async def test_oauth_unlink_without_bearer_token_returns_401(client: httpx.AsyncClient) -> None:
+    response = await client.post("/api/v1/auth/oauth/google/unlink")
+
+    assert response.status_code == 401
+
+
+async def test_oauth_unlink_removes_linked_account(
+    client: httpx.AsyncClient,
+    user_repo: UserRepository,
+    oauth_account_repo: OAuthAccountRepository,
+    session: AsyncSession,
+) -> None:
+    user = await user_repo.create(
+        email="unlink@example.com",
+        hashed_password=hash_password(_VALID_PASSWORD),
+        email_verified_at=datetime.now(UTC),
+    )
+    await oauth_account_repo.create(
+        user_id=user.id, provider="google", provider_user_id="g-unlink-1"
+    )
+    await session.commit()
+
+    response = await client.post("/api/v1/auth/oauth/google/unlink", headers=_auth_header(user))
+
+    assert response.status_code == 200
+    remaining = await oauth_account_repo.get_by_provider_account("google", "g-unlink-1")
+    assert remaining is None
+
+
+async def test_oauth_unlink_with_no_linked_account_returns_404(
+    client: httpx.AsyncClient, user_repo: UserRepository, session: AsyncSession
+) -> None:
+    user = await user_repo.create(
+        email="nolinked@example.com",
+        hashed_password=hash_password(_VALID_PASSWORD),
+        email_verified_at=datetime.now(UTC),
+    )
+    await session.commit()
+
+    response = await client.post("/api/v1/auth/oauth/google/unlink", headers=_auth_header(user))
+
+    assert response.status_code == 404
+
+
+async def test_oauth_unlink_sole_auth_method_returns_409(
+    client: httpx.AsyncClient,
+    user_repo: UserRepository,
+    oauth_account_repo: OAuthAccountRepository,
+    session: AsyncSession,
+) -> None:
+    # An OAuth-only user (no password, §T-023) with exactly one linked
+    # provider has no other way back in -- unlinking would lock them out.
+    user = await user_repo.create(
+        email="oauth-only@example.com",
+        hashed_password=None,
+        email_verified_at=datetime.now(UTC),
+    )
+    await oauth_account_repo.create(user_id=user.id, provider="google", provider_user_id="g-sole-1")
+    await session.commit()
+
+    response = await client.post("/api/v1/auth/oauth/google/unlink", headers=_auth_header(user))
+
+    assert response.status_code == 409
+
+
+async def test_oauth_unlink_sole_provider_succeeds_when_a_password_is_set(
+    client: httpx.AsyncClient,
+    user_repo: UserRepository,
+    oauth_account_repo: OAuthAccountRepository,
+    session: AsyncSession,
+) -> None:
+    # Same "only one linked provider" shape as the 409 case above, but this
+    # user also has a password -- so unlinking still leaves them able to log
+    # back in and must be allowed.
+    user = await user_repo.create(
+        email="has-password@example.com",
+        hashed_password=hash_password(_VALID_PASSWORD),
+        email_verified_at=datetime.now(UTC),
+    )
+    await oauth_account_repo.create(
+        user_id=user.id, provider="google", provider_user_id="g-haspw-1"
+    )
+    await session.commit()
+
+    response = await client.post("/api/v1/auth/oauth/google/unlink", headers=_auth_header(user))
+
+    assert response.status_code == 200
+
+
+async def test_oauth_unlink_enqueues_security_notification_email(
+    client: httpx.AsyncClient,
+    user_repo: UserRepository,
+    oauth_account_repo: OAuthAccountRepository,
+    session: AsyncSession,
+    enqueued_jobs: list[tuple[str, dict[str, Any]]],
+) -> None:
+    user = await user_repo.create(
+        email="unlink-notify@example.com",
+        hashed_password=hash_password(_VALID_PASSWORD),
+        email_verified_at=datetime.now(UTC),
+    )
+    await oauth_account_repo.create(
+        user_id=user.id, provider="google", provider_user_id="g-notify-1"
+    )
+    await session.commit()
+
+    response = await client.post("/api/v1/auth/oauth/google/unlink", headers=_auth_header(user))
+
+    assert response.status_code == 200
+    email_jobs = [kwargs for name, kwargs in enqueued_jobs if name == "send_email"]
+    assert len(email_jobs) == 1
+    assert email_jobs[0]["context"]["event"] == "oauth_unlinked"
+    assert email_jobs[0]["context"]["provider"] == "Google"
+
+
+# --- AuthService.oauth_login() (direct, no HTTP) -------------------------------
+
+
+async def test_oauth_login_linking_to_existing_user_enqueues_security_notification_email(
+    session: AsyncSession,
+    user_repo: UserRepository,
+    enqueued_jobs: list[tuple[str, dict[str, Any]]],
+) -> None:
+    existing = await user_repo.create(
+        email="link-notify@example.com",
+        hashed_password=hash_password(_VALID_PASSWORD),
+        email_verified_at=datetime.now(UTC),
+    )
+
+    await AuthService(session).oauth_login(
+        "google",
+        OAuthProfile(
+            provider_user_id="g-link-notify-1",
+            email=existing.email,
+            email_verified=True,
+        ),
+        "127.0.0.1",
+        "pytest",
+    )
+
+    email_jobs = [kwargs for name, kwargs in enqueued_jobs if name == "send_email"]
+    assert len(email_jobs) == 1
+    assert email_jobs[0]["context"]["event"] == "oauth_linked"
+    assert email_jobs[0]["context"]["provider"] == "Google"
+
+
+async def test_oauth_login_brand_new_user_does_not_enqueue_security_notification_email(
+    session: AsyncSession,
+    enqueued_jobs: list[tuple[str, dict[str, Any]]],
+) -> None:
+    # A signup-via-OAuth with no prior account has no "change" for a
+    # security-notification email to be about.
+    await AuthService(session).oauth_login(
+        "google",
+        OAuthProfile(
+            provider_user_id="g-newuser-1", email="brand-new@example.com", email_verified=True
+        ),
+        "127.0.0.1",
+        "pytest",
+    )
+
+    email_jobs = [kwargs for name, kwargs in enqueued_jobs if name == "send_email"]
+    assert email_jobs == []
 
 
 # --- AuthService.oauth_login() (direct, no HTTP) -------------------------------

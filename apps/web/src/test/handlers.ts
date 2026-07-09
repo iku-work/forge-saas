@@ -97,11 +97,20 @@ export const handlers = [
   http.delete(`${API}/api/v1/auth/sessions/:sessionId`, () =>
     HttpResponse.json(envelope(null)),
   ),
+  http.post(`${API}/api/v1/auth/change-password`, () =>
+    HttpResponse.json(envelope(null)),
+  ),
+  http.get(`${API}/api/v1/auth/oauth/accounts`, () =>
+    HttpResponse.json(envelope([])),
+  ),
   http.get(`${API}/api/v1/auth/oauth/:provider`, () =>
     HttpResponse.redirect("https://oauth.example.test/authorize", 302),
   ),
   http.get(`${API}/api/v1/auth/oauth/:provider/callback`, () =>
     HttpResponse.redirect("/", 302),
+  ),
+  http.post(`${API}/api/v1/auth/oauth/:provider/unlink`, () =>
+    HttpResponse.json(envelope(null)),
   ),
   http.post(`${API}/api/v1/auth/2fa/enable`, () =>
     HttpResponse.json(

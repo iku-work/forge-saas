@@ -30,6 +30,8 @@
   "invalid_magic_link": "Tämä kirjautumislinkki on virheellinen tai vanhentunut.",
   "oauth_no_linked_user": "Tämä OAuth-tili ei ole linkitetty käyttäjään.",
   "oauth_email_not_verified": "OAuth-palveluntarjoajasi ei ilmoittanut vahvistettua sähköpostiosoitetta.",
+  "oauth_account_not_linked": "Tähän palveluun ei ole linkitettyä tiliä.",
+  "oauth_last_auth_method": "Et voi poistaa ainoaa kirjautumistapaasi — aseta ensin salasana.",
   "totp_already_enabled": "Kaksivaiheinen tunnistautuminen on jo käytössä.",
   "totp_setup_not_pending": "Ei odottavaa kaksivaiheisen tunnistautumisen asetusta vahvistettavaksi.",
   "invalid_totp_code": "Virheellinen kaksivaiheisen tunnistautumisen koodi.",

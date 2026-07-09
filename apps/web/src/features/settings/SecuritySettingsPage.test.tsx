@@ -1,6 +1,7 @@
 import { http, HttpResponse } from "msw";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { getApiBaseUrl } from "@forge/api-client";
@@ -98,6 +99,67 @@ describe("SecuritySettingsPage", () => {
     expect(
       screen.getByRole("button", { name: "Disable 2FA" }),
     ).toBeInTheDocument();
+  });
+
+  it("submits a password change and shows the success message", async () => {
+    hooks.useAuth.mockReturnValue({ user, isLoading: false });
+    server.use(
+      http.get(`${API}/api/v1/auth/sessions`, () =>
+        HttpResponse.json(envelope([])),
+      ),
+    );
+    const interaction = userEvent.setup();
+
+    renderPage();
+
+    await interaction.type(
+      screen.getByLabelText("Current password"),
+      "Correct-Horse9",
+    );
+    await interaction.type(
+      screen.getByLabelText("New password"),
+      "Even-Better-Horse8",
+    );
+    await interaction.click(
+      screen.getByRole("button", { name: "Change password" }),
+    );
+
+    expect(
+      await screen.findByText(
+        "Your password has been changed. Other devices have been signed out.",
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it("lists linked OAuth accounts and unlinks a provider", async () => {
+    hooks.useAuth.mockReturnValue({ user, isLoading: false });
+    let unlinkCalled = false;
+    server.use(
+      http.get(`${API}/api/v1/auth/sessions`, () =>
+        HttpResponse.json(envelope([])),
+      ),
+      http.get(`${API}/api/v1/auth/oauth/accounts`, () =>
+        HttpResponse.json(
+          envelope([
+            { provider: "google", created_at: "2026-01-01T00:00:00Z" },
+          ]),
+        ),
+      ),
+      http.post(`${API}/api/v1/auth/oauth/google/unlink`, () => {
+        unlinkCalled = true;
+        return HttpResponse.json(envelope(null));
+      }),
+    );
+    const interaction = userEvent.setup();
+
+    renderPage();
+
+    await screen.findByText("Google");
+    await interaction.click(screen.getByRole("button", { name: "Unlink" }));
+
+    await waitFor(() => {
+      expect(unlinkCalled).toBe(true);
+    });
   });
 
   it("hides the TOTP section when the totp_2fa module is disabled", async () => {

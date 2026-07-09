@@ -15,7 +15,8 @@ import {
   FormItem,
   FormLabel,
   FormMessage,
-  Input,
+  PasswordInput,
+  PasswordStrengthMeter,
 } from "@forge/ui";
 import {
   passwordResetSchema,
@@ -114,15 +115,12 @@ export function ResetPasswordPage({ token }: ResetPasswordPageProps) {
                   {t("auth.reset_password.new_password_label")}
                 </FormLabel>
                 <FormControl>
-                  <Input
-                    type="password"
-                    autoComplete="new-password"
-                    {...field}
-                  />
+                  <PasswordInput autoComplete="new-password" {...field} />
                 </FormControl>
                 <p className="text-xs text-muted-foreground">
                   {t("auth.reset_password.password_helper")}
                 </p>
+                <PasswordStrengthMeter password={field.value} />
                 <FormMessage />
               </FormItem>
             )}

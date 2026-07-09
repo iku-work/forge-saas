@@ -331,6 +331,38 @@ async def test_revoke_all_for_user_does_not_touch_other_users(
     assert fetched.revoked_at is None
 
 
+async def test_revoke_all_for_user_with_except_id_spares_that_session(
+    session_repo: SessionRepository, existing_user: User
+) -> None:
+    # T-216: change_password() keeps the request's own session alive while
+    # revoking every other one -- except_id is how it does that.
+    keep = await session_repo.create(
+        user_id=existing_user.id,
+        token_hash="token-hash-except-1",
+        device_label=None,
+        ip_address="127.0.0.1",
+        user_agent="pytest",
+        expires_at=_future(),
+    )
+    await session_repo.create(
+        user_id=existing_user.id,
+        token_hash="token-hash-except-2",
+        device_label=None,
+        ip_address="127.0.0.1",
+        user_agent="pytest",
+        expires_at=_future(),
+    )
+
+    await session_repo.revoke_all_for_user(existing_user.id, except_id=keep.id)
+
+    refetched_keep = await session_repo.get_by_token_hash("token-hash-except-1")
+    refetched_other = await session_repo.get_by_token_hash("token-hash-except-2")
+    assert refetched_keep is not None
+    assert refetched_keep.revoked_at is None
+    assert refetched_other is not None
+    assert refetched_other.revoked_at is not None
+
+
 async def test_list_active_for_user_excludes_revoked_and_expired(
     session_repo: SessionRepository, existing_user: User
 ) -> None:

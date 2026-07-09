@@ -1,7 +1,8 @@
 """
 Business logic for registration, email verification (T-017), login with
 brute-force lockout (T-018), refresh-token rotation with theft detection
-(T-019), and password reset + magic link (T-020).
+(T-019), password reset + magic link (T-020), and the authenticated
+change-password/OAuth-unlink/security-notification-email flows (T-216).
 """
 
 import json
@@ -19,8 +20,8 @@ from app.core.config import get_settings
 from app.core.exceptions import AuthenticationError, ConflictError, NotFoundError
 from app.models._mixins import utcnow
 from app.modules.audit.service import AuditService
+from app.modules.auth.models import OAuthAccount, TOTPSecret, User
 from app.modules.auth.models import Session as SessionModel
-from app.modules.auth.models import TOTPSecret, User
 from app.modules.auth.repository import (
     EmailVerificationTokenRepository,
     MagicLinkTokenRepository,
@@ -329,6 +330,7 @@ class AuthService:
                 )
 
             user = await self._users.get_by_email(profile.email)
+            is_new_user = user is None
             if user is None:
                 user = await self._users.create(
                     email=profile.email,
@@ -346,8 +348,69 @@ class AuthService:
             await self._oauth_accounts.create(
                 user_id=user.id, provider=provider, provider_user_id=profile.provider_user_id
             )
+            if not is_new_user:
+                # T-216/ASVS V2.5.5: only a security-relevant event for an
+                # account that already existed -- a brand-new signup-via-OAuth
+                # has no prior state for this to be a *change* to.
+                await self._enqueue_security_notification_email(
+                    user, "oauth_linked", provider=provider
+                )
 
         return await self._create_session(user, ip, user_agent)
+
+    async def change_password(
+        self,
+        user: User,
+        current_password: str,
+        new_password: str,
+        current_refresh_token_plain: str | None,
+    ) -> None:
+        if not verify_password(current_password, user.hashed_password or _DUMMY_PASSWORD_HASH):
+            raise AuthenticationError("errors.invalid_password", fallback="Invalid password")
+
+        await self._users.update(user.id, hashed_password=hash_password(new_password))
+
+        # Keeps the session this request is authenticated with alive and
+        # revokes every other one (ASVS V3.3.4) -- unlike
+        # confirm_password_reset's unconditional revoke_all_for_user, this
+        # request already proved the caller's identity, so it shouldn't log
+        # them out of their own action.
+        current_session_id: UUID | None = None
+        if current_refresh_token_plain is not None:
+            current_session = await self._sessions.get_by_token_hash(
+                hash_token(current_refresh_token_plain)
+            )
+            if current_session is not None:
+                current_session_id = current_session.id
+        await self._sessions.revoke_all_for_user(user.id, except_id=current_session_id)
+
+        await self._enqueue_security_notification_email(user, "password_change")
+
+    async def list_oauth_accounts(self, user_id: UUID) -> list[OAuthAccount]:
+        return await self._oauth_accounts.list_for_user(user_id)
+
+    async def unlink_oauth(self, user: User, provider: str) -> None:
+        account = await self._oauth_accounts.get_by_user_and_provider(user.id, provider)
+        if account is None:
+            raise NotFoundError(
+                "errors.oauth_account_not_linked",
+                fallback="No linked account for this provider",
+            )
+
+        if user.hashed_password is None:
+            # An OAuth-only user (§T-023) with exactly one linked provider has
+            # no other way to sign back in -- unlinking would permanently
+            # lock them out (ASVS V3.5.1 still expects this to be revocable,
+            # just not down to zero auth factors).
+            remaining = await self._oauth_accounts.list_for_user(user.id)
+            if len(remaining) <= 1:
+                raise ConflictError(
+                    "errors.oauth_last_auth_method",
+                    fallback="Can't unlink your only sign-in method. Set a password first.",
+                )
+
+        await self._oauth_accounts.delete(account.id)
+        await self._enqueue_security_notification_email(user, "oauth_unlinked", provider=provider)
 
     async def logout(self, refresh_token_plain: str) -> None:
         session = await self._sessions.get_by_token_hash(hash_token(refresh_token_plain))
@@ -415,6 +478,7 @@ class AuthService:
             user.id, json.dumps([hash_password(c) for c in backup_codes])
         )
         await self._users.update(user.id, totp_enabled=True)
+        await self._enqueue_security_notification_email(user, "totp_enabled")
         return backup_codes
 
     async def disable_2fa(self, user: User, password: str, code: str) -> None:
@@ -435,6 +499,7 @@ class AuthService:
 
         await self._totp_secrets.disable(user.id)
         await self._users.update(user.id, totp_enabled=False)
+        await self._enqueue_security_notification_email(user, "totp_disabled")
 
     async def confirm_login_2fa(
         self, temp_token: str, code: str, ip: str, user_agent: str
@@ -514,5 +579,26 @@ class AuthService:
             context={
                 "user_name": user.full_name,
                 "login_url": f"{settings.FRONTEND_URL}/magic-link/consume?token={token}",
+            },
+        )
+
+    async def _enqueue_security_notification_email(
+        self, user: User, event: str, *, provider: str | None = None
+    ) -> None:
+        # T-216/ASVS V2.2.3, V2.5.5: fired on password change, 2FA enable/
+        # disable, and OAuth link/unlink -- `event` selects the body copy the
+        # SecurityNotification template renders (see
+        # packages/email-templates/src/templates/SecurityNotification.tsx).
+        settings = get_settings()
+        await jobs.enqueue_job(
+            "send_email",
+            to=user.email,
+            template="security_notification",
+            locale=user.locale,
+            context={
+                "user_name": user.full_name,
+                "event": event,
+                "provider": provider.capitalize() if provider else None,
+                "settings_url": f"{settings.FRONTEND_URL}/settings/security",
             },
         )

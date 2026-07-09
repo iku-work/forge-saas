@@ -16,6 +16,8 @@ import {
   FormLabel,
   FormMessage,
   Input,
+  PasswordInput,
+  PasswordStrengthMeter,
 } from "@forge/ui";
 import { registerSchema, type RegisterInput } from "@forge/validation";
 
@@ -107,15 +109,12 @@ export function RegisterPage() {
               <FormItem>
                 <FormLabel>{t("auth.register.password_label")}</FormLabel>
                 <FormControl>
-                  <Input
-                    type="password"
-                    autoComplete="new-password"
-                    {...field}
-                  />
+                  <PasswordInput autoComplete="new-password" {...field} />
                 </FormControl>
                 <p className="text-xs text-muted-foreground">
                   {t("auth.register.password_helper")}
                 </p>
+                <PasswordStrengthMeter password={field.value} />
                 <FormMessage />
               </FormItem>
             )}

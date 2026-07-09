@@ -6,10 +6,14 @@ import { useTranslation } from "react-i18next";
 import { z } from "zod";
 
 import {
+  changePasswordApiV1AuthChangePasswordPost,
   disable2FaApiV1Auth2FaDisablePost,
   enable2FaApiV1Auth2FaEnablePost,
+  listOauthAccountsApiV1AuthOauthAccountsGet,
+  listOauthAccountsApiV1AuthOauthAccountsGetQueryKey,
   listSessionsApiV1AuthSessionsGet,
   listSessionsApiV1AuthSessionsGetQueryKey,
+  oauthUnlinkApiV1AuthOauthProviderUnlinkPost,
   revokeSessionApiV1AuthSessionsSessionIdDelete,
   verify2FaApiV1Auth2FaVerifyPost,
 } from "@forge/api-client";
@@ -29,6 +33,8 @@ import {
   FormLabel,
   FormMessage,
   Input,
+  PasswordInput,
+  PasswordStrengthMeter,
   Skeleton,
   Table,
   TableBody,
@@ -38,8 +44,11 @@ import {
   TableRow,
 } from "@forge/ui";
 import { formatDate } from "@forge/utils";
+import { changePasswordSchema, type ChangePasswordInput } from "@forge/validation";
 
 import { getErrorMessage } from "../auth/getErrorMessage";
+
+const _OAUTH_PROVIDERS = ["google", "github"] as const;
 
 function SessionsCard() {
   const { t, i18n } = useTranslation();
@@ -411,14 +420,214 @@ function TwoFactorCard() {
   );
 }
 
+function ChangePasswordCard() {
+  const { t } = useTranslation();
+  const [formError, setFormError] = useState<string | null>(null);
+  const [success, setSuccess] = useState(false);
+
+  const changePassword = useMutation({
+    mutationFn: async (input: ChangePasswordInput) => {
+      await changePasswordApiV1AuthChangePasswordPost({
+        body: {
+          current_password: input.currentPassword,
+          new_password: input.newPassword,
+        },
+        throwOnError: true,
+      });
+    },
+  });
+
+  const form = useForm<ChangePasswordInput>({
+    resolver: zodResolver(changePasswordSchema),
+    defaultValues: { currentPassword: "", newPassword: "" },
+  });
+
+  const onSubmit = async (values: ChangePasswordInput): Promise<void> => {
+    setFormError(null);
+    setSuccess(false);
+    try {
+      await changePassword.mutateAsync(values);
+      setSuccess(true);
+      form.reset();
+    } catch (caught) {
+      setFormError(getErrorMessage(caught, "auth.change_password.error_default"));
+    }
+  };
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardDescription>{t("auth.change_password.description")}</CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        {formError ? (
+          <Alert variant="destructive">
+            <AlertDescription>{formError}</AlertDescription>
+          </Alert>
+        ) : null}
+        {success ? (
+          <Alert>
+            <AlertDescription>
+              {t("auth.change_password.success_message")}
+            </AlertDescription>
+          </Alert>
+        ) : null}
+
+        <Form {...form}>
+          <form
+            className="space-y-3"
+            onSubmit={(event) => {
+              void form.handleSubmit(onSubmit)(event);
+            }}
+            noValidate
+          >
+            <FormField
+              control={form.control}
+              name="currentPassword"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>
+                    {t("auth.change_password.current_password_label")}
+                  </FormLabel>
+                  <FormControl>
+                    <PasswordInput autoComplete="current-password" {...field} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <FormField
+              control={form.control}
+              name="newPassword"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>
+                    {t("auth.change_password.new_password_label")}
+                  </FormLabel>
+                  <FormControl>
+                    <PasswordInput autoComplete="new-password" {...field} />
+                  </FormControl>
+                  <p className="text-xs text-muted-foreground">
+                    {t("auth.change_password.password_helper")}
+                  </p>
+                  <PasswordStrengthMeter password={field.value} />
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <Button type="submit" disabled={form.formState.isSubmitting}>
+              {form.formState.isSubmitting
+                ? t("auth.change_password.submit_pending")
+                : t("auth.change_password.submit")}
+            </Button>
+          </form>
+        </Form>
+      </CardContent>
+    </Card>
+  );
+}
+
+function LinkedAccountsCard() {
+  const { t } = useTranslation();
+  const queryClient = useQueryClient();
+  // Raw SDK calls rather than the generated *Mutation() helpers -- see the
+  // comment above SessionsCard's sessionsQuery for why.
+  const accountsQuery = useQuery({
+    queryKey: listOauthAccountsApiV1AuthOauthAccountsGetQueryKey(),
+    queryFn: async () => {
+      const { data } = await listOauthAccountsApiV1AuthOauthAccountsGet({
+        throwOnError: true,
+      });
+      return data;
+    },
+  });
+  const unlink = useMutation({
+    mutationFn: async (provider: string) => {
+      await oauthUnlinkApiV1AuthOauthProviderUnlinkPost({
+        path: { provider },
+        throwOnError: true,
+      });
+    },
+  });
+  const [unlinkError, setUnlinkError] = useState<string | null>(null);
+
+  const handleUnlink = async (provider: string): Promise<void> => {
+    setUnlinkError(null);
+    try {
+      await unlink.mutateAsync(provider);
+      await queryClient.invalidateQueries({
+        queryKey: listOauthAccountsApiV1AuthOauthAccountsGetQueryKey(),
+      });
+    } catch (error) {
+      setUnlinkError(getErrorMessage(error, "auth.linked_accounts.error_unlink"));
+    }
+  };
+
+  const linkedProviders = new Set(
+    (accountsQuery.data?.data ?? []).map((account) => account.provider),
+  );
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardDescription>{t("auth.linked_accounts.description")}</CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        {unlinkError ? (
+          <Alert variant="destructive">
+            <AlertDescription>{unlinkError}</AlertDescription>
+          </Alert>
+        ) : null}
+
+        {accountsQuery.isLoading ? (
+          <Skeleton className="h-8 w-full" />
+        ) : (
+          _OAUTH_PROVIDERS.map((provider) => {
+            const linked = linkedProviders.has(provider);
+            return (
+              <div key={provider} className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium">
+                    {t(`auth.linked_accounts.${provider}`)}
+                  </p>
+                  {linked ? null : (
+                    <p className="text-xs text-muted-foreground">
+                      {t("auth.linked_accounts.not_linked")}
+                    </p>
+                  )}
+                </div>
+                {linked ? (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    disabled={unlink.isPending}
+                    onClick={() => {
+                      void handleUnlink(provider);
+                    }}
+                  >
+                    {t("auth.linked_accounts.unlink")}
+                  </Button>
+                ) : null}
+              </div>
+            );
+          })
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
 export function SecuritySettingsPage() {
   const { t } = useTranslation();
   const modules = useModules();
   return (
     <div className="max-w-xl space-y-6 p-6">
       <h1 className="text-xl font-semibold">{t("common.nav.security")}</h1>
+      <ChangePasswordCard />
       <SessionsCard />
       {modules.totp2fa ? <TwoFactorCard /> : null}
+      {modules.oauth ? <LinkedAccountsCard /> : null}
     </div>
   );
 }

@@ -27,11 +27,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
 from app.core.db import get_session
+from app.core.dependencies import get_current_user
 from app.core.envelope import Envelope, Meta
 from app.core.exceptions import AuthenticationError, DomainError, NotFoundError
-from app.middleware.rate_limit import auth_limit
+from app.middleware.rate_limit import api_limit, auth_limit, sensitive_limit
+from app.modules.auth.models import User
 from app.modules.auth.router import _client_ip, _request_id, _set_refresh_cookie
-from app.modules.auth.schemas import LoginResponse, OAuthProfile, UserPublic
+from app.modules.auth.schemas import LoginResponse, OAuthAccountPublic, OAuthProfile, UserPublic
 from app.modules.auth.service import AuthService
 from app.modules.auth.utils import sign_url_token, verify_url_token
 
@@ -196,6 +198,21 @@ def _get_client_or_raise(clients: dict[str, OAuthClient], provider: str) -> OAut
 router = APIRouter(prefix="/auth/oauth", tags=["auth"])
 
 
+# T-216: registered before "/{provider}" -- Starlette matches path routes in
+# registration order, so "/accounts" would otherwise be swallowed by
+# "/{provider}" (provider="accounts") since both are GET.
+@router.get("/accounts")
+@api_limit
+async def list_oauth_accounts(
+    request: Request,
+    user: Annotated[User, Depends(get_current_user)],
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> Envelope[list[OAuthAccountPublic]]:
+    accounts = await AuthService(session).list_oauth_accounts(user.id)
+    data = [OAuthAccountPublic.model_validate(a) for a in accounts]
+    return Envelope(data=data, meta=Meta(request_id=_request_id(request)))
+
+
 @router.get("/{provider}")
 @auth_limit
 async def oauth_start(
@@ -257,3 +274,16 @@ async def oauth_callback(  # noqa: PLR0913 -- state/code/provider/session are ea
     response.delete_cookie(_STATE_COOKIE_NAME, path=_STATE_COOKIE_PATH)
     data = LoginResponse(access_token=access_token, user=UserPublic.model_validate(user))
     return Envelope(data=data, meta=Meta(request_id=_request_id(request)))
+
+
+@router.post("/{provider}/unlink")
+@sensitive_limit
+async def oauth_unlink(
+    request: Request,
+    provider: str,
+    user: Annotated[User, Depends(get_current_user)],
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> Envelope[None]:
+    await AuthService(session).unlink_oauth(user, provider)
+    await session.commit()
+    return Envelope(data=None, meta=Meta(request_id=_request_id(request)))

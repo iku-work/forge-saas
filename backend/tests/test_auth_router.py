@@ -65,7 +65,7 @@ _TABLES = [
     MagicLinkToken.__table__,
 ]
 _VALID_PASSWORD = "Correct-Horse9"
-_REFRESH_COOKIE_NAME = "refresh_token"
+_REFRESH_COOKIE_NAME = "__Host-refresh_token"
 _PLATFORM_HEADER = "X-Client-Platform"
 
 
@@ -266,7 +266,9 @@ async def test_login_sets_cookie_with_correct_attributes(
     assert "HttpOnly" in cookie
     assert "Secure" in cookie
     assert "SameSite=strict" in cookie
-    assert "Path=/api/v1/auth" in cookie
+    # T-216: Path=/ is required by the __Host- cookie-name prefix (a browser
+    # refuses to set the cookie otherwise) -- see router.py's _REFRESH_COOKIE_PATH.
+    assert "Path=/" in cookie
 
 
 async def test_login_response_contains_access_token_and_user(
@@ -730,3 +732,76 @@ async def test_revoke_session_owned_by_another_user_returns_404(
     )
 
     assert response.status_code == 404
+
+
+# --- /change-password (T-216) ---------------------------------------------
+
+
+async def test_change_password_without_bearer_token_returns_401(client: httpx.AsyncClient) -> None:
+    response = await client.post(
+        "/api/v1/auth/change-password",
+        json={"current_password": _VALID_PASSWORD, "new_password": "Even-Better-Horse8"},
+    )
+
+    assert response.status_code == 401
+
+
+async def test_change_password_wrong_current_password_returns_401(
+    client: httpx.AsyncClient, verified_user: User
+) -> None:
+    response = await client.post(
+        "/api/v1/auth/change-password",
+        json={"current_password": "wrong-password", "new_password": "Even-Better-Horse8"},
+        headers=_auth_header(verified_user),
+    )
+
+    assert response.status_code == 401
+
+
+async def test_change_password_happy_path_allows_login_with_new_password(
+    client: httpx.AsyncClient, verified_user: User
+) -> None:
+    response = await client.post(
+        "/api/v1/auth/change-password",
+        json={"current_password": _VALID_PASSWORD, "new_password": "Even-Better-Horse8"},
+        headers=_auth_header(verified_user),
+    )
+
+    assert response.status_code == 200
+    old_login = await client.post(
+        "/api/v1/auth/login", json={"email": verified_user.email, "password": _VALID_PASSWORD}
+    )
+    assert old_login.status_code == 401
+    new_login = await client.post(
+        "/api/v1/auth/login",
+        json={"email": verified_user.email, "password": "Even-Better-Horse8"},
+    )
+    assert new_login.status_code == 200
+
+
+async def test_change_password_revokes_other_sessions_but_keeps_current_one(
+    client: httpx.AsyncClient, verified_user: User, session_repo: SessionRepository
+) -> None:
+    # A separate, independent session (e.g. a second device).
+    login_elsewhere = await client.post(
+        "/api/v1/auth/login", json={"email": verified_user.email, "password": _VALID_PASSWORD}
+    )
+    assert login_elsewhere.status_code == 200
+    client.cookies.clear()
+
+    # This request's own login is what sets the cookie change-password reads
+    # to identify "the current session" below -- it must be the one session
+    # that survives.
+    await client.post(
+        "/api/v1/auth/login", json={"email": verified_user.email, "password": _VALID_PASSWORD}
+    )
+
+    response = await client.post(
+        "/api/v1/auth/change-password",
+        json={"current_password": _VALID_PASSWORD, "new_password": "Even-Better-Horse8"},
+        headers=_auth_header(verified_user),
+    )
+
+    assert response.status_code == 200
+    active = await session_repo.list_active_for_user(verified_user.id)
+    assert len(active) == 1

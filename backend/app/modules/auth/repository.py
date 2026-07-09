@@ -158,9 +158,16 @@ class SessionRepository:
         session_obj.revoked_at = utcnow()
         await self.session.flush()
 
-    async def revoke_all_for_user(self, user_id: UUID) -> None:
+    async def revoke_all_for_user(self, user_id: UUID, *, except_id: UUID | None = None) -> None:
+        # T-216: except_id lets change_password() keep the session the
+        # request itself is authenticated with alive while revoking every
+        # other one (ASVS V3.3.4's "all *other* active sessions" -- unlike
+        # confirm_password_reset, which has no authenticated session to
+        # spare and always revokes everything).
         m = cast("Any", SessionModel)
         stmt = select(SessionModel).where(m.user_id == user_id, m.revoked_at.is_(None))
+        if except_id is not None:
+            stmt = stmt.where(m.id != except_id)
         result = await self.session.execute(stmt)
         now = utcnow()
         for session_obj in result.scalars().all():
@@ -228,6 +235,24 @@ class OAuthAccountRepository:
         self.session.add(account)
         await self.session.flush()
         return account
+
+    async def list_for_user(self, user_id: UUID) -> list[OAuthAccount]:
+        m = cast("Any", OAuthAccount)
+        stmt = select(OAuthAccount).where(m.user_id == user_id)
+        result = await self.session.execute(stmt)
+        return list(result.scalars().all())
+
+    async def get_by_user_and_provider(self, user_id: UUID, provider: str) -> OAuthAccount | None:
+        m = cast("Any", OAuthAccount)
+        stmt = select(OAuthAccount).where(m.user_id == user_id, m.provider == provider)
+        result = await self.session.execute(stmt)
+        return result.scalar_one_or_none()
+
+    async def delete(self, account_id: UUID) -> None:
+        m = cast("Any", OAuthAccount)
+        stmt = delete(OAuthAccount).where(m.id == account_id)
+        await self.session.execute(stmt)
+        await self.session.flush()
 
 
 class TOTPSecretRepository:

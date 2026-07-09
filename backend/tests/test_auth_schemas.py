@@ -4,6 +4,7 @@ import pytest
 from pydantic import ValidationError
 
 from app.modules.auth.schemas import (
+    ChangePasswordRequest,
     Enable2FAResponse,
     LoginRequest,
     LoginResponse,
@@ -30,19 +31,31 @@ def test_register_request_rejects_password_shorter_than_12_chars() -> None:
         RegisterRequest(email="alice@example.com", password="Short1Aa!")
 
 
-def test_register_request_rejects_password_missing_uppercase() -> None:
+def test_register_request_rejects_password_longer_than_128_chars() -> None:
     with pytest.raises(ValidationError):
-        RegisterRequest(email="alice@example.com", password="lowercase123only")
+        RegisterRequest(email="alice@example.com", password="Correct-Horse9" + "x" * 128)
 
 
-def test_register_request_rejects_password_missing_lowercase() -> None:
-    with pytest.raises(ValidationError):
-        RegisterRequest(email="alice@example.com", password="UPPERCASE123ONLY")
+# T-216: ASVS V2.1.9 / NIST SP 800-63B recommend against composition rules
+# (forced upper/lower/digit) in favor of length + breach-list checks alone --
+# these three, previously-rejected passwords are now accepted as long as
+# they're long enough and not on the common-password denylist.
+def test_register_request_accepts_password_without_uppercase() -> None:
+    req = RegisterRequest(email="alice@example.com", password="lowercase123only")
+
+    assert req.password == "lowercase123only"
 
 
-def test_register_request_rejects_password_missing_digit() -> None:
-    with pytest.raises(ValidationError):
-        RegisterRequest(email="alice@example.com", password="NoDigitsHereAtAll")
+def test_register_request_accepts_password_without_lowercase() -> None:
+    req = RegisterRequest(email="alice@example.com", password="UPPERCASE123ONLY")
+
+    assert req.password == "UPPERCASE123ONLY"
+
+
+def test_register_request_accepts_password_without_digit() -> None:
+    req = RegisterRequest(email="alice@example.com", password="NoDigitsHereAtAll")
+
+    assert req.password == "NoDigitsHereAtAll"
 
 
 def test_register_request_rejects_common_password() -> None:
@@ -61,6 +74,42 @@ def test_password_reset_confirm_accepts_strong_password() -> None:
     confirm = PasswordResetConfirmRequest(token="tok", new_password="Tr0ub4dor&3xyz")
 
     assert confirm.new_password == "Tr0ub4dor&3xyz"
+
+
+# ---------------------------------------------------------------------------
+# ChangePasswordRequest schemas -- T-216
+# ---------------------------------------------------------------------------
+
+
+def test_change_password_request_accepts_strong_password() -> None:
+    req = ChangePasswordRequest(current_password="whatever", new_password="Tr0ub4dor&3xyz")
+
+    assert req.new_password == "Tr0ub4dor&3xyz"
+
+
+def test_change_password_request_rejects_short_new_password() -> None:
+    with pytest.raises(ValidationError):
+        ChangePasswordRequest(current_password="whatever", new_password="short1Aa!")
+
+
+def test_change_password_request_rejects_common_new_password() -> None:
+    with pytest.raises(ValidationError):
+        ChangePasswordRequest(current_password="whatever", new_password="Password123!")
+
+
+def test_change_password_request_rejects_current_password_longer_than_128_chars() -> None:
+    with pytest.raises(ValidationError):
+        ChangePasswordRequest(current_password="x" * 129, new_password="Tr0ub4dor&3xyz")
+
+
+# ---------------------------------------------------------------------------
+# Password max_length=128 (T-216) -- every password-accepting field
+# ---------------------------------------------------------------------------
+
+
+def test_login_request_rejects_password_longer_than_128_chars() -> None:
+    with pytest.raises(ValidationError):
+        LoginRequest(email="alice@example.com", password="x" * 129)
 
 
 # ---------------------------------------------------------------------------

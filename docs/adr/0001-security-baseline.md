@@ -144,17 +144,17 @@ questionnaire) — evidence links point at real files, not at task IDs.
 | ID | Requirement | Status | Evidence |
 |---|---|---|---|
 | V2.1.1 | Minimum 12-character passwords | met | `backend/app/modules/auth/schemas.py` — `Field(min_length=12)` on `RegisterRequest.password` and the reset-confirm `new_password`. |
-| V2.1.2 | Allow ≥64 characters, deny >128 | partial | Minimum enforced; no `max_length` cap found — an unbounded password is passed to Argon2. Follow-up: T-216. |
+| V2.1.2 | Allow ≥64 characters, deny >128 | met | `backend/app/modules/auth/schemas.py` — `_PASSWORD_MAX_LENGTH = 128` applied via `Field(max_length=...)` to every password-accepting field (`RegisterRequest`, `LoginRequest`, `PasswordResetConfirmRequest`, `ChangePasswordRequest`, `Disable2FARequest`). Closed by T-216. |
 | V2.1.3 | No password truncation | met | Argon2 (`backend/app/modules/auth/utils.py`) hashes the full password; no truncation logic present (unlike bcrypt's 72-byte limit). |
-| V2.1.4 | Any printable Unicode, including emoji, permitted | met | Pydantic `str` fields accept full Unicode by default; no character-class restriction beyond the composition check in V2.1.9. |
-| V2.1.5 | Users can change their password | partial | Only a forgot-password reset flow exists (`request_password_reset`/`confirm_password_reset`); no authenticated "I know my password, set a new one" endpoint. Follow-up: T-216. |
-| V2.1.6 | Password change requires current + new password | partial | No authenticated change-password endpoint exists yet (see V2.1.5). Follow-up: T-216. |
-| V2.1.7 | Passwords checked against a breached-password list | met | `backend/app/modules/auth/schemas.py` `_COMMON_PASSWORDS` (~1000 entries) with trailing-noise stripping, checked on registration and password reset. |
-| V2.1.8 | Password strength meter shown to users | partial | Enforcement is server-side rejection only; no confirmed frontend strength-meter UX. Follow-up: T-216. |
-| V2.1.9 | No password composition rules (no forced upper/lower/digit/special) | partial | `_validate_password_strength` (`backend/app/modules/auth/schemas.py:1030-1040`) requires 1 uppercase, 1 lowercase, 1 digit — exactly the composition-rule pattern ASVS 4.0.3 recommends against in favor of length + breach-list checks (NIST SP 800-63B). Follow-up: T-216. |
+| V2.1.4 | Any printable Unicode, including emoji, permitted | met | Pydantic `str` fields accept full Unicode by default; composition-rule restriction removed by T-216 (see V2.1.9). |
+| V2.1.5 | Users can change their password | met | `POST /api/v1/auth/change-password` (`backend/app/modules/auth/router.py`, `AuthService.change_password`) — an authenticated change-password endpoint alongside the existing forgot-password reset flow. Closed by T-216. |
+| V2.1.6 | Password change requires current + new password | met | `ChangePasswordRequest(current_password, new_password)` — `AuthService.change_password` re-verifies `current_password` via Argon2 before accepting `new_password`. Closed by T-216. |
+| V2.1.7 | Passwords checked against a breached-password list | met | `backend/app/modules/auth/schemas.py` `_COMMON_PASSWORDS` (~1000 entries) with trailing-noise stripping, checked on registration, password reset, and change-password. |
+| V2.1.8 | Password strength meter shown to users | met | `packages/ui/src/components/password-strength-meter.tsx` (`PasswordStrengthMeter`), wired into `RegisterPage`, `ResetPasswordPage`, and Settings > Security's `ChangePasswordCard`. Closed by T-216. |
+| V2.1.9 | No password composition rules (no forced upper/lower/digit/special) | met | `_validate_password_strength` (`backend/app/modules/auth/schemas.py`) dropped the upper/lower/digit composition check per ASVS 4.0.3's recommendation against composition rules (NIST SP 800-63B) — length (`min_length=12`, `max_length=128`) + the breached-password denylist are now the whole policy. Mirrored on the frontend in `packages/validation/src/index.ts`'s `passwordSchema`. Closed by T-216. |
 | V2.1.10 | No periodic credential rotation or password-history requirement | met | No password-history table or rotation policy exists in `backend/app/modules/auth/models.py` or `backend/app/core/config.py`. |
 | V2.1.11 | Paste and password managers permitted | met | `backend/app/modules/auth/schemas.py` declares `password` as a plain `str` field — no client-side restriction is possible from a JSON API; nothing blocks paste or autofill. |
-| V2.1.12 | User can temporarily reveal a masked password | partial | Frontend UX detail, not verified in this pass. Follow-up: T-216. |
+| V2.1.12 | User can temporarily reveal a masked password | met | `packages/ui/src/components/password-input.tsx` (`PasswordInput`) — a reveal-toggle button, wired into every password field (login, register, reset, change-password). Closed by T-216. |
 
 #### V2.2 General Authenticator Security
 
@@ -162,7 +162,7 @@ questionnaire) — evidence links point at real files, not at task IDs.
 |---|---|---|---|
 | V2.2.1 | Anti-automation: lockout/rate-limiting, ≤100 failed attempts/hour | met | Account lockout after 10 failed attempts within a 15-minute window (`backend/app/modules/auth/service.py:49-50,143-162`) plus `5/minute` rate limit on the login route (`backend/app/middleware/rate_limit.py:35`) — well under the 100/hour ceiling. |
 | V2.2.2 | Weak authenticators (SMS/email) limited to secondary use | met | `backend/app/modules/auth/service.py` — 2FA (`enable_2fa`/`verify_2fa`) uses TOTP, not SMS; magic-link email is an alternate primary login path, not represented as a "stronger" factor. |
-| V2.2.3 | Secure notification sent after auth-detail changes | partial | Password reset revokes all sessions (`backend/app/modules/auth/service.py:273`) but no confirmed notification email is sent on password/2FA change or login from a new location. Follow-up: T-216. |
+| V2.2.3 | Secure notification sent after auth-detail changes | met | `AuthService._enqueue_security_notification_email` sends the `security_notification` email (`packages/email-templates/src/templates/SecurityNotification.tsx`) on password change, 2FA enable/disable, and OAuth link/unlink. Closed by T-216. |
 
 #### V2.3 Authenticator Lifecycle
 
@@ -190,7 +190,7 @@ questionnaire) — evidence links point at real files, not at task IDs.
 | V2.5.2 | No security questions | met | No "secret question" field exists in `backend/app/modules/auth/models.py` or anywhere else in the codebase. |
 | V2.5.3 | Recovery never reveals the current password | met | `backend/app/modules/auth/service.py` `confirm_password_reset` sets a new password; the old one is never returned or displayed. |
 | V2.5.4 | No shared/default accounts | met | No hardcoded default admin/root credentials found; `backend/app/core/seed.py` is dev-only seed data. |
-| V2.5.5 | User notified if an auth factor is changed/replaced | partial | Same gap as V2.2.3. Follow-up: T-216. |
+| V2.5.5 | User notified if an auth factor is changed/replaced | met | Same fix as V2.2.3 — `_enqueue_security_notification_email` fires on 2FA enable/disable and OAuth link/unlink, not just password change. Closed by T-216. |
 | V2.5.6 | Recovery uses a secure mechanism (TOTP, offline, signed link) | met | Reset/magic-link uses `itsdangerous`-signed, single-use, time-limited tokens (`backend/app/modules/auth/utils.py:111-117`). |
 | V2.5.7 | Lost-MFA recovery re-verifies identity at enrollment level | partial | `disable_2fa` requires password + code; if a user loses both their TOTP device and all backup codes, there's no documented admin-assisted recovery path. Follow-up: T-218. |
 
@@ -255,7 +255,7 @@ questionnaire) — evidence links point at real files, not at task IDs.
 |---|---|---|---|
 | V3.2.1 | New session token generated on authentication | met | `login()`/OAuth/2FA-confirm each call `create_access_token`+`generate_refresh_token` fresh (`backend/app/modules/auth/service.py`). |
 | V3.2.2 | Session tokens have ≥64 bits of entropy | met | `secrets.token_urlsafe(32)` = 256 bits (`backend/app/modules/auth/utils.py:103`). |
-| V3.2.3 | Tokens stored in the browser via secure methods | partial | Refresh token is a secure httpOnly cookie; access-token storage strategy on the frontend (memory vs. localStorage) wasn't verified in this backend-focused pass. Follow-up: T-216. |
+| V3.2.3 | Tokens stored in the browser via secure methods | met | Refresh token is a secure httpOnly cookie; access token lives only in a module-scoped in-memory store (`packages/api-client/src/client.ts` — "In-memory only -- the access token must never touch localStorage/cookies"), read by `packages/hooks/src/useAuth.ts`. Verified by T-216; no code change needed, `localStorage`/`sessionStorage` grepped clean for token usage. |
 | V3.2.4 | Session tokens generated via approved crypto algorithms | met | JWT RS256 for the access token; `secrets.token_urlsafe` (CSPRNG) for the refresh token. |
 
 #### V3.3 Session Termination
@@ -265,7 +265,7 @@ questionnaire) — evidence links point at real files, not at task IDs.
 | V3.3.1 | Logout/expiry invalidates the token, no back-button resume | met | `logout()` revokes the session row; access tokens expire in 15 minutes; refresh-token reuse triggers full revocation (`backend/app/modules/auth/service.py:202-237`). |
 | V3.3.2 | Periodic re-authentication (L2 target: ~12h or 30min idle) | partial | Access-token TTL forces a refresh every 15 minutes, but the refresh token itself is valid 30 days with no idle-timeout or forced periodic re-auth. Follow-up: T-218. |
 | V3.3.3 | Option to terminate all other sessions after password change | met | `confirm_password_reset` revokes all sessions (`backend/app/modules/auth/service.py:273`); `logout_all()` available on demand. |
-| V3.3.4 | Users can view/log out of all active sessions | partial | `logout_all()` exists, but no confirmed "list my active sessions" endpoint/UI. Follow-up: T-216. |
+| V3.3.4 | Users can view/log out of all active sessions | met | `GET /api/v1/auth/sessions` + `DELETE /api/v1/auth/sessions/{id}` (`backend/app/modules/auth/router.py`), scoped to the caller and revocable individually; surfaced in Settings > Security's `SessionsCard` (`apps/web/src/features/settings/SecuritySettingsPage.tsx`). `logout_all()` remains available for "sign out everywhere". |
 
 #### V3.4 Cookie-based Session Management
 
@@ -274,14 +274,14 @@ questionnaire) — evidence links point at real files, not at task IDs.
 | V3.4.1 | `Secure` attribute set | met | `backend/app/modules/auth/router.py` `_set_refresh_cookie()` — `secure=True`. |
 | V3.4.2 | `HttpOnly` attribute set | met | Same location — `httponly=True`. |
 | V3.4.3 | `SameSite` attribute limits CSRF exposure | met | Same location — `samesite="strict"`. |
-| V3.4.4 | `__Host-` cookie-name prefix used | partial | Cookie name doesn't currently use the `__Host-` prefix. Follow-up: T-216. |
-| V3.4.5 | Cookie `path` attribute scoped as precisely as possible | met | `path="/api/v1/auth"` (`backend/app/modules/auth/router.py:68-76`). |
+| V3.4.4 | `__Host-` cookie-name prefix used | met | Refresh cookie renamed to `__Host-refresh_token` (`backend/app/modules/auth/router.py`). Closed by T-216. |
+| V3.4.5 | Cookie `path` attribute scoped as precisely as possible | met | `path="/"` (`backend/app/modules/auth/router.py`) — widened from `/api/v1/auth` because the `__Host-` prefix (V3.4.4) requires `Path=/`; still scoped by `httponly`+`secure`+`samesite="strict"`. |
 
 #### V3.5 Token-based Session Management
 
 | ID | Requirement | Status | Evidence |
 |---|---|---|---|
-| V3.5.1 | Users can revoke OAuth tokens linked to their account | partial | No confirmed self-service "unlink OAuth provider" endpoint. Follow-up: T-216. |
+| V3.5.1 | Users can revoke OAuth tokens linked to their account | met | `POST /api/v1/auth/oauth/{provider}/unlink` (`backend/app/modules/auth/oauth.py`, `AuthService.unlink_oauth`) — blocked only if it's the account's sole authentication method (no password, no other linked provider). Surfaced in Settings > Security's `LinkedAccountsCard`. Closed by T-216. |
 | V3.5.2 | Session tokens used, not static API secrets | met | `backend/app/modules/auth/service.py` — rotating session tokens throughout; no static API-key auth mechanism exists yet (planned separately as T-310/T-311). |
 | V3.5.3 | Stateless tokens protected against tampering/replay | met | JWT is RS256-signed; `itsdangerous`-signed URL tokens for reset/magic-link/OAuth state. |
 
@@ -461,8 +461,8 @@ questionnaire) — evidence links point at real files, not at task IDs.
 | ID | Requirement | Status | Evidence |
 |---|---|---|---|
 | V8.2.1 | Sufficient anti-caching headers so browsers don't cache sensitive data | met | `Cache-Control: no-store` applies to all responses (`backend/app/middleware/security_headers.py:30`). |
-| V8.2.2 | Sensitive data absent from browser storage (localStorage etc.) | partial | Refresh token correctly avoids this (httpOnly cookie); frontend access-token storage strategy wasn't verified in this backend-focused pass. Follow-up: T-216. |
-| V8.2.3 | Authenticated data cleared from client storage after session end | partial | Frontend-dependent, not verified here. Follow-up: T-216. |
+| V8.2.2 | Sensitive data absent from browser storage (localStorage etc.) | met | Refresh token is httpOnly (never script-readable); access token lives only in a module-scoped in-memory variable (`packages/api-client/src/client.ts`), never `localStorage`/`sessionStorage`. Verified by T-216. |
+| V8.2.3 | Authenticated data cleared from client storage after session end | met | `useAuth().logout()`/`onSessionExpired` (`packages/hooks/src/useAuth.ts`) call `setAccessToken(null)`, clearing the in-memory token; nothing was ever written to persistent client storage to begin with. Verified by T-216. |
 
 #### V8.3 Sensitive Private Data
 

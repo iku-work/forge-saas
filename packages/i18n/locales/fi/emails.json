@@ -12,7 +12,8 @@
     "subscription_suspended": "Tilauksesi on keskeytetty",
     "trial_ending": "Kokeilujaksosi on päättymässä",
     "trial_expired": "Kokeilujaksosi on päättynyt",
-    "file_uploaded": "Uusi tiedosto ladattu"
+    "file_uploaded": "Uusi tiedosto ladattu",
+    "security_notification": "Tietoturvahälytys tilillesi"
   },
   "footer": {
     "ignore_notice": "Jos et pyytänyt tätä sähköpostia, voit jättää sen huomiotta."
@@ -106,5 +107,18 @@
     "greeting": "Hei",
     "body": "{uploaded_by} latasi tiedoston {filename} organisaatioon {org_name}.",
     "button": "Näytä tiedosto"
+  },
+  "security_notification": {
+    "title": "Tietoturvahälytys",
+    "greeting": "Hei",
+    "events": {
+      "password_change": "Salasanasi vaihdettiin juuri.",
+      "totp_enabled": "Kaksivaiheinen tunnistautuminen otettiin käyttöön tilillesi.",
+      "totp_disabled": "Kaksivaiheinen tunnistautuminen poistettiin käytöstä tililtäsi.",
+      "oauth_linked": "Tilisi yhdistettiin kirjautumaan sisään palvelulla {provider}.",
+      "oauth_unlinked": "Tilisi yhteys palveluun {provider} poistettiin."
+    },
+    "button": "Tarkista tietoturva-asetukset",
+    "footer": "Jos tämä et ollut sinä, vaihda salasanasi välittömästi ja tarkista aktiiviset istuntosi."
   }
 }

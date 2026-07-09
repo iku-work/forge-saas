@@ -24,6 +24,7 @@ from app.core.exceptions import AuthenticationError
 from app.middleware.rate_limit import api_limit, auth_limit, sensitive_limit
 from app.modules.auth.models import User
 from app.modules.auth.schemas import (
+    ChangePasswordRequest,
     LoginRequest,
     LoginResponse,
     MagicLinkConsumeRequest,
@@ -43,8 +44,15 @@ from app.modules.auth.service import AuthService, TwoFactorChallenge
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
-_REFRESH_COOKIE_NAME = "refresh_token"
-_REFRESH_COOKIE_PATH = "/api/v1/auth"
+# T-216/ASVS V3.4.4: the __Host- prefix is a browser-enforced guarantee that
+# this cookie was set with Secure, no Domain attribute, and Path=/ -- a
+# malicious subdomain or a network attacker on plain HTTP can't get the
+# browser to accept a same-named cookie that would shadow this one. The
+# prefix *requires* Path=/ (a browser silently refuses to set the cookie
+# otherwise), which is why the path widened from the old "/api/v1/auth" --
+# httpOnly + Secure + SameSite=strict already scope who can read it.
+_REFRESH_COOKIE_NAME = "__Host-refresh_token"
+_REFRESH_COOKIE_PATH = "/"
 
 # Mobile has no cookie jar, so it identifies itself with this header and
 # carries its refresh token explicitly (request body in, response body
@@ -274,6 +282,22 @@ async def update_me(
     return Envelope(
         data=UserPublic.model_validate(updated), meta=Meta(request_id=_request_id(request))
     )
+
+
+@router.post("/change-password")
+@sensitive_limit
+async def change_password(
+    request: Request,
+    body: ChangePasswordRequest,
+    user: Annotated[User, Depends(get_current_user)],
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> Envelope[None]:
+    refresh_token = _bearer_refresh_token(request, None)
+    await AuthService(session).change_password(
+        user, body.current_password, body.new_password, refresh_token
+    )
+    await session.commit()
+    return Envelope(data=None, meta=Meta(request_id=_request_id(request)))
 
 
 @router.get("/sessions")

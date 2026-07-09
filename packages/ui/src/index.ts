@@ -11,6 +11,8 @@ export * from "./components/form";
 export * from "./components/input";
 export * from "./components/label";
 export * from "./components/locale-switcher";
+export * from "./components/password-input";
+export * from "./components/password-strength-meter";
 export * from "./components/popover";
 export * from "./components/separator";
 export * from "./components/skeleton";
