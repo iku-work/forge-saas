@@ -177,6 +177,27 @@ async def test_login_wrong_password_increments_failed_count(
     assert fetched.failed_login_count == 1
 
 
+@pytest.mark.owasp("A07")
+async def test_login_wrong_password_writes_audit_event(
+    service: AuthService, verified_user: User, session: AsyncSession
+) -> None:
+    with pytest.raises(AuthenticationError):
+        await service.login(
+            LoginRequest(email="alice@example.com", password="wrong-password"), _IP, _USER_AGENT
+        )
+
+    events = (
+        (await session.execute(select(AuditEvent).where(AuditEvent.action == "user.login_failed")))
+        .scalars()
+        .all()
+    )
+    assert len(events) == 1
+    assert events[0].actor_id == verified_user.id
+    assert events[0].ip_address == _IP
+    assert events[0].user_agent == _USER_AGENT
+    assert events[0].severity == "info"
+
+
 @pytest.mark.owasp("A04")
 @pytest.mark.owasp("A07")
 async def test_login_tenth_wrong_password_triggers_lockout(
@@ -196,6 +217,41 @@ async def test_login_tenth_wrong_password_triggers_lockout(
     assert fetched.locked_until > datetime.now(UTC)
     # Lockout resets the counter so the next window starts clean.
     assert fetched.failed_login_count == 0
+
+
+@pytest.mark.owasp("A04")
+@pytest.mark.owasp("A07")
+async def test_login_tenth_wrong_password_writes_elevated_account_locked_event(
+    service: AuthService, verified_user: User, session: AsyncSession
+) -> None:
+    for _ in range(10):
+        with pytest.raises(AuthenticationError):
+            await service.login(
+                LoginRequest(email="alice@example.com", password="wrong-password"),
+                _IP,
+                _USER_AGENT,
+            )
+
+    locked_events = (
+        (
+            await session.execute(
+                select(AuditEvent).where(AuditEvent.action == "user.account_locked")
+            )
+        )
+        .scalars()
+        .all()
+    )
+    assert len(locked_events) == 1
+    assert locked_events[0].actor_id == verified_user.id
+    assert locked_events[0].severity == "elevated"
+    # The 9 attempts before the lockout-triggering 10th are each a plain
+    # login_failed event -- account_locked doesn't replace them.
+    failed_events = (
+        (await session.execute(select(AuditEvent).where(AuditEvent.action == "user.login_failed")))
+        .scalars()
+        .all()
+    )
+    assert len(failed_events) == 9
 
 
 @pytest.mark.owasp("A04")

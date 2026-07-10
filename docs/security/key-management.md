@@ -10,7 +10,7 @@ vault-vs-environment-variable gap is tracked separately as T-225).
 
 | Key | Purpose | Settings field(s) | Algorithm |
 |---|---|---|---|
-| Fernet encryption key | Encrypts sensitive DB columns at rest (currently `TOTPSecret.secret_encrypted`; `User.full_name` pending T-219) | `ENCRYPTION_KEY`, `ENCRYPTION_KEY_OLD` | Fernet (AES-128-CBC + HMAC-SHA256), via `backend/app/core/encrypted_type.py` |
+| Fernet encryption key | Encrypts sensitive DB columns at rest (`TOTPSecret.secret_encrypted`, `User.full_name` — see [`docs/security/data-classification.md`](data-classification.md) for the rest of the inventory) | `ENCRYPTION_KEY`, `ENCRYPTION_KEY_OLD` | Fernet (AES-128-CBC + HMAC-SHA256), via `backend/app/core/encrypted_type.py` |
 | JWT keypair | Signs/verifies access tokens and `itsdangerous` URL tokens (magic-link, password reset) | `JWT_PRIVATE_KEY`, `JWT_PUBLIC_KEY` | RS256, via `backend/app/modules/auth/utils.py` |
 
 Refresh tokens are **not** on this list — they're opaque, CSPRNG-generated

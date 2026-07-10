@@ -21,6 +21,7 @@ from apscheduler.triggers.cron import CronTrigger
 from apscheduler.triggers.interval import IntervalTrigger
 from redis.asyncio import Redis
 
+from app.core.config import get_settings
 from app.core.db import async_session_factory
 from app.core.metrics import ACTIVE_SESSIONS_REDIS_KEY
 from app.models._mixins import utcnow
@@ -32,6 +33,7 @@ from app.modules.auth.repository import (
 )
 from app.modules.billing.repository import SubscriptionRepository
 from app.modules.gdpr.repository import DataExportJobRepository
+from app.modules.notifications.repository import NotificationRepository
 from app.workers.jobs.billing import expire_trials_to_inactive, notify_expiring_trials
 from app.workers.jobs.usage import report_usage_to_stripe
 
@@ -88,6 +90,17 @@ async def expire_data_export_urls(ctx: dict[str, Any]) -> None:  # noqa: ARG001
         expired = await DataExportJobRepository(session).expire_ready_past_expiry()
         await session.commit()
     logger.info("expire_data_export_urls: expired %d data export jobs", expired)
+
+
+async def prune_old_notifications(ctx: dict[str, Any]) -> None:  # noqa: ARG001
+    # T-219/ASVS V8.3.8: the retention job T-101's model/repository docstrings
+    # already promised -- delivers on "notifications are hard-deleted by a
+    # retention job, never soft-deleted" (app/modules/notifications/models.py).
+    cutoff = utcnow() - timedelta(days=get_settings().NOTIFICATION_RETENTION_DAYS)
+    async with async_session_factory() as session:
+        pruned = await NotificationRepository.prune_older_than(session, cutoff)
+        await session.commit()
+    logger.info("prune_old_notifications: pruned %d notifications older than %s", pruned, cutoff)
 
 
 async def refresh_active_sessions_gauge(redis_client: Redis) -> None:
@@ -150,6 +163,13 @@ def create_scheduler(redis_client: Redis) -> AsyncIOScheduler:
         report_usage_to_stripe,
         "report_usage_to_stripe",
         CronTrigger(minute="*/15", timezone="UTC"),
+    )
+    _add_locked_job(
+        scheduler,
+        redis_client,
+        prune_old_notifications,
+        "prune_old_notifications",
+        CronTrigger(hour=2, minute=0, timezone="UTC"),
     )
 
     async def _run_refresh_active_sessions_gauge() -> None:

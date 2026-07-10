@@ -97,8 +97,8 @@ questionnaire) — evidence links point at real files, not at task IDs.
 
 | ID | Requirement | Status | Evidence |
 |---|---|---|---|
-| V1.8.1 | All sensitive data identified and classified | partial | Only the TOTP secret is explicitly classified/encrypted; no full data-classification inventory across modules. Follow-up: T-219. |
-| V1.8.2 | Protection levels have associated requirements, applied in the architecture | partial | Same gap as V1.8.1. Follow-up: T-219. |
+| V1.8.1 | All sensitive data identified and classified | met | `docs/security/data-classification.md` (T-219) — one row per PII-bearing column across every module, with a classification (public/internal/sensitive) and current protection. |
+| V1.8.2 | Protection levels have associated requirements, applied in the architecture | met | Same doc, "Current protection" and "Retention" columns state the concrete requirement per classification (encryption for direct identifiers/secrets, scrubbing from logs, a retention/expiry schedule or a documented reason it's kept indefinitely) and whether it's met, per row. |
 
 #### V1.9 Communications Architecture
 
@@ -380,7 +380,7 @@ questionnaire) — evidence links point at real files, not at task IDs.
 
 | ID | Requirement | Status | Evidence |
 |---|---|---|---|
-| V6.1.1 | Regulated PII stored encrypted at rest | partial | Only `TOTPSecret.secret_encrypted` (`backend/app/modules/auth/models.py:68`) is encrypted; `email`/`full_name` and other PII columns are plaintext. Follow-up: T-219. |
+| V6.1.1 | Regulated PII stored encrypted at rest | partial | `TOTPSecret.secret_encrypted` and, as of T-219, `User.full_name` (`backend/app/modules/auth/models.py:30`) are encrypted via `EncryptedString`. `User.email` stays plaintext — a documented, reasoned exception (unique lookup key; see `docs/security/data-classification.md` §2) rather than a silent gap, which is why this row stays `partial` rather than flipping to `met`. |
 | V6.1.2 | Regulated health data stored encrypted | n/a | Template stores no health data by default — product-specific data classification is each deployment's own responsibility. |
 | V6.1.3 | Regulated financial data stored encrypted | n/a | Card/financial data never touches the backend — Stripe-hosted Checkout/Billing Portal; only non-sensitive references (customer ID, subscription ID, plan slug) are stored locally. |
 
@@ -415,17 +415,17 @@ questionnaire) — evidence links point at real files, not at task IDs.
 
 | ID | Requirement | Status | Evidence |
 |---|---|---|---|
-| V7.1.1 | No credentials/payment details logged; session tokens only hashed | met | `_scrub()` redacts keys matching `password`/`token`/`secret`/`api_key`/`authorization`/`cookie` (`backend/app/core/logging.py:31-55`), applied to every log record. |
-| V7.1.2 | No other privacy-law-sensitive data logged | partial | Scrubbing is key-name-based (substring match), not value-aware — a PII value logged under an unlisted field name wouldn't be redacted. Follow-up: T-219. |
-| V7.1.3 | Security-relevant events logged (auth success/failure, access-control failures, validation failures) | partial | Login success and admin access are audited (`user.login_success`, `admin.access`); permission-denied (403) events for regular org-scoped routes aren't confirmed to be logged beyond the HTTP response itself. Follow-up: T-219. |
+| V7.1.1 | No credentials/payment details logged; session tokens only hashed | met | `_scrub()` redacts keys matching `password`/`token`/`secret`/`api_key`/`authorization`/`cookie` (`backend/app/core/logging.py:31-52`), applied to every log record. |
+| V7.1.2 | No other privacy-law-sensitive data logged | met | T-219 extended `_scrub()`/`_is_sensitive_key()` to also redact by exact PII field name (`email`, `full_name`), not just secret-shaped substrings (`backend/app/core/logging.py:39-52`) — a `logger.bind(email=...)` call site no longer has to remember to name the key `*_token` to get scrubbed. |
+| V7.1.3 | Security-relevant events logged (auth success/failure, access-control failures, validation failures) | met | Login success/failure and account lockout are audited (`user.login_success`, `user.login_failed`, `user.account_locked` — `backend/app/modules/auth/service.py`); admin access is logged (`admin.access`); permission-denied (403) from `require_permission` now writes a `permission.denied` `AuditEvent` (T-219, `backend/app/core/dependencies.py`). |
 | V7.1.4 | Each log event carries enough context for investigation | met | Structured JSON logs carry `request_id`/`actor_id`/timestamps; audit rows carry `actor_id`/`org_id`/`resource_id`/`diff`/`ip`/`ua`. |
 
 #### V7.2 Log Processing
 
 | ID | Requirement | Status | Evidence |
 |---|---|---|---|
-| V7.2.1 | All authentication decisions logged, no sensitive tokens | partial | Login success is audited; failed-login attempts increment a lockout counter but aren't confirmed to be surfaced as a discrete security/audit log event. Follow-up: T-219. |
-| V7.2.2 | All access-control decisions loggable, failures logged | partial | Same gap as V7.1.3. Follow-up: T-219. |
+| V7.2.1 | All authentication decisions logged, no sensitive tokens | met | T-219: a wrong-password attempt now writes a `user.login_failed` `AuditEvent`, and the 10th attempt that triggers a lockout writes a separate `severity="elevated"` `user.account_locked` event, alongside the pre-existing `user.login_success` (`backend/app/modules/auth/service.py`). No token/password value is ever included — only actor/ip/ua. |
+| V7.2.2 | All access-control decisions loggable, failures logged | met | Same `permission.denied` `AuditEvent` as V7.1.3 (`backend/app/core/dependencies.py`); `require_superadmin`'s pre-existing `admin.access` log line covers the platform-admin gate. |
 
 #### V7.3 Log Protection
 
@@ -471,11 +471,11 @@ questionnaire) — evidence links point at real files, not at task IDs.
 | V8.3.1 | Sensitive data sent in body/headers, never query strings | met | All mutating endpoints use body payloads; the bearer token travels in the `Authorization` header, never a URL. |
 | V8.3.2 | Users can export/remove their data on demand | met | `backend/app/modules/gdpr/service.py` `request_export()`/`delete_me()`; `backend/app/modules/gdpr/router.py` `GET /me/export`, `DELETE /me`. |
 | V8.3.3 | Clear consent language, opt-in before data use | n/a | Consent-copy/UX is a product-specific, legally-reviewed concern; the template provides only the backend primitive (`record_consent`/`list_consents`, `backend/app/modules/gdpr/service.py:61-74`) that a product's consent UI is built on. |
-| V8.3.4 | Sensitive data identified with a handling policy | partial | Same gap as V1.8.1/V1.8.2. Follow-up: T-219. |
+| V8.3.4 | Sensitive data identified with a handling policy | met | Same as V1.8.1/V1.8.2 — `docs/security/data-classification.md`. |
 | V8.3.5 | Access to sensitive data audited, without logging the data itself | met | `AuditService.log()` records action/resource metadata and a diff, not raw field values (`backend/app/modules/audit/service.py:32-63`). |
 | V8.3.6 | Sensitive data in memory overwritten after use | n/a | CPython offers no reliable memory-zeroing guarantee for a garbage-collected language — an inherent limitation shared by all Python applications, not a gap specific to this codebase. |
 | V8.3.7 | Sensitive data encrypted with algorithms providing confidentiality+integrity | met | `backend/app/core/encrypted_type.py` — where encryption is applied (TOTP secret), Fernet provides both (encrypt-then-MAC). Coverage breadth is tracked separately under V6.1.1. |
-| V8.3.8 | Sensitive data subject to a retention/auto-deletion schedule | partial | GDPR purge (`GDPR_PURGE_GRACE_DAYS`) and file hard-delete grace period exist for user-initiated deletion, but there's no general automatic retention schedule for all data classes. Follow-up: T-219. |
+| V8.3.8 | Sensitive data subject to a retention/auto-deletion schedule | partial | GDPR purge (`GDPR_PURGE_GRACE_DAYS`), expired-session pruning, and expired data-export-URL clearing exist. T-219 added `prune_old_notifications` (`backend/app/workers/scheduler.py`, `NOTIFICATION_RETENTION_DAYS`) as the next-highest-value gap. Still not a schedule for *every* data class — `docs/security/data-classification.md` §10 names the remaining ones (`Invitation.email`, `PushToken.token`, `WebhookEvent.payload`) as an explicit, prioritized backlog rather than a silent gap, which is why this row stays `partial`. |
 
 ### V9 — Communication
 

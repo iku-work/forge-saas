@@ -11,12 +11,12 @@ shape. PushToken is looked up by its own unique token / by user_id, never by
 org_id, like the auth module's SessionRepository.
 """
 
-from datetime import timedelta
+from datetime import datetime, timedelta
 from typing import Any, cast
 from uuid import UUID
 
 from redis.asyncio import Redis
-from sqlalchemy import CursorResult, func, select, tuple_, update
+from sqlalchemy import CursorResult, delete, func, select, tuple_, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import NotFoundError
@@ -148,6 +148,21 @@ class NotificationRepository:
 
     async def _invalidate_unread_count(self, user_id: UUID) -> None:
         await self._redis.delete(_unread_count_cache_key(user_id))
+
+    @staticmethod
+    async def prune_older_than(session: AsyncSession, cutoff: datetime) -> int:
+        """T-219: the hard-delete retention job this class's own docstring
+        (and T-101's model docstring) promised -- called by
+        app.workers.scheduler.prune_old_notifications. A `@staticmethod`,
+        not an instance method, because it purges across every org in one
+        sweep; every other method here is deliberately scoped to a single
+        org_id via __init__, which doesn't fit a global retention pass.
+        """
+        m = cast("Any", Notification)
+        stmt = delete(Notification).where(m.created_at < cutoff)
+        result = await session.execute(stmt)
+        await session.flush()
+        return cast("CursorResult[Any]", result).rowcount
 
 
 class PushTokenRepository:

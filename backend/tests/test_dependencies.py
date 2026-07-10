@@ -15,6 +15,7 @@ from uuid import uuid4
 import pytest
 from freezegun import freeze_time
 from redis.asyncio import Redis
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import (
     AsyncEngine,
     AsyncSession,
@@ -43,6 +44,7 @@ from app.core.exceptions import (
 from app.core.migrations import build_config
 from app.core.migrations import upgrade as upgrade_migrations
 from app.models._mixins import utcnow
+from app.modules.audit.models import AuditEvent
 from app.modules.auth.models import User
 from app.modules.auth.permissions import MemberRole, Permission
 from app.modules.auth.utils import create_access_token
@@ -287,25 +289,79 @@ def _membership(role: MemberRole) -> Membership:
     return Membership(user_id=uuid4(), org_id=uuid4(), role=role)
 
 
-async def test_require_permission_denies_member_without_billing_manage() -> None:
+def _plain_request() -> Request:
+    return Request(
+        scope={
+            "type": "http",
+            "path": "/api/v1/billing/subscription",
+            "query_string": b"",
+            "headers": [(b"user-agent", b"pytest")],
+            "client": ("127.0.0.1", 12345),
+        }
+    )
+
+
+async def test_require_permission_denies_member_without_billing_manage(
+    session: AsyncSession,
+) -> None:
     checker = require_permission(Permission.BILLING_MANAGE)
     org = _unique_org()
     membership = _membership(MemberRole.MEMBER)
+    kwargs = {
+        "request": _plain_request(),
+        "org_and_membership": (org, membership),
+        "session": session,
+    }
 
     with pytest.raises(PermissionDeniedError) as exc_info:
-        await checker((org, membership))
+        await checker(**kwargs)
 
     assert exc_info.value.status_code == 403
 
 
-async def test_require_permission_allows_owner_with_billing_manage() -> None:
+async def test_require_permission_allows_owner_with_billing_manage(session: AsyncSession) -> None:
     checker = require_permission(Permission.BILLING_MANAGE)
     org = _unique_org()
     membership = _membership(MemberRole.OWNER)
+    kwargs = {
+        "request": _plain_request(),
+        "org_and_membership": (org, membership),
+        "session": session,
+    }
 
-    result = await checker((org, membership))
+    result = await checker(**kwargs)
 
     assert result is membership
+
+
+async def test_require_permission_denial_writes_audit_event(session: AsyncSession) -> None:
+    checker = require_permission(Permission.BILLING_MANAGE)
+    org = _unique_org()
+    membership = _membership(MemberRole.MEMBER)
+    kwargs = {
+        "request": _plain_request(),
+        "org_and_membership": (org, membership),
+        "session": session,
+    }
+
+    with pytest.raises(PermissionDeniedError):
+        await checker(**kwargs)
+
+    events = (
+        (
+            await session.execute(
+                select(AuditEvent).where(AuditEvent.action == "permission.denied")
+            )
+        )
+        .scalars()
+        .all()
+    )
+    assert len(events) == 1
+    assert events[0].actor_id == membership.user_id
+    assert events[0].org_id == org.id
+    assert events[0].severity == "elevated"
+    assert events[0].ip_address == "127.0.0.1"
+    assert events[0].user_agent == "pytest"
 
 
 # ---- require_recent_auth (T-218) --------------------------------------------

@@ -16,6 +16,7 @@ from collections.abc import AsyncGenerator
 import pytest
 from alembic import command
 from alembic.config import Config
+from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import (
     AsyncEngine,
@@ -92,3 +93,21 @@ async def test_oauth_account_unique_constraint_enforced_by_database(
     )
     with pytest.raises(IntegrityError):
         await migrated_session.flush()
+
+
+@pytest.mark.owasp("A02")
+async def test_full_name_is_encrypted_at_rest(migrated_session: AsyncSession) -> None:
+    user = User(email="carol@example.com", full_name="Carol Danvers")
+    migrated_session.add(user)
+    await migrated_session.flush()
+
+    raw = (
+        await migrated_session.execute(
+            text('SELECT full_name FROM "user" WHERE id = :id'), {"id": user.id}
+        )
+    ).scalar_one()
+    assert raw.startswith("gAAAAA")
+    assert "Carol Danvers" not in raw
+
+    await migrated_session.refresh(user)
+    assert user.full_name == "Carol Danvers"

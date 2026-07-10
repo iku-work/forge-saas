@@ -78,6 +78,12 @@ class Settings(BaseSettings):
     # GDPR (T-033) — grace period between DELETE /me and purge_user_data (T-036)
     GDPR_PURGE_GRACE_DAYS: int = 30
 
+    # Notifications (T-219) — age (from created_at) at which an in-app
+    # Notification row is hard-deleted by the retention job (T-101's model
+    # docstring promised this; app.workers.scheduler.prune_old_notifications
+    # is what actually delivers it).
+    NOTIFICATION_RETENTION_DAYS: int = 90
+
     # Notifications (T-103) — global cap on open SSE streams, to bound memory
     SSE_MAX_CONNECTIONS: int = 10000
 

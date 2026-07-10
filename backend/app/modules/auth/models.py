@@ -15,13 +15,21 @@ from app.models._mixins import SoftDeleteMixin, TimestampMixin, UUIDPKMixin
 _TZ_DATETIME = DateTime(timezone=True)
 
 
-class User(UUIDPKMixin, TimestampMixin, SoftDeleteMixin, SQLModel, table=True):
+class User(RedactedReprMixin, UUIDPKMixin, TimestampMixin, SoftDeleteMixin, SQLModel, table=True):
     __tablename__ = "user"
+    # T-219/ASVS V6.1.1: full_name is the highest-value plaintext PII column
+    # left after TOTPSecret.secret_encrypted -- see docs/security/
+    # data-classification.md for why email itself stays plaintext (it's a
+    # unique, indexed lookup key; EncryptedString's own docstring says
+    # filtering on an encrypted column isn't supported).
+    __redacted_fields__: ClassVar[set[str]] = {"full_name"}
 
     email: str = Field(unique=True, index=True)
     email_verified_at: datetime | None = Field(default=None, sa_type=_TZ_DATETIME)  # type: ignore[call-overload]
     hashed_password: str | None = Field(default=None)  # null for OAuth-only users
-    full_name: str | None = Field(default=None)
+    full_name: str | None = Field(
+        default=None, sa_column=Column(EncryptedString, nullable=True)
+    )
     avatar_url: str | None = Field(default=None)
     is_active: bool = Field(default=True)
     is_superadmin: bool = Field(default=False)

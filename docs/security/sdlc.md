@@ -13,11 +13,11 @@ so "is security in the SDLC" has a concrete, auditable answer instead of
   cryptography, tenant isolation, or a new remote service integration
   updates [`docs/security/threat-model.md`](threat-model.md) in the same
   PR — new trust boundary, new arrow on the data-flow diagram, or both.
-- A design change that introduces a new class of stored data checks it
-  against `docs/security/data-classification.md` (T-219) once that doc
-  exists; until then, treat any new PII-shaped column as `sensitive` by
-  default and encrypt it (`backend/app/core/encrypted_type.py`) unless
-  there's a documented reason not to.
+- A design change that introduces a new class of stored data adds a row to
+  [`docs/security/data-classification.md`](data-classification.md) (T-219)
+  in the same PR: treat any new PII-shaped column as `sensitive` by default
+  and encrypt it (`backend/app/core/encrypted_type.py`) unless there's a
+  documented reason not to.
 - There is no separate per-sprint threat-modeling ritual — ASVS-baseline
   review (below) plays that role on a slower cadence, and this per-change
   check plays it on every change that actually needs it. Full re-review of

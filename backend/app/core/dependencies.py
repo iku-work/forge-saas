@@ -31,6 +31,7 @@ from app.core.exceptions import (
 )
 from app.core.token_blocklist import is_jti_blocked
 from app.models._mixins import utcnow
+from app.modules.audit.service import AuditService
 from app.modules.auth.models import User
 from app.modules.auth.permissions import ROLE_PERMISSIONS, Permission
 from app.modules.auth.repository import UserRepository, WebAuthnCredentialRepository
@@ -220,11 +221,32 @@ def require_recent_auth(max_age_minutes: int) -> Callable[..., Awaitable[None]]:
 
 
 def require_permission(permission: Permission) -> Callable[..., Awaitable[Membership]]:
+    """T-219/ASVS V7.1.3, V7.2.2: a denial here is an access-control decision
+    (not the RBAC matrix in app.modules.auth.permissions itself), so it gets
+    an AuditEvent the same way a denial in require_superadmin already gets a
+    log line -- unlike that one, this fires only on the *deny* path, since
+    every allowed org-scoped request would otherwise double the audit-write
+    volume of the whole API for no security value.
+    """
+
     async def checker(
+        request: Request,
         org_and_membership: Annotated[tuple[Organization, Membership], Depends(get_current_org)],
+        session: Annotated[AsyncSession, Depends(get_session)],
     ) -> Membership:
-        _, membership = org_and_membership
+        org, membership = org_and_membership
         if permission not in ROLE_PERMISSIONS[membership.role]:
+            await AuditService(session).log(
+                action="permission.denied",
+                resource_type="membership",
+                resource_id=str(membership.id),
+                org_id=org.id,
+                actor_id=membership.user_id,
+                diff={"permission": permission.value, "role": membership.role.value},
+                ip=request.client.host if request.client else None,
+                ua=request.headers.get("user-agent"),
+                severity="elevated",
+            )
             raise PermissionDeniedError(
                 "errors.missing_permission",
                 fallback=f"Missing permission: {permission.value}",

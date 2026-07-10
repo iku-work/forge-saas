@@ -63,12 +63,15 @@ from app.modules.billing.models import Plan, Subscription
 from app.modules.billing.repository import SubscriptionRepository
 from app.modules.gdpr.models import DataExportJob
 from app.modules.gdpr.repository import DataExportJobRepository
+from app.modules.notifications.models import Notification
+from app.modules.tenancy.models import Organization
 from app.workers import scheduler as scheduler_module
 from app.workers.scheduler import (
     cleanup_expired_sessions,
     cleanup_expired_tokens,
     create_scheduler,
     expire_data_export_urls,
+    prune_old_notifications,
     refresh_active_sessions_gauge,
     sync_expiring_trials,
     with_distributed_lock,
@@ -83,6 +86,8 @@ _TABLES = [
     Plan.__table__,
     Subscription.__table__,
     DataExportJob.__table__,
+    Organization.__table__,
+    Notification.__table__,
 ]
 
 
@@ -142,6 +147,13 @@ async def _seed_user(session: AsyncSession) -> User:
     session.add(user)
     await session.flush()
     return user
+
+
+async def _seed_org(session: AsyncSession) -> Organization:
+    org = Organization(name="Acme", slug=f"acme-{uuid4().hex[:12]}")
+    session.add(org)
+    await session.flush()
+    return org
 
 
 async def _seed_plan(session: AsyncSession) -> Plan:
@@ -332,6 +344,43 @@ async def test_expire_data_export_urls_expires_only_ready_past_expiry(
         assert refetched_pending.status == "pending"
 
 
+# --- prune_old_notifications -----------------------------------------------------
+
+
+async def test_prune_old_notifications_deletes_only_rows_past_retention(
+    session: AsyncSession, session_factory: async_sessionmaker[AsyncSession]
+) -> None:
+    user = await _seed_user(session)
+    org = await _seed_org(session)
+    old = Notification(
+        org_id=org.id,
+        user_id=user.id,
+        type="weekly_summary",
+        title="old",
+        body="old",
+        channels=["in_app"],
+        created_at=_past(hours=24 * 91),
+    )
+    recent = Notification(
+        org_id=org.id,
+        user_id=user.id,
+        type="weekly_summary",
+        title="recent",
+        body="recent",
+        channels=["in_app"],
+        created_at=_past(hours=24 * 10),
+    )
+    session.add_all([old, recent])
+    await session.commit()
+
+    await prune_old_notifications({})
+
+    async with session_factory() as verify_session:
+        remaining = (await verify_session.get(Notification, old.id)) is not None
+        assert not remaining
+        assert (await verify_session.get(Notification, recent.id)) is not None
+
+
 # --- refresh_active_sessions_gauge -----------------------------------------------
 
 
@@ -445,6 +494,7 @@ async def test_create_scheduler_registers_all_jobs_in_utc(redis_client: Redis) -
         "notify_expiring_trials",
         "expire_trials_to_inactive",
         "report_usage_to_stripe",
+        "prune_old_notifications",
         "refresh_active_sessions_gauge",
     }
     assert "hour='*/6'" in repr(jobs_by_id["cleanup_expired_sessions"].trigger)
@@ -454,6 +504,7 @@ async def test_create_scheduler_registers_all_jobs_in_utc(redis_client: Redis) -
     assert "hour=" not in repr(jobs_by_id["cleanup_expired_tokens"].trigger)
     assert "hour=" not in repr(jobs_by_id["expire_data_export_urls"].trigger)
     assert "minute='*/15'" in repr(jobs_by_id["report_usage_to_stripe"].trigger)
+    assert "hour='2'" in repr(jobs_by_id["prune_old_notifications"].trigger)
     assert "seconds=60" in repr(jobs_by_id["refresh_active_sessions_gauge"].trigger)
     for job in jobs_by_id.values():
         assert "timezone='UTC'" in repr(job.trigger)

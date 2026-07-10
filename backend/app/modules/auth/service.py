@@ -202,6 +202,30 @@ class AuthService:
             if user.failed_login_count >= _MAX_FAILED_LOGIN_ATTEMPTS:
                 await self._users.set_lockout(user.id, utcnow() + _LOCKOUT_DURATION)
                 await self._users.reset_failed_login(user.id)
+                # T-219/ASVS V7.2.1: the counter increment above is state, not
+                # a discrete security event -- lockout is the high-severity
+                # one (an active brute-force attempt), so it gets its own
+                # audit action rather than folding into user.login_failed.
+                await self._audit.log(
+                    action="user.account_locked",
+                    resource_type="user",
+                    resource_id=str(user.id),
+                    org_id=None,
+                    actor_id=user.id,
+                    ip=ip,
+                    ua=user_agent,
+                    severity="elevated",
+                )
+            else:
+                await self._audit.log(
+                    action="user.login_failed",
+                    resource_type="user",
+                    resource_id=str(user.id),
+                    org_id=None,
+                    actor_id=user.id,
+                    ip=ip,
+                    ua=user_agent,
+                )
             raise AuthenticationError(
                 "errors.invalid_credentials", fallback="Invalid email or password"
             )

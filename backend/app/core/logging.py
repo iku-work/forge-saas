@@ -36,11 +36,19 @@ _SENSITIVE_KEY_MARKERS = (
     "authorization",
     "cookie",
 )
+# T-219/ASVS V7.1.2: substring markers above catch secret-*shaped* keys
+# (anything with "token" in it); they say nothing about a key that's just a
+# plain PII field name, e.g. `logger.bind(email=...)` from a call site that
+# doesn't know it's holding PII. Matched by exact name (not substring) so
+# this doesn't also swallow unrelated keys like `email_verified_at`.
+_PII_KEY_NAMES = frozenset({"email", "full_name"})
 _REDACTED = "***"
 
 
 def _is_sensitive_key(key: str) -> bool:
     lowered = key.lower()
+    if lowered in _PII_KEY_NAMES:
+        return True
     return any(marker in lowered for marker in _SENSITIVE_KEY_MARKERS)
 
 

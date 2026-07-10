@@ -151,6 +151,26 @@ def test_is_sensitive_key_matches_known_markers() -> None:
     assert not _is_sensitive_key("org_id")
 
 
+@pytest.mark.owasp("A02")
+def test_is_sensitive_key_matches_known_pii_field_names() -> None:
+    assert _is_sensitive_key("email")
+    assert _is_sensitive_key("EMAIL")
+    assert _is_sensitive_key("full_name")
+    # Exact-name match, not substring -- a field that merely contains "email"
+    # (e.g. a verification timestamp) is not itself PII and must pass through.
+    assert not _is_sensitive_key("email_verified_at")
+
+
+@pytest.mark.owasp("A02")
+def test_email_key_is_scrubbed_in_json_output(capsys: pytest.CaptureFixture[str]) -> None:
+    configure_logging(settings=_staging_settings())
+
+    logger.bind(email="alice@example.com").warning("login attempt")
+
+    record = _last_json_line(capsys.readouterr().err)
+    assert record["email"] == "***"
+
+
 def test_scrub_redacts_nested_dicts_and_lists() -> None:
     scrubbed = _scrub({"token": "abc", "nested": [{"secret": "xyz", "ok": 1}]})
     assert scrubbed == {"token": "***", "nested": [{"secret": "***", "ok": 1}]}
