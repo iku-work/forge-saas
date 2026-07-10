@@ -51,8 +51,20 @@ FIXTURE_ENV_FILE = Path(__file__).parent.parent / ".env.test"
 
 
 def _settings(**overrides: Any) -> Settings:  # noqa: ANN401 -- forwarded straight to Settings kwargs
+    # T-225: outside dev, Settings also requires VIRUS_SCANNER != "noop", a
+    # non-blank PASSWORD_PEPPER, and TLS on DATABASE_URL/REDIS_URL -- none of
+    # which this test cares about, so satisfy them minimally by default.
+    defaults: dict[str, Any] = {
+        "VIRUS_SCANNER": "clamav",
+        "PASSWORD_PEPPER": "a-real-pepper",
+        "DATABASE_URL": "postgresql+asyncpg://u:p@localhost:5432/db?sslmode=require",
+        "REDIS_URL": "rediss://localhost:6379/0",
+    }
     return Settings(
-        _env_file=FIXTURE_ENV_FILE, ENVIRONMENT="staging", FORCE_HTTPS=True, **overrides
+        _env_file=FIXTURE_ENV_FILE,
+        ENVIRONMENT="staging",
+        FORCE_HTTPS=True,
+        **{**defaults, **overrides},
     )
 
 

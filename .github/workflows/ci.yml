@@ -440,6 +440,24 @@ jobs:
       - name: Trivy image scan (high+ severity)
         run: trivy image "$IMAGE:$GITHUB_SHA" --exit-code 1 --severity HIGH,CRITICAL
 
+      # T-225/ASVS V14.2.5: a CycloneDX SBOM of the exact image being
+      # shipped -- every Python (pip) and Node (pnpm, via the
+      # email-templates-builder stage baked into the runtime image) package,
+      # not just top-level deps.
+      - name: Generate SBOM
+        uses: anchore/sbom-action@v0
+        with:
+          image: "${{ env.IMAGE }}:${{ github.sha }}"
+          format: cyclonedx-json
+          output-file: sbom.cyclonedx.json
+
+      - name: Upload SBOM
+        uses: actions/upload-artifact@v4
+        with:
+          name: sbom
+          path: sbom.cyclonedx.json
+          retention-days: 90
+
       # Pushed only once the scan above passes -- a vulnerable image never
       # reaches the registry the deploy job pulls from.
       - name: Push image
@@ -551,6 +569,18 @@ jobs:
 
       - name: Write production .env (Settings() needs every required field, not just DATABASE_URL)
         run: printf '%s' "${{ secrets.PROD_ENV_FILE }}" > prod.env
+
+      # T-225/ASVS V12.4.2: app.core.config.Settings itself already refuses
+      # to boot with VIRUS_SCANNER=noop outside dev, but that failure would
+      # only surface as a crash-looping Render service *after* the deploy
+      # below -- catching it here fails fast, before migrations even run,
+      # against the exact env file the deploy is about to ship.
+      - name: Guard against VIRUS_SCANNER=noop in production
+        run: |
+          if grep -qE '^VIRUS_SCANNER=noop$' prod.env; then
+            echo "PROD_ENV_FILE sets VIRUS_SCANNER=noop -- uploaded files would never be scanned. Refusing to deploy." >&2
+            exit 1
+          fi
 
       # Same image that was scanned + pushed in `build` -- never reinstalled
       # from source, so what ran migrations is byte-for-byte what gets deployed.

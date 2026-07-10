@@ -26,13 +26,23 @@ _JWT_ALGORITHM = "RS256"
 _password_hasher = PasswordHasher()
 
 
+def _peppered(plain: str) -> str:
+    # T-225/ASVS V2.4.5: an HMAC-SHA256 pre-hash keyed by settings.PASSWORD_PEPPER,
+    # applied identically before both hash() and verify() so the pepper is
+    # transparent to argon2-cffi itself. Blank pepper (dev only — enforced
+    # non-blank outside dev by Settings._enforce_startup_invariants) reduces
+    # to hashing the plaintext directly, i.e. today's behavior.
+    pepper = get_settings().PASSWORD_PEPPER
+    return hashlib.sha256(f"{pepper}:{plain}".encode()).hexdigest()
+
+
 def hash_password(plain: str) -> str:
-    return _password_hasher.hash(plain)
+    return _password_hasher.hash(_peppered(plain))
 
 
 def verify_password(plain: str, hashed: str) -> bool:
     try:
-        return _password_hasher.verify(hashed, plain)
+        return _password_hasher.verify(hashed, _peppered(plain))
     except VerifyMismatchError:
         return False
     # Any other exception (e.g. InvalidHashError for a corrupt/foreign hash

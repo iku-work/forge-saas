@@ -98,6 +98,14 @@ class Settings(BaseSettings):
     # in addition to the normal log stream.
     ADMIN_AUDIT_LOG_PATH: str = "admin-audit.log"
 
+    # Password pepper (T-225/ASVS V2.4.5) — an HMAC key mixed into every
+    # password before it reaches Argon2 (see app.modules.auth.utils), on top
+    # of Argon2's own per-hash salt. Blank in dev (matches every other
+    # dev-optional secret here); required outside dev, enforced below.
+    # Vault/HSM-held storage of this value is intentionally out of scope —
+    # see docs/adr/0001-security-baseline.md's V2.4.5 row.
+    PASSWORD_PEPPER: str = ""
+
     @model_validator(mode="after")
     def _enforce_startup_invariants(self) -> Self:
         if self.ENVIRONMENT != "dev":
@@ -105,8 +113,31 @@ class Settings(BaseSettings):
                 raise RuntimeError("ALLOWED_ORIGINS must not contain '*' outside dev")
             if not self.FORCE_HTTPS:
                 raise RuntimeError("FORCE_HTTPS must be true in non-dev environments")
+            if self.VIRUS_SCANNER == "noop":
+                raise RuntimeError(
+                    "VIRUS_SCANNER must not be 'noop' outside dev — uploaded files would "
+                    "never actually be scanned. Set it to 'clamav' or 'virustotal'."
+                )
+            if not self.PASSWORD_PEPPER:
+                raise RuntimeError("PASSWORD_PEPPER must be set outside dev")
+            self._validate_transport_tls()
         self._validate_encryption_key()
         return self
+
+    def _validate_transport_tls(self) -> None:
+        # T-225/ASVS V1.9.1, V9.2.2: outside dev, DB/Redis traffic must be
+        # encrypted end-to-end, not just the client-facing hop Caddy
+        # terminates. Render's managed Postgres/Redis already require this on
+        # their external connection strings; self-hosted deployments
+        # (docker-compose.prod.yml) must be configured to match — see
+        # docs/runbooks/backup-restore.md's "Docker-network TLS" section.
+        database_query = self.DATABASE_URL.query or ""
+        if "sslmode=require" not in database_query and "sslmode=verify" not in database_query:
+            raise RuntimeError(
+                "DATABASE_URL must set sslmode=require (or stricter) outside dev"
+            )
+        if self.REDIS_URL.scheme != "rediss":
+            raise RuntimeError("REDIS_URL must use the rediss:// scheme outside dev")
 
     def _validate_encryption_key(self) -> None:
         try:

@@ -73,6 +73,57 @@ def test_cors_rejects_unconfigured_origin() -> None:
     assert "access-control-allow-origin" not in response.headers
 
 
+@pytest.mark.owasp("A05")
+def test_wrong_content_type_on_post_with_body_returns_415() -> None:
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/v1/auth/login", content=b"not json", headers={"Content-Type": "text/plain"}
+        )
+
+    assert response.status_code == 415
+    assert response.json()["error"]["code"] == "unsupported_media_type"
+
+
+def test_missing_content_type_on_post_with_body_returns_415() -> None:
+    with TestClient(app) as client:
+        response = client.post("/api/v1/auth/login", content=b'{"email": "a@example.com"}')
+
+    assert response.status_code == 415
+
+
+def test_json_content_type_on_post_is_not_rejected() -> None:
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/v1/auth/login",
+            json={"email": "nobody@example.com", "password": "wrong"},
+        )
+
+    # Reaches the route handler (and fails there, on bad credentials) --
+    # proves the 415 check isn't firing on a legitimate JSON request.
+    assert response.status_code != 415
+
+
+def test_post_with_no_body_is_not_rejected_for_content_type() -> None:
+    with TestClient(app) as client:
+        response = client.post("/api/v1/auth/logout")
+
+    assert response.status_code != 415
+
+
+def test_content_disposition_attachment_on_api_response() -> None:
+    with TestClient(app) as client:
+        response = client.get("/api/v1/config")
+
+    assert response.headers["Content-Disposition"] == "attachment"
+
+
+def test_content_disposition_not_forced_outside_api_prefix() -> None:
+    with TestClient(app) as client:
+        response = client.get("/health")
+
+    assert "Content-Disposition" not in response.headers
+
+
 def test_cors_preflight_allows_authorization_and_org_header() -> None:
     with TestClient(app) as client:
         response = client.options(

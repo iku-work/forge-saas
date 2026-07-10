@@ -23,3 +23,26 @@ groups:
             {{ $labels.query }} has averaged over 500ms per execution for at
             least 15 minutes, called over 100 times. See
             docs/runbooks/slow-queries.md for the EXPLAIN ANALYZE workflow.
+
+  # T-225/ASVS V8.1.4: a per-route spike in the *rate-limit rejection* rate
+  # (not raw request volume, and deliberately not per-user/per-IP, which
+  # would explode Prometheus cardinality and leak individual IPs into
+  # metrics storage) is the cardinality-safe proxy for "abnormal traffic" --
+  # slowapi's 429 responses (app.middleware.rate_limit) are already surfaced
+  # on the http_requests_total{status="429"} series
+  # prometheus-fastapi-instrumentator produces for every route
+  # (app.core.metrics.init_metrics).
+  - name: forge-request-anomalies
+    rules:
+      - alert: RequestVolumeAnomaly
+        expr: sum(rate(http_requests_total{status="429"}[5m])) by (handler) > 1
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "{{ $labels.handler }} sustaining >1 rate-limit rejection/sec"
+          description: >-
+            {{ $labels.handler }} has averaged over 1 HTTP 429 response per
+            second for at least 5 minutes -- likely an abusive client or
+            credential-stuffing attempt being throttled. Investigate the
+            source before it escalates to a full rate-limit bypass attempt.

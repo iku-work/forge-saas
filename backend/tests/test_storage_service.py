@@ -38,6 +38,11 @@ from app.modules.tenancy.repository import OrganizationRepository
 class _FakeStorageBackend:
     uploaded: dict[str, dict[str, Any]] = field(default_factory=dict)
     deleted: list[str] = field(default_factory=list)
+    # T-225: content-sniffing needs *some* bytes at confirm time -- real PDF
+    # magic bytes by default, since every pre-existing test in this file
+    # declares content_type="application/pdf". Override per-key to exercise
+    # a declared/actual mismatch.
+    content: dict[str, bytes] = field(default_factory=dict)
 
     async def presign_upload(
         self,
@@ -64,6 +69,9 @@ class _FakeStorageBackend:
 
     async def head(self, key: str) -> dict[str, Any] | None:
         return self.uploaded.get(key)
+
+    async def read_prefix(self, key: str, num_bytes: int) -> bytes:  # noqa: ARG002 -- fake ignores the byte cap
+        return self.content.get(key, b"%PDF-1.4\n%\xe2\xe3\xcf\xd3\n")
 
     async def delete(self, key: str) -> None:
         self.deleted.append(key)
@@ -268,6 +276,47 @@ async def test_presign_upload_allows_file_within_plan_cap(
 
 
 @pytest.mark.usefixtures("fake_backend")
+async def test_presign_upload_rejects_when_file_count_quota_would_be_exceeded(
+    session: AsyncSession, redis: Redis, org, user_id
+) -> None:
+    service = _service(session, redis, org)
+    repo = StoredFileRepository(session, org.id, redis)
+    await repo.create(
+        uploaded_by=user_id,
+        key="existing",
+        filename="existing.pdf",
+        content_type="application/pdf",
+        size_bytes=100,
+        bucket="default",
+        status="ready",
+    )
+    org_sub = _org_sub(org, max_files=1)
+
+    with pytest.raises(PlanLimitError):
+        await service.presign_upload(
+            user_id,
+            filename="one-too-many.pdf",
+            content_type="application/pdf",
+            size_bytes=100,
+            org_sub=org_sub,
+        )
+
+
+@pytest.mark.usefixtures("fake_backend")
+async def test_presign_upload_allows_file_within_file_count_quota(
+    session: AsyncSession, redis: Redis, org, user_id
+) -> None:
+    service = _service(session, redis, org)
+    org_sub = _org_sub(org, max_files=5)
+
+    result = await service.presign_upload(
+        user_id, filename="ok.pdf", content_type="application/pdf", size_bytes=100, org_sub=org_sub
+    )
+
+    assert result["file_id"] is not None
+
+
+@pytest.mark.usefixtures("fake_backend")
 async def test_presign_upload_rejects_when_org_quota_would_be_exceeded(
     session: AsyncSession, redis: Redis, org, user_id
 ) -> None:
@@ -357,6 +406,45 @@ async def test_confirm_upload_within_tolerance_succeeds(
     )
     await session.commit()
     fake_backend.uploaded[presigned["key"]] = {"ContentLength": 1024 + 1000, "ETag": '"abc"'}
+
+    updated = await service.confirm_upload(user_id, presigned["file_id"])
+
+    assert updated.status == "ready"
+
+
+@pytest.mark.owasp("A08")
+async def test_confirm_upload_rejects_content_sniff_mismatch_and_deletes_object(
+    session: AsyncSession, redis: Redis, org, user_id, fake_backend
+) -> None:
+    # Declares application/pdf but uploads a PNG's actual bytes -- the
+    # content-type allowlist check at presign time is declared-type-only and
+    # can't catch this; confirm_upload's sniff step must.
+    service = _service(session, redis, org)
+    presigned = await service.presign_upload(
+        user_id, filename="f.pdf", content_type="application/pdf", size_bytes=1024, org_sub=None
+    )
+    await session.commit()
+    fake_backend.uploaded[presigned["key"]] = {"ContentLength": 1024, "ETag": '"abc"'}
+    fake_backend.content[presigned["key"]] = bytes.fromhex("89504e470d0a1a0a") + b"\x00" * 64
+
+    with pytest.raises(UnprocessableEntityError):
+        await service.confirm_upload(user_id, presigned["file_id"])
+
+    assert presigned["key"] in fake_backend.deleted
+
+
+async def test_confirm_upload_skips_sniff_for_text_plain(
+    session: AsyncSession, redis: Redis, org, user_id, fake_backend
+) -> None:
+    # text/plain has no reliable magic-byte signature -- any bytes must be
+    # accepted rather than flagged as a "mismatch" against arbitrary content.
+    service = _service(session, redis, org)
+    presigned = await service.presign_upload(
+        user_id, filename="f.txt", content_type="text/plain", size_bytes=1024, org_sub=None
+    )
+    await session.commit()
+    fake_backend.uploaded[presigned["key"]] = {"ContentLength": 1024, "ETag": '"abc"'}
+    fake_backend.content[presigned["key"]] = bytes.fromhex("89504e470d0a1a0a") + b"\x00" * 64
 
     updated = await service.confirm_upload(user_id, presigned["file_id"])
 

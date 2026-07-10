@@ -35,3 +35,10 @@ def test_caddyfile_prod_blocks_public_metrics_access() -> None:
 def test_caddyfile_dev_blocks_public_metrics_access() -> None:
     content = (REPO_ROOT / "Caddyfile").read_text()
     assert "respond /metrics 404" in content
+
+
+def test_caddyfile_prod_strips_server_header() -> None:
+    # T-225/ASVS V14.3.3: Uvicorn's default `Server: uvicorn` response
+    # header shouldn't leak past the edge.
+    content = (REPO_ROOT / "Caddyfile.prod").read_text()
+    assert "-Server" in content

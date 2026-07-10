@@ -54,7 +54,8 @@ ENV PYTHONUNBUFFERED=1 \
 
 # `node` only -- no npm/pnpm, no node_modules; send_email (T-106) shells out
 # to the dependency-free cli.js copied in below, nothing else needs Node.
-RUN apt-get update && apt-get install -y --no-install-recommends nodejs \
+# `libmagic1` backs python-magic (T-225's content-sniffing on upload confirm).
+RUN apt-get update && apt-get install -y --no-install-recommends nodejs libmagic1 \
     && rm -rf /var/lib/apt/lists/*
 
 # No shell, no home dir, no login -- this user can run the app and nothing else.

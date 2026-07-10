@@ -30,6 +30,21 @@ def _ci_workflow() -> dict:
     return yaml.safe_load(content)
 
 
+def _zap_full_workflow() -> dict:
+    content = (REPO_ROOT / ".github" / "workflows" / "zap-full.yml").read_text()
+    return yaml.safe_load(content)
+
+
+# T-225/ASVS V9.1.2, V9.1.3: an independent TLS cipher/version scan of
+# STAGING_URL runs alongside the ZAP full scan, same dormant-until-configured
+# job.
+def test_zap_full_workflow_runs_testssl_against_staging() -> None:
+    steps = _zap_full_workflow()["jobs"]["zap-full-scan"]["steps"]
+    testssl_step = next(s for s in steps if "testssl" in s.get("name", "").lower())
+    assert "drwetter/testssl.sh" in testssl_step["run"]
+    assert "STAGING_URL" in testssl_step["run"]
+
+
 def test_test_job_copies_env_file_before_running_pytest() -> None:
     # app/core/db.py builds the engine at import time, which runs the moment
     # conftest.py is collected -- backend/.env must exist on disk before that
@@ -54,10 +69,33 @@ def test_build_job_scans_image_before_pushing() -> None:
     assert scan_index < push_index
 
 
+# T-225/ASVS V14.2.5: an SBOM of the exact shipped image, generated before
+# the image is pushed (same ordering guarantee as the trivy scan above).
+def test_build_job_generates_sbom_before_pushing() -> None:
+    steps = _ci_workflow()["jobs"]["build"]["steps"]
+    step_names = [s.get("name", "") for s in steps]
+    sbom_index = next(i for i, n in enumerate(step_names) if "Generate SBOM" in n)
+    push_index = next(i for i, n in enumerate(step_names) if n == "Push image")
+    assert sbom_index < push_index
+
+
 def test_deploy_job_only_runs_on_main_and_needs_build() -> None:
     deploy = _ci_workflow()["jobs"]["deploy"]
     assert deploy["if"] == "github.ref == 'refs/heads/main'"
     assert deploy["needs"] == "build"
+
+
+# T-225/ASVS V12.4.2: the deploy job must refuse to ship a production env
+# file that would leave uploaded files unscanned, and must do so before any
+# migration/deploy step runs against production.
+def test_deploy_job_guards_against_virus_scanner_noop_before_migrating() -> None:
+    steps = _ci_workflow()["jobs"]["deploy"]["steps"]
+    step_names = [s.get("name", "") for s in steps]
+    guard_index = next(i for i, n in enumerate(step_names) if "Guard against VIRUS_SCANNER" in n)
+    migrate_index = next(i for i, n in enumerate(step_names) if "Run migrations" in n)
+    assert guard_index < migrate_index
+    assert "VIRUS_SCANNER=noop" in steps[guard_index]["run"]
+    assert "exit 1" in steps[guard_index]["run"]
 
 
 def test_deploy_job_runs_migrations_before_triggering_a_deploy() -> None:

@@ -19,6 +19,7 @@ from datetime import datetime, timedelta
 from typing import Any
 from uuid import UUID, uuid4
 
+import magic
 from redis.asyncio import Redis
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -35,6 +36,13 @@ from app.modules.storage.repository import StoredFileRepository
 _SIZE_TOLERANCE_BYTES = 1024
 _DOWNLOAD_EXPIRES_IN_SECONDS = 3600
 _HARD_DELETE_GRACE_PERIOD = timedelta(days=7)
+# T-225/ASVS V12.2.1: content-sniffing only needs enough bytes for libmagic's
+# signature tables, never the whole object.
+_SNIFF_PREFIX_BYTES = 2048
+# text/plain and text/csv have no reliable magic-byte signature -- any byte
+# sequence can be valid text, so sniffing them can only produce false
+# positives. These two stay declared-Content-Type-only, same as before.
+_SNIFF_EXEMPT_CONTENT_TYPES = frozenset({"text/plain", "text/csv"})
 
 _DEFAULT_ALLOWED_CONTENT_TYPES = frozenset(
     {
@@ -151,6 +159,16 @@ class StorageService:
                     params={"storage_gb": str(storage_gb)},
                 )
 
+        max_files = org_sub.plan.features.get("max_files")
+        if max_files is not None:
+            file_count = await self._repo.count_files_for_org()
+            if file_count >= max_files:
+                raise PlanLimitError(
+                    "errors.file_count_quota_exceeded",
+                    fallback=f"This would exceed the {max_files}-file limit on your plan",
+                    params={"max_files": str(max_files)},
+                )
+
     async def confirm_upload(self, user_id: UUID, file_id: UUID) -> StoredFile:
         stored_file = await self._repo.get_or_raise(file_id)
         if stored_file.status != "pending":
@@ -171,6 +189,9 @@ class StorageService:
                 "errors.file_size_mismatch",
                 fallback="Uploaded file size does not match the claimed size",
             )
+
+        if stored_file.content_type not in _SNIFF_EXEMPT_CONTENT_TYPES:
+            await self._verify_content_sniff(stored_file)
 
         checksum = metadata.get("ETag")
         updated = await self._repo.update(
@@ -197,6 +218,24 @@ class StorageService:
             body=f"{updated.filename} finished uploading.",
         )
         return updated
+
+    async def _verify_content_sniff(self, stored_file: StoredFile) -> None:
+        # T-225/ASVS V12.2.1: the declared Content-Type (checked at presign
+        # time in presign_upload) is entirely client-supplied -- this
+        # confirms the uploaded bytes actually are what was declared, using
+        # libmagic's signature tables against the object's real content.
+        prefix = await self._backend.read_prefix(stored_file.key, _SNIFF_PREFIX_BYTES)
+        sniffed_type = magic.from_buffer(prefix, mime=True)
+        if sniffed_type != stored_file.content_type:
+            await self._backend.delete(stored_file.key)
+            raise UnprocessableEntityError(
+                "errors.content_type_mismatch",
+                fallback=(
+                    f"File content does not match its declared type "
+                    f"'{stored_file.content_type}' (detected '{sniffed_type}')"
+                ),
+                params={"declared": stored_file.content_type, "detected": sniffed_type},
+            )
 
     async def list_files(
         self, after: UUID | None, limit: int, *, bucket: str | None = None

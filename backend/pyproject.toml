@@ -53,6 +53,15 @@ dependencies = [
     # every single request once the middleware is actually wired in (T-202).
     "prometheus-fastapi-instrumentator>=8.0.2",
     "boto3>=1.35",
+    # T-225 — content-sniffing on upload confirm (app.modules.storage.service).
+    # Linux/macOS python-magic is a thin ctypes wrapper around the system
+    # libmagic1 (installed in Dockerfile/Dockerfile.dev); Windows has no
+    # system libmagic; a mismatch here doesn't raise ImportError, it
+    # segfaults the interpreter. python-magic-bin bundles prebuilt libmagic
+    # binaries so `import magic` works the same way on a bare Windows dev
+    # machine running `pytest` outside Docker.
+    "python-magic>=0.4.27; sys_platform != 'win32'",
+    "python-magic-bin>=0.4.14; sys_platform == 'win32'",
     "itsdangerous>=2.2",
     "httpx>=0.27",
     "babel>=2.16", # Accept-Language negotiation (T-068)

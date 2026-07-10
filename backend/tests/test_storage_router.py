@@ -64,6 +64,9 @@ _TABLES = [
 class _FakeStorageBackend:
     uploaded: dict[str, dict[str, Any]] = field(default_factory=dict)
     deleted: list[str] = field(default_factory=list)
+    # T-225: content-sniffing needs *some* bytes at confirm time -- real PDF
+    # magic bytes by default, matching this file's default content_type.
+    content: dict[str, bytes] = field(default_factory=dict)
 
     async def presign_upload(
         self,
@@ -90,6 +93,9 @@ class _FakeStorageBackend:
 
     async def head(self, key: str) -> dict[str, Any] | None:
         return self.uploaded.get(key)
+
+    async def read_prefix(self, key: str, num_bytes: int) -> bytes:  # noqa: ARG002 -- fake ignores the byte cap
+        return self.content.get(key, b"%PDF-1.4\n%\xe2\xe3\xcf\xd3\n")
 
     async def delete(self, key: str) -> None:
         self.deleted.append(key)

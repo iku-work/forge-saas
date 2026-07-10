@@ -8,7 +8,8 @@ ENV PYTHONUNBUFFERED=1 \
 # `node` only -- no npm/pnpm, no node_modules. send_email (T-106) shells out
 # to packages/email-templates' compiled, dependency-free cli.js, bind-mounted
 # in by docker-compose.yml; nothing here ever runs `npm install`.
-RUN apt-get update && apt-get install -y --no-install-recommends nodejs \
+# `libmagic1` backs python-magic (T-225's content-sniffing on upload confirm).
+RUN apt-get update && apt-get install -y --no-install-recommends nodejs libmagic1 \
     && rm -rf /var/lib/apt/lists/*
 
 COPY . .

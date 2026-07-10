@@ -160,6 +160,43 @@ async def test_presign_download_with_filename_sets_content_disposition(backend: 
     assert "report.jpg" in response.headers.get("content-disposition", "")
 
 
+@pytest.mark.owasp("A03")
+async def test_presign_download_sanitizes_reflective_file_download_filename(
+    backend: S3Backend,
+) -> None:
+    # T-225/ASVS V12.3.4: a filename carrying CRLF (header injection) or a
+    # path separator (looks like a path) must not reach the response header
+    # unsanitized.
+    key = f"download-rfd/{uuid4()}.jpg"
+    presigned = await backend.presign_upload(key, "image/jpeg", max_bytes=1024)
+    _post_upload(presigned, b"content", content_type="image/jpeg")
+    malicious_filename = 'evil\r\nX-Injected: 1".jpg; ../../etc/passwd'
+
+    url = await backend.presign_download(key, filename=malicious_filename)
+    response = _get(url)
+
+    assert response.status_code == 200
+    # Header injection (CRLF) is the actual RFD-adjacent threat here -- a
+    # literal colon/quote surviving *inside* the one Content-Disposition
+    # value is harmless, only a raw CR/LF could ever start a new header.
+    assert "x-injected" not in {h.lower() for h in response.headers}
+    disposition = response.headers.get("content-disposition", "")
+    assert "\r" not in disposition
+    assert "\n" not in disposition
+    assert "/" not in disposition
+
+
+async def test_read_prefix_returns_only_the_requested_leading_bytes(backend: S3Backend) -> None:
+    key = f"read-prefix/{uuid4()}.bin"
+    content = b"%PDF-1.4\n" + b"x" * 4096
+    presigned = await backend.presign_upload(key, "application/pdf", max_bytes=len(content) + 1024)
+    _post_upload(presigned, content, content_type="application/pdf")
+
+    prefix = await backend.read_prefix(key, 9)
+
+    assert prefix == b"%PDF-1.4\n"
+
+
 async def test_head_returns_none_when_missing(backend: S3Backend) -> None:
     assert await backend.head(f"missing/{uuid4()}.jpg") is None
 

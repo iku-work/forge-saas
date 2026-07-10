@@ -82,7 +82,7 @@ questionnaire) — evidence links point at real files, not at task IDs.
 | ID | Requirement | Status | Evidence |
 |---|---|---|---|
 | V1.6.1 | Explicit key-management policy following a lifecycle standard | met | `docs/security/key-management.md` — generation, storage/holders, rotation procedure (including the existing `ENCRYPTION_KEY_OLD`/`MultiFernet` support, `backend/app/core/encrypted_type.py`), and compromise response for every key material in use. |
-| V1.6.2 | Key material protected via vault/API, not app-held secrets | partial | Keys load from environment variables (hosting-platform secret store), not a dedicated vault/KMS. Follow-up: T-225. |
+| V1.6.2 | Key material protected via vault/API, not app-held secrets | partial | Keys load from environment variables (hosting-platform secret store), not a dedicated vault/KMS. T-225 evaluated this and deliberately deferred it: moving `ENCRYPTION_KEY`/`JWT_PRIVATE_KEY` into a specific vault (HashiCorp Vault, AWS KMS, etc.) is a vendor/infra decision a template shouldn't force on every deployer — env-var-via-hosting-secret-store is the intentional baseline here. |
 | V1.6.3 | Keys/passwords replaceable, part of a defined re-encryption process | met | `ENCRYPTION_KEY_OLD` + `MultiFernet` (`backend/app/core/encrypted_type.py:33,50-86`) support rotation without downtime; `backend/app/workers/jobs/encryption.py` re-encrypts. |
 | V1.6.4 | Client-side secrets never used to protect sensitive data | met | All cryptography (Fernet, JWT signing, password hashing) happens server-side only, in `backend/app/core/encrypted_type.py` and `backend/app/modules/auth/utils.py`. |
 
@@ -104,7 +104,7 @@ questionnaire) — evidence links point at real files, not at task IDs.
 
 | ID | Requirement | Status | Evidence |
 |---|---|---|---|
-| V1.9.1 | Encrypted communication between components across containers/sites | partial | Client-facing traffic is TLS-terminated at Caddy (`Caddyfile.prod`). Backend↔Postgres/Redis within the Docker network isn't confirmed to require TLS (`sslmode`) outside of what the managed hosting provider enforces. Follow-up: T-225. |
+| V1.9.1 | Encrypted communication between components across containers/sites | met | Client-facing traffic is TLS-terminated at Caddy (`Caddyfile.prod`). `Settings._enforce_startup_invariants` (`backend/app/core/config.py`, T-225) now refuses to boot outside dev unless `DATABASE_URL` sets `sslmode=require`+ and `REDIS_URL` uses `rediss://`. Render's managed Postgres/Redis satisfy this by default; self-hosted `docker-compose.prod.yml` deployers must complete the cert setup in `docs/runbooks/backup-restore.md`'s "Docker-network TLS" section or the app won't start. |
 | V1.9.2 | Components verify authenticity of each side of a communication link | met | Outbound calls to Stripe/Resend/OAuth providers use standard HTTP-client TLS certificate verification (no `verify=False` found anywhere in the codebase). |
 
 #### V1.10 Malicious Software Architecture
@@ -133,7 +133,7 @@ questionnaire) — evidence links point at real files, not at task IDs.
 | V1.14.1 | Segregation of differing trust levels via gateway/reverse proxy | met | Caddy reverse-proxies to the backend and blocks `/metrics` externally (`Caddyfile.prod`). |
 | V1.14.2 | Binary signatures/trusted connections for remote device deployment | n/a | Template ships a web backend only; no remote/IoT device deployment exists. |
 | V1.14.3 | Build pipeline warns of out-of-date/insecure components | met | `pip-audit` + `pnpm audit` + `trivy` gate the `build` job in `.github/workflows/ci.yml` (not `continue-on-error`). |
-| V1.14.4 | Build pipeline verifies secure deployment of software-defined infra | partial | CI builds/pushes the Docker image and scans it with trivy, but there's no explicit "verify secure deployment config" step for the hosting platform. Follow-up: T-225. |
+| V1.14.4 | Build pipeline verifies secure deployment of software-defined infra | met | CI builds/pushes the Docker image and scans it with trivy. The `deploy` job's "Guard against VIRUS_SCANNER=noop in production" step (`.github/workflows/ci.yml`, T-225) additionally fails the deploy before it ships if the production env file would leave uploaded files unscanned. |
 | V1.14.5 | Deployments sandboxed/containerized/isolated | met | Docker containerization, non-root user, separate backend/worker services in `docker-compose.yml`. |
 | V1.14.6 | No unsupported/deprecated client-side tech (Flash, ActiveX, etc.) | met | `apps/web/package.json` — React 18 + Vite 6 + TypeScript SPA; no legacy plugin technology in the stack. |
 
@@ -180,7 +180,7 @@ questionnaire) — evidence links point at real files, not at task IDs.
 | V2.4.2 | Unique salt ≥32 bits per credential | met | Argon2's `PasswordHasher` generates a unique random salt per hash automatically. |
 | V2.4.3 | PBKDF2 iteration count | n/a | PBKDF2 is not used — Argon2 is used instead. |
 | V2.4.4 | bcrypt work factor | n/a | bcrypt is not used. |
-| V2.4.5 | Additional server-side secret pepper (HSM-protected) | partial | No secret pepper beyond Argon2's per-hash salt. Follow-up: T-225. |
+| V2.4.5 | Additional server-side secret pepper (HSM-protected) | partial | An HMAC-SHA256 pepper (`PASSWORD_PEPPER`) is now mixed into every password before Argon2, on top of its own per-hash salt (`backend/app/modules/auth/utils.py`, `_peppered`, T-225) — required outside dev. Still `partial`: the pepper itself lives in an env var, not an HSM/vault, deferred for the same vault/KMS vendor decision as V1.6.2/V6.4.1/V6.4.2. |
 
 #### V2.5 Credential Recovery
 
@@ -236,9 +236,9 @@ questionnaire) — evidence links point at real files, not at task IDs.
 
 | ID | Requirement | Status | Evidence |
 |---|---|---|---|
-| V2.10.1 | Intra-service secrets aren't unchanging passwords/shared accounts | partial | `DATABASE_URL`/`REDIS_URL` are long-lived static credentials (standard for managed Postgres/Redis) without automated rotation. Follow-up: T-225. |
+| V2.10.1 | Intra-service secrets aren't unchanging passwords/shared accounts | partial | `DATABASE_URL`/`REDIS_URL` are long-lived static credentials (standard for managed Postgres/Redis) without automated rotation. T-225 evaluated this: automated rotation requires the same vault/KMS vendor decision as V1.6.2/V6.4.1/V6.4.2, deliberately deferred rather than built against one vendor's API. |
 | V2.10.2 | Service account isn't a default credential | met | `DATABASE_URL`/`REDIS_URL` are required fields with no default value (`backend/app/core/config.py`) — the app cannot boot with a "root/root"-style default. |
-| V2.10.3 | Service passwords protected against offline recovery | partial | Credentials live in environment variables / the hosting platform's secret store, not independently hardened beyond that. Follow-up: T-225. |
+| V2.10.3 | Service passwords protected against offline recovery | partial | Credentials live in environment variables / the hosting platform's secret store, not independently hardened beyond that — same vault/KMS deferral as V2.10.1. |
 | V2.10.4 | Secrets not committed to source, secure key store recommended | met | All secrets load via `Settings`/env (`backend/app/core/config.py`); `ENCRYPTION_KEY`/JWT keys are required fields with no defaults; trufflehog + gitleaks CI gates catch accidental commits. |
 
 ### V3 — Session Management
@@ -406,8 +406,8 @@ questionnaire) — evidence links point at real files, not at task IDs.
 
 | ID | Requirement | Status | Evidence |
 |---|---|---|---|
-| V6.4.1 | Secrets-management solution (vault) for key lifecycle | partial | Keys load from environment variables (hosting-platform secret store), not a dedicated vault (e.g. HashiCorp Vault, AWS KMS). Follow-up: T-225. |
-| V6.4.2 | Key material isolated from the app, vault-mediated crypto ops | partial | `ENCRYPTION_KEY` loads directly into app memory, not vault-mediated. Follow-up: T-225. |
+| V6.4.1 | Secrets-management solution (vault) for key lifecycle | partial | Keys load from environment variables (hosting-platform secret store), not a dedicated vault (e.g. HashiCorp Vault, AWS KMS). Same deliberate T-225 deferral as V1.6.2 — a specific vault/KMS integration is a vendor decision, not a template default. |
+| V6.4.2 | Key material isolated from the app, vault-mediated crypto ops | partial | `ENCRYPTION_KEY` loads directly into app memory, not vault-mediated — same deferral as V6.4.1. |
 
 ### V7 — Error Handling and Logging
 
@@ -452,9 +452,9 @@ questionnaire) — evidence links point at real files, not at task IDs.
 | V8.1.1 | Sensitive data not cached in server components (load balancers, caches) | met | `Cache-Control: no-store` set by default on every response (`backend/app/middleware/security_headers.py:30`). |
 | V8.1.2 | Cached/temp server-side copies purged after use | met | `no-store` prevents proxy caching; presigned download URLs expire after 1 hour (`backend/app/modules/storage/service.py`, `_DOWNLOAD_EXPIRES_IN_SECONDS`). |
 | V8.1.3 | Minimal parameters per request (no hidden fields) | met | `backend/app/core/schemas.py` — JSON API with explicitly declared schema fields only, no hidden-form-field pattern. |
-| V8.1.4 | Detect/alert on abnormal request volume | partial | Rate limiting exists (429s) but no confirmed anomaly-detection/alerting pipeline beyond that. Follow-up: T-225. |
-| V8.1.5 | Regular backups with tested restores | partial | Delegated to the managed Postgres hosting provider; no documented, tested restore runbook in this repo. Follow-up: T-225. |
-| V8.1.6 | Backups stored securely | partial | Delegated to the hosting provider, not independently documented/verified here. Follow-up: T-225. |
+| V8.1.4 | Detect/alert on abnormal request volume | met | `RequestVolumeAnomaly` (`docs/grafana/alerts.yml`, T-225) pages when a route's rate-limit-rejection rate (`http_requests_total{status="429"}`, already produced by `prometheus-fastapi-instrumentator`) sustains over 1/sec for 5 minutes. Deliberately per-route, not per-user/per-IP — true per-IP cardinality in Prometheus is itself a metrics-storage/PII risk. |
+| V8.1.5 | Regular backups with tested restores | partial | `docs/runbooks/backup-restore.md` (T-225) documents the restore procedure for both the Render-managed and self-hosted paths in detail. Still `partial`: the "tested" half requires executing a restore against a live instance, which doesn't exist for this template yet — the runbook's own "Verification status" checklist tracks this explicitly rather than claiming it silently. |
+| V8.1.6 | Backups stored securely | partial | Same runbook as V8.1.5 — Render's managed backups are provider-secured by default; the self-hosted path's operator-owned backup archive isn't independently verified here. |
 
 #### V8.2 Client-side Data Protection
 
@@ -484,17 +484,17 @@ questionnaire) — evidence links point at real files, not at task IDs.
 | ID | Requirement | Status | Evidence |
 |---|---|---|---|
 | V9.1.1 | TLS for all client connectivity, no plaintext fallback | met | Caddy HTTP→HTTPS redirect (`Caddyfile.prod`); `FORCE_HTTPS` enforced outside `dev` (`backend/app/core/config.py:90-91`). |
-| V9.1.2 | Only strong cipher suites enabled, strongest preferred | partial | Delegated entirely to Caddy's default TLS configuration; not independently verified via a testing tool. Follow-up: T-225. |
-| V9.1.3 | Only current TLS versions (1.2/1.3) enabled | partial | Same — Caddy's defaults are modern but not independently pinned/confirmed. Follow-up: T-225. |
+| V9.1.2 | Only strong cipher suites enabled, strongest preferred | partial | A `testssl.sh` step (`.github/workflows/zap-full.yml`, T-225) now scans `STAGING_URL`'s actual negotiated cipher suites nightly, same dormant-until-`STAGING_URL`-is-configured status as the ZAP job it sits alongside. Still `partial`, not `met`: the scan is wired up but hasn't actually run against a live staging deployment yet, so Caddy's default cipher configuration remains independently *unverified* rather than independently *confirmed*. |
+| V9.1.3 | Only current TLS versions (1.2/1.3) enabled | partial | Same `testssl.sh` step and same caveat as V9.1.2 — wired up, not yet executed against a live target. |
 
 #### V9.2 Server Communication Security
 
 | ID | Requirement | Status | Evidence |
 |---|---|---|---|
 | V9.2.1 | Trusted TLS certs between servers, restrict self-signed | met | Caddy auto-obtains Let's Encrypt certificates (`Caddyfile.prod`); outbound calls to Stripe/Resend/OAuth providers use their publicly-trusted CA certs. |
-| V9.2.2 | Encrypted connections for all inbound/outbound (incl. DB, mgmt) | partial | External client traffic is TLS; backend↔Postgres/Redis TLS (`sslmode`) within the Docker network isn't independently confirmed outside of what a managed hosting provider enforces. Follow-up: T-225. |
+| V9.2.2 | Encrypted connections for all inbound/outbound (incl. DB, mgmt) | met | Same enforcement as V1.9.1 — `Settings._enforce_startup_invariants` (T-225) requires `sslmode=require`+ on `DATABASE_URL` and `rediss://` on `REDIS_URL` outside dev. |
 | V9.2.3 | Encrypted external connections carrying sensitive data are authenticated | met | `backend/app/core/config.py` — `STRIPE_SECRET_KEY`, `RESEND_API_KEY`, `GOOGLE_CLIENT_SECRET`/`GITHUB_CLIENT_SECRET` are required for their respective clients; every encrypted external call is also credential-authenticated. |
-| V9.2.4 | Certificate revocation checking (OCSP stapling) configured | partial | Not independently verified; Caddy supports OCSP stapling by default for ACME certs but no explicit config/test confirms it. Follow-up: T-225. |
+| V9.2.4 | Certificate revocation checking (OCSP stapling) configured | met | Caddy enables OCSP stapling by default for ACME-issued certs — no explicit config is needed to turn it on. T-225 confirmed this is Caddy's documented default behavior rather than adding a no-op config line. |
 
 ### V12 — Files and Resources
 
@@ -504,13 +504,13 @@ questionnaire) — evidence links point at real files, not at task IDs.
 |---|---|---|---|
 | V12.1.1 | Reject large files that could fill storage / cause DoS | met | Plan-quota check (`_check_quota`) + declared-vs-actual size cross-check at confirm time (`backend/app/modules/storage/service.py:135-152,167-173`). |
 | V12.1.2 | Compressed files checked against max uncompressed size/file count before unzipping | n/a | The backend never decompresses uploaded files server-side (they're stored/virus-scanned as opaque byte streams) — if a future feature adds server-side unzip of e.g. `.docx`, this control must be added at that point. |
-| V12.1.3 | File-size quota and max-files-per-user enforced | partial | A storage-byte quota exists (`_check_quota`); a distinct hard cap on file *count* per user/org wasn't confirmed. Follow-up: T-225. |
+| V12.1.3 | File-size quota and max-files-per-user enforced | met | A storage-byte quota already existed (`_check_quota`); T-225 added a `max_files`-per-org check alongside it, backed by the already-present (previously unused) `StoredFileRepository.count_files_for_org()` (`backend/app/modules/storage/repository.py`). |
 
 #### V12.2 File Integrity
 
 | ID | Requirement | Status | Evidence |
 |---|---|---|---|
-| V12.2.1 | File type validated from actual content, not just declared type | partial | `_DEFAULT_ALLOWED_CONTENT_TYPES` validates the client-declared `Content-Type` header only — no magic-byte/content-sniffing validation exists to catch a mislabeled file. Follow-up: T-225. |
+| V12.2.1 | File type validated from actual content, not just declared type | met | `StorageService._verify_content_sniff` (`backend/app/modules/storage/service.py`, T-225) reads the first 2KB of a confirmed upload via a new `StorageBackend.read_prefix` and compares libmagic's (`python-magic`) detected MIME type against the declared one, deleting the object on mismatch. `text/plain`/`text/csv` stay declared-type-only — no reliable magic-byte signature exists for either. |
 
 #### V12.3 File Execution
 
@@ -519,7 +519,7 @@ questionnaire) — evidence links point at real files, not at task IDs.
 | V12.3.1 | Filename metadata not used directly for filesystem access | met | Storage key is server-generated (`uuid4()`); filename only feeds a slugified human-readable tail (`backend/app/modules/storage/service.py:63-69,105`). |
 | V12.3.2 | Filename metadata validated/ignored to prevent LFI | met | `backend/app/modules/storage/service.py:63-69,105` — same mechanism as V12.3.1. |
 | V12.3.3 | Filename metadata validated/ignored to prevent RFI/SSRF | met | `backend/app/modules/storage/service.py` — filename is never used to construct a fetchable URL. |
-| V12.3.4 | Reflective File Download protection (fixed Content-Disposition, text/plain) | partial | Downloads go through storage-backend presigned URLs; Content-Disposition behavior is backend-dependent and not independently confirmed here. Follow-up: T-225. |
+| V12.3.4 | Reflective File Download protection (fixed Content-Disposition, text/plain) | met | `_content_disposition` (`backend/app/modules/storage/backends/s3.py`, T-225) strips CR/LF and path separators from the filename before it reaches `ResponseContentDisposition`, and RFC-5987-encodes it (`filename*=UTF-8''...`) rather than interpolating it raw into the quoted-string form of the header. |
 | V12.3.5 | Untrusted file metadata not passed to system APIs (OS command injection) | met | `backend/app/modules/storage/service.py` — no shell/subprocess call is built from a filename; enforced by the bandit CI gate. |
 | V12.3.6 | No execution of untrusted third-party content | met | `backend/app/modules/storage/service.py` — uploaded files are stored as opaque objects, never executed or included as code by the backend. |
 
@@ -528,7 +528,7 @@ questionnaire) — evidence links point at real files, not at task IDs.
 | ID | Requirement | Status | Evidence |
 |---|---|---|---|
 | V12.4.1 | Untrusted files stored outside the web root, limited permissions | met | `backend/app/modules/storage/backends/` (`s3.py`, `r2.py`, `minio.py`) — files live in object storage, not on the app's filesystem, inherently outside any served directory. |
-| V12.4.2 | Untrusted files scanned by antivirus | partial | `ClamAVScanner` is a real implementation (`backend/app/modules/storage/scanner.py:74-137`), but the default `VIRUS_SCANNER=noop` marks every file clean with no scanning — production deployments must switch this setting. Follow-up: T-225 (deploy-config verification should fail a prod build/deploy if `VIRUS_SCANNER=noop`). |
+| V12.4.2 | Untrusted files scanned by antivirus | met | `ClamAVScanner` is a real implementation (`backend/app/modules/storage/scanner.py:74-137`); `VIRUS_SCANNER=noop` still defaults in dev, but `Settings._enforce_startup_invariants` (`backend/app/core/config.py`, T-225) now refuses to boot outside dev with that setting, and the CI `deploy` job independently fails fast if the production env file would set it (`.github/workflows/ci.yml`). |
 
 #### V12.5 File Download
 
@@ -552,7 +552,7 @@ questionnaire) — evidence links point at real files, not at task IDs.
 | V13.1.1 | Consistent encodings/parsers across components | met | `backend/app/main.py` — single FastAPI/Pydantic stack, one JSON parser, no mixed multi-parser surface. |
 | V13.1.3 | API URLs don't expose sensitive info | met | Bearer token in `Authorization` header, refresh token in cookie — never in a URL (ties to V3.1.1). |
 | V13.1.4 | Authorization checked at both the URI/controller level and the resource level | met | `require_permission` at the router/dependency level + explicit `org_id` re-check inside services (e.g. `backend/app/modules/tenancy/service.py:137,171`). |
-| V13.1.5 | Unexpected/missing content types rejected with 406/415 | partial | Malformed JSON bodies are rejected (422 via Pydantic), but explicit 406/415 handling for a wrong `Content-Type` header isn't confirmed. Follow-up: T-225. |
+| V13.1.5 | Unexpected/missing content types rejected with 406/415 | met | `SecurityHeadersMiddleware` (`backend/app/middleware/security_headers.py`, T-225) 415s any `POST`/`PUT`/`PATCH` request with a non-empty body whose `Content-Type` isn't `application/json` — every mutating endpoint in this API is JSON-only (uploads go client→storage-backend directly via a presigned POST, never through the backend). 406 doesn't apply: this API doesn't do `Accept`-based content negotiation. |
 
 #### V13.2 RESTful Web Service
 
@@ -561,7 +561,7 @@ questionnaire) — evidence links point at real files, not at task IDs.
 | V13.2.1 | Enabled HTTP methods valid for the caller's role | met | Mutating routes (`DELETE`/`PUT`) are gated by `require_permission`; a `MEMBER`-role user calling `DELETE` gets 403. |
 | V13.2.2 | JSON schema validation before accepting input | met | `backend/app/core/schemas.py` — Pydantic validates before any handler logic runs (FastAPI request-body binding). |
 | V13.2.3 | CSRF protection for cookie-based REST services | met | `SameSite=Strict` on the refresh cookie (ties to V4.2.2); mutating calls also require a custom `Authorization` header a simple cross-site form can't set. |
-| V13.2.5 | Incoming `Content-Type` explicitly checked | partial | Same gap as V13.1.5. Follow-up: T-225. |
+| V13.2.5 | Incoming `Content-Type` explicitly checked | met | Same check as V13.1.5. |
 | V13.2.6 | Headers/payload integrity in transit | met | TLS-only outside `dev` (`FORCE_HTTPS`) provides transport-level integrity; ASVS explicitly calls this sufficient for most cases. |
 
 #### V13.3 SOAP Web Service
@@ -592,22 +592,22 @@ questionnaire) — evidence links point at real files, not at task IDs.
 | V14.2.2 | Unneeded features/docs/sample apps/configs removed | met | Production Docker image is a minimal runtime stage (multi-stage build strips builder tooling; only `nodejs` retained for email-template rendering). |
 | V14.2.3 | CDN-hosted assets use Subresource Integrity | n/a | No third-party CDN-hosted assets — the frontend build is self-hosted/bundled. |
 | V14.2.4 | Third-party components from trusted, maintained repositories | met | Dependencies sourced from the official PyPI/npm registries via `pyproject.toml`/`package.json`. |
-| V14.2.5 | SBOM maintained for all third-party libraries | partial | No SBOM generation step exists in CI. Follow-up: T-225. |
+| V14.2.5 | SBOM maintained for all third-party libraries | met | `.github/workflows/ci.yml`'s `build` job (T-225) generates a CycloneDX SBOM of the exact shipped image via `anchore/sbom-action` and uploads it as a workflow artifact on every build. |
 | V14.2.6 | Attack surface reduced by encapsulating third-party libraries | met | `backend/app/core/module_loader.py` already encapsulates optional third-party integrations (Stripe, OAuth providers, storage backends) behind feature flags — disabled modules' third-party code never loads. |
 
 #### V14.3 Unintended Security Disclosure
 
 | ID | Requirement | Status | Evidence |
 |---|---|---|---|
-| V14.3.2 | Debug mode disabled in production | partial | `ENVIRONMENT` distinguishes `dev`/`staging`/`prod`, but whether FastAPI's interactive `/docs`/`/redoc` are disabled outside `dev` wasn't confirmed. Follow-up: T-225. |
-| V14.3.3 | HTTP headers don't expose detailed version info | partial | FastAPI/Starlette don't add a `Server` header by default, but Uvicorn does (`Server: uvicorn`); whether Caddy strips/replaces it wasn't confirmed. Follow-up: T-225. |
+| V14.3.2 | Debug mode disabled in production | met | This was a real gap, not just an unconfirmed one: FastAPI's interactive `/docs`/`/redoc`/`/openapi.json` were live in every environment including `prod`. `backend/app/main.py` (T-225) now passes `docs_url`/`redoc_url`/`openapi_url` as `None` unless `ENVIRONMENT == "dev"`. |
+| V14.3.3 | HTTP headers don't expose detailed version info | met | `Caddyfile.prod`'s `header` block (T-225) now includes `-Server`, stripping Uvicorn's default `Server: uvicorn` response header at the edge. |
 
 #### V14.4 HTTP Security Headers
 
 | ID | Requirement | Status | Evidence |
 |---|---|---|---|
 | V14.4.1 | Every response has a `Content-Type` with a safe charset | met | FastAPI sets `application/json; charset=utf-8` by default. |
-| V14.4.2 | API responses carry a `Content-Disposition: attachment` header | partial | Not implemented for JSON API responses. Follow-up: T-225. |
+| V14.4.2 | API responses carry a `Content-Disposition: attachment` header | met | `SecurityHeadersMiddleware` (`backend/app/middleware/security_headers.py`, T-225) sets `Content-Disposition: attachment` (via `setdefault`) on every `/api/*` response. Scoped to the API prefix, not every response — `/docs`/`/redoc` (dev only) are meant to render as HTML. |
 | V14.4.3 | Content-Security-Policy header present | met | `default-src 'self'` (`backend/app/middleware/security_headers.py:13`). |
 | V14.4.4 | `X-Content-Type-Options: nosniff` on all responses | met | `backend/app/middleware/security_headers.py:10`. |
 | V14.4.5 | `Strict-Transport-Security` on all responses/subdomains | met | Set at both the app layer (`backend/app/middleware/security_headers.py:8`) and the edge (`Caddyfile.prod`, with `preload`). |
@@ -618,7 +618,7 @@ questionnaire) — evidence links point at real files, not at task IDs.
 
 | ID | Requirement | Status | Evidence |
 |---|---|---|---|
-| V14.5.1 | Only in-use HTTP methods accepted, invalid attempts logged | partial | FastAPI 405s undeclared methods per route by default, but explicit logging/alerting on invalid-method attempts isn't confirmed. Follow-up: T-225. |
+| V14.5.1 | Only in-use HTTP methods accepted, invalid attempts logged | met | FastAPI already 405s undeclared methods per route by default; `http_exception_handler` (`backend/app/core/handlers.py`, T-225) now logs a warning (method/path/request-id) on every 405 before falling through to the default response. |
 | V14.5.2 | `Origin` header not used for authentication/access-control decisions | met | Authorization decisions are based on the bearer token/session, never the `Origin` header (`backend/app/core/dependencies.py`). |
 | V14.5.3 | CORS allow-list is strict, no `null` origin support | met | `ALLOWED_ORIGINS` explicit list + wildcard-forbidden startup invariant (`backend/app/core/config.py:88-89`); no special-casing of a `null` origin found. |
 | V14.5.4 | Headers from a trusted proxy/SSO are authenticated by the app | n/a | Template doesn't rely on proxy-injected identity headers (e.g. `X-Forwarded-User`) — all authentication is via app-issued JWT/session. |
@@ -634,14 +634,19 @@ questionnaire) — evidence links point at real files, not at task IDs.
   only verifies evidence *paths* still exist — it cannot verify the
   *claims* are still true. Status changes must be made in the same PR as
   the code change that causes them.
-- **Honest gaps, not zero gaps**: roughly a third of the applicable rows
-  are `partial`. That's the point of doing this exercise for real instead
-  of writing a table that says "met" everywhere — several concrete,
-  previously-undocumented gaps surfaced while building this (no
+- **Honest gaps, not zero gaps**: this started at roughly a third of the
+  applicable rows sitting `partial`, the point of doing this exercise for
+  real instead of writing a table that says "met" everywhere — several
+  concrete, previously-undocumented gaps surfaced while building this (no
   authenticated change-password endpoint, TOTP replay-within-window not
   tracked, `url_guard.py` has no caller yet, no SBOM, superadmin doesn't
   require 2FA). Those became the follow-up tasks below rather than being
-  quietly noted and dropped.
+  quietly noted and dropped. T-225 closed most of its batch outright; the
+  rows still `partial` after it are the ones that turned out to need a real
+  infrastructure/vendor decision (a specific vault/KMS, an executed backup
+  restore, a completed `testssl.sh` run against a live staging deployment)
+  rather than more application code — deferred with a named reason each,
+  not silently left as before.
 
 ## Follow-up tasks filed by this document
 

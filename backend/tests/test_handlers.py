@@ -141,6 +141,48 @@ def test_unhandled_exception_returns_500_with_no_traceback() -> None:
     assert "Traceback" not in response.text
 
 
+def test_wrong_method_returns_405_and_logs_warning() -> None:
+    # T-225/ASVS V14.5.1: same caplog workaround as
+    # test_domain_error_with_missing_key_logs_warning_and_uses_fallback above.
+    target = logging.getLogger("app.core.handlers")
+    handler = _ListHandler()
+    previous_level, previous_disabled = target.level, target.disabled
+    target.addHandler(handler)
+    target.setLevel(logging.WARNING)
+    target.disabled = False
+    try:
+        client = TestClient(_build_test_app())
+        response = client.post("/raise-not-found")  # a GET-only route
+    finally:
+        target.removeHandler(handler)
+        target.setLevel(previous_level)
+        target.disabled = previous_disabled
+
+    assert response.status_code == 405
+    assert any(
+        "405" in message and "/raise-not-found" in message for message in handler.messages
+    )
+
+
+def test_404_does_not_log_a_405_warning() -> None:
+    target = logging.getLogger("app.core.handlers")
+    handler = _ListHandler()
+    previous_level, previous_disabled = target.level, target.disabled
+    target.addHandler(handler)
+    target.setLevel(logging.WARNING)
+    target.disabled = False
+    try:
+        client = TestClient(_build_test_app())
+        response = client.get("/this-route-does-not-exist")
+    finally:
+        target.removeHandler(handler)
+        target.setLevel(previous_level)
+        target.disabled = previous_disabled
+
+    assert response.status_code == 404
+    assert not any("405" in message for message in handler.messages)
+
+
 def test_request_id_echoed_when_already_set_on_request_state() -> None:
     test_app = _build_test_app()
 

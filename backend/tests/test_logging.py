@@ -27,6 +27,13 @@ def _staging_settings(admin_audit_log_path: str | None = None) -> Settings:
         _env_file=FIXTURE_ENV_FILE,
         ENVIRONMENT="staging",
         FORCE_HTTPS=True,
+        # T-225: outside dev, Settings also requires VIRUS_SCANNER != "noop",
+        # a non-blank PASSWORD_PEPPER, and TLS on DATABASE_URL/REDIS_URL --
+        # none of which this test cares about, so satisfy them minimally.
+        VIRUS_SCANNER="clamav",
+        PASSWORD_PEPPER="a-real-pepper",
+        DATABASE_URL="postgresql+asyncpg://u:p@localhost:5432/db?sslmode=require",
+        REDIS_URL="rediss://localhost:6379/0",
         **kwargs,  # type: ignore[arg-type]
     )
 

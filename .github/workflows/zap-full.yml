@@ -18,6 +18,10 @@
 # secret: rotate the password on the staging user itself (or recreate the
 # account), then update the GitHub Actions secret to match -- nothing else
 # references these credentials.
+#
+# T-225: also runs a testssl.sh scan of STAGING_URL's negotiated TLS
+# versions/cipher suites (ASVS V9.1.2/V9.1.3), same STAGING_URL dependency
+# and dormant-until-configured behavior as the ZAP step.
 name: ZAP Full Scan
 
 on:
@@ -38,6 +42,27 @@ jobs:
 
       - name: Make report output directory
         run: mkdir -p zap-reports
+
+      # T-225/ASVS V9.1.2, V9.1.3: an independent scan of staging's actual
+      # negotiated TLS versions/cipher suites, not just trust in Caddy's
+      # defaults. Same dormant-until-STAGING_URL pattern as the ZAP step
+      # below -- runs regardless of whether STAGING_URL is set yet (it just
+      # fails fast against an empty URL the same way the ZAP step does).
+      - name: TLS version/cipher-suite scan (testssl.sh)
+        if: always()
+        run: |
+          docker run --rm -v "$PWD/zap-reports:/output" drwetter/testssl.sh \
+            --severity HIGH --protocols --ciphers \
+            --jsonfile /output/testssl-report.json \
+            "${{ vars.STAGING_URL }}"
+
+      - name: Upload testssl.sh report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: testssl-report
+          path: zap-reports/testssl-report.json
+          retention-days: 90
 
       # zaproxy/action-af wraps `docker run ... zap.sh -cmd -autorun <plan>`,
       # mounting $GITHUB_WORKSPACE as the container's /zap/wrk -- so the plan

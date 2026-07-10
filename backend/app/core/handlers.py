@@ -4,8 +4,11 @@ from uuid import uuid4
 import sentry_sdk
 from fastapi import FastAPI, Request
 from fastapi.encoders import jsonable_encoder
+from fastapi.exception_handlers import http_exception_handler as _default_http_exception_handler
 from fastapi.exceptions import RequestValidationError
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
+from starlette import status
+from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from app.core.envelope import Envelope, ErrorBody, Meta
 from app.core.exceptions import DomainError
@@ -59,6 +62,24 @@ async def validation_error_handler(request: Request, exc: Exception) -> JSONResp
     return _envelope_response(request, 422, error)
 
 
+async def http_exception_handler(request: Request, exc: Exception) -> Response:
+    # T-225/ASVS V14.5.1: FastAPI already 405s a request whose method isn't
+    # declared for the matched route (Starlette raises StarletteHTTPException
+    # itself, before this ever reaches a route handler) -- this only adds the
+    # log line so an operator can alert on repeated wrong-method probes.
+    # Every other status this handler sees (404 for no matching route, etc.)
+    # falls through to FastAPI's own default response, unchanged.
+    assert isinstance(exc, StarletteHTTPException)  # noqa: S101 — Starlette dispatches by registered class
+    if exc.status_code == status.HTTP_405_METHOD_NOT_ALLOWED:
+        logger.warning(
+            "405 Method Not Allowed: %s %s (request_id=%s)",
+            request.method,
+            request.url.path,
+            _request_id(request),
+        )
+    return await _default_http_exception_handler(request, exc)
+
+
 async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONResponse:
     sentry_sdk.capture_exception(exc)
     message = _translate_or_fallback(
@@ -71,4 +92,5 @@ async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONR
 def register_exception_handlers(app: FastAPI) -> None:
     app.add_exception_handler(DomainError, domain_error_handler)
     app.add_exception_handler(RequestValidationError, validation_error_handler)
+    app.add_exception_handler(StarletteHTTPException, http_exception_handler)
     app.add_exception_handler(Exception, unhandled_exception_handler)

@@ -52,7 +52,18 @@ get_modules()  # validates product.config.py dependency rules before any router 
 validate_stripe_keys(settings)  # T-065: billing-disabled products may omit Stripe keys entirely
 load_translations()  # T-068: populates the i18n cache before any request can hit t()
 
-app = FastAPI(title="ForgeSaaS", version="0.1.0", lifespan=lifespan)
+# T-225/ASVS V14.3.2: interactive API docs are a dev convenience, not
+# something prod should expose -- they leak the full schema (including
+# internal-only fields/response shapes) to anyone who requests them.
+_docs_enabled = settings.ENVIRONMENT == "dev"
+app = FastAPI(
+    title="ForgeSaaS",
+    version="0.1.0",
+    lifespan=lifespan,
+    docs_url="/docs" if _docs_enabled else None,
+    redoc_url="/redoc" if _docs_enabled else None,
+    openapi_url="/openapi.json" if _docs_enabled else None,
+)
 register_exception_handlers(app)
 register_rate_limiting(app)
 app.add_middleware(SecurityHeadersMiddleware)

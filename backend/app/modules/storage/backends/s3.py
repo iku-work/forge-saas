@@ -20,9 +20,11 @@ twice against the shared "s3" breaker.
 from __future__ import annotations
 
 import asyncio
+import re
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import Any
+from urllib.parse import quote
 
 import boto3
 from botocore.client import Config as BotoConfig
@@ -33,6 +35,22 @@ from app.modules.storage.backend import PresignedUpload
 
 _SSE_ALGORITHM = "AES256"
 _NOT_FOUND_CODES = {"404", "NoSuchKey", "NotFound"}
+# T-225/ASVS V12.3.4 (Reflective File Download): strips CR/LF (header
+# injection) and path separators (a filename that looks like a path) before
+# a stored filename ever reaches a response header.
+_DISPOSITION_UNSAFE_CHARS = re.compile(r'[\r\n"/\\]')
+
+
+def _content_disposition(filename: str) -> str:
+    safe_filename = _DISPOSITION_UNSAFE_CHARS.sub("_", filename)
+    # Plain `filename=` for clients that don't parse RFC 5987, plus
+    # `filename*=` (UTF-8, percent-encoded) as the authoritative value for
+    # everything else -- avoids ever interpolating a raw, attacker-influenced
+    # string into the quoted-string form of the header.
+    return (
+        f'attachment; filename="{safe_filename}"; '
+        f"filename*=UTF-8''{quote(safe_filename, safe='')}"
+    )
 
 
 @dataclass(frozen=True)
@@ -104,7 +122,7 @@ class S3Backend:
         def _presign() -> str:
             params: dict[str, str] = {"Bucket": self._bucket, "Key": key}
             if filename:
-                params["ResponseContentDisposition"] = f'attachment; filename="{filename}"'
+                params["ResponseContentDisposition"] = _content_disposition(filename)
             url: str = self._client.generate_presigned_url(
                 "get_object", Params=params, ExpiresIn=expires_in
             )
@@ -125,6 +143,21 @@ class S3Backend:
             return response
 
         return await asyncio.to_thread(_head)
+
+    @resilient("s3")
+    async def read_prefix(self, key: str, num_bytes: int) -> bytes:
+        # T-225: content-sniffing (StorageService.confirm_upload) only ever
+        # needs the first couple KB to identify a file's real MIME type via
+        # magic bytes -- a ranged GET avoids pulling the whole object through
+        # this process for that check.
+        def _read() -> bytes:
+            response = self._client.get_object(
+                Bucket=self._bucket, Key=key, Range=f"bytes=0-{num_bytes - 1}"
+            )
+            body: bytes = response["Body"].read()
+            return body
+
+        return await asyncio.to_thread(_read)
 
     @resilient("s3")
     async def delete(self, key: str) -> None:

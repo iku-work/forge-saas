@@ -41,6 +41,20 @@ def test_verify_password_raises_on_corrupt_hash_format() -> None:
         verify_password("anything", "not-an-argon2-hash")
 
 
+@pytest.mark.owasp("A02")
+def test_verify_password_fails_when_pepper_changes(monkeypatch: pytest.MonkeyPatch) -> None:
+    # T-225/ASVS V2.4.5: proves PASSWORD_PEPPER is actually mixed into the
+    # hash, not just present as an unused setting -- a hash produced under
+    # one pepper must not verify under a different one.
+    settings = get_settings()
+    monkeypatch.setattr(settings, "PASSWORD_PEPPER", "pepper-a")
+    hashed = hash_password("correct horse battery staple")
+
+    monkeypatch.setattr(settings, "PASSWORD_PEPPER", "pepper-b")
+
+    assert verify_password("correct horse battery staple", hashed) is False
+
+
 # ---------------------------------------------------------------------------
 # Access tokens (RS256 JWT)
 # ---------------------------------------------------------------------------
