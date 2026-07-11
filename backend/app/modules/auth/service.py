@@ -18,6 +18,7 @@ from uuid import UUID, uuid4
 
 import pyotp
 import webauthn
+from redis.asyncio import Redis
 from sqlalchemy.ext.asyncio import AsyncSession
 from webauthn.helpers import base64url_to_bytes, bytes_to_base64url, options_to_json_dict
 from webauthn.helpers.exceptions import WebAuthnException
@@ -30,7 +31,12 @@ from webauthn.helpers.structs import (
 
 from app.core import jobs
 from app.core.config import get_settings
-from app.core.exceptions import AuthenticationError, ConflictError, NotFoundError
+from app.core.exceptions import (
+    AuthenticationError,
+    ConflictError,
+    NotFoundError,
+    RateLimitError,
+)
 from app.models._mixins import utcnow
 from app.modules.audit.service import AuditService
 from app.modules.auth.models import OAuthAccount, TOTPSecret, User, WebAuthnCredential
@@ -63,6 +69,13 @@ _EMAIL_VERIFICATION_TOKEN_TTL = timedelta(hours=24)
 _PASSWORD_RESET_TOKEN_TTL = timedelta(hours=1)
 _MAGIC_LINK_TOKEN_TTL = timedelta(minutes=15)
 _EMAIL_CHANGE_TOKEN_TTL = timedelta(hours=1)
+# T-226: per-*target-address* limit, distinct from the per-user/per-IP
+# sensitive_limit slowapi already applies to POST /auth/change-email --
+# without this, an attacker with a valid session of their own could still
+# use the flow as a spam vector against any inbox by repeatedly naming it as
+# new_email (each request re-sends the confirm-link email to that address).
+_EMAIL_CHANGE_TARGET_LIMIT = 3
+_EMAIL_CHANGE_TARGET_WINDOW_SECONDS = 3600
 _MAX_FAILED_LOGIN_ATTEMPTS = 10
 _LOCKOUT_DURATION = timedelta(minutes=15)
 # Hashed once at import time so a login for an unknown email (or an
@@ -512,18 +525,41 @@ class AuthService:
         await self._oauth_accounts.delete(account.id)
         await self._enqueue_security_notification_email(user, "oauth_unlinked", provider=provider)
 
-    async def request_email_change(self, user: User, new_email: str) -> None:
-        """T-218 (minimal implementation -- see T-226's follow-up task for the
-        production-ready version). Enumeration-safe the same way
-        request_password_reset() is: if `new_email` already belongs to a
-        *different* user, this silently no-ops rather than raising a
-        conflict, so the response an authenticated caller sees doesn't leak
-        whether an arbitrary address is registered to someone else.
+    async def request_email_change(  # noqa: PLR0913 — see SessionRepository.create's precedent
+        self,
+        user: User,
+        new_email: str,
+        current_password: str | None,
+        ip: str,
+        user_agent: str,
+        redis: Redis,
+    ) -> None:
+        """T-226: production-ready follow-up to T-218's minimal version.
+        Enumeration-safe the same way request_password_reset() is: if
+        `new_email` already belongs to a *different* user, this silently
+        no-ops rather than raising a conflict, so the response an
+        authenticated caller sees doesn't leak whether an arbitrary address
+        is registered to someone else.
         """
         if new_email == user.email:
             raise ConflictError(
                 "errors.email_unchanged", fallback="This is already your current email address"
             )
+
+        # ASVS V2.5.5-adjacent: require_recent_auth (the router's dependency)
+        # only proves the session itself was established/refreshed recently
+        # -- it doesn't re-prove the caller still has the account's own
+        # credential in hand. An OAuth-only user (§T-023, hashed_password is
+        # None) has no password to re-prove, so require_recent_auth's session
+        # freshness is the whole story for them, same as it is today.
+        if user.hashed_password is not None and not verify_password(
+            current_password or "", user.hashed_password
+        ):
+            raise AuthenticationError("errors.invalid_password", fallback="Invalid password")
+
+        # Applies regardless of the enumeration-safe no-op below -- the
+        # inbox being spammed doesn't have to belong to a registered user.
+        await self._check_email_change_target_rate_limit(redis, new_email)
 
         existing = await self._users.get_by_email(new_email)
         if existing is not None:
@@ -536,11 +572,15 @@ class AuthService:
             return
 
         plain_token, token_hash = generate_refresh_token()
+        cancel_plain_token, cancel_token_hash = generate_refresh_token()
         await self._email_change_tokens.create(
             user_id=user.id,
             new_email=new_email,
             token_hash=token_hash,
+            cancel_token_hash=cancel_token_hash,
             expires_at=utcnow() + _EMAIL_CHANGE_TOKEN_TTL,
+            requested_ip=ip,
+            requested_user_agent=user_agent,
         )
         settings = get_settings()
         await jobs.enqueue_job(
@@ -555,9 +595,46 @@ class AuthService:
         )
         # Notifies the *current* address too (ASVS V2.5.5) -- so a real
         # account owner finds out about a change they didn't request even
-        # before it's confirmed, not just after.
+        # before it's confirmed, not just after. Carries a cancel_url (T-226)
+        # so that owner can kill the request themselves, not just be told
+        # about it.
         await self._enqueue_security_notification_email(
-            user, "email_change_requested", new_email=new_email
+            user,
+            "email_change_requested",
+            new_email=new_email,
+            cancel_url=(
+                f"{settings.FRONTEND_URL}/cancel-email-change?token={cancel_plain_token}"
+            ),
+        )
+
+    async def cancel_email_change(self, cancel_token: str) -> None:
+        """T-226: the grace/undo window a real account owner reaches from the
+        email_change_requested notification's cancel link -- lets them stop a
+        request they didn't make before the (separate) confirm link mailed to
+        new_email is ever clicked. Public/token-only, like confirm_email_change,
+        since the owner clicking this may not have a valid session at all if
+        the request came from a compromised credential.
+        """
+        record = await self._email_change_tokens.get_by_cancel_hash(hash_token(cancel_token))
+        if record is None:
+            raise AuthenticationError(
+                "errors.invalid_email_change_cancel_token",
+                fallback="This cancel link is invalid or has expired",
+            )
+
+        user = await self._users.get_by_id(record.user_id)
+        if user is None:
+            raise AuthenticationError(
+                "errors.invalid_email_change_cancel_token",
+                fallback="This cancel link is invalid or has expired",
+            )
+
+        await self._email_change_tokens.mark_cancelled(record.id)
+        await self._enqueue_security_notification_email(
+            user, "email_change_cancelled", new_email=record.new_email
+        )
+        logger.info(
+            "auth.cancel_email_change: pending change cancelled (user_id=%s)", user.id
         )
 
     async def confirm_email_change(self, token: str) -> User:
@@ -592,13 +669,42 @@ class AuthService:
         await self._enqueue_security_notification_email(
             user, "email_changed", new_email=record.new_email
         )
-        updated = await self._users.update(user.id, email=record.new_email)
+        # T-226: email_verified_at now reflects the *new* address -- this
+        # confirm link is itself proof of control over it, the same proof
+        # verify_email()/mark_email_verified() rely on for a brand-new
+        # signup. Pending Invitation rows are untouched deliberately:
+        # Invitation.email is never matched against User.email (see
+        # TenancyService.accept_invitation, which trusts the caller's
+        # session, not an email match), so a change here can't invalidate or
+        # misdirect one.
+        updated = await self._users.update(
+            user.id, email=record.new_email, email_verified_at=utcnow()
+        )
+        # No authenticated session to spare the way change_password's request
+        # has -- this confirm link is clicked from wherever, possibly with no
+        # session at all -- so every existing session is revoked
+        # unconditionally, same reasoning as confirm_password_reset.
+        await self._sessions.revoke_all_for_user(user.id)
         logger.info(
             "auth.confirm_email_change: email changed (user_id=%s, old_email=%s)",
             user.id,
             old_email,
         )
         return updated
+
+    async def _check_email_change_target_rate_limit(self, redis: Redis, new_email: str) -> None:
+        key = f"auth:email_change:target:{new_email.lower()}"
+        count = await redis.incr(key)
+        if count == 1:
+            await redis.expire(key, _EMAIL_CHANGE_TARGET_WINDOW_SECONDS)
+        if count > _EMAIL_CHANGE_TARGET_LIMIT:
+            raise RateLimitError(
+                "errors.email_change_target_rate_limited",
+                fallback=(
+                    "Too many change-email requests for this address recently. "
+                    "Please try again later."
+                ),
+            )
 
     async def logout(self, refresh_token_plain: str) -> None:
         session = await self._sessions.get_by_token_hash(hash_token(refresh_token_plain))
@@ -969,12 +1075,14 @@ class AuthService:
         *,
         provider: str | None = None,
         new_email: str | None = None,
+        cancel_url: str | None = None,
     ) -> None:
-        # T-216/T-217/T-218/ASVS V2.2.3, V2.5.5: fired on password change, 2FA
-        # enable/disable, OAuth link/unlink, WebAuthn registration, TOTP
-        # replay rejection, and email change request/completion -- `event`
-        # selects the body copy the SecurityNotification template renders
-        # (see packages/email-templates/src/templates/SecurityNotification.tsx).
+        # T-216/T-217/T-218/T-226/ASVS V2.2.3, V2.5.5: fired on password
+        # change, 2FA enable/disable, OAuth link/unlink, WebAuthn
+        # registration, TOTP replay rejection, and email change
+        # request/completion/cancellation -- `event` selects the body copy
+        # the SecurityNotification template renders (see packages/
+        # email-templates/src/templates/SecurityNotification.tsx).
         # Always sent to `user.email` -- callers around an email-change flow
         # must pass a `user` object whose `.email` still reads as whichever
         # address (old or new) is the intended recipient at that point.
@@ -989,6 +1097,10 @@ class AuthService:
                 "event": event,
                 "provider": provider.capitalize() if provider else None,
                 "new_email": new_email,
+                # Only set for email_change_requested -- lets a real owner
+                # cancel a request they didn't make straight from this email
+                # (T-226), instead of just being told to go check settings.
+                "cancel_url": cancel_url,
                 "settings_url": f"{settings.FRONTEND_URL}/settings/security",
             },
         )

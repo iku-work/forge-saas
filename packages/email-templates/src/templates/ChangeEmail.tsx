@@ -4,10 +4,11 @@ import { t } from "@forge/i18n";
 
 import { BaseLayout, CtaButton, exampleBranding, type Branding } from "../components/BaseLayout.js";
 
-// T-218 (minimal implementation -- see T-226's follow-up task for the
-// production-ready version): sent to the *new* address a change-email
-// request names, to prove the requester actually controls it before
-// AuthService.confirm_email_change() applies the change.
+// Sent to the *new* address a change-email request names, to prove the
+// requester actually controls it before AuthService.confirm_email_change()
+// applies the change. See SecurityNotification's email_change_requested
+// event (T-226) for the counterpart mailed to the *old* address, which
+// carries its own separate cancel link.
 export interface ChangeEmailProps {
   branding: Branding;
   locale?: string;

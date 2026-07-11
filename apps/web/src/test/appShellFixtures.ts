@@ -176,6 +176,7 @@ export function makeStoredFile(
     content_type: "text/plain",
     size_bytes: 1024 * suffix,
     status: "ready",
+    virus_scan_result: null,
     uploaded_by: fixtureUser.id,
     created_at: "2026-01-01T00:00:00Z",
     ...overrides,

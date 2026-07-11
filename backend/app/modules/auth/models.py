@@ -144,12 +144,22 @@ class MagicLinkToken(UUIDPKMixin, TimestampMixin, SoftDeleteMixin, SQLModel, tab
 
 
 class EmailChangeToken(UUIDPKMixin, TimestampMixin, SoftDeleteMixin, SQLModel, table=True):
-    """T-218 (minimal implementation -- see T-226's follow-up for the
-    production-ready version): proves the caller owns `new_email` before
+    """Proves the caller owns `new_email` before
     AuthService.confirm_email_change() applies it to User.email. Mirrors
     EmailVerificationToken's shape rather than embedding new_email in a
     signed token, so a second pending request can't silently race the
     uniqueness check confirm does at apply time.
+
+    T-226: also carries a second single-use secret (`cancel_token_hash`),
+    mailed to the *old* address alongside the `email_change_requested`
+    notification, so the real account owner can kill a request they didn't
+    make before `token_hash` is ever redeemed. `cancelled_at` is distinct
+    from `used_at` only so callers can tell *which* outcome ended this row's
+    life; `get_by_hash`/confirm still treat a cancelled row as unusable
+    because mark_cancelled() also sets `used_at` (see repository.py).
+    `cancel_token_hash` is nullable because rows created before this column
+    existed have no cancel capability -- there's no value to backfill it
+    with, and those rows expire within their original 1h TTL regardless.
     """
 
     __tablename__ = "email_change_token"
@@ -157,5 +167,14 @@ class EmailChangeToken(UUIDPKMixin, TimestampMixin, SoftDeleteMixin, SQLModel, t
     user_id: UUID = Field(foreign_key="user.id", index=True)
     new_email: str
     token_hash: str = Field(unique=True)  # SHA-256 hex — never the plain token
+    cancel_token_hash: str | None = Field(default=None, unique=True)  # SHA-256 hex
     expires_at: datetime = Field(sa_type=_TZ_DATETIME)  # type: ignore[call-overload]
     used_at: datetime | None = Field(default=None, sa_type=_TZ_DATETIME)  # type: ignore[call-overload]
+    cancelled_at: datetime | None = Field(default=None, sa_type=_TZ_DATETIME)  # type: ignore[call-overload]
+    # T-226: same device/IP fingerprint Session.{ip_address,user_agent} carry,
+    # for the same admin-assisted recovery / audit story -- lets support (or
+    # AuditService's log, which this doesn't duplicate into since the token
+    # row itself *is* the durable record) tell a legitimate request from one
+    # made after a session/credential compromise.
+    requested_ip: str
+    requested_user_agent: str

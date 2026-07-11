@@ -846,11 +846,25 @@ async def test_change_email_happy_path_returns_200(
 ) -> None:
     response = await client.post(
         "/api/v1/auth/change-email",
-        json={"new_email": "new@example.com"},
+        json={"new_email": "new@example.com", "current_password": _VALID_PASSWORD},
         headers=_auth_header(verified_user),
     )
 
     assert response.status_code == 200
+
+
+async def test_change_email_wrong_current_password_returns_401(
+    client: httpx.AsyncClient, verified_user: User
+) -> None:
+    # T-226: re-verifying the *old* address's own credential, on top of
+    # require_recent_auth's session-freshness check above.
+    response = await client.post(
+        "/api/v1/auth/change-email",
+        json={"new_email": "new@example.com", "current_password": "wrong-password"},
+        headers=_auth_header(verified_user),
+    )
+
+    assert response.status_code == 401
 
 
 async def test_confirm_email_change_happy_path_updates_email_and_allows_new_login(
@@ -860,7 +874,7 @@ async def test_confirm_email_change_happy_path_updates_email_and_allows_new_logi
 ) -> None:
     await client.post(
         "/api/v1/auth/change-email",
-        json={"new_email": "new@example.com"},
+        json={"new_email": "new@example.com", "current_password": _VALID_PASSWORD},
         headers=_auth_header(verified_user),
     )
     change_email_jobs = [
@@ -886,3 +900,58 @@ async def test_confirm_email_change_invalid_token_returns_401(client: httpx.Asyn
     )
 
     assert response.status_code == 401
+
+
+# --- /change-email/cancel (T-226) --------------------------------------------
+
+
+async def test_cancel_email_change_happy_path_blocks_the_confirm_link(
+    client: httpx.AsyncClient,
+    verified_user: User,
+    enqueued_jobs: list[tuple[str, dict[str, Any]]],
+) -> None:
+    await client.post(
+        "/api/v1/auth/change-email",
+        json={"new_email": "new@example.com", "current_password": _VALID_PASSWORD},
+        headers=_auth_header(verified_user),
+    )
+    change_email_jobs = [
+        kwargs for name, kwargs in enqueued_jobs if kwargs.get("template") == "change_email"
+    ]
+    confirm_plain = change_email_jobs[0]["context"]["confirm_url"].rsplit("token=", 1)[1]
+    notifications = [
+        kwargs
+        for name, kwargs in enqueued_jobs
+        if kwargs.get("template") == "security_notification"
+        and kwargs["context"]["event"] == "email_change_requested"
+    ]
+    cancel_plain = notifications[0]["context"]["cancel_url"].rsplit("token=", 1)[1]
+
+    cancel_response = await client.post(
+        "/api/v1/auth/change-email/cancel", json={"token": cancel_plain}
+    )
+    assert cancel_response.status_code == 200
+
+    confirm_response = await client.post(
+        "/api/v1/auth/change-email/confirm", json={"token": confirm_plain}
+    )
+    assert confirm_response.status_code == 401
+
+
+async def test_cancel_email_change_invalid_token_returns_401(client: httpx.AsyncClient) -> None:
+    response = await client.post(
+        "/api/v1/auth/change-email/cancel", json={"token": "not-a-real-token"}
+    )
+
+    assert response.status_code == 401
+
+
+# The per-target-address rate limit (AuthService._check_email_change_target_
+# rate_limit) isn't re-exercised at the HTTP layer here: every request in this
+# module's `client` shares one source address, and app.middleware.rate_limit's
+# _key_func falls back to get_remote_address whenever request.state.user_id
+# isn't set (which it never is in this codebase) -- so sensitive_limit's own
+# 3/minute-per-address cap would trip on the same 4th request regardless of
+# which distinct target/user the test used, making the two limits
+# indistinguishable over HTTP. test_auth_service_email_change.py's
+# test_request_email_change_target_rate_limited exercises it directly instead.

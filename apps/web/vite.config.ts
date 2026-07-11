@@ -33,9 +33,13 @@ export default defineConfig({
     __VITE_API_URL_OVERRIDE__: JSON.stringify(process.env.VITE_API_URL),
   },
   // Sentry needs these to de-minify stack traces; harmless when nothing
-  // ever uploads them (sentryVitePlugin above is CI-only).
+  // ever uploads them (sentryVitePlugin above is CI-only). target is bumped
+  // past Vite's default (~es2020) because main.tsx's top-level `await
+  // initI18n()` needs it -- default esbuild target predates broad top-level-
+  // await support (Chrome/Edge/Firefox 89+, Safari 15+, all from 2021).
   build: {
     sourcemap: true,
+    target: "es2022",
   },
   server: {
     proxy: {

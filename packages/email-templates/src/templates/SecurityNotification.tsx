@@ -18,6 +18,7 @@ export type SecurityNotificationEvent =
   | "totp_replay_rejected"
   | "email_change_requested"
   | "email_changed"
+  | "email_change_cancelled"
   | "totp_disabled_by_admin";
 
 export interface SecurityNotificationProps {
@@ -29,8 +30,13 @@ export interface SecurityNotificationProps {
   // copy) for the two OAuth events -- absent/ignored for every other event.
   provider?: string | null;
   // Only set (and only interpolated into the email_change_requested/
-  // email_changed copy) for T-218's email-change events.
+  // email_changed/email_change_cancelled copy) for T-218/T-226's
+  // email-change events.
   new_email?: string | null;
+  // T-226: only set for email_change_requested -- renders a second CTA the
+  // real account owner can use to kill a request they didn't make, straight
+  // from this email, before the (separately mailed) confirm link is clicked.
+  cancel_url?: string | null;
   settings_url: string;
 }
 
@@ -41,6 +47,7 @@ export function SecurityNotification({
   event,
   provider,
   new_email,
+  cancel_url,
   settings_url,
 }: SecurityNotificationProps) {
   return (
@@ -60,6 +67,11 @@ export function SecurityNotification({
           locale,
         )}
       </Text>
+      {cancel_url ? (
+        <CtaButton href={cancel_url} branding={branding}>
+          {t("emails.security_notification.cancel_button", {}, locale)}
+        </CtaButton>
+      ) : null}
       <CtaButton href={settings_url} branding={branding}>
         {t("emails.security_notification.button", {}, locale)}
       </CtaButton>

@@ -1,6 +1,6 @@
 import { http, HttpResponse } from "msw";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -115,16 +115,23 @@ describe("SecuritySettingsPage", () => {
 
     renderPage();
 
+    // Scoped to this card's own <form> -- ChangeEmailCard has its own
+    // "Current password" field on the same page (T-226), so an unscoped
+    // getByLabelText("Current password") would match both.
+    const newPasswordField = screen.getByLabelText("New password");
+    const passwordForm = newPasswordField.closest("form");
+    if (!passwordForm) {
+      throw new Error("Change password form not found");
+    }
+    const passwordFormScope = within(passwordForm);
+
     await interaction.type(
-      screen.getByLabelText("Current password"),
+      passwordFormScope.getByLabelText("Current password"),
       "Correct-Horse9",
     );
-    await interaction.type(
-      screen.getByLabelText("New password"),
-      "Even-Better-Horse8",
-    );
+    await interaction.type(newPasswordField, "Even-Better-Horse8");
     await interaction.click(
-      screen.getByRole("button", { name: "Change password" }),
+      passwordFormScope.getByRole("button", { name: "Change password" }),
     );
 
     expect(

@@ -701,15 +701,20 @@ function ChangeEmailCard() {
   const [formError, setFormError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
 
-  // T-218 (minimal implementation -- see T-226 for the production-ready
-  // follow-up): the backend gates this request on require_recent_auth, so a
-  // session idling past that window surfaces as errors.step_up_auth_required
-  // here -- shown via getErrorMessage's normal code->copy mapping, same as
-  // any other error, rather than a dedicated re-auth prompt (T-226 territory).
+  // The backend gates this request on require_recent_auth, so a session
+  // idling past that window surfaces as errors.step_up_auth_required here --
+  // shown via getErrorMessage's normal code->copy mapping, same as any other
+  // error, rather than a dedicated re-auth prompt. current_password is
+  // re-verified server-side too (T-226); an OAuth-only account submits it
+  // blank and the backend skips that check for them (AuthService.
+  // request_email_change).
   const requestEmailChange = useMutation({
-    mutationFn: async (newEmail: string) => {
+    mutationFn: async (input: ChangeEmailInput) => {
       await requestEmailChangeApiV1AuthChangeEmailPost({
-        body: { new_email: newEmail },
+        body: {
+          new_email: input.newEmail,
+          current_password: input.currentPassword || null,
+        },
         throwOnError: true,
       });
     },
@@ -717,14 +722,14 @@ function ChangeEmailCard() {
 
   const form = useForm<ChangeEmailInput>({
     resolver: zodResolver(changeEmailSchema),
-    defaultValues: { newEmail: "" },
+    defaultValues: { currentPassword: "", newEmail: "" },
   });
 
   const onSubmit = async (values: ChangeEmailInput): Promise<void> => {
     setFormError(null);
     setSuccess(false);
     try {
-      await requestEmailChange.mutateAsync(values.newEmail);
+      await requestEmailChange.mutateAsync(values);
       setSuccess(true);
       form.reset();
     } catch (caught) {
@@ -757,6 +762,22 @@ function ChangeEmailCard() {
             }}
             noValidate
           >
+            <FormField
+              control={form.control}
+              name="currentPassword"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>{t("auth.change_email.current_password_label")}</FormLabel>
+                  <FormControl>
+                    <PasswordInput autoComplete="current-password" {...field} />
+                  </FormControl>
+                  <p className="text-xs text-muted-foreground">
+                    {t("auth.change_email.current_password_helper")}
+                  </p>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
             <FormField
               control={form.control}
               name="newEmail"

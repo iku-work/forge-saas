@@ -1267,10 +1267,19 @@ class WebAuthnLoginRequest(AppBaseModel):
 
 
 class RequestEmailChangeRequest(AppBaseModel):
-    # T-218 (minimal implementation -- see T-226's follow-up task for the
-    # production-ready version, e.g. re-verifying the old address too).
     new_email: EmailStr
+    # T-226: required for a password-holding account (AuthService.
+    # request_email_change 400s via errors.invalid_password if it's wrong or
+    # missing); ignored for an OAuth-only account (§T-023), which has no
+    # password to re-prove. Optional here rather than required because the
+    # schema layer can't see which case applies -- that check needs `user`,
+    # which only the service has.
+    current_password: str | None = Field(default=None, max_length=_PASSWORD_MAX_LENGTH)
 
 
 class ConfirmEmailChangeRequest(AppBaseModel):
+    token: str
+
+
+class CancelEmailChangeRequest(AppBaseModel):
     token: str

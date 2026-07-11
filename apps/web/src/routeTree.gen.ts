@@ -16,6 +16,7 @@ import { Route as MagicLinkRouteImport } from './routes/magic-link'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as ForgotPasswordRouteImport } from './routes/forgot-password'
 import { Route as ConfirmEmailChangeRouteImport } from './routes/confirm-email-change'
+import { Route as CancelEmailChangeRouteImport } from './routes/cancel-email-change'
 import { Route as AdminRouteImport } from './routes/admin'
 import { Route as AppRouteImport } from './routes/_app'
 import { Route as AdminIndexRouteImport } from './routes/admin.index'
@@ -68,6 +69,11 @@ const ForgotPasswordRoute = ForgotPasswordRouteImport.update({
 const ConfirmEmailChangeRoute = ConfirmEmailChangeRouteImport.update({
   id: '/confirm-email-change',
   path: '/confirm-email-change',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const CancelEmailChangeRoute = CancelEmailChangeRouteImport.update({
+  id: '/cancel-email-change',
+  path: '/cancel-email-change',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AdminRoute = AdminRouteImport.update({
@@ -164,6 +170,7 @@ const AppSettingsBillingRoute = AppSettingsBillingRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof AppIndexRoute
   '/admin': typeof AdminRouteWithChildren
+  '/cancel-email-change': typeof CancelEmailChangeRoute
   '/confirm-email-change': typeof ConfirmEmailChangeRoute
   '/forgot-password': typeof ForgotPasswordRoute
   '/login': typeof LoginRoute
@@ -188,6 +195,7 @@ export interface FileRoutesByFullPath {
   '/admin/users/$id': typeof AdminUsersIdRoute
 }
 export interface FileRoutesByTo {
+  '/cancel-email-change': typeof CancelEmailChangeRoute
   '/confirm-email-change': typeof ConfirmEmailChangeRoute
   '/forgot-password': typeof ForgotPasswordRoute
   '/login': typeof LoginRoute
@@ -216,6 +224,7 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/_app': typeof AppRouteWithChildren
   '/admin': typeof AdminRouteWithChildren
+  '/cancel-email-change': typeof CancelEmailChangeRoute
   '/confirm-email-change': typeof ConfirmEmailChangeRoute
   '/forgot-password': typeof ForgotPasswordRoute
   '/login': typeof LoginRoute
@@ -245,6 +254,7 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/admin'
+    | '/cancel-email-change'
     | '/confirm-email-change'
     | '/forgot-password'
     | '/login'
@@ -269,6 +279,7 @@ export interface FileRouteTypes {
     | '/admin/users/$id'
   fileRoutesByTo: FileRoutesByTo
   to:
+    | '/cancel-email-change'
     | '/confirm-email-change'
     | '/forgot-password'
     | '/login'
@@ -296,6 +307,7 @@ export interface FileRouteTypes {
     | '__root__'
     | '/_app'
     | '/admin'
+    | '/cancel-email-change'
     | '/confirm-email-change'
     | '/forgot-password'
     | '/login'
@@ -324,6 +336,7 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   AppRoute: typeof AppRouteWithChildren
   AdminRoute: typeof AdminRouteWithChildren
+  CancelEmailChangeRoute: typeof CancelEmailChangeRoute
   ConfirmEmailChangeRoute: typeof ConfirmEmailChangeRoute
   ForgotPasswordRoute: typeof ForgotPasswordRoute
   LoginRoute: typeof LoginRoute
@@ -383,6 +396,13 @@ declare module '@tanstack/react-router' {
       path: '/confirm-email-change'
       fullPath: '/confirm-email-change'
       preLoaderRoute: typeof ConfirmEmailChangeRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/cancel-email-change': {
+      id: '/cancel-email-change'
+      path: '/cancel-email-change'
+      fullPath: '/cancel-email-change'
+      preLoaderRoute: typeof CancelEmailChangeRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/admin': {
@@ -563,6 +583,7 @@ const AdminRouteWithChildren = AdminRoute._addFileChildren(AdminRouteChildren)
 const rootRouteChildren: RootRouteChildren = {
   AppRoute: AppRouteWithChildren,
   AdminRoute: AdminRouteWithChildren,
+  CancelEmailChangeRoute: CancelEmailChangeRoute,
   ConfirmEmailChangeRoute: ConfirmEmailChangeRoute,
   ForgotPasswordRoute: ForgotPasswordRoute,
   LoginRoute: LoginRoute,

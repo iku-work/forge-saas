@@ -129,10 +129,12 @@
       "webauthn_registered": "A new security key was registered on your account.",
       "webauthn_removed": "A security key was removed from your account.",
       "totp_replay_rejected": "A two-factor code that had already been used was rejected on your account. If this wasn't you, someone may have intercepted a code of yours.",
-      "email_change_requested": "A request was made to change your account email to {new_email}. If this wasn't you, no changes have been made yet — you can ignore this.",
+      "email_change_requested": "A request was made to change your account email to {new_email}. If this was you, no action is needed — just click the confirmation link we sent to the new address. If it wasn't, use the button below to cancel the request before it's confirmed.",
       "email_changed": "Your account email address was changed to {new_email}.",
+      "email_change_cancelled": "A pending request to change your account email to {new_email} was cancelled. Your account email is unchanged.",
       "totp_disabled_by_admin": "An administrator disabled two-factor authentication on your account as part of an account-recovery request. If you didn't request this, contact support immediately."
     },
+    "cancel_button": "Cancel this request",
     "button": "Review security settings",
     "footer": "If this wasn't you, reset your password immediately and review your active sessions."
   }

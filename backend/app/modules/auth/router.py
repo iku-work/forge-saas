@@ -29,6 +29,7 @@ from app.core.exceptions import AuthenticationError
 from app.middleware.rate_limit import api_limit, auth_limit, sensitive_limit
 from app.modules.auth.models import User
 from app.modules.auth.schemas import (
+    CancelEmailChangeRequest,
     ChangePasswordRequest,
     ConfirmEmailChangeRequest,
     LoginRequest,
@@ -315,8 +316,16 @@ async def request_email_change(
     user: Annotated[User, Depends(get_current_user)],
     _recent_auth: Annotated[None, Depends(require_recent_auth(max_age_minutes=5))],
     session: Annotated[AsyncSession, Depends(get_session)],
+    redis: Annotated[Redis, Depends(get_redis)],
 ) -> Envelope[None]:
-    await AuthService(session).request_email_change(user, body.new_email)
+    await AuthService(session).request_email_change(
+        user,
+        body.new_email,
+        body.current_password,
+        _client_ip(request),
+        request.headers.get("user-agent", ""),
+        redis,
+    )
     await session.commit()
     return Envelope(data=None, meta=Meta(request_id=_request_id(request)))
 
@@ -335,6 +344,21 @@ async def confirm_email_change(
     return Envelope(
         data=UserPublic.model_validate(updated), meta=Meta(request_id=_request_id(request))
     )
+
+
+@router.post("/change-email/cancel")
+@auth_limit
+async def cancel_email_change(
+    request: Request,
+    body: CancelEmailChangeRequest,
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> Envelope[None]:
+    # T-226: public/token-only like confirm_email_change above -- the real
+    # owner clicking this from the email_change_requested notification may
+    # not have (or trust) a valid session at all.
+    await AuthService(session).cancel_email_change(body.token)
+    await session.commit()
+    return Envelope(data=None, meta=Meta(request_id=_request_id(request)))
 
 
 @router.get("/sessions")

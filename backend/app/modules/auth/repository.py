@@ -474,3 +474,39 @@ class MagicLinkTokenRepository(_TokenRepository[MagicLinkToken]):
 
 class EmailChangeTokenRepository(_TokenRepository[EmailChangeToken]):
     model = EmailChangeToken
+
+    async def get_by_cancel_hash(self, cancel_token_hash: str) -> EmailChangeToken | None:
+        # T-226: a separate lookup rather than a get_by_hash() variant, since
+        # this filters on cancel_token_hash (mailed to the *old* address)
+        # instead of token_hash (mailed to the new one) -- the two secrets
+        # share a row and its expires_at/used_at lifecycle, but are never
+        # interchangeable.
+        m = cast("Any", EmailChangeToken)
+        stmt = select(EmailChangeToken).where(
+            m.cancel_token_hash == cancel_token_hash,
+            m.used_at.is_(None),
+            m.cancelled_at.is_(None),
+            m.expires_at > utcnow(),
+        )
+        result = await self.session.execute(stmt)
+        return result.scalar_one_or_none()
+
+    async def mark_cancelled(self, token_id: UUID) -> None:
+        m = cast("Any", EmailChangeToken)
+        stmt = select(EmailChangeToken).where(m.id == token_id)
+        result = await self.session.execute(stmt)
+        token = result.scalar_one_or_none()
+        if token is None:
+            raise NotFoundError(
+                "errors.resource_not_found",
+                fallback="EmailChangeToken not found",
+                params={"resource": "EmailChangeToken"},
+            )
+        now = utcnow()
+        token.cancelled_at = now
+        # Also consumes the *confirm* half of this row -- get_by_hash's
+        # generic used_at.is_(None) filter is what stops the (still
+        # unexpired) confirm link from working after a cancel, without
+        # needing its own cancelled_at check.
+        token.used_at = now
+        await self.session.flush()

@@ -70,5 +70,7 @@
   "step_up_auth_required": "Tämä toiminto edellyttää, että olet kirjautunut sisään äskettäin. Kirjaudu sisään uudelleen jatkaaksesi.",
   "superadmin_2fa_required": "Pääkäyttäjätilien on otettava käyttöön kaksivaiheinen tunnistautuminen (autentikointisovellus tai suojausavain) ennen pääkäyttäjätoimintojen käyttöä.",
   "email_unchanged": "Tämä on jo nykyinen sähköpostiosoitteesi.",
-  "invalid_email_change_token": "Tämä sähköpostin vaihtolinkki on virheellinen tai vanhentunut."
+  "invalid_email_change_token": "Tämä sähköpostin vaihtolinkki on virheellinen tai vanhentunut.",
+  "invalid_email_change_cancel_token": "Tämä peruutuslinkki on virheellinen tai vanhentunut.",
+  "email_change_target_rate_limited": "Liian monta sähköpostin vaihtopyyntöä tälle osoitteelle äskettäin. Yritä myöhemmin uudelleen."
 }

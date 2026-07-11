@@ -129,10 +129,12 @@
       "webauthn_registered": "Tilillesi rekisteröitiin uusi turva-avain.",
       "webauthn_removed": "Turva-avain poistettiin tililtäsi.",
       "totp_replay_rejected": "Tililläsi hylättiin jo kertaalleen käytetty kaksivaiheisen tunnistautumisen koodi. Jos tämä et ollut sinä, joku on saattanut siepata koodisi.",
-      "email_change_requested": "Tilisi sähköpostin vaihtamista osoitteeseen {new_email} pyydettiin. Jos tämä et ollut sinä, muutoksia ei ole vielä tehty — voit jättää tämän huomiotta.",
+      "email_change_requested": "Tilisi sähköpostin vaihtamista osoitteeseen {new_email} pyydettiin. Jos tämä olit sinä, mitään lisätoimia ei tarvita — napsauta uuteen osoitteeseen lähetettyä vahvistuslinkkiä. Jos tämä et ollut sinä, peruuta pyyntö alla olevasta painikkeesta ennen kuin se vahvistetaan.",
       "email_changed": "Tilisi sähköpostiosoite vaihdettiin osoitteeksi {new_email}.",
+      "email_change_cancelled": "Vireillä ollut pyyntö vaihtaa tilisi sähköposti osoitteeseen {new_email} peruutettiin. Tilisi sähköpostiosoite ei muuttunut.",
       "totp_disabled_by_admin": "Pääkäyttäjä poisti kaksivaiheisen tunnistautumisen käytöstä tililtäsi tilin palautuspyynnön yhteydessä. Jos et pyytänyt tätä, ota välittömästi yhteyttä tukeen."
     },
+    "cancel_button": "Peruuta tämä pyyntö",
     "button": "Tarkista tietoturva-asetukset",
     "footer": "Jos tämä et ollut sinä, vaihda salasanasi välittömästi ja tarkista aktiiviset istuntosi."
   }

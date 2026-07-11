@@ -41,6 +41,10 @@ export const forgotPasswordSchema = z.object({
 });
 
 export const changeEmailSchema = z.object({
+  // T-226: optional, unlike changePasswordSchema's currentPassword -- an
+  // OAuth-only account (no password set) legitimately submits this blank,
+  // and the backend (not this schema) is what knows which case applies.
+  currentPassword: z.string().optional(),
   newEmail: z.string().email("validation.email_invalid"),
 });
 
