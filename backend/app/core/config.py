@@ -31,6 +31,18 @@ class Settings(BaseSettings):
     REFRESH_TOKEN_EXPIRE_DAYS: int = 30
     REFRESH_TOKEN_IDLE_TIMEOUT_MINUTES: int = 720
 
+    # slowapi limit strings (app.middleware.rate_limit) -- defaults match the
+    # values that module hardcoded before T-220. AUTH_RATE_LIMIT in
+    # particular guards register/login/verify_email, all keyed by client IP
+    # until a session exists; a single multi-account browser journey (T-220's
+    # E2E suite registers+verifies+logs in *two* accounts from one runner IP)
+    # legitimately needs more headroom than a real client ever would, so
+    # backend/.env.e2e raises this one specifically rather than the
+    # production-facing default here.
+    AUTH_RATE_LIMIT: str = "5/minute"
+    SENSITIVE_RATE_LIMIT: str = "3/minute"
+    API_RATE_LIMIT: str = "100/minute"
+
     # App
     ENVIRONMENT: Literal["dev", "staging", "prod"] = "dev"
     ALLOWED_ORIGINS: list[str] = []

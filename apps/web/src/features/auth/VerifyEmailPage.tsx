@@ -57,13 +57,17 @@ export function VerifyEmailPage({ token }: VerifyEmailPageProps) {
   if (state === "success") {
     return (
       <AuthCard title={t("auth.verify_email.title_success")}>
-        <Alert>
+        <Alert data-testid="verify-email-success">
           <AlertDescription>
             {t("auth.verify_email.success_message")}
           </AlertDescription>
         </Alert>
         <p className="text-center text-sm text-muted-foreground">
-          <Link to="/login" className="underline underline-offset-4">
+          <Link
+            to="/login"
+            className="underline underline-offset-4"
+            data-testid="verify-email-continue-to-login"
+          >
             {t("auth.verify_email.continue_to_login")}
           </Link>
         </p>
@@ -73,7 +77,7 @@ export function VerifyEmailPage({ token }: VerifyEmailPageProps) {
 
   return (
     <AuthCard title={t("auth.verify_email.title_failed")}>
-      <Alert variant="destructive">
+      <Alert variant="destructive" data-testid="verify-email-error">
         <AlertDescription>
           {errorMessage ?? t("auth.verify_email.error_default")}
         </AlertDescription>

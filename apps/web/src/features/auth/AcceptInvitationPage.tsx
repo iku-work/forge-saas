@@ -115,6 +115,7 @@ export function AcceptInvitationPage({ token }: AcceptInvitationPageProps) {
             void handleAccept();
           }}
           disabled={isAccepting}
+          data-testid="accept-invitation-button"
         >
           {isAccepting
             ? t("tenancy.invitation_accept.accept_button_pending")
@@ -128,10 +129,14 @@ export function AcceptInvitationPage({ token }: AcceptInvitationPageProps) {
             })}
           </p>
           <Button asChild className="w-full">
-            <Link to="/login">{t("tenancy.invitation_accept.login")}</Link>
+            <Link to="/login" data-testid="accept-invitation-login-link">
+              {t("tenancy.invitation_accept.login")}
+            </Link>
           </Button>
           <Button asChild variant="outline" className="w-full">
-            <Link to="/register">{t("tenancy.invitation_accept.signup")}</Link>
+            <Link to="/register" data-testid="accept-invitation-signup-link">
+              {t("tenancy.invitation_accept.signup")}
+            </Link>
           </Button>
         </div>
       )}

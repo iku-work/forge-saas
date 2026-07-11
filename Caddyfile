@@ -15,7 +15,40 @@ localhost, caddy {
 	# internal leaf cert, which is why they're both site addresses here
 	# rather than "localhost" alone.
 	respond /metrics 404
-	reverse_proxy backend:8000
+
+	# T-220: everything the backend actually owns goes to it; everything
+	# else falls through to the SPA below. Without this split, the
+	# catch-all reverse_proxy that used to sit here would swallow every
+	# frontend route (e.g. /verify-email, /accept-invitation/*) and the
+	# backend would 404 them itself.
+	handle /api/* {
+		reverse_proxy backend:8000
+	}
+	handle /health* {
+		reverse_proxy backend:8000
+	}
+	handle /docs* {
+		reverse_proxy backend:8000
+	}
+	handle /redoc* {
+		reverse_proxy backend:8000
+	}
+	handle /openapi.json {
+		reverse_proxy backend:8000
+	}
+
+	# apps/web's dist, bind-mounted read-only into /srv/web (see
+	# docker-compose.yml's caddy service). try_files falls back to
+	# index.html for any path that isn't a real static asset -- required
+	# for a client-side-routed SPA (TanStack Router) so a deep link like
+	# /accept-invitation/<token> or a hard refresh on /settings/billing
+	# still loads the app shell instead of 404ing.
+	handle {
+		root * /srv/web
+		try_files {path} /index.html
+		file_server
+	}
+
 	tls internal
 }
 

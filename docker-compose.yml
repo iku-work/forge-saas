@@ -175,6 +175,15 @@ services:
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile
       - caddy_data:/data
+      # T-220: apps/web/dist is built on the host (`pnpm build`) before this
+      # container starts, same mount-a-host-built-artifact pattern already
+      # used for packages/i18n/locales and packages/email-templates/dist
+      # above -- Caddy serves the SPA's static files directly rather than
+      # adding a whole extra Node/nginx container just to do that. Fine to
+      # be empty/missing for stacks that never build the frontend (e.g. the
+      # ZAP baseline job): file_server just 404s on those paths, everything
+      # else (/api, /health, /docs) still reaches the backend unaffected.
+      - ./apps/web/dist:/srv/web:ro
     ports:
       - "80:80"
       - "443:443"

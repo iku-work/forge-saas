@@ -48,7 +48,7 @@ export function RegisterPage() {
   if (submitted) {
     return (
       <AuthCard title={t("auth.register.success_title")}>
-        <Alert>
+        <Alert data-testid="register-success">
           <AlertDescription>
             {t("auth.register.success_message")}
           </AlertDescription>
@@ -96,7 +96,12 @@ export function RegisterPage() {
               <FormItem>
                 <FormLabel>{t("auth.register.email_label")}</FormLabel>
                 <FormControl>
-                  <Input type="email" autoComplete="email" {...field} />
+                  <Input
+                    type="email"
+                    autoComplete="email"
+                    data-testid="register-email-input"
+                    {...field}
+                  />
                 </FormControl>
                 <FormMessage />
               </FormItem>
@@ -109,7 +114,11 @@ export function RegisterPage() {
               <FormItem>
                 <FormLabel>{t("auth.register.password_label")}</FormLabel>
                 <FormControl>
-                  <PasswordInput autoComplete="new-password" {...field} />
+                  <PasswordInput
+                    autoComplete="new-password"
+                    data-testid="register-password-input"
+                    {...field}
+                  />
                 </FormControl>
                 <p className="text-xs text-muted-foreground">
                   {t("auth.register.password_helper")}
@@ -123,6 +132,7 @@ export function RegisterPage() {
             type="submit"
             className="w-full"
             disabled={form.formState.isSubmitting}
+            data-testid="register-submit"
           >
             {form.formState.isSubmitting
               ? t("auth.register.submit_pending")

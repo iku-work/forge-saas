@@ -23,6 +23,9 @@ storybook-static/
 test-results/
 coverage/storybook/
 
+# Playwright (T-220)
+playwright-report/
+
 # Expo
 .expo/
 web-build/

@@ -130,7 +130,12 @@ function InviteForm({
             <FormItem>
               <FormLabel>{t("tenancy.invite.email_label")}</FormLabel>
               <FormControl>
-                <Input type="email" autoComplete="email" {...field} />
+                <Input
+                  type="email"
+                  autoComplete="email"
+                  data-testid="invite-email-input"
+                  {...field}
+                />
               </FormControl>
               <FormMessage />
             </FormItem>
@@ -145,6 +150,7 @@ function InviteForm({
               <FormControl>
                 <select
                   className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm shadow-sm"
+                  data-testid="invite-role-select"
                   {...field}
                 >
                   {ROLE_OPTIONS.map((role) => (
@@ -162,6 +168,7 @@ function InviteForm({
           type="submit"
           className="w-full"
           disabled={form.formState.isSubmitting}
+          data-testid="invite-submit"
         >
           {form.formState.isSubmitting
             ? t("tenancy.invite.submit_pending")
@@ -283,6 +290,7 @@ export function MembersSettingsPage() {
             onClick={() => {
               setInviteOpen(true);
             }}
+            data-testid="members-invite-button"
           >
             {t("tenancy.members.invite_button")}
           </Button>
@@ -333,7 +341,7 @@ export function MembersSettingsPage() {
               </TableHeader>
               <TableBody>
                 {members.map((member) => (
-                  <TableRow key={member.id}>
+                  <TableRow key={member.id} data-testid="member-row">
                     <TableCell>
                       {member.user_id === user?.id ? (
                         t("tenancy.members.you")

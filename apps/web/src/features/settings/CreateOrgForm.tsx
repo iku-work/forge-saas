@@ -93,7 +93,11 @@ export function CreateOrgForm({ onCreated }: CreateOrgFormProps) {
             <FormItem>
               <FormLabel>{t("tenancy.org_create.name_label")}</FormLabel>
               <FormControl>
-                <Input autoComplete="organization" {...field} />
+                <Input
+                  autoComplete="organization"
+                  data-testid="create-org-name-input"
+                  {...field}
+                />
               </FormControl>
               <FormMessage />
             </FormItem>
@@ -103,6 +107,7 @@ export function CreateOrgForm({ onCreated }: CreateOrgFormProps) {
           type="submit"
           className="w-full"
           disabled={form.formState.isSubmitting}
+          data-testid="create-org-submit"
         >
           {form.formState.isSubmitting
             ? t("tenancy.org_create.submit_pending")

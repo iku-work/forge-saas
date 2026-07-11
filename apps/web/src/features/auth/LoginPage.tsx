@@ -133,7 +133,12 @@ export function LoginPage() {
               <FormItem>
                 <FormLabel>{t("auth.login.email_label")}</FormLabel>
                 <FormControl>
-                  <Input type="email" autoComplete="email" {...field} />
+                  <Input
+                    type="email"
+                    autoComplete="email"
+                    data-testid="login-email-input"
+                    {...field}
+                  />
                 </FormControl>
                 <FormMessage />
               </FormItem>
@@ -146,7 +151,11 @@ export function LoginPage() {
               <FormItem>
                 <FormLabel>{t("auth.login.password_label")}</FormLabel>
                 <FormControl>
-                  <PasswordInput autoComplete="current-password" {...field} />
+                  <PasswordInput
+                    autoComplete="current-password"
+                    data-testid="login-password-input"
+                    {...field}
+                  />
                 </FormControl>
                 <FormMessage />
               </FormItem>
@@ -156,6 +165,7 @@ export function LoginPage() {
             type="submit"
             className="w-full"
             disabled={form.formState.isSubmitting}
+            data-testid="login-submit"
           >
             {form.formState.isSubmitting
               ? t("auth.login.submit_pending")

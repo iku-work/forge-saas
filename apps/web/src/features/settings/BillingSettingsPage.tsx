@@ -215,7 +215,7 @@ export function BillingSettingsPage() {
             <Skeleton className="h-8 w-32" />
           ) : (
             <div className="flex items-center gap-3">
-              <Badge>
+              <Badge data-testid="billing-current-plan">
                 {currentPlan?.name ?? t("billing.current_plan.free_label")}
               </Badge>
               {subscription ? (
@@ -277,6 +277,7 @@ export function BillingSettingsPage() {
                     onClick={() => {
                       void handleUpgrade(plan.slug);
                     }}
+                    data-testid={`billing-upgrade-${plan.slug}`}
                   >
                     {plan.id === currentPlan?.id
                       ? t("billing.current_plan.badge")

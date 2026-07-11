@@ -34,11 +34,12 @@ def rate_limit_exceeded_handler(request: Request, exc: Exception) -> JSONRespons
     return JSONResponse(status_code=429, content=envelope.model_dump(mode="json"))
 
 
-limiter = Limiter(key_func=_key_func, storage_uri=str(get_settings().REDIS_URL))
+_settings = get_settings()
+limiter = Limiter(key_func=_key_func, storage_uri=str(_settings.REDIS_URL))
 
-auth_limit = limiter.limit("5/minute")
-sensitive_limit = limiter.limit("3/minute")
-api_limit = limiter.limit("100/minute")
+auth_limit = limiter.limit(_settings.AUTH_RATE_LIMIT)
+sensitive_limit = limiter.limit(_settings.SENSITIVE_RATE_LIMIT)
+api_limit = limiter.limit(_settings.API_RATE_LIMIT)
 
 
 def register_rate_limiting(app: FastAPI) -> None:

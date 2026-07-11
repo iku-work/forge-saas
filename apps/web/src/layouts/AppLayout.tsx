@@ -123,6 +123,11 @@ function initialsFor(email: string): string {
   return email.slice(0, 2).toUpperCase();
 }
 
+// "/" -> "dashboard", "/settings/members" -> "settings-members"
+function navTestSlug(to: string): string {
+  return to === "/" ? "dashboard" : to.replace(/^\//, "").replace(/\//g, "-");
+}
+
 function NavLink({ item }: { item: NavItem }) {
   const { t } = useTranslation();
   // usePermission must run unconditionally (hooks can't be called
@@ -150,6 +155,7 @@ function NavLink({ item }: { item: NavItem }) {
         className: "bg-accent text-accent-foreground font-medium",
       }}
       activeOptions={{ exact: item.to === "/" }}
+      data-testid={`nav-${navTestSlug(item.to)}`}
     >
       <Icon className="size-4" aria-hidden="true" />
       {t(item.labelKey)}
@@ -286,7 +292,10 @@ function UserMenu() {
 function CreateFirstOrgPrompt() {
   const { t } = useTranslation();
   return (
-    <div className="flex min-h-screen items-center justify-center p-4">
+    <div
+      className="flex min-h-screen items-center justify-center p-4"
+      data-testid="create-first-org-prompt"
+    >
       <Card className="w-full max-w-sm">
         <CardHeader>
           {/* CardTitle renders a <div>, not a heading -- this page needs a
@@ -330,7 +339,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
   const pageTitle = pageTitleFor(location.pathname, t);
 
   return (
-    <div className="flex min-h-screen">
+    <div className="flex min-h-screen" data-testid="app-shell">
       <aside className="flex w-64 shrink-0 flex-col border-r p-4">
         <div className="px-2 pb-4 text-lg font-semibold">
           {t("common.app.name")}

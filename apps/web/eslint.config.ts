@@ -13,6 +13,13 @@ export default tseslint.config(
     languageOptions: { globals: globals.node },
   },
   {
+    // T-220: Playwright specs + helpers run under Node, not the browser --
+    // same treatment as *.config.ts above, just scoped to e2e/ instead.
+    files: ["e2e/**/*.ts"],
+    extends: [js.configs.recommended, ...tseslint.configs.recommended],
+    languageOptions: { globals: globals.node },
+  },
+  {
     files: ["src/**/*.{ts,tsx}"],
     extends: [
       js.configs.recommended,

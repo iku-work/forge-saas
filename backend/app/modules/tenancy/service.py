@@ -234,6 +234,12 @@ class TenancyService:
             template="invitation",
             context={
                 "org_name": org_name,
-                "accept_url": f"{settings.FRONTEND_URL}/invitations/{token}",
+                # T-220: must match the frontend's actual route
+                # (apps/web/src/routes/accept-invitation.$token.tsx), not the
+                # backend's own GET /api/v1/invitations/{token} preview
+                # endpoint path -- confirmed via a real Playwright run that
+                # the old "/invitations/{token}" link 404'd in the SPA (no
+                # such route was ever defined there).
+                "accept_url": f"{settings.FRONTEND_URL}/accept-invitation/{token}",
             },
         )
