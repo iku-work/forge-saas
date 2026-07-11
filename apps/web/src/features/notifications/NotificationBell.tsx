@@ -57,6 +57,7 @@ export function NotificationBell() {
         <button
           type="button"
           aria-label={ariaLabel}
+          data-testid="notification-bell-trigger"
           className="relative rounded-md p-2 text-muted-foreground hover:bg-accent hover:text-accent-foreground"
         >
           <Bell className="size-4" aria-hidden="true" />
@@ -74,6 +75,7 @@ export function NotificationBell() {
         align="end"
         className="w-96 p-0"
         aria-label={t("notifications.feed.heading")}
+        data-testid="notification-panel"
       >
         <div className="flex items-center justify-between px-4 py-2">
           <p className="text-sm font-semibold">{t("notifications.feed.heading")}</p>
