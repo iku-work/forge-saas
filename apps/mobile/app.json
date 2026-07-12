@@ -7,6 +7,12 @@
     "orientation": "portrait",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
+    "ios": {
+      "bundleIdentifier": "com.forgesaas.mobile"
+    },
+    "android": {
+      "package": "com.forgesaas.mobile"
+    },
     "plugins": [
       "expo-router",
       [

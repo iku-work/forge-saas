@@ -92,7 +92,7 @@ export default function SettingsScreen() {
               ? t("common.status.logging_out")
               : t("common.nav.logout")
           }
-          hint="Signs out of this account on this device"
+          hint={t("common.nav.logout_hint")}
           variant="outline"
           disabled={isLoggingOut}
           onPress={() => {

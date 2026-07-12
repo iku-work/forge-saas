@@ -1,0 +1,20 @@
+appId: com.forgesaas.mobile
+env:
+  MOBILE_E2E_EMAIL: mobile-e2e@example.com
+  MOBILE_E2E_PASSWORD: MobileE2ePass123!
+---
+# Seeded by backend/app/core/seed.py (`make seed`) -- see MOBILE_E2E_EMAIL
+# there. Assumes the app's EXPO_PUBLIC_API_URL already points at the local
+# backend (see apps/mobile/README.md).
+- launchApp:
+    clearState: true
+- assertVisible: "Email"
+- tapOn: "Email"
+- inputText: "${MOBILE_E2E_EMAIL}"
+- tapOn: "Password"
+- inputText: "${MOBILE_E2E_PASSWORD}"
+- hideKeyboard
+- tapOn: "Log in"
+- assertVisible:
+    text: "Dashboard"
+    timeout: 15000

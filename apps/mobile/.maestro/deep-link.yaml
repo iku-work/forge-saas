@@ -1,0 +1,48 @@
+appId: com.forgesaas.mobile
+env:
+  BACKEND_URL: http://localhost:8000
+  MAILHOG_URL: http://localhost:8025
+  MOBILE_E2E_OWNER_EMAIL: mobile-e2e@example.com
+  MOBILE_E2E_OWNER_PASSWORD: MobileE2ePass123!
+  MOBILE_E2E_INVITEE_EMAIL: mobile-e2e-invitee@example.com
+---
+# Exercises forge://invitations/[token] (apps/mobile/app/invitations/[token].tsx),
+# the one deep-link screen that both (a) hits the real backend for its
+# content (an org-name/role preview) and (b) is safe to open twice --
+# GET /invitations/{token} is a read-only preview; only POST .../accept
+# consumes the token, and this flow never calls it. That lets the same
+# token cover both the cold-start and warm-app-already-running cases without
+# needing two separate invitations.
+#
+# create-invitation.js logs in as the seeded mobile-e2e owner (see
+# backend/app/core/seed.py) and calls the real invite endpoint, the same way
+# a human org owner would from the web/mobile UI. poll-invitation-email.js
+# then pulls the token out of MailHog, mirroring
+# apps/web/e2e/helpers/mailhog.ts's waitForLink -- the emailed link and the
+# mobile deep link share the same backend-issued token, just a different URL
+# scheme (https://localhost/accept-invitation/<token> vs.
+# forge://invitations/<token>).
+- launchApp:
+    clearState: true
+- stopApp
+- runScript:
+    file: scripts/create-invitation.js
+- retry:
+    maxRetries: 10
+    commands:
+      - runScript:
+          file: scripts/poll-invitation-email.js
+
+# Cold: stopApp above killed the app, so this openLink is a cold start.
+- openLink: "forge://invitations/${output.invitationToken}"
+- assertVisible:
+    text: "Mobile E2E"
+    timeout: 15000
+- assertVisible: "Log in"
+- assertVisible: "Sign up"
+
+# Warm: app is already in the foreground from the assertions above.
+- openLink: "forge://invitations/${output.invitationToken}"
+- assertVisible:
+    text: "Mobile E2E"
+    timeout: 15000

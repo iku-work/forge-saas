@@ -35,6 +35,14 @@ export default function DashboardScreen() {
             router.push("/notifications" as Href);
           }}
         />
+        <Button
+          label={t("common.nav.settings")}
+          hint={t("common.nav.settings_hint")}
+          variant="outline"
+          onPress={() => {
+            router.push("/settings");
+          }}
+        />
       </View>
     </View>
   );

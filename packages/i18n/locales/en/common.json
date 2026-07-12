@@ -21,6 +21,7 @@
     "files": "Files",
     "files_hint": "Opens your uploaded files",
     "settings": "Settings",
+    "settings_hint": "Opens your account and app settings",
     "profile": "Profile",
     "security": "Security",
     "organization": "Organization",

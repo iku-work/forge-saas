@@ -21,6 +21,7 @@
     "files": "Tiedostot",
     "files_hint": "Avaa ladatut tiedostosi",
     "settings": "Asetukset",
+    "settings_hint": "Avaa tili- ja sovellusasetuksesi",
     "profile": "Profiili",
     "security": "Tietoturva",
     "organization": "Organisaatio",

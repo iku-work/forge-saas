@@ -26,6 +26,14 @@ SUPERADMIN_PASSWORD = "DevPassword123!"  # noqa: S105 — documented local-dev-o
 DEMO_ORG_NAME = "Forge Demo"
 DEMO_ORG_SLUG = "forge-demo"
 
+# T-222: a dedicated account for the Maestro mobile E2E suite (.maestro/), kept
+# separate from SUPERADMIN_EMAIL so the invitation the deep-link flow sends
+# doesn't pile up under the shared demo org over repeated runs.
+MOBILE_E2E_EMAIL = "mobile-e2e@example.com"
+MOBILE_E2E_PASSWORD = "MobileE2ePass123!"  # noqa: S105 — documented local-dev-only seed login, not a real secret
+MOBILE_E2E_ORG_NAME = "Mobile E2E"
+MOBILE_E2E_ORG_SLUG = "mobile-e2e"
+
 
 async def _ensure_plan(plans: PlanRepository, session: AsyncSession, plan: Plan) -> None:
     if await plans.get_by_slug(plan.slug) is not None:
@@ -42,6 +50,17 @@ async def _ensure_superadmin(users: UserRepository) -> User:
         hashed_password=hash_password(SUPERADMIN_PASSWORD),
         email_verified_at=datetime.now(UTC),
         is_superadmin=True,
+    )
+
+
+async def _ensure_mobile_e2e_user(users: UserRepository) -> User:
+    existing = await users.get_by_email(MOBILE_E2E_EMAIL)
+    if existing is not None:
+        return existing
+    return await users.create(
+        email=MOBILE_E2E_EMAIL,
+        hashed_password=hash_password(MOBILE_E2E_PASSWORD),
+        email_verified_at=datetime.now(UTC),
     )
 
 
@@ -87,6 +106,10 @@ async def seed(session: AsyncSession) -> None:
     orgs = OrganizationRepository(session)
     if await orgs.get_by_slug(DEMO_ORG_SLUG) is None:
         await TenancyService(session).create_org(superadmin, DEMO_ORG_NAME)
+
+    mobile_e2e_user = await _ensure_mobile_e2e_user(UserRepository(session))
+    if await orgs.get_by_slug(MOBILE_E2E_ORG_SLUG) is None:
+        await TenancyService(session).create_org(mobile_e2e_user, MOBILE_E2E_ORG_NAME)
 
     await backfill_notification_preferences_for_session(session)
 

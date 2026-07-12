@@ -1,0 +1,33 @@
+appId: com.forgesaas.mobile
+env:
+  MOBILE_E2E_EMAIL: mobile-e2e@example.com
+  MOBILE_E2E_PASSWORD: MobileE2ePass123!
+---
+# Logs in, navigates to Settings (dashboard.tsx's "Settings" button), signs
+# out, then asserts the secure-store session is actually gone -- not just
+# that this screen redirected -- by killing and relaunching the app and
+# confirming it lands back on the login screen instead of auto-signing in.
+- launchApp:
+    clearState: true
+- tapOn: "Email"
+- inputText: "${MOBILE_E2E_EMAIL}"
+- tapOn: "Password"
+- inputText: "${MOBILE_E2E_PASSWORD}"
+- hideKeyboard
+- tapOn: "Log in"
+- assertVisible:
+    text: "Dashboard"
+    timeout: 15000
+- tapOn: "Settings"
+- assertVisible: "Log out"
+- tapOn: "Log out"
+- assertVisible:
+    text: "Email"
+    timeout: 15000
+- assertNotVisible: "Dashboard"
+- stopApp
+- launchApp
+- assertVisible:
+    text: "Email"
+    timeout: 15000
+- assertNotVisible: "Dashboard"

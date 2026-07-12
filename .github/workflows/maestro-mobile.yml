@@ -1,0 +1,104 @@
+# T-222: Maestro E2E flows for the mobile app (apps/mobile/.maestro/) against
+# a real backend + MailHog, on a real iOS Simulator -- not per-PR, for two
+# reasons: booting a simulator and producing a native build (expo run:ios)
+# takes several minutes even before the flows themselves run, and unlike the
+# web Playwright suite (T-220) this depends on Xcode/simctl, which only
+# GitHub's macOS runners provide. Maestro Cloud was considered as a
+# device-farm alternative to a locally booted Simulator -- skipped for now,
+# see apps/mobile/README.md's "CI" section for why.
+#
+# Assumes GitHub's macos-14 runner image ships Docker (documented in
+# actions/runner-images) so the same docker-compose stack ci.yml's
+# zap-baseline job boots on ubuntu-latest can boot here too. If a future
+# runner image drops that, this job's "Boot ephemeral stack" step is where
+# it'll fail first.
+name: Maestro Mobile E2E
+
+on:
+  schedule:
+    - cron: "0 4 * * *"
+  workflow_dispatch:
+
+jobs:
+  maestro-mobile:
+    runs-on: macos-14
+
+    # Fixes the compose network/project name so container ports (backend,
+    # MailHog) are predictable regardless of the checkout directory name --
+    # same reasoning as ci.yml's zap-baseline job.
+    env:
+      COMPOSE_PROJECT_NAME: forge-mobile-e2e
+
+    permissions:
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: pnpm
+
+      - name: Install frontend dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Copy test environment file
+        working-directory: backend
+        run: cp .env.test .env
+
+      - name: Boot ephemeral stack (backend + Postgres + Redis + MinIO + MailHog)
+        run: docker compose up -d postgres redis minio minio-init mailhog backend
+
+      - name: Wait for backend
+        run: |
+          for i in $(seq 1 30); do
+            curl -sf http://localhost:8000/health && exit 0
+            sleep 2
+          done
+          echo "backend did not become ready" >&2
+          docker compose logs backend
+          exit 1
+
+      # Creates MOBILE_E2E_EMAIL (backend/app/core/seed.py) that login.yaml
+      # and logout.yaml sign in with, and the "Mobile E2E" org
+      # deep-link.yaml's setup script invites from.
+      - name: Migrate + seed
+        run: |
+          docker compose exec -T backend python -m app.core.migrations
+          docker compose exec -T backend python -m app.core.seed
+
+      - name: Install Maestro CLI
+        run: |
+          curl -Ls "https://get.maestro.mobile.dev" | bash
+          echo "$HOME/.maestro/bin" >> "$GITHUB_PATH"
+
+      - name: Boot iOS Simulator
+        run: |
+          xcrun simctl boot "iPhone 15" 2>/dev/null || true
+          xcrun simctl bootstatus "iPhone 15" -b
+
+      # Release configuration embeds the JS bundle into the app binary, so
+      # the flows below don't depend on a live Metro dev server -- --no-bundler
+      # skips starting one.
+      - name: Build + install app on the Simulator
+        working-directory: apps/mobile
+        run: npx expo run:ios --configuration Release --no-bundler --device "iPhone 15"
+
+      - name: Run Maestro flows
+        working-directory: apps/mobile
+        run: maestro test .maestro/ --format junit --output ../../maestro-report.xml
+
+      - name: Upload Maestro report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: maestro-report
+          path: maestro-report.xml
+          retention-days: 30
+
+      - name: Tear down stack
+        if: always()
+        run: docker compose down
