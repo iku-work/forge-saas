@@ -81,12 +81,23 @@ services:
   # One-shot: creates the AWS_BUCKET_NAME bucket (T-037's export job uploads
   # here) -- minio/minio ships its own `mc` client, so no separate image is
   # needed. Idempotent (--ignore-existing), exits after running once.
+  #
+  # Creates both bucket names that appear across the repo's env files
+  # (.env.example uses forge-local; .env.test/.env.e2e/.env.loadtest use
+  # forge-test) rather than just one -- whichever env file gets copied to
+  # backend/.env before this stack boots, AWS_BUCKET_NAME resolves to a
+  # bucket that actually exists. Before this, any env file using the
+  # "wrong" name would presign uploads against a bucket MinIO never
+  # created, and every confirm would 422 with file_not_uploaded -- nothing
+  # exercised a real upload through this compose stack (vs. testcontainers'
+  # own dedicated bucket in test_storage_backend.py) until T-223's presign.js.
   minio-init:
     image: minio/minio
     entrypoint: ["/bin/sh", "-c"]
     command: >
       "mc alias set local http://minio:9000 minioadmin minioadmin &&
-       mc mb --ignore-existing local/forge-local"
+       mc mb --ignore-existing local/forge-local &&
+       mc mb --ignore-existing local/forge-test"
     depends_on:
       minio:
         condition: service_healthy
@@ -226,6 +237,26 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+    networks:
+      - forge-net
+
+  # T-223: `make load-test` and the nightly load-test CI job run k6 through
+  # this rather than a host-installed k6 binary. profiles: ["loadtest"] keeps
+  # it out of `docker compose up -d` (make dev), same as observability's
+  # prometheus/grafana below -- `docker compose run --rm k6 ...` still works
+  # despite the profile (run/exec ignore profile restrictions for a service
+  # named explicitly on the command line), and joining forge-net lets
+  # BASE_URL address the backend by its compose service name instead of a
+  # published host port, avoiding any dependency on this project's exact
+  # compose network name.
+  k6:
+    image: grafana/k6:latest
+    profiles: ["loadtest"]
+    environment:
+      BASE_URL: http://backend:8000
+    volumes:
+      - ./tests/load:/scripts:ro
+      - ./tests/load/results:/results
     networks:
       - forge-net
 

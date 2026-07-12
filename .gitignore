@@ -47,3 +47,7 @@ Thumbs.db
 # ZAP full scan (T-211) -- generated reports, not the checked-in
 # .zap/full-scan.yaml / .zap/scripts/
 zap-reports/
+
+# k6 load test (T-223) -- generated per-run JSON summaries, not the checked-in
+# tests/load/*.js or tests/load/RESULTS.md trend log
+tests/load/results/

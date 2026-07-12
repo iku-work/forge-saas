@@ -7,6 +7,7 @@ WebAuthn/FIDO2 registration + assertion as an alternative second factor
 (T-217).
 """
 
+import asyncio
 import hmac
 import json
 import logging
@@ -84,6 +85,27 @@ _LOCKOUT_DURATION = timedelta(minutes=15)
 # are registered.
 _DUMMY_PASSWORD_HASH = hash_password(uuid4().hex)
 
+
+async def _hash_password_off_loop(plain: str) -> str:
+    # T-223: argon2's memory-hard params (T-225) make a single hash/verify
+    # call take tens of milliseconds of pure CPU time. Calling
+    # hash_password/verify_password (app.modules.auth.utils) directly here
+    # would block this whole worker's single-threaded event loop for that
+    # duration, serializing every other in-flight request behind it --
+    # k6's login-burst.js (tests/load/) is what actually surfaced this: 30
+    # concurrent logins pushed p(95) past 1.8s even though one hash in
+    # isolation only takes ~45ms. Every request-serving call site in this
+    # module goes through this (or _verify_password_off_loop) instead of
+    # calling utils.py's functions directly -- they stay synchronous so
+    # seed scripts and the ~60 test files that construct a User directly
+    # don't have to change.
+    return await asyncio.to_thread(hash_password, plain)
+
+
+async def _verify_password_off_loop(plain: str, hashed: str) -> bool:
+    return await asyncio.to_thread(verify_password, plain, hashed)
+
+
 # §T-024: the token /login hands back instead of real credentials when
 # totp_enabled is set -- short-lived since it only proves "password already
 # checked", not "this session is authenticated".
@@ -147,7 +169,7 @@ class AuthService:
 
         user = await self._users.create(
             email=req.email,
-            hashed_password=hash_password(req.password),
+            hashed_password=await _hash_password_off_loop(req.password),
             is_active=False,
         )
         plain_token, token_hash = generate_refresh_token()
@@ -193,7 +215,7 @@ class AuthService:
     ) -> tuple[str, str, User] | TwoFactorChallenge:
         user = await self._users.get_by_email(req.email)
         if user is None:
-            verify_password(req.password, _DUMMY_PASSWORD_HASH)
+            await _verify_password_off_loop(req.password, _DUMMY_PASSWORD_HASH)
             raise AuthenticationError(
                 "errors.invalid_credentials", fallback="Invalid email or password"
             )
@@ -210,7 +232,9 @@ class AuthService:
                 fallback="Please verify your email address before logging in.",
             )
 
-        if not verify_password(req.password, user.hashed_password or _DUMMY_PASSWORD_HASH):
+        if not await _verify_password_off_loop(
+            req.password, user.hashed_password or _DUMMY_PASSWORD_HASH
+        ):
             await self._users.increment_failed_login(user.id)
             if user.failed_login_count >= _MAX_FAILED_LOGIN_ATTEMPTS:
                 await self._users.set_lockout(user.id, utcnow() + _LOCKOUT_DURATION)
@@ -379,7 +403,9 @@ class AuthService:
             )
 
         await self._password_reset_tokens.mark_used(record.id)
-        await self._users.update(user.id, hashed_password=hash_password(new_password))
+        await self._users.update(
+            user.id, hashed_password=await _hash_password_off_loop(new_password)
+        )
         # A password reset is treated the same as a confirmed compromise of
         # every existing session -- whoever could read the reset email now
         # controls the account, so anyone already logged in elsewhere (e.g.
@@ -478,10 +504,14 @@ class AuthService:
         new_password: str,
         current_refresh_token_plain: str | None,
     ) -> None:
-        if not verify_password(current_password, user.hashed_password or _DUMMY_PASSWORD_HASH):
+        if not await _verify_password_off_loop(
+            current_password, user.hashed_password or _DUMMY_PASSWORD_HASH
+        ):
             raise AuthenticationError("errors.invalid_password", fallback="Invalid password")
 
-        await self._users.update(user.id, hashed_password=hash_password(new_password))
+        await self._users.update(
+            user.id, hashed_password=await _hash_password_off_loop(new_password)
+        )
 
         # Keeps the session this request is authenticated with alive and
         # revokes every other one (ASVS V3.3.4) -- unlike
@@ -552,7 +582,7 @@ class AuthService:
         # credential in hand. An OAuth-only user (§T-023, hashed_password is
         # None) has no password to re-prove, so require_recent_auth's session
         # freshness is the whole story for them, same as it is today.
-        if user.hashed_password is not None and not verify_password(
+        if user.hashed_password is not None and not await _verify_password_off_loop(
             current_password or "", user.hashed_password
         ):
             raise AuthenticationError("errors.invalid_password", fallback="Invalid password")
@@ -602,9 +632,7 @@ class AuthService:
             user,
             "email_change_requested",
             new_email=new_email,
-            cancel_url=(
-                f"{settings.FRONTEND_URL}/cancel-email-change?token={cancel_plain_token}"
-            ),
+            cancel_url=(f"{settings.FRONTEND_URL}/cancel-email-change?token={cancel_plain_token}"),
         )
 
     async def cancel_email_change(self, cancel_token: str) -> None:
@@ -633,9 +661,7 @@ class AuthService:
         await self._enqueue_security_notification_email(
             user, "email_change_cancelled", new_email=record.new_email
         )
-        logger.info(
-            "auth.cancel_email_change: pending change cancelled (user_id=%s)", user.id
-        )
+        logger.info("auth.cancel_email_change: pending change cancelled (user_id=%s)", user.id)
 
     async def confirm_email_change(self, token: str) -> User:
         record = await self._email_change_tokens.get_by_hash(hash_token(token))
@@ -768,15 +794,16 @@ class AuthService:
             )
 
         backup_codes = [secrets.token_hex(5) for _ in range(_BACKUP_CODE_COUNT)]
-        await self._totp_secrets.mark_enabled(
-            user.id, json.dumps([hash_password(c) for c in backup_codes])
-        )
+        hashed_backup_codes = [await _hash_password_off_loop(c) for c in backup_codes]
+        await self._totp_secrets.mark_enabled(user.id, json.dumps(hashed_backup_codes))
         await self._users.update(user.id, totp_enabled=True)
         await self._enqueue_security_notification_email(user, "totp_enabled")
         return backup_codes
 
     async def disable_2fa(self, user: User, password: str, code: str) -> None:
-        if not verify_password(password, user.hashed_password or _DUMMY_PASSWORD_HASH):
+        if not await _verify_password_off_loop(
+            password, user.hashed_password or _DUMMY_PASSWORD_HASH
+        ):
             raise AuthenticationError("errors.invalid_password", fallback="Invalid password")
 
         record = await self._totp_secrets.get_by_user_id(user.id)
@@ -857,7 +884,7 @@ class AuthService:
     async def _consume_backup_code(self, record: TOTPSecret, code: str) -> bool:
         hashed_codes: list[str] = json.loads(record.backup_codes_hash)
         for hashed in hashed_codes:
-            if verify_password(code, hashed):
+            if await _verify_password_off_loop(code, hashed):
                 hashed_codes.remove(hashed)
                 await self._totp_secrets.update_backup_codes(
                     record.user_id, json.dumps(hashed_codes)

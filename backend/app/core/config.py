@@ -45,6 +45,30 @@ class Settings(BaseSettings):
 
     # App
     ENVIRONMENT: Literal["dev", "staging", "prod"] = "dev"
+    # T-223: app.core.db's engine defaults SQLAlchemy's own `echo` to
+    # ENVIRONMENT == "dev" -- convenient for local debugging, but it logs
+    # every SQL statement (with parameters) synchronously to stdout on the
+    # request path, which k6's mixed.js load test showed adds real,
+    # concurrency-multiplying latency: 50 concurrent VUs pushed p(95) to
+    # ~900ms purely from this, with zero errors (it's overhead, not a
+    # capacity limit). None (the default) preserves today's ENVIRONMENT-tied
+    # behavior everywhere; backend/.env.loadtest sets this to false
+    # explicitly so the load-test stack measures real request latency
+    # instead of debug-logging overhead no production deployment would have.
+    DB_ECHO: bool | None = None
+    # T-223: mixed.js's ramp to 50 concurrent VUs kept p(95) elevated (with
+    # DB_ECHO already off, zero errors) even after that fix -- 20 total
+    # connections (5 + 15 overflow) queuing requests behind Little's-Law-style
+    # contention under sustained ~80 req/s is the difference between this and
+    # the argon2/DB_ECHO findings: those were pure overhead with a clear
+    # "shouldn't happen at all" fix, this is a real capacity number a
+    # single un-scaled dev-mode replica needs sized to its expected
+    # concurrency. Defaults match today's hardcoded values exactly (no
+    # behavior change for any existing env file); backend/.env.loadtest
+    # raises both so the load-test stack's numbers reflect request-handling
+    # latency, not this replica's pool being undersized for k6's VU count.
+    DB_POOL_SIZE: int = 5
+    DB_MAX_OVERFLOW: int = 15
     ALLOWED_ORIGINS: list[str] = []
     LOG_LEVEL: str = "INFO"
     DOMAIN: str = "localhost"  # used by Caddyfile.prod ($DOMAIN) and link generation
@@ -145,9 +169,7 @@ class Settings(BaseSettings):
         # docs/runbooks/backup-restore.md's "Docker-network TLS" section.
         database_query = self.DATABASE_URL.query or ""
         if "sslmode=require" not in database_query and "sslmode=verify" not in database_query:
-            raise RuntimeError(
-                "DATABASE_URL must set sslmode=require (or stricter) outside dev"
-            )
+            raise RuntimeError("DATABASE_URL must set sslmode=require (or stricter) outside dev")
         if self.REDIS_URL.scheme != "rediss":
             raise RuntimeError("REDIS_URL must use the rediss:// scheme outside dev")
 

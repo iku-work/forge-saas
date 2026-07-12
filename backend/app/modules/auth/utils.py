@@ -49,6 +49,20 @@ def verify_password(plain: str, hashed: str) -> bool:
     # format) propagates — that is a data-integrity bug, not a wrong password.
 
 
+# T-223: argon2's memory-hard params (T-225) make a single hash/verify call
+# take tens of milliseconds of pure CPU time. auth/service.py's request
+# handlers run these off the event loop via asyncio.to_thread (see that
+# module's _hash_password_off_loop/_verify_password_off_loop) rather than
+# calling hash_password/verify_password directly -- k6's login-burst.js is
+# what actually surfaced why: called synchronously inside an async def, a
+# blocking call like this stalls the whole single-threaded event loop for
+# its duration, serializing every other in-flight request on this worker
+# behind it. 30 concurrent logins pushed p(95) past 1.8s even though one
+# hash in isolation only takes ~45ms. Kept synchronous here (not async) so
+# every other caller -- seed scripts, the ~60 test files across
+# backend/tests/ that construct a User directly -- doesn't have to change.
+
+
 @dataclass(frozen=True, slots=True)
 class AccessTokenPayload:
     user_id: UUID

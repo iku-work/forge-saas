@@ -1,4 +1,4 @@
-.PHONY: dev test lint migrate migrate-plan gen-client seed pentest-accounts new-module install-hooks down update-from-template check-template-drift observe
+.PHONY: dev test lint migrate migrate-plan gen-client seed pentest-accounts seed-load load-test new-module install-hooks down update-from-template check-template-drift observe
 
 TEMPLATE_VERSION ?= main
 
@@ -60,6 +60,21 @@ seed:
 
 pentest-accounts:
 	cd backend && python -m app.core.seed_pentest
+
+seed-load:
+	cd backend && python -m app.core.seed_load
+
+# T-223: assumes `make dev` is already up. Each script is its own
+# `docker compose run` (not one process running all four) so a budget
+# failure in one script doesn't hide whether the others also failed --
+# see tests/load/README.md for why this runs against a stack you booted
+# yourself rather than one this target boots and tears down itself.
+load-test: seed-load
+	mkdir -p tests/load/results
+	@for script in login-burst browse presign mixed; do \
+		echo "=== k6: $$script ==="; \
+		docker compose run --rm -T k6 run --summary-export=/results/$$script.json /scripts/$$script.js || exit 1; \
+	done
 
 new-module:
 	@test -n "$(NAME)" || (echo "Usage: make new-module NAME=foo" && exit 1)

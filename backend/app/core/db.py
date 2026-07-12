@@ -11,12 +11,14 @@ from app.core.config import get_settings
 
 _settings = get_settings()
 
+_echo = _settings.DB_ECHO if _settings.DB_ECHO is not None else _settings.ENVIRONMENT == "dev"
+
 engine: AsyncEngine = create_async_engine(
     str(_settings.DATABASE_URL),
-    pool_size=5,
-    max_overflow=15,
+    pool_size=_settings.DB_POOL_SIZE,
+    max_overflow=_settings.DB_MAX_OVERFLOW,
     pool_pre_ping=True,
-    echo=_settings.ENVIRONMENT == "dev",
+    echo=_echo,
 )
 
 async_session_factory: async_sessionmaker[AsyncSession] = async_sessionmaker(

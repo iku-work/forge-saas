@@ -1,0 +1,164 @@
+# T-223: k6 load scripts (tests/load/) against a dedicated ephemeral compose
+# stack, nightly rather than per-PR -- see tests/load/README.md's "Why
+# nightly, not per-PR" for the full reasoning (shared CI runners produce
+# noisy p95s that have nothing to do with the code in a given PR; per-PR
+# gates on that noise either flake constantly or get loosened until they
+# stop catching anything).
+name: Load Test
+
+on:
+  schedule:
+    - cron: "0 5 * * *"
+  workflow_dispatch:
+
+jobs:
+  load-test:
+    runs-on: ubuntu-latest
+
+    # Fixes the compose network/project name, same reasoning as ci.yml's
+    # zap-baseline / e2e-web jobs and maestro-mobile.yml.
+    env:
+      COMPOSE_PROJECT_NAME: forge-loadtest
+
+    permissions:
+      # Needs write to append this run's numbers to tests/load/RESULTS.md
+      # (T-223's own "a trend note is appended ... per run") -- every other
+      # job in this repo's workflows only ever reads.
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # T-223's spec requirement, checked here rather than relying on
+      # convention: every script must declare both threshold metrics (via
+      # the shared lib/config.js THRESHOLDS export, not a literal per-script
+      # copy -- see that file for why centralizing them is deliberate, not
+      # a shortcut around this check).
+      - name: Verify every script asserts the shared budget thresholds
+        run: |
+          for script in tests/load/login-burst.js tests/load/browse.js tests/load/presign.js tests/load/mixed.js; do
+            grep -q 'thresholds: THRESHOLDS' "$script" || {
+              echo "$script does not use the shared THRESHOLDS (tests/load/lib/config.js)" >&2
+              exit 1
+            }
+          done
+          grep -q 'http_req_duration' tests/load/lib/config.js || {
+            echo "tests/load/lib/config.js is missing the http_req_duration threshold" >&2
+            exit 1
+          }
+          grep -q 'http_req_failed' tests/load/lib/config.js || {
+            echo "tests/load/lib/config.js is missing the http_req_failed threshold" >&2
+            exit 1
+          }
+
+      - name: Copy load-test environment file
+        working-directory: backend
+        run: cp .env.loadtest .env
+
+      - name: Boot ephemeral stack (backend + Postgres + Redis + MinIO)
+        run: docker compose up -d postgres redis minio minio-init backend
+
+      - name: Wait for backend
+        run: |
+          for i in $(seq 1 30); do
+            curl -sf http://localhost:8000/health && exit 0
+            sleep 2
+          done
+          echo "backend did not become ready" >&2
+          docker compose logs backend
+          exit 1
+
+      # make seed-load's "Load Test Org" (1k members/10k notifications/300
+      # files) needs the base plans app.core.seed creates first (T-223
+      # needs: T-056) -- see backend/app/core/seed_load.py's own docstring.
+      - name: Migrate + seed
+        run: |
+          docker compose exec -T backend python -m app.core.migrations
+          docker compose exec -T backend python -m app.core.seed
+          docker compose exec -T backend python -m app.core.seed_load
+
+      # One script at a time so a budget failure in one doesn't prevent the
+      # others from running (and being recorded) -- overall exit status
+      # still reflects "did anything fail its budget."
+      - name: Run k6 load scripts
+        run: |
+          mkdir -p tests/load/results
+          : > tests/load/results/status.txt
+          overall=0
+          for script in login-burst browse presign mixed; do
+            echo "=== k6: $script ==="
+            if docker compose run --rm -T k6 run --summary-export=/results/$script.json /scripts/$script.js; then
+              echo "$script PASS" >> tests/load/results/status.txt
+            else
+              echo "$script FAIL" >> tests/load/results/status.txt
+              overall=1
+            fi
+          done
+          exit $overall
+
+      - name: Upload k6 summaries
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: k6-summaries
+          path: tests/load/results/*.json
+          retention-days: 90
+
+      - name: Append trend note to RESULTS.md
+        if: always()
+        run: |
+          python3 - <<'PY'
+          import json
+          import pathlib
+          import datetime
+          import subprocess
+
+          commit = subprocess.check_output(["git", "rev-parse", "--short", "HEAD"]).decode().strip()
+          date = datetime.date.today().isoformat()
+          results_dir = pathlib.Path("tests/load/results")
+          status = {}
+          status_file = results_dir / "status.txt"
+          if status_file.exists():
+              for line in status_file.read_text().splitlines():
+                  script, outcome = line.split()
+                  status[script] = outcome
+
+          lines = []
+          for script in ["login-burst", "browse", "presign", "mixed"]:
+              outcome = status.get(script, "FAIL")
+              p95_s, rate_s = "-", "-"
+              summary_path = results_dir / f"{script}.json"
+              if summary_path.exists():
+                  try:
+                      metrics = json.loads(summary_path.read_text()).get("metrics", {})
+                      p95 = metrics.get("http_req_duration", {}).get("values", {}).get("p(95)")
+                      rate = metrics.get("http_req_failed", {}).get("values", {}).get("rate")
+                      if p95 is not None:
+                          p95_s = f"{p95:.0f}"
+                      if rate is not None:
+                          rate_s = f"{rate:.2%}"
+                  except (json.JSONDecodeError, AttributeError):
+                      pass
+              lines.append(f"| {date} | {commit} | {script} | {p95_s} | {rate_s} | {outcome} |")
+
+          results_path = pathlib.Path("tests/load/RESULTS.md")
+          content = results_path.read_text().rstrip("\n") + "\n" + "\n".join(lines) + "\n"
+          results_path.write_text(content)
+          PY
+
+      - name: Commit RESULTS.md trend update
+        if: always()
+        run: |
+          git config user.name "forge-load-test-bot"
+          git config user.email "load-test-bot@users.noreply.github.com"
+          git add tests/load/RESULTS.md
+          if git diff --cached --quiet; then
+            echo "No RESULTS.md changes to commit"
+          else
+            git commit -m "chore(load-test): append nightly trend results [skip ci]"
+            git push
+          fi
+
+      - name: Tear down stack
+        if: always()
+        run: docker compose down -v
