@@ -7,27 +7,43 @@ env:
 # out, then asserts the secure-store session is actually gone -- not just
 # that this screen redirected -- by killing and relaunching the app and
 # confirming it lands back on the login screen instead of auto-signing in.
+# clearState alone doesn't touch the iOS Keychain -- see login.yaml's
+# launchApp comment. This flow needs to start logged out, both to test the
+# login step itself and so the later logout assertions mean something.
 - launchApp:
     clearState: true
-- tapOn: "Email"
+    clearKeychain: true
+# FormField renders the label as its own Text plus a TextInput sharing the
+# same accessibilityLabel -- index 0 is the label, index 1 is the actual
+# input (same ambiguity as the "Log in" heading/button below).
+- tapOn:
+    text: "Email"
+    index: 1
 - inputText: "${MOBILE_E2E_EMAIL}"
-- tapOn: "Password"
+- tapOn:
+    text: "Password"
+    index: 1
 - inputText: "${MOBILE_E2E_PASSWORD}"
 - hideKeyboard
-- tapOn: "Log in"
-- assertVisible:
-    text: "Dashboard"
+# "Log in" matches both the screen's heading and the submit button --
+# index 1 is the button (see LoginScreen: AuthCard title + Button label both
+# resolve to auth.login.title / auth.login.submit, which are the same string).
+- tapOn:
+    text: "Log in"
+    index: 1
+- extendedWaitUntil:
+    visible: "Dashboard"
     timeout: 15000
 - tapOn: "Settings"
 - assertVisible: "Log out"
 - tapOn: "Log out"
-- assertVisible:
-    text: "Email"
+- extendedWaitUntil:
+    visible: "Email"
     timeout: 15000
 - assertNotVisible: "Dashboard"
 - stopApp
 - launchApp
-- assertVisible:
-    text: "Email"
+- extendedWaitUntil:
+    visible: "Email"
     timeout: 15000
 - assertNotVisible: "Dashboard"

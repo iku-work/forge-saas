@@ -1,6 +1,12 @@
 .expo/
 dist/
 web-build/
+# expo prebuild output -- CI (maestro-mobile.yml) and local E2E testing both
+# regenerate this from app.json/plugins via `expo run:ios`/`expo prebuild`,
+# never hand-edited, so it doesn't belong in git (found uncommitted, and
+# 139MB, while verifying T-222's iOS Maestro coverage).
+ios/
+android/
 *.orig.*
 .metro-health-check*
 *.jks

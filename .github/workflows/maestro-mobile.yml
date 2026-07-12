@@ -45,12 +45,29 @@ jobs:
       - name: Install frontend dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Copy test environment file
-        working-directory: backend
-        run: cp .env.test .env
+      # worker's send_email job shells out to this compiled CLI (T-106) --
+      # docker-compose.yml bind-mounts dist/ in rather than building it
+      # inside the (Python) worker image, so it must already exist on the
+      # host, same as make dev's own dev target does locally.
+      - name: Build email-templates CLI
+        run: pnpm --filter "@forge/email-templates..." build
 
-      - name: Boot ephemeral stack (backend + Postgres + Redis + MinIO + MailHog)
-        run: docker compose up -d postgres redis minio minio-init mailhog backend
+      # .env.test's EMAIL_BACKEND=resend would make every invitation email
+      # attempt a real (and, with .env.test's dummy key, always-failing)
+      # Resend API call instead of landing in MailHog -- .env.e2e is the
+      # same fixture the e2e-web job (T-220, ci.yml) uses, which forces
+      # EMAIL_BACKEND=smtp so verification/invitation emails actually reach
+      # MailHog. See that file's own header comment for the full reasoning.
+      - name: Copy E2E environment file
+        working-directory: backend
+        run: cp .env.e2e .env
+
+      # Unlike a passive scan that never sends mail, deep-link.yaml's
+      # invitation email only reaches MailHog if something actually
+      # dequeues the "send_email" ARQ job -- that's the worker container,
+      # not the backend API process (same reasoning as e2e-web's boot step).
+      - name: Boot ephemeral stack (backend + worker + Postgres + Redis + MinIO + MailHog)
+        run: docker compose up -d postgres redis minio minio-init mailhog backend worker
 
       - name: Wait for backend
         run: |
@@ -75,17 +92,33 @@ jobs:
           curl -Ls "https://get.maestro.mobile.dev" | bash
           echo "$HOME/.maestro/bin" >> "$GITHUB_PATH"
 
+      # "iPhone 15" is only a device *type* until something creates a
+      # concrete simulator instance with that name -- Xcode/simctl only
+      # pre-provisions instances for the newest few generations by default,
+      # so a plain `simctl boot "iPhone 15"` silently fails once GitHub's
+      # runner image moves its default Xcode past that point (discovered by
+      # actually running this on a current macOS box, where only iPhone
+      # 16/17-generation instances existed out of the box). Creating it
+      # first makes this idempotent regardless of what's pre-provisioned.
       - name: Boot iOS Simulator
         run: |
+          xcrun simctl list devices | grep -q '"iPhone 15"' || \
+            xcrun simctl create "iPhone 15" "iPhone 15" \
+              "$(xcrun simctl list runtimes | grep -o 'com\.apple\.CoreSimulator\.SimRuntime\.iOS-[0-9-]*' | tail -1)"
           xcrun simctl boot "iPhone 15" 2>/dev/null || true
           xcrun simctl bootstatus "iPhone 15" -b
 
       # Release configuration embeds the JS bundle into the app binary, so
       # the flows below don't depend on a live Metro dev server -- --no-bundler
-      # skips starting one.
+      # skips starting one. SENTRY_DISABLE_AUTO_UPLOAD is required: this repo
+      # has no SENTRY_ORG/SENTRY_AUTH_TOKEN configured for this job, so the
+      # Xcode build phase's debug-symbol upload otherwise fails the build
+      # outright ("An organization ID or slug is required") on every run.
       - name: Build + install app on the Simulator
         working-directory: apps/mobile
         run: npx expo run:ios --configuration Release --no-bundler --device "iPhone 15"
+        env:
+          SENTRY_DISABLE_AUTO_UPLOAD: "true"
 
       - name: Run Maestro flows
         working-directory: apps/mobile

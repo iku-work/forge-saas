@@ -1,0 +1,13 @@
+diff --git a/ios/LocalizationModule.swift b/ios/LocalizationModule.swift
+index 73b2b9d5a194141a3b9dd2c98c277707274151e2..ab98d69422d16c5109807b7006168f1c8add90b4 100644
+--- a/ios/LocalizationModule.swift
++++ b/ios/LocalizationModule.swift
+@@ -123,6 +123,8 @@ public class LocalizationModule: Module {
+       return "roc"
+     case .iso8601:
+       return "iso8601"
++    @unknown default:
++      return "gregory"
+     }
+   }
+ 

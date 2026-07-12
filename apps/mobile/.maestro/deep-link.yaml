@@ -22,27 +22,52 @@ env:
 # mobile deep link share the same backend-issued token, just a different URL
 # scheme (https://localhost/accept-invitation/<token> vs.
 # forge://invitations/<token>).
+# clearState alone doesn't touch the iOS Keychain -- see login.yaml's
+# launchApp comment. This flow's assertions expect a logged-out state.
 - launchApp:
     clearState: true
+    clearKeychain: true
 - stopApp
 - runScript:
     file: scripts/create-invitation.js
+# The invitation email is sent by the worker's async "send_email" ARQ job,
+# not synchronously by create-invitation.js's request -- retry has no
+# built-in delay between attempts (poll-invitation-email.js's http.get calls
+# are near-instant), so without a forced pause all 10 attempts burn through
+# in under a second, well before the worker has dequeued and sent the
+# email. Maestro has no plain "sleep" command, so extendedWaitUntil on a
+# selector that will never match is the documented way to force one: it
+# polls for the full timeout before giving up, and `optional: true` stops
+# that expected failure from failing the flow.
 - retry:
     maxRetries: 10
     commands:
+      - extendedWaitUntil:
+          visible: "__maestro_forced_delay_never_visible__"
+          timeout: 1500
+          optional: true
       - runScript:
           file: scripts/poll-invitation-email.js
 
-# Cold: stopApp above killed the app, so this openLink is a cold start.
+# Cold: stopApp above killed the app, so this openLink is a cold start --
+# a fresh JS bundle boot (clearState wiped every cache) plus the real
+# GET /invitations/{token} round-trip both land inside this wait, so it
+# gets more headroom than the warm one below, which only waits on a
+# same-process navigation once the app is already running.
 - openLink: "forge://invitations/${output.invitationToken}"
-- assertVisible:
-    text: "Mobile E2E"
+# Plain "Mobile E2E" never matches: this Maestro version's text selectors
+# match a node's *entire* accessible text rather than doing a substring
+# search (contrary to what the docs describe), and the rendered text is the
+# full sentence "Join Mobile E2E as member." -- .* on both sides forces the
+# partial match.
+- extendedWaitUntil:
+    visible: ".*Mobile E2E.*"
     timeout: 15000
 - assertVisible: "Log in"
 - assertVisible: "Sign up"
 
 # Warm: app is already in the foreground from the assertions above.
 - openLink: "forge://invitations/${output.invitationToken}"
-- assertVisible:
-    text: "Mobile E2E"
+- extendedWaitUntil:
+    visible: ".*Mobile E2E.*"
     timeout: 15000

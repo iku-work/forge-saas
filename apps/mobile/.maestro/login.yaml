@@ -6,15 +6,32 @@ env:
 # Seeded by backend/app/core/seed.py (`make seed`) -- see MOBILE_E2E_EMAIL
 # there. Assumes the app's EXPO_PUBLIC_API_URL already points at the local
 # backend (see apps/mobile/README.md).
+# clearState alone doesn't touch the iOS Keychain -- expo-secure-store's
+# session token survives it, so a prior successful login in this same
+# simulator run would otherwise auto-sign back in here instead of showing
+# the login screen. clearKeychain makes this flow order-independent.
 - launchApp:
     clearState: true
+    clearKeychain: true
 - assertVisible: "Email"
-- tapOn: "Email"
+# FormField renders the label as its own Text plus a TextInput sharing the
+# same accessibilityLabel -- index 0 is the label, index 1 is the actual
+# input (same ambiguity as the "Log in" heading/button below).
+- tapOn:
+    text: "Email"
+    index: 1
 - inputText: "${MOBILE_E2E_EMAIL}"
-- tapOn: "Password"
+- tapOn:
+    text: "Password"
+    index: 1
 - inputText: "${MOBILE_E2E_PASSWORD}"
 - hideKeyboard
-- tapOn: "Log in"
-- assertVisible:
-    text: "Dashboard"
+# "Log in" matches both the screen's heading and the submit button --
+# index 1 is the button (see LoginScreen: AuthCard title + Button label both
+# resolve to auth.login.title / auth.login.submit, which are the same string).
+- tapOn:
+    text: "Log in"
+    index: 1
+- extendedWaitUntil:
+    visible: "Dashboard"
     timeout: 15000

@@ -36,5 +36,28 @@ overrides:
   "@tanstack/router-plugin": ">=1.168.18"
   # T-054 security job (trivy fs / pnpm audit): transitive pins dragged in by
   # Expo CLI tooling resolved to vulnerable versions — force the fixed ones.
-  "@xmldom/xmldom": ">=0.9.10"
+  #
+  # Pinned to the 0.8.x line, not >=0.9.10 (T-222): every current consumer
+  # here is Expo/RN native-build tooling (@expo/plist, and plist/simple-plist
+  # used by the Xcode project tooling), all of which call
+  # `DOMParser.parseFromString(xml)` with no mimeType arg -- optional through
+  # 0.8.x, but mandatory as of 0.9.0 (throws "the provided mimeType
+  # 'undefined' is not valid" otherwise), which broke `expo prebuild`
+  # outright. 0.8.13 carries the same CVE fixes trivy/pnpm audit wanted
+  # (advisories list "0.8.13, 0.9.10 or above" as the fixed versions), so it
+  # satisfies the security job without the 0.9.0 breaking change. Tilde-pinned
+  # so a future `pnpm install` can't silently float across that line again.
+  "@xmldom/xmldom": "~0.8.13"
   "tar": ">=7.5.11"
+  # Exempted from the blanket tar bump above (T-222): @expo/cli@0.22.28's own
+  # bundled tar.js/npm.js do `require('tar').default.extract` -- CJS interop
+  # that assumes any `__esModule`-flagged module also has a `.default`. tar's
+  # 7.x line sets `__esModule: true` but doesn't provide a `.default`, so
+  # forcing @expo/cli onto 7.x breaks `expo prebuild`/`expo run:ios` outright
+  # ("Cannot read properties of undefined (reading 'extract')"). @expo/cli
+  # already declares "tar": "^6.2.1", which is itself past the CVE-2024-28863
+  # fix the blanket override exists for, so pinning just this edge back to
+  # 6.x keeps the security fix everywhere else without breaking native builds.
+  "@expo/cli>tar": "^6.2.1"
+patchedDependencies:
+  expo-localization@16.0.1: patches/expo-localization@16.0.1.patch
