@@ -254,7 +254,7 @@ function UserMenu() {
           type="button"
           className="flex w-full items-center gap-2 rounded-md px-2 py-2 text-left text-sm hover:bg-accent"
         >
-          <Avatar className="size-7">
+          <Avatar className="size-7" data-testid="user-menu-avatar">
             <AvatarFallback>{initialsFor(user.email)}</AvatarFallback>
           </Avatar>
           <span className="flex-1 truncate">

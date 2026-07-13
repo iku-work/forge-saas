@@ -40,7 +40,7 @@ export function ProfileSettingsPage() {
           </CardHeader>
           <CardContent className="space-y-6">
             <div className="flex items-start gap-4">
-              <Avatar className="size-16">
+              <Avatar className="size-16" data-testid="profile-avatar">
                 <AvatarFallback className="text-lg">
                   {initialsFor(user.email)}
                 </AvatarFallback>

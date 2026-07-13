@@ -108,7 +108,7 @@ export function OrgSettingsPage() {
         </CardHeader>
         <CardContent className="space-y-6">
           <div className="flex items-center gap-4">
-            <Avatar className="size-16">
+            <Avatar className="size-16" data-testid="org-avatar">
               <AvatarFallback className="text-lg">
                 {org.name.slice(0, 2).toUpperCase()}
               </AvatarFallback>
