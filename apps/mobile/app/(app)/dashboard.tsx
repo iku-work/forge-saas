@@ -1,4 +1,4 @@
-import { router, type Href } from "expo-router";
+import { router } from "expo-router";
 import { useTranslation } from "react-i18next";
 import { Text, View } from "react-native";
 
@@ -21,7 +21,7 @@ export default function DashboardScreen() {
           hint={t("common.nav.files_hint")}
           variant="outline"
           onPress={() => {
-            router.push("/files" as Href);
+            router.push("/files");
           }}
         />
         <Button
@@ -29,10 +29,7 @@ export default function DashboardScreen() {
           hint={t("common.nav.notifications_hint")}
           variant="outline"
           onPress={() => {
-            // Not yet known to the typed-routes generator until the next
-            // `expo start` regenerates .expo/types/router.d.ts -- same
-            // escape hatch as lib/push.ts's action_url navigation.
-            router.push("/notifications" as Href);
+            router.push("/notifications");
           }}
         />
         <Button
