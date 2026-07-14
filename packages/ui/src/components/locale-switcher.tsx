@@ -2,6 +2,7 @@ import { Check, ChevronsUpDown, Globe } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
 import { useLocale } from "@forge/hooks";
+import { localeMeta } from "@forge/i18n";
 
 import {
   DropdownMenu,
@@ -11,17 +12,13 @@ import {
   DropdownMenuTrigger,
 } from "./dropdown-menu";
 
-// Native names are derived from Intl.DisplayNames rather than a hardcoded
-// map -- asking a locale to display *itself* (e.g. new
-// Intl.DisplayNames(["fi"], { type: "language" }).of("fi") -> "suomi")
-// always returns that language's own endonym, which is what a language
-// picker should show regardless of how many locales @forge/i18n ships.
+// Native names come from @forge/i18n's locale metadata registry (T-230,
+// src/locales.ts) rather than each UI surface re-deriving them -- that
+// registry itself computes them via Intl.DisplayNames (asking a locale to
+// display *itself*, e.g. "fi" -> "suomi", always returns that language's own
+// endonym), so this stays a lookup, not a hardcoded name map.
 function nativeNameFor(code: string): string {
-  try {
-    return new Intl.DisplayNames([code], { type: "language" }).of(code) ?? code;
-  } catch {
-    return code;
-  }
+  return localeMeta(code)?.nativeName ?? code;
 }
 
 export function LocaleSwitcher() {

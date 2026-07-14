@@ -24,7 +24,7 @@ export const config = {
     outboundWebhooks: false,
   },
   locales: {
-    supported: ["en", "fi"],
+    supported: ["en", "fi", "de", "es", "fr"],
     default: "en",
   },
 } satisfies ProductConfig;

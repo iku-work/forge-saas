@@ -1,0 +1,71 @@
+{
+  "org_create": {
+    "title": "Crea tu organización",
+    "description": "Necesitas una organización antes de poder invitar compañeros de equipo o administrar la facturación.",
+    "name_label": "Nombre de la organización",
+    "submit": "Crear organización",
+    "submit_pending": "Creando…",
+    "error_default": "No se pudo crear la organización."
+  },
+  "org_settings": {
+    "title": "Organización",
+    "description": "Administra el perfil de tu organización.",
+    "name_label": "Nombre de la organización",
+    "logo_upload": "Subir logotipo",
+    "coming_soon": "Próximamente.",
+    "save": "Guardar",
+    "saved": "Guardado.",
+    "permission_notice": "Solo los propietarios y administradores pueden cambiar esto.",
+    "error_default": "No se pudo actualizar la organización."
+  },
+  "members": {
+    "title": "Miembros",
+    "description": "Personas con acceso a esta organización.",
+    "invite_button": "Invitar",
+    "no_members": "Aún no hay miembros.",
+    "member_col": "Miembro",
+    "role_col": "Rol",
+    "action_col": "Acción",
+    "you": "Tú",
+    "remove": "Eliminar",
+    "load_more": "Cargar más",
+    "change_role_label": "Cambiar rol de {user_id}",
+    "role": {
+      "owner": "Propietario",
+      "admin": "Administrador",
+      "member": "Miembro"
+    },
+    "error_load": "No se pudieron cargar los miembros.",
+    "error_role_change": "No se pudo actualizar el rol de este miembro.",
+    "error_remove": "No se pudo eliminar a este miembro."
+  },
+  "invite": {
+    "title": "Invitar a un compañero de equipo",
+    "email_label": "Correo electrónico",
+    "role_label": "Rol",
+    "submit": "Enviar invitación",
+    "submit_pending": "Enviando…",
+    "error_default": "No se pudo enviar esta invitación."
+  },
+  "invitation_accept": {
+    "title": "Tienes una invitación",
+    "join_description": "Únete a {org_name} como {role}.",
+    "loading_title": "Cargando invitación…",
+    "unavailable_title": "Invitación no disponible",
+    "unavailable_message": "Esta invitación no es válida o ha expirado.",
+    "back_to_login": "Volver a iniciar sesión",
+    "accept_button": "Aceptar invitación",
+    "accept_button_pending": "Uniéndote…",
+    "accept_hint": "Te une a esta organización con tu cuenta",
+    "not_logged_in": "Inicia sesión o crea una cuenta con {email} para aceptar esta invitación.",
+    "login": "Iniciar sesión",
+    "signup": "Registrarse",
+    "error_default": "No se pudo aceptar esta invitación."
+  },
+  "error": {
+    "membership_not_found": "Membresía no encontrada.",
+    "invite_invalid_or_expired": "Esta invitación no es válida o ha expirado.",
+    "cannot_demote_last_owner": "No puedes degradar al último propietario de una organización.",
+    "cannot_remove_last_owner": "No puedes eliminar al último propietario de una organización."
+  }
+}

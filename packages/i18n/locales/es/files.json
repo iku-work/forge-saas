@@ -1,0 +1,57 @@
+{
+  "page": {
+    "title": "Archivos",
+    "empty": "Aún no hay archivos. Sube uno para comenzar.",
+    "error_load": "No se pudieron cargar los archivos."
+  },
+  "uploader": {
+    "drop_here": "Suelta los archivos aquí",
+    "drag_active": "Suelta para subir",
+    "browse": "Explorar",
+    "hint": "o arrastra y suelta",
+    "cancel": "Cancelar",
+    "retry": "Reintentar",
+    "error_type": "Tipo de archivo no permitido.",
+    "error_size": "El archivo supera el límite de {max}.",
+    "error_upload": "Error al subir el archivo.",
+    "queued": "En cola",
+    "uploading": "Subiendo…",
+    "done": "Listo"
+  },
+  "table": {
+    "col_name": "Nombre",
+    "col_size": "Tamaño",
+    "col_uploader": "Subido por",
+    "col_status": "Estado",
+    "col_actions": "Acciones"
+  },
+  "status": {
+    "pending": "Pendiente",
+    "ready": "Listo",
+    "infected": "Infectado",
+    "failed": "Fallido"
+  },
+  "action": {
+    "download": "Descargar",
+    "delete": "Eliminar",
+    "delete_confirm": "¿Eliminar este archivo?"
+  },
+  "picker": {
+    "upload_button": "Subir",
+    "upload_hint": "Elige una fuente para añadir un archivo",
+    "sheet_title": "Añadir un archivo",
+    "source_camera": "Tomar foto",
+    "source_camera_hint": "Toma una nueva foto con la cámara",
+    "source_library": "Biblioteca de fotos",
+    "source_library_hint": "Elige una foto de tu biblioteca",
+    "source_document": "Explorar archivos",
+    "source_document_hint": "Elige un documento de este dispositivo",
+    "cancel": "Cancelar",
+    "cancel_hint": "Cierra este menú sin elegir un archivo",
+    "permission_denied": "Se requiere permiso para continuar.",
+    "error_upload": "Error al subir el archivo.",
+    "avatar_button": "Cambiar foto",
+    "avatar_hint": "Sube una nueva foto de perfil desde tu biblioteca",
+    "avatar_uploaded": "Foto de perfil actualizada."
+  }
+}

@@ -1,0 +1,41 @@
+{
+  "coming_soon": "Las notificaciones estarán disponibles próximamente.",
+  "messages": {
+    "count": "{count, plural, one {1 mensaje} other {# mensajes}}"
+  },
+  "bell": {
+    "aria_label": "Notificaciones",
+    "aria_label_unread": "Notificaciones, {count, plural, one {1 sin leer} other {# sin leer}}"
+  },
+  "feed": {
+    "heading": "Notificaciones",
+    "mark_all_read": "Marcar todas como leídas",
+    "mark_all_read_hint": "Marca todas las notificaciones como leídas",
+    "mark_read": "Marcar como leída",
+    "mark_read_hint": "Marca esta notificación como leída",
+    "load_more": "Cargar más",
+    "view": "Ver",
+    "view_hint": "Abre la página vinculada a esta notificación",
+    "loading": "Cargando notificaciones…",
+    "error": "No se pudieron cargar las notificaciones.",
+    "empty": "Estás al día."
+  },
+  "banner": {
+    "dismiss_hint": "Descarta esta notificación"
+  },
+  "preferences": {
+    "title": "Preferencias de notificaciones",
+    "description": "Elige cómo quieres enterarte de la actividad en tu cuenta.",
+    "channel_email": "Correo electrónico",
+    "channel_in_app": "En la aplicación",
+    "channel_push": "Push",
+    "save": "Guardar preferencias",
+    "saved": "Preferencias guardadas.",
+    "error_save": "No se pudieron guardar tus preferencias.",
+    "type_member_invited": "Alguien se une a tu organización",
+    "type_payment_failed": "Un pago falla",
+    "type_subscription_expiring": "Tu suscripción está por vencer",
+    "type_weekly_summary": "Resumen semanal",
+    "type_file_uploaded": "Se sube un archivo"
+  }
+}

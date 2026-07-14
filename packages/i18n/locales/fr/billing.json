@@ -1,0 +1,35 @@
+{
+  "title": "Facturation",
+  "current_plan": {
+    "title": "Offre actuelle",
+    "status": "Statut : {status}",
+    "badge": "Offre actuelle",
+    "free_label": "Gratuit"
+  },
+  "available_plans": {
+    "title": "Offres disponibles",
+    "no_plans": "Aucune offre n'est encore configurée.",
+    "per_month": "/mois"
+  },
+  "upgrade_button": "Mettre à niveau",
+  "manage_button": "Gérer la facturation",
+  "invoices": {
+    "title": "Factures",
+    "not_available": "Aucune facture pour le moment.",
+    "date_col": "Date",
+    "amount_col": "Montant",
+    "status_col": "Statut",
+    "pdf_col": "Reçu",
+    "download_pdf": "Télécharger le PDF",
+    "load_more": "Charger plus",
+    "error_load": "Impossible de charger les factures."
+  },
+  "error": {
+    "permission_denied": "Vous n'avez pas la permission de consulter la facturation de cette organisation.",
+    "checkout_failed": "Impossible de démarrer le paiement.",
+    "portal_failed": "Impossible d'ouvrir le portail de facturation.",
+    "feature_unavailable": "La fonctionnalité « {feature} » n'est pas disponible sur votre offre.",
+    "plan_limit_reached": "Vous avez atteint la limite de votre offre pour « {feature} ».",
+    "plan_not_found": "L'offre « {plan_slug} » est introuvable."
+  }
+}

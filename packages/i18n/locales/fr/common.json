@@ -1,0 +1,234 @@
+{
+  "app": {
+    "name": "ForgeSaaS"
+  },
+  "button": {
+    "save": "Enregistrer",
+    "cancel": "Annuler",
+    "submit": "Envoyer",
+    "load_more": "Charger plus",
+    "remove": "Supprimer",
+    "upload": "Importer"
+  },
+  "status": {
+    "loading": "Chargement…",
+    "saving": "Enregistrement…",
+    "saved": "Enregistré.",
+    "logging_out": "Déconnexion…"
+  },
+  "nav": {
+    "dashboard": "Tableau de bord",
+    "files": "Fichiers",
+    "files_hint": "Ouvre vos fichiers importés",
+    "settings": "Paramètres",
+    "settings_hint": "Ouvre les paramètres de votre compte et de l'application",
+    "profile": "Profil",
+    "security": "Sécurité",
+    "organization": "Organisation",
+    "members": "Membres",
+    "billing": "Facturation",
+    "notifications": "Notifications",
+    "notifications_hint": "Ouvre votre liste de notifications",
+    "reports": "Rapports avancés",
+    "logout": "Se déconnecter",
+    "logout_hint": "Déconnecte ce compte sur cet appareil"
+  },
+  "reports": {
+    "description": "Les rapports avancés sont inclus dans votre offre. Rien à afficher pour le moment."
+  },
+  "form": {
+    "enter_value_hint": "Saisissez votre {field}"
+  },
+  "org_switcher": {
+    "label": "Organisations",
+    "select": "Sélectionner une organisation",
+    "create": "Créer une organisation",
+    "loading": "Chargement…"
+  },
+  "locale_switcher": {
+    "label": "Langue",
+    "select_hint": "Définit cette langue comme langue de l'application"
+  },
+  "dashboard": {
+    "empty": "Rien à afficher pour le moment."
+  },
+  "not_found": {
+    "title": "Page introuvable",
+    "back": "Retour au tableau de bord"
+  },
+  "error": {
+    "unexpected": "Une erreur s'est produite. Veuillez réessayer.",
+    "permission_denied": "Vous n'avez pas la permission de faire cela.",
+    "not_a_member": "Vous n'êtes pas membre de cette organisation.",
+    "org_id_required": "Une organisation doit être sélectionnée pour cette action."
+  },
+  "error_boundary": {
+    "title": "Une erreur s'est produite",
+    "reload": "Recharger"
+  },
+  "impersonation": {
+    "banner": "Connecté en tant que {email}",
+    "end": "Quitter l'emprunt d'identité"
+  },
+  "admin": {
+    "badge": "Admin",
+    "back_to_app": "Retour à l'application",
+    "nav": {
+      "dashboard": "Tableau de bord",
+      "orgs": "Organisations",
+      "users": "Utilisateurs",
+      "audit": "Journal d'audit"
+    },
+    "user_menu_link": "Admin",
+    "dashboard": {
+      "title": "Tableau de bord admin",
+      "org_count": "Organisations",
+      "user_count": "Utilisateurs",
+      "mrr": "Estimation du MRR",
+      "mrr_unavailable": "Facturation désactivée",
+      "recent_signups": "Inscriptions récentes",
+      "recent_payment_failures": "Échecs de paiement récents",
+      "no_signups": "Aucune inscription récente.",
+      "no_payment_failures": "Aucun échec de paiement récent.",
+      "error_load": "Impossible de charger le tableau de bord."
+    },
+    "orgs": {
+      "title": "Organisations",
+      "search_placeholder": "Rechercher par nom ou slug",
+      "filter_status_label": "Statut",
+      "filter_status_all": "Tous les statuts",
+      "col_name": "Organisation",
+      "col_plan": "Offre",
+      "col_status": "Statut",
+      "col_created": "Créée le",
+      "no_results": "Aucune organisation trouvée.",
+      "error_load": "Impossible de charger les organisations.",
+      "load_more": "Charger plus"
+    },
+    "org_detail": {
+      "back_to_orgs": "Retour aux organisations",
+      "created_line": "Créée le : {date}",
+      "members_label": "Membres",
+      "files_label": "Fichiers",
+      "last_activity_line": "Dernière activité : {date}",
+      "never": "Jamais",
+      "not_available": "Non disponible",
+      "tab_subscription": "Abonnement",
+      "tab_members": "Membres",
+      "tab_files": "Fichiers",
+      "tab_audit": "Audit",
+      "tab_feature_flags": "Indicateurs de fonctionnalités",
+      "no_subscription": "Aucun abonnement pour cette organisation.",
+      "plan_label": "Offre",
+      "status_label": "Statut",
+      "billing_interval_label": "Fréquence de facturation",
+      "trial_end_label": "Fin de l'essai",
+      "period_end_label": "Fin de la période en cours",
+      "free_override_label": "Forçage gratuit",
+      "yes": "Oui",
+      "no": "Non",
+      "flag_resolved_on": "activé",
+      "flag_resolved_off": "désactivé",
+      "flag_override_prefix": "forçage : {value}",
+      "flag_turn_on": "Activer",
+      "flag_turn_off": "Désactiver",
+      "error_load": "Impossible de charger cette organisation.",
+      "override_plan_button": "Forcer une offre",
+      "extend_trial_button": "Prolonger l'essai",
+      "comp_credit_button": "Émettre un crédit commercial",
+      "error_action_default": "Cette action n'a pas pu être effectuée."
+    },
+    "plan_override_modal": {
+      "title": "Forcer une offre",
+      "plan_slug_label": "Slug de l'offre",
+      "billing_interval_label": "Fréquence de facturation",
+      "billing_interval_none": "Inchangée",
+      "billing_interval_monthly": "Mensuelle",
+      "billing_interval_yearly": "Annuelle",
+      "free_override_label": "Forçage gratuit (sans facturation)",
+      "expires_at_label": "Expire le (facultatif)",
+      "submit": "Appliquer",
+      "submit_pending": "Application en cours…",
+      "cancel": "Annuler"
+    },
+    "extend_trial_modal": {
+      "title": "Prolonger l'essai",
+      "days_label": "Jours à ajouter",
+      "submit": "Prolonger",
+      "submit_pending": "Prolongation en cours…",
+      "cancel": "Annuler"
+    },
+    "comp_credit_modal": {
+      "title": "Émettre un crédit commercial",
+      "amount_label": "Montant (en centimes)",
+      "reason_label": "Motif",
+      "submit": "Émettre le crédit",
+      "submit_pending": "Émission en cours…",
+      "cancel": "Annuler"
+    },
+    "users": {
+      "title": "Utilisateurs",
+      "search_placeholder": "Rechercher par e-mail",
+      "filter_active_label": "Statut",
+      "filter_active_all": "Tous les utilisateurs",
+      "filter_active_true": "Actifs uniquement",
+      "filter_active_false": "Inactifs uniquement",
+      "col_email": "E-mail",
+      "col_name": "Nom",
+      "col_status": "Statut",
+      "col_created": "Créé le",
+      "status_active": "Actif",
+      "status_inactive": "Inactif",
+      "no_results": "Aucun utilisateur trouvé.",
+      "error_load": "Impossible de charger les utilisateurs.",
+      "load_more": "Charger plus"
+    },
+    "user_detail": {
+      "back_to_users": "Retour aux utilisateurs",
+      "created_line": "Créé le : {date}",
+      "superadmin_badge": "Super-administrateur",
+      "impersonate_button": "Emprunter l'identité",
+      "memberships_title": "Adhésions",
+      "no_memberships": "Aucune adhésion.",
+      "sessions_title": "Sessions actives",
+      "no_sessions": "Aucune session active.",
+      "audit_title": "Activité récente",
+      "audit_heading": "Activité récente — {count} événements au total",
+      "no_audit": "Aucune activité enregistrée.",
+      "error_load": "Impossible de charger cet utilisateur.",
+      "col_org": "Organisation",
+      "col_role": "Rôle",
+      "col_device": "Appareil",
+      "col_last_seen": "Dernière activité"
+    },
+    "impersonate_modal": {
+      "title": "Emprunter l'identité de {email}",
+      "reason_label": "Motif (10 caractères min.)",
+      "duration_label": "Durée (minutes, 60 max.)",
+      "submit": "Démarrer l'emprunt d'identité",
+      "submit_pending": "Démarrage en cours…",
+      "cancel": "Annuler",
+      "error_default": "Impossible de démarrer l'emprunt d'identité."
+    },
+    "audit": {
+      "title": "Journal d'audit",
+      "filter_actor_placeholder": "ID de l'auteur",
+      "filter_action_placeholder": "Action",
+      "filter_since_label": "Depuis",
+      "filter_until_label": "Jusqu'à",
+      "col_time": "Heure",
+      "col_actor": "Auteur",
+      "col_action": "Action",
+      "col_resource": "Ressource",
+      "col_org": "Organisation",
+      "col_severity": "Gravité",
+      "system_actor": "Système",
+      "no_results": "Aucun événement d'audit correspondant.",
+      "error_load": "Impossible de charger le journal d'audit.",
+      "load_more": "Charger plus"
+    },
+    "guard": {
+      "denied": "Vous n'avez pas accès à la zone d'administration."
+    }
+  }
+}

@@ -1,0 +1,141 @@
+{
+  "subject": {
+    "verify_email": "Verifica tu dirección de correo electrónico",
+    "password_reset": "Restablece tu contraseña",
+    "magic_link": "Tu enlace de inicio de sesión de ForgeSaaS",
+    "invitation": "Te han invitado a unirte a una organización",
+    "welcome": "Bienvenido a ForgeSaaS",
+    "download_link": "Tu exportación de datos está lista",
+    "member_invited": "Nuevo miembro del equipo",
+    "payment_failed": "Tu pago no se pudo procesar",
+    "subscription_expiring": "Tu suscripción vence pronto",
+    "subscription_suspended": "Tu suscripción ha sido suspendida",
+    "trial_ending": "Tu prueba está por finalizar",
+    "trial_expired": "Tu prueba ha finalizado",
+    "file_uploaded": "Se subió un nuevo archivo",
+    "security_notification": "Alerta de seguridad para tu cuenta",
+    "change_email": "Confirma tu nueva dirección de correo electrónico"
+  },
+  "footer": {
+    "ignore_notice": "Si no solicitaste este correo electrónico, puedes ignorarlo sin problema."
+  },
+  "verify_email": {
+    "title": "Verifica tu correo electrónico",
+    "greeting": "Hola",
+    "body": "Gracias por registrarte en ForgeSaaS. Confirma tu dirección de correo electrónico para activar tu cuenta.",
+    "button": "Verificar correo electrónico",
+    "paste_link": "O pega este enlace en tu navegador:",
+    "expires": "Este enlace expira en 24 horas."
+  },
+  "change_email": {
+    "title": "Confirma tu nueva dirección de correo electrónico",
+    "greeting": "Hola",
+    "body": "Tú (o alguien con acceso a tu cuenta de ForgeSaaS) solicitó cambiar el correo electrónico de tu cuenta a esta dirección. Confirma a continuación para completar el cambio.",
+    "button": "Confirmar nuevo correo electrónico",
+    "paste_link": "O pega este enlace en tu navegador:",
+    "expires": "Este enlace expira en 1 hora. Si no solicitaste esto, puedes ignorar este correo electrónico sin problema — el correo electrónico de tu cuenta no ha cambiado."
+  },
+  "password_reset": {
+    "title": "Restablece tu contraseña",
+    "greeting": "Hola",
+    "body": "Recibimos una solicitud para restablecer tu contraseña de ForgeSaaS. Haz clic a continuación para elegir una nueva.",
+    "button": "Restablecer contraseña",
+    "paste_link": "O pega este enlace en tu navegador:",
+    "expires": "Este enlace expira en 1 hora. Si no solicitaste un restablecimiento de contraseña, tu cuenta sigue segura — simplemente ignora este correo electrónico."
+  },
+  "magic_link": {
+    "title": "Tu enlace de inicio de sesión",
+    "greeting": "Hola",
+    "body": "Haz clic a continuación para iniciar sesión en ForgeSaaS. No necesitas contraseña.",
+    "button": "Iniciar sesión",
+    "paste_link": "O pega este enlace en tu navegador:",
+    "expires": "Este enlace expira en 15 minutos y solo puede usarse una vez."
+  },
+  "invitation": {
+    "title": "Tienes una invitación",
+    "greeting": "Hola,",
+    "body_with_inviter": "{inviter_name} te ha invitado a unirte a {org_name} en ForgeSaaS.",
+    "body_without_inviter": "Te han invitado a unirte a {org_name} en ForgeSaaS.",
+    "button": "Aceptar invitación",
+    "paste_link": "O pega este enlace en tu navegador:",
+    "expires": "Esta invitación expira en 72 horas."
+  },
+  "welcome": {
+    "title": "Bienvenido a ForgeSaaS",
+    "greeting": "Hola",
+    "body": "Tu correo electrónico está verificado y tu cuenta de ForgeSaaS está lista para usarse.",
+    "button": "Ir al panel",
+    "closing": "Nos alegra tenerte aquí."
+  },
+  "download_link": {
+    "title": "Tu exportación de datos está lista",
+    "greeting": "Hola",
+    "body": "La exportación de datos que solicitaste está lista para descargar.",
+    "button": "Descargar tus datos",
+    "paste_link": "O pega este enlace en tu navegador:",
+    "expires": "Este enlace expira en 24 horas."
+  },
+  "member_invited": {
+    "title": "Nuevo miembro del equipo",
+    "greeting": "Hola",
+    "body": "{member_name} se unió a {org_name} como {role}.",
+    "button": "Ver equipo"
+  },
+  "payment_failed": {
+    "title": "El pago falló",
+    "greeting": "Hola",
+    "body": "No pudimos cobrar a tu tarjeta la suscripción de {org_name} ({amount}). Actualiza tu método de pago para evitar perder el acceso.",
+    "button": "Actualizar método de pago"
+  },
+  "subscription_expiring": {
+    "title": "Tu suscripción está por vencer",
+    "greeting": "Hola",
+    "body": "El plan {plan_name} de {org_name} vence el {expires_at}. Renueva ahora para mantener el acceso sin interrupciones.",
+    "button": "Administrar suscripción"
+  },
+  "subscription_suspended": {
+    "title": "Tu suscripción ha sido suspendida",
+    "greeting": "Hola",
+    "body": "El plan {plan_name} de {org_name} ha sido suspendido debido a un pago fallido. Actualiza tu método de pago para restaurar el acceso.",
+    "button": "Actualizar método de pago"
+  },
+  "trial_ending": {
+    "title": "Tu prueba está por finalizar",
+    "greeting": "Hola",
+    "body": "La prueba de {org_name} finaliza el {trial_end_date}. Mejora tu plan ahora para mantener el acceso de tu equipo.",
+    "button": "Mejorar plan ahora"
+  },
+  "trial_expired": {
+    "title": "Tu prueba ha finalizado",
+    "greeting": "Hola",
+    "body": "La prueba de {org_name} ha finalizado y no hay ningún método de pago registrado, por lo que el acceso se ha pausado. Añade un método de pago para continuar justo donde lo dejaste.",
+    "button": "Añadir método de pago"
+  },
+  "file_uploaded": {
+    "title": "Nuevo archivo subido",
+    "greeting": "Hola",
+    "body": "{uploaded_by} subió {filename} a {org_name}.",
+    "button": "Ver archivo"
+  },
+  "security_notification": {
+    "title": "Alerta de seguridad",
+    "greeting": "Hola",
+    "events": {
+      "password_change": "Tu contraseña acaba de cambiarse.",
+      "totp_enabled": "Se activó la autenticación de dos factores en tu cuenta.",
+      "totp_disabled": "Se desactivó la autenticación de dos factores en tu cuenta.",
+      "oauth_linked": "Tu cuenta se vinculó para iniciar sesión con {provider}.",
+      "oauth_unlinked": "Tu cuenta se desvinculó de {provider}.",
+      "webauthn_registered": "Se registró una nueva llave de seguridad en tu cuenta.",
+      "webauthn_removed": "Se eliminó una llave de seguridad de tu cuenta.",
+      "totp_replay_rejected": "Se rechazó en tu cuenta un código de dos factores que ya había sido utilizado. Si no fuiste tú, es posible que alguien haya interceptado uno de tus códigos.",
+      "email_change_requested": "Se solicitó cambiar el correo electrónico de tu cuenta a {new_email}. Si fuiste tú, no es necesario hacer nada — solo haz clic en el enlace de confirmación que enviamos a la nueva dirección. Si no fuiste tú, usa el botón a continuación para cancelar la solicitud antes de que se confirme.",
+      "email_changed": "La dirección de correo electrónico de tu cuenta se cambió a {new_email}.",
+      "email_change_cancelled": "Se canceló una solicitud pendiente para cambiar el correo electrónico de tu cuenta a {new_email}. El correo electrónico de tu cuenta no ha cambiado.",
+      "totp_disabled_by_admin": "Un administrador desactivó la autenticación de dos factores en tu cuenta como parte de una solicitud de recuperación de cuenta. Si no solicitaste esto, contacta a soporte de inmediato."
+    },
+    "cancel_button": "Cancelar esta solicitud",
+    "button": "Revisar la configuración de seguridad",
+    "footer": "Si no fuiste tú, restablece tu contraseña de inmediato y revisa tus sesiones activas."
+  }
+}

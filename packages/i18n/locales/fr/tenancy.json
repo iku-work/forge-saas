@@ -1,0 +1,71 @@
+{
+  "org_create": {
+    "title": "Créez votre organisation",
+    "description": "Vous devez disposer d'une organisation avant de pouvoir inviter des collègues ou gérer la facturation.",
+    "name_label": "Nom de l'organisation",
+    "submit": "Créer l'organisation",
+    "submit_pending": "Création en cours…",
+    "error_default": "Impossible de créer l'organisation."
+  },
+  "org_settings": {
+    "title": "Organisation",
+    "description": "Gérez le profil de votre organisation.",
+    "name_label": "Nom de l'organisation",
+    "logo_upload": "Importer un logo",
+    "coming_soon": "Bientôt disponible.",
+    "save": "Enregistrer",
+    "saved": "Enregistré.",
+    "permission_notice": "Seuls les propriétaires et les administrateurs peuvent modifier ceci.",
+    "error_default": "Impossible de mettre à jour l'organisation."
+  },
+  "members": {
+    "title": "Membres",
+    "description": "Personnes ayant accès à cette organisation.",
+    "invite_button": "Inviter",
+    "no_members": "Aucun membre pour le moment.",
+    "member_col": "Membre",
+    "role_col": "Rôle",
+    "action_col": "Action",
+    "you": "Vous",
+    "remove": "Supprimer",
+    "load_more": "Charger plus",
+    "change_role_label": "Changer le rôle de {user_id}",
+    "role": {
+      "owner": "Propriétaire",
+      "admin": "Administrateur",
+      "member": "Membre"
+    },
+    "error_load": "Impossible de charger les membres.",
+    "error_role_change": "Impossible de mettre à jour le rôle de ce membre.",
+    "error_remove": "Impossible de supprimer ce membre."
+  },
+  "invite": {
+    "title": "Inviter un collègue",
+    "email_label": "E-mail",
+    "role_label": "Rôle",
+    "submit": "Envoyer l'invitation",
+    "submit_pending": "Envoi en cours…",
+    "error_default": "Impossible d'envoyer cette invitation."
+  },
+  "invitation_accept": {
+    "title": "Vous êtes invité",
+    "join_description": "Rejoignez {org_name} en tant que {role}.",
+    "loading_title": "Chargement de l'invitation…",
+    "unavailable_title": "Invitation indisponible",
+    "unavailable_message": "Cette invitation n'est pas valide ou a expiré.",
+    "back_to_login": "Retour à la connexion",
+    "accept_button": "Accepter l'invitation",
+    "accept_button_pending": "Adhésion en cours…",
+    "accept_hint": "Ajoute votre compte à cette organisation",
+    "not_logged_in": "Connectez-vous ou créez un compte avec {email} pour accepter cette invitation.",
+    "login": "Se connecter",
+    "signup": "S'inscrire",
+    "error_default": "Impossible d'accepter cette invitation."
+  },
+  "error": {
+    "membership_not_found": "Adhésion introuvable.",
+    "invite_invalid_or_expired": "Cette invitation n'est pas valide ou a expiré.",
+    "cannot_demote_last_owner": "Vous ne pouvez pas rétrograder le dernier propriétaire d'une organisation.",
+    "cannot_remove_last_owner": "Vous ne pouvez pas supprimer le dernier propriétaire d'une organisation."
+  }
+}

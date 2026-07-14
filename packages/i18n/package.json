@@ -15,8 +15,10 @@
   "files": ["dist", "locales"],
   "scripts": {
     "generate-types": "tsx scripts/generate-types.ts",
+    "check-locales": "tsx scripts/check-locales.ts",
     "build": "pnpm run generate-types && tsup",
     "dev": "tsup --watch",
+    "lint": "pnpm run check-locales",
     "type-check": "tsc --noEmit",
     "test": "vitest run"
   },

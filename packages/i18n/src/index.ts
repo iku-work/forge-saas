@@ -1,5 +1,14 @@
 import { IntlMessageFormat } from "intl-messageformat";
 
+export {
+  type LocaleMeta,
+  LOCALES as LOCALE_REGISTRY,
+  localeMeta,
+  SUPPORTED_LOCALES,
+  type SupportedLocale,
+} from "./locales";
+import { SUPPORTED_LOCALES, type SupportedLocale } from "./locales";
+
 import authEn from "../locales/en/auth.json";
 import billingEn from "../locales/en/billing.json";
 import commonEn from "../locales/en/common.json";
@@ -20,6 +29,36 @@ import notificationsFi from "../locales/fi/notifications.json";
 import tenancyFi from "../locales/fi/tenancy.json";
 import validationFi from "../locales/fi/validation.json";
 
+import authDe from "../locales/de/auth.json";
+import billingDe from "../locales/de/billing.json";
+import commonDe from "../locales/de/common.json";
+import emailsDe from "../locales/de/emails.json";
+import errorsDe from "../locales/de/errors.json";
+import filesDe from "../locales/de/files.json";
+import notificationsDe from "../locales/de/notifications.json";
+import tenancyDe from "../locales/de/tenancy.json";
+import validationDe from "../locales/de/validation.json";
+
+import authEs from "../locales/es/auth.json";
+import billingEs from "../locales/es/billing.json";
+import commonEs from "../locales/es/common.json";
+import emailsEs from "../locales/es/emails.json";
+import errorsEs from "../locales/es/errors.json";
+import filesEs from "../locales/es/files.json";
+import notificationsEs from "../locales/es/notifications.json";
+import tenancyEs from "../locales/es/tenancy.json";
+import validationEs from "../locales/es/validation.json";
+
+import authFr from "../locales/fr/auth.json";
+import billingFr from "../locales/fr/billing.json";
+import commonFr from "../locales/fr/common.json";
+import emailsFr from "../locales/fr/emails.json";
+import errorsFr from "../locales/fr/errors.json";
+import filesFr from "../locales/fr/files.json";
+import notificationsFr from "../locales/fr/notifications.json";
+import tenancyFr from "../locales/fr/tenancy.json";
+import validationFr from "../locales/fr/validation.json";
+
 // A leaf is always a string -- locale JSON files never contain numbers,
 // booleans, or arrays. See packages/i18n/README.md.
 export type TranslationNode = string | { [key: string]: TranslationNode };
@@ -27,13 +66,13 @@ export type Translations = Record<string, Record<string, TranslationNode>>;
 
 export const DEFAULT_LOCALE = "en";
 
-// What this package ships data for. A product's own subset (which of these
-// it actually exposes to users) is configured separately in
-// product.config.py / product.config.ts -- see README.md.
-export const SUPPORTED_LOCALES = ["en", "fi"] as const;
-export type SupportedLocale = (typeof SUPPORTED_LOCALES)[number];
+// SUPPORTED_LOCALES / SupportedLocale live in ./locales.ts (the T-230
+// metadata registry) and are re-exported above -- what this package ships
+// data for. A product's own subset (which of these it actually exposes to
+// users) is configured separately in product.config.py / product.config.ts
+// -- see README.md.
 
-const LOCALES: Record<SupportedLocale, Translations> = {
+const TRANSLATIONS_BY_LOCALE: Record<SupportedLocale, Translations> = {
   en: {
     common: commonEn,
     auth: authEn,
@@ -56,6 +95,39 @@ const LOCALES: Record<SupportedLocale, Translations> = {
     errors: errorsFi,
     validation: validationFi,
   },
+  de: {
+    common: commonDe,
+    auth: authDe,
+    tenancy: tenancyDe,
+    billing: billingDe,
+    files: filesDe,
+    notifications: notificationsDe,
+    emails: emailsDe,
+    errors: errorsDe,
+    validation: validationDe,
+  },
+  es: {
+    common: commonEs,
+    auth: authEs,
+    tenancy: tenancyEs,
+    billing: billingEs,
+    files: filesEs,
+    notifications: notificationsEs,
+    emails: emailsEs,
+    errors: errorsEs,
+    validation: validationEs,
+  },
+  fr: {
+    common: commonFr,
+    auth: authFr,
+    tenancy: tenancyFr,
+    billing: billingFr,
+    files: filesFr,
+    notifications: notificationsFr,
+    emails: emailsFr,
+    errors: errorsFr,
+    validation: validationFr,
+  },
 };
 
 function isSupportedLocale(locale: string): locale is SupportedLocale {
@@ -68,7 +140,7 @@ export function loadLocale(locale: string): Translations {
       `@forge/i18n: "${locale}" is not a supported locale (${SUPPORTED_LOCALES.join(", ")})`,
     );
   }
-  return LOCALES[locale];
+  return TRANSLATIONS_BY_LOCALE[locale];
 }
 
 function resolveKey(translations: Translations, key: string): string | undefined {

@@ -1,0 +1,234 @@
+{
+  "app": {
+    "name": "ForgeSaaS"
+  },
+  "button": {
+    "save": "Speichern",
+    "cancel": "Abbrechen",
+    "submit": "Absenden",
+    "load_more": "Mehr laden",
+    "remove": "Entfernen",
+    "upload": "Hochladen"
+  },
+  "status": {
+    "loading": "Wird geladen…",
+    "saving": "Wird gespeichert…",
+    "saved": "Gespeichert.",
+    "logging_out": "Abmeldung läuft…"
+  },
+  "nav": {
+    "dashboard": "Dashboard",
+    "files": "Dateien",
+    "files_hint": "Öffnet Ihre hochgeladenen Dateien",
+    "settings": "Einstellungen",
+    "settings_hint": "Öffnet Ihre Konto- und App-Einstellungen",
+    "profile": "Profil",
+    "security": "Sicherheit",
+    "organization": "Organisation",
+    "members": "Mitglieder",
+    "billing": "Abrechnung",
+    "notifications": "Benachrichtigungen",
+    "notifications_hint": "Öffnet Ihre Benachrichtigungsliste",
+    "reports": "Erweiterte Berichte",
+    "logout": "Abmelden",
+    "logout_hint": "Meldet dieses Konto auf diesem Gerät ab"
+  },
+  "reports": {
+    "description": "Erweiterte Berichte sind in Ihrem Tarif enthalten. Hier gibt es noch nichts zu sehen."
+  },
+  "form": {
+    "enter_value_hint": "Geben Sie Ihr {field} ein"
+  },
+  "org_switcher": {
+    "label": "Organisationen",
+    "select": "Organisation auswählen",
+    "create": "Organisation erstellen",
+    "loading": "Wird geladen…"
+  },
+  "locale_switcher": {
+    "label": "Sprache",
+    "select_hint": "Legt dies als Ihre App-Sprache fest"
+  },
+  "dashboard": {
+    "empty": "Hier gibt es noch nichts."
+  },
+  "not_found": {
+    "title": "Seite nicht gefunden",
+    "back": "Zurück zum Dashboard"
+  },
+  "error": {
+    "unexpected": "Etwas ist schiefgelaufen. Bitte versuchen Sie es erneut.",
+    "permission_denied": "Sie haben keine Berechtigung für diese Aktion.",
+    "not_a_member": "Sie sind kein Mitglied dieser Organisation.",
+    "org_id_required": "Für diese Aktion muss eine Organisation ausgewählt sein."
+  },
+  "error_boundary": {
+    "title": "Etwas ist schiefgelaufen",
+    "reload": "Neu laden"
+  },
+  "impersonation": {
+    "banner": "Angemeldet als {email} (Identitätswechsel)",
+    "end": "Identitätswechsel beenden"
+  },
+  "admin": {
+    "badge": "Admin",
+    "back_to_app": "Zurück zur App",
+    "nav": {
+      "dashboard": "Dashboard",
+      "orgs": "Organisationen",
+      "users": "Benutzer",
+      "audit": "Audit-Protokoll"
+    },
+    "user_menu_link": "Admin",
+    "dashboard": {
+      "title": "Admin-Dashboard",
+      "org_count": "Organisationen",
+      "user_count": "Benutzer",
+      "mrr": "MRR-Schätzung",
+      "mrr_unavailable": "Abrechnung deaktiviert",
+      "recent_signups": "Neueste Registrierungen",
+      "recent_payment_failures": "Neueste fehlgeschlagene Zahlungen",
+      "no_signups": "Keine neuen Registrierungen.",
+      "no_payment_failures": "Keine kürzlich fehlgeschlagenen Zahlungen.",
+      "error_load": "Das Dashboard konnte nicht geladen werden."
+    },
+    "orgs": {
+      "title": "Organisationen",
+      "search_placeholder": "Nach Name oder Slug suchen",
+      "filter_status_label": "Status",
+      "filter_status_all": "Alle Status",
+      "col_name": "Organisation",
+      "col_plan": "Tarif",
+      "col_status": "Status",
+      "col_created": "Erstellt",
+      "no_results": "Keine Organisationen gefunden.",
+      "error_load": "Organisationen konnten nicht geladen werden.",
+      "load_more": "Mehr laden"
+    },
+    "org_detail": {
+      "back_to_orgs": "Zurück zu den Organisationen",
+      "created_line": "Erstellt: {date}",
+      "members_label": "Mitglieder",
+      "files_label": "Dateien",
+      "last_activity_line": "Letzte Aktivität: {date}",
+      "never": "Nie",
+      "not_available": "Nicht verfügbar",
+      "tab_subscription": "Abonnement",
+      "tab_members": "Mitglieder",
+      "tab_files": "Dateien",
+      "tab_audit": "Audit",
+      "tab_feature_flags": "Feature-Flags",
+      "no_subscription": "Diese Organisation hat kein Abonnement.",
+      "plan_label": "Tarif",
+      "status_label": "Status",
+      "billing_interval_label": "Abrechnungsintervall",
+      "trial_end_label": "Testphase endet",
+      "period_end_label": "Aktuelle Periode endet",
+      "free_override_label": "Kostenlose Freischaltung",
+      "yes": "Ja",
+      "no": "Nein",
+      "flag_resolved_on": "an",
+      "flag_resolved_off": "aus",
+      "flag_override_prefix": "Überschreibung: {value}",
+      "flag_turn_on": "Ein",
+      "flag_turn_off": "Aus",
+      "error_load": "Diese Organisation konnte nicht geladen werden.",
+      "override_plan_button": "Tarif überschreiben",
+      "extend_trial_button": "Testphase verlängern",
+      "comp_credit_button": "Gutschrift ausstellen",
+      "error_action_default": "Diese Aktion konnte nicht abgeschlossen werden."
+    },
+    "plan_override_modal": {
+      "title": "Tarif erzwungen zuweisen",
+      "plan_slug_label": "Tarif-Slug",
+      "billing_interval_label": "Abrechnungsintervall",
+      "billing_interval_none": "Unverändert",
+      "billing_interval_monthly": "Monatlich",
+      "billing_interval_yearly": "Jährlich",
+      "free_override_label": "Kostenlose Freischaltung (ohne Abrechnung)",
+      "expires_at_label": "Läuft ab am (optional)",
+      "submit": "Anwenden",
+      "submit_pending": "Wird angewendet…",
+      "cancel": "Abbrechen"
+    },
+    "extend_trial_modal": {
+      "title": "Testphase verlängern",
+      "days_label": "Hinzuzufügende Tage",
+      "submit": "Verlängern",
+      "submit_pending": "Wird verlängert…",
+      "cancel": "Abbrechen"
+    },
+    "comp_credit_modal": {
+      "title": "Gutschrift ausstellen",
+      "amount_label": "Betrag (Cent)",
+      "reason_label": "Grund",
+      "submit": "Gutschrift ausstellen",
+      "submit_pending": "Wird ausgestellt…",
+      "cancel": "Abbrechen"
+    },
+    "users": {
+      "title": "Benutzer",
+      "search_placeholder": "Nach E-Mail suchen",
+      "filter_active_label": "Status",
+      "filter_active_all": "Alle Benutzer",
+      "filter_active_true": "Nur aktive",
+      "filter_active_false": "Nur inaktive",
+      "col_email": "E-Mail",
+      "col_name": "Name",
+      "col_status": "Status",
+      "col_created": "Erstellt",
+      "status_active": "Aktiv",
+      "status_inactive": "Inaktiv",
+      "no_results": "Keine Benutzer gefunden.",
+      "error_load": "Benutzer konnten nicht geladen werden.",
+      "load_more": "Mehr laden"
+    },
+    "user_detail": {
+      "back_to_users": "Zurück zu den Benutzern",
+      "created_line": "Erstellt: {date}",
+      "superadmin_badge": "Superadmin",
+      "impersonate_button": "Identität annehmen",
+      "memberships_title": "Mitgliedschaften",
+      "no_memberships": "Keine Mitgliedschaften.",
+      "sessions_title": "Aktive Sitzungen",
+      "no_sessions": "Keine aktiven Sitzungen.",
+      "audit_title": "Neueste Aktivität",
+      "audit_heading": "Neueste Aktivität — {count} Ereignisse insgesamt",
+      "no_audit": "Keine aufgezeichnete Aktivität.",
+      "error_load": "Dieser Benutzer konnte nicht geladen werden.",
+      "col_org": "Organisation",
+      "col_role": "Rolle",
+      "col_device": "Gerät",
+      "col_last_seen": "Zuletzt aktiv"
+    },
+    "impersonate_modal": {
+      "title": "Identität von {email} annehmen",
+      "reason_label": "Grund (mind. 10 Zeichen)",
+      "duration_label": "Dauer (Minuten, max. 60)",
+      "submit": "Identitätswechsel starten",
+      "submit_pending": "Wird gestartet…",
+      "cancel": "Abbrechen",
+      "error_default": "Der Identitätswechsel konnte nicht gestartet werden."
+    },
+    "audit": {
+      "title": "Audit-Protokoll",
+      "filter_actor_placeholder": "Benutzer-ID des Akteurs",
+      "filter_action_placeholder": "Aktion",
+      "filter_since_label": "Von",
+      "filter_until_label": "Bis",
+      "col_time": "Zeit",
+      "col_actor": "Akteur",
+      "col_action": "Aktion",
+      "col_resource": "Ressource",
+      "col_org": "Organisation",
+      "col_severity": "Schweregrad",
+      "system_actor": "System",
+      "no_results": "Keine passenden Audit-Ereignisse.",
+      "error_load": "Das Audit-Protokoll konnte nicht geladen werden.",
+      "load_more": "Mehr laden"
+    },
+    "guard": {
+      "denied": "Sie haben keinen Zugriff auf den Admin-Bereich."
+    }
+  }
+}

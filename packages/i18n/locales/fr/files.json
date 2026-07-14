@@ -1,0 +1,57 @@
+{
+  "page": {
+    "title": "Fichiers",
+    "empty": "Aucun fichier pour le moment. Importez-en un pour commencer.",
+    "error_load": "Impossible de charger les fichiers."
+  },
+  "uploader": {
+    "drop_here": "Déposez vos fichiers ici",
+    "drag_active": "Déposez pour importer",
+    "browse": "Parcourir",
+    "hint": "ou glissez-déposez",
+    "cancel": "Annuler",
+    "retry": "Réessayer",
+    "error_type": "Type de fichier non autorisé.",
+    "error_size": "Le fichier dépasse la limite de {max}.",
+    "error_upload": "Échec de l'import.",
+    "queued": "En attente",
+    "uploading": "Import en cours…",
+    "done": "Terminé"
+  },
+  "table": {
+    "col_name": "Nom",
+    "col_size": "Taille",
+    "col_uploader": "Importé par",
+    "col_status": "Statut",
+    "col_actions": "Actions"
+  },
+  "status": {
+    "pending": "En attente",
+    "ready": "Prêt",
+    "infected": "Infecté",
+    "failed": "Échoué"
+  },
+  "action": {
+    "download": "Télécharger",
+    "delete": "Supprimer",
+    "delete_confirm": "Supprimer ce fichier ?"
+  },
+  "picker": {
+    "upload_button": "Importer",
+    "upload_hint": "Choisissez une source pour ajouter un fichier",
+    "sheet_title": "Ajouter un fichier",
+    "source_camera": "Prendre une photo",
+    "source_camera_hint": "Prendre une nouvelle photo avec l'appareil photo",
+    "source_library": "Photothèque",
+    "source_library_hint": "Choisir une photo dans votre photothèque",
+    "source_document": "Parcourir les fichiers",
+    "source_document_hint": "Choisir un document depuis cet appareil",
+    "cancel": "Annuler",
+    "cancel_hint": "Ferme ce menu sans sélectionner de fichier",
+    "permission_denied": "Une autorisation est requise pour continuer.",
+    "error_upload": "Échec de l'import.",
+    "avatar_button": "Changer la photo",
+    "avatar_hint": "Importer une nouvelle photo de profil depuis votre photothèque",
+    "avatar_uploaded": "Photo de profil mise à jour."
+  }
+}

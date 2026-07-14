@@ -1,0 +1,141 @@
+{
+  "subject": {
+    "verify_email": "Vérifiez votre adresse e-mail",
+    "password_reset": "Réinitialisez votre mot de passe",
+    "magic_link": "Votre lien de connexion ForgeSaaS",
+    "invitation": "Vous avez été invité à rejoindre une organisation",
+    "welcome": "Bienvenue sur ForgeSaaS",
+    "download_link": "Votre export de données est prêt",
+    "member_invited": "Nouveau membre de l'équipe",
+    "payment_failed": "Votre paiement n'a pas abouti",
+    "subscription_expiring": "Votre abonnement expire bientôt",
+    "subscription_suspended": "Votre abonnement a été suspendu",
+    "trial_ending": "Votre essai se termine bientôt",
+    "trial_expired": "Votre essai est terminé",
+    "file_uploaded": "Un nouveau fichier a été importé",
+    "security_notification": "Alerte de sécurité pour votre compte",
+    "change_email": "Confirmez votre nouvelle adresse e-mail"
+  },
+  "footer": {
+    "ignore_notice": "Si vous n'êtes pas à l'origine de cette demande, vous pouvez ignorer cet e-mail en toute sécurité."
+  },
+  "verify_email": {
+    "title": "Vérifiez votre e-mail",
+    "greeting": "Bonjour",
+    "body": "Merci de vous être inscrit sur ForgeSaaS. Confirmez votre adresse e-mail pour activer votre compte.",
+    "button": "Vérifier l'e-mail",
+    "paste_link": "Ou collez ce lien dans votre navigateur :",
+    "expires": "Ce lien expire dans 24 heures."
+  },
+  "change_email": {
+    "title": "Confirmez votre nouvelle adresse e-mail",
+    "greeting": "Bonjour",
+    "body": "Vous (ou une personne ayant accès à votre compte ForgeSaaS) avez demandé à changer l'adresse e-mail de votre compte pour celle-ci. Confirmez ci-dessous pour finaliser ce changement.",
+    "button": "Confirmer la nouvelle adresse e-mail",
+    "paste_link": "Ou collez ce lien dans votre navigateur :",
+    "expires": "Ce lien expire dans 1 heure. Si vous n'êtes pas à l'origine de cette demande, vous pouvez ignorer cet e-mail en toute sécurité — l'e-mail de votre compte n'a pas été modifié."
+  },
+  "password_reset": {
+    "title": "Réinitialisez votre mot de passe",
+    "greeting": "Bonjour",
+    "body": "Nous avons reçu une demande de réinitialisation de votre mot de passe ForgeSaaS. Cliquez ci-dessous pour en choisir un nouveau.",
+    "button": "Réinitialiser le mot de passe",
+    "paste_link": "Ou collez ce lien dans votre navigateur :",
+    "expires": "Ce lien expire dans 1 heure. Si vous n'êtes pas à l'origine de cette demande de réinitialisation, votre compte reste sécurisé — il vous suffit d'ignorer cet e-mail."
+  },
+  "magic_link": {
+    "title": "Votre lien de connexion",
+    "greeting": "Bonjour",
+    "body": "Cliquez ci-dessous pour vous connecter à ForgeSaaS. Aucun mot de passe requis.",
+    "button": "Se connecter",
+    "paste_link": "Ou collez ce lien dans votre navigateur :",
+    "expires": "Ce lien expire dans 15 minutes et ne peut être utilisé qu'une seule fois."
+  },
+  "invitation": {
+    "title": "Vous êtes invité",
+    "greeting": "Bonjour,",
+    "body_with_inviter": "{inviter_name} vous a invité à rejoindre {org_name} sur ForgeSaaS.",
+    "body_without_inviter": "Vous avez été invité à rejoindre {org_name} sur ForgeSaaS.",
+    "button": "Accepter l'invitation",
+    "paste_link": "Ou collez ce lien dans votre navigateur :",
+    "expires": "Cette invitation expire dans 72 heures."
+  },
+  "welcome": {
+    "title": "Bienvenue sur ForgeSaaS",
+    "greeting": "Bonjour",
+    "body": "Votre e-mail est vérifié et votre compte ForgeSaaS est prêt.",
+    "button": "Accéder au tableau de bord",
+    "closing": "Ravis de vous compter parmi nous."
+  },
+  "download_link": {
+    "title": "Votre export de données est prêt",
+    "greeting": "Bonjour",
+    "body": "L'export de données que vous avez demandé est prêt à être téléchargé.",
+    "button": "Télécharger vos données",
+    "paste_link": "Ou collez ce lien dans votre navigateur :",
+    "expires": "Ce lien expire dans 24 heures."
+  },
+  "member_invited": {
+    "title": "Nouveau membre de l'équipe",
+    "greeting": "Bonjour",
+    "body": "{member_name} a rejoint {org_name} en tant que {role}.",
+    "button": "Voir l'équipe"
+  },
+  "payment_failed": {
+    "title": "Échec du paiement",
+    "greeting": "Bonjour",
+    "body": "Nous n'avons pas pu débiter votre carte pour l'abonnement de {org_name} ({amount}). Mettez à jour votre moyen de paiement pour ne pas perdre l'accès.",
+    "button": "Mettre à jour le moyen de paiement"
+  },
+  "subscription_expiring": {
+    "title": "Votre abonnement expire bientôt",
+    "greeting": "Bonjour",
+    "body": "L'offre {plan_name} de {org_name} expire le {expires_at}. Renouvelez dès maintenant pour conserver un accès ininterrompu.",
+    "button": "Gérer l'abonnement"
+  },
+  "subscription_suspended": {
+    "title": "Votre abonnement a été suspendu",
+    "greeting": "Bonjour",
+    "body": "L'offre {plan_name} de {org_name} a été suspendue suite à un échec de paiement. Mettez à jour votre moyen de paiement pour rétablir l'accès.",
+    "button": "Mettre à jour le moyen de paiement"
+  },
+  "trial_ending": {
+    "title": "Votre essai se termine bientôt",
+    "greeting": "Bonjour",
+    "body": "L'essai de {org_name} se termine le {trial_end_date}. Effectuez une mise à niveau dès maintenant pour conserver l'accès de votre équipe.",
+    "button": "Mettre à niveau"
+  },
+  "trial_expired": {
+    "title": "Votre essai est terminé",
+    "greeting": "Bonjour",
+    "body": "L'essai de {org_name} est terminé et aucun moyen de paiement n'est enregistré, l'accès a donc été suspendu. Ajoutez un moyen de paiement pour reprendre là où vous vous étiez arrêté.",
+    "button": "Ajouter un moyen de paiement"
+  },
+  "file_uploaded": {
+    "title": "Nouveau fichier importé",
+    "greeting": "Bonjour",
+    "body": "{uploaded_by} a importé {filename} dans {org_name}.",
+    "button": "Voir le fichier"
+  },
+  "security_notification": {
+    "title": "Alerte de sécurité",
+    "greeting": "Bonjour",
+    "events": {
+      "password_change": "Votre mot de passe vient d'être modifié.",
+      "totp_enabled": "L'authentification à deux facteurs a été activée pour votre compte.",
+      "totp_disabled": "L'authentification à deux facteurs a été désactivée pour votre compte.",
+      "oauth_linked": "Votre compte a été lié pour vous connecter avec {provider}.",
+      "oauth_unlinked": "Votre compte a été dissocié de {provider}.",
+      "webauthn_registered": "Une nouvelle clé de sécurité a été enregistrée sur votre compte.",
+      "webauthn_removed": "Une clé de sécurité a été supprimée de votre compte.",
+      "totp_replay_rejected": "Un code de double authentification déjà utilisé a été rejeté sur votre compte. Si ce n'était pas vous, il est possible que l'un de vos codes ait été intercepté.",
+      "email_change_requested": "Une demande a été faite pour changer l'adresse e-mail de votre compte vers {new_email}. Si vous êtes à l'origine de cette demande, aucune action n'est requise — il vous suffit de cliquer sur le lien de confirmation envoyé à la nouvelle adresse. Si ce n'est pas le cas, utilisez le bouton ci-dessous pour annuler la demande avant qu'elle ne soit confirmée.",
+      "email_changed": "L'adresse e-mail de votre compte a été changée vers {new_email}.",
+      "email_change_cancelled": "Une demande en attente de changement de l'adresse e-mail de votre compte vers {new_email} a été annulée. L'adresse e-mail de votre compte reste inchangée.",
+      "totp_disabled_by_admin": "Un administrateur a désactivé l'authentification à deux facteurs sur votre compte dans le cadre d'une demande de récupération de compte. Si vous n'êtes pas à l'origine de cette demande, contactez immédiatement le support."
+    },
+    "cancel_button": "Annuler cette demande",
+    "button": "Vérifier les paramètres de sécurité",
+    "footer": "Si ce n'était pas vous, réinitialisez immédiatement votre mot de passe et vérifiez vos sessions actives."
+  }
+}

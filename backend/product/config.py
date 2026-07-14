@@ -34,5 +34,5 @@ SUPPORT_EMAIL = "support@example.com"
 # see packages/i18n/README.md for the key-naming conventions every
 # translatable string follows. Keep this in sync with product.config.ts's
 # `locales` field.
-SUPPORTED_LOCALES = ["en", "fi"]
+SUPPORTED_LOCALES = ["en", "fi", "de", "es", "fr"]
 DEFAULT_LOCALE = "en"

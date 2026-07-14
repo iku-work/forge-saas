@@ -1,0 +1,41 @@
+{
+  "coming_soon": "Benachrichtigungen kommen bald.",
+  "messages": {
+    "count": "{count, plural, one {1 Nachricht} other {# Nachrichten}}"
+  },
+  "bell": {
+    "aria_label": "Benachrichtigungen",
+    "aria_label_unread": "Benachrichtigungen, {count, plural, one {1 ungelesen} other {# ungelesen}}"
+  },
+  "feed": {
+    "heading": "Benachrichtigungen",
+    "mark_all_read": "Alle als gelesen markieren",
+    "mark_all_read_hint": "Markiert alle Benachrichtigungen als gelesen",
+    "mark_read": "Als gelesen markieren",
+    "mark_read_hint": "Markiert diese Benachrichtigung als gelesen",
+    "load_more": "Mehr laden",
+    "view": "Anzeigen",
+    "view_hint": "Öffnet die verknüpfte Seite dieser Benachrichtigung",
+    "loading": "Benachrichtigungen werden geladen…",
+    "error": "Benachrichtigungen konnten nicht geladen werden.",
+    "empty": "Sie haben alles gesehen."
+  },
+  "banner": {
+    "dismiss_hint": "Blendet diese Benachrichtigung aus"
+  },
+  "preferences": {
+    "title": "Benachrichtigungseinstellungen",
+    "description": "Wählen Sie, wie Sie über Aktivitäten in Ihrem Konto informiert werden möchten.",
+    "channel_email": "E-Mail",
+    "channel_in_app": "In der App",
+    "channel_push": "Push",
+    "save": "Einstellungen speichern",
+    "saved": "Einstellungen gespeichert.",
+    "error_save": "Ihre Einstellungen konnten nicht gespeichert werden.",
+    "type_member_invited": "Jemand tritt Ihrer Organisation bei",
+    "type_payment_failed": "Eine Zahlung schlägt fehl",
+    "type_subscription_expiring": "Ihr Abonnement läuft ab",
+    "type_weekly_summary": "Wöchentliche Zusammenfassung",
+    "type_file_uploaded": "Eine Datei wird hochgeladen"
+  }
+}

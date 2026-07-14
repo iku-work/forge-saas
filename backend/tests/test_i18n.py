@@ -72,7 +72,7 @@ def test_t_falls_back_to_english_when_key_missing_in_target_locale() -> None:
 
 
 def test_t_falls_back_to_default_locale_for_unrecognized_locale_code() -> None:
-    assert i18n.t("errors.fallback", "de") == i18n.t("errors.fallback", "en")
+    assert i18n.t("errors.fallback", "ja") == i18n.t("errors.fallback", "en")
 
 
 def test_t_raises_key_error_when_missing_from_both_locales() -> None:

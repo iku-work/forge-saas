@@ -1,0 +1,57 @@
+{
+  "page": {
+    "title": "Dateien",
+    "empty": "Noch keine Dateien. Laden Sie eine hoch, um loszulegen.",
+    "error_load": "Dateien konnten nicht geladen werden."
+  },
+  "uploader": {
+    "drop_here": "Dateien hier ablegen",
+    "drag_active": "Zum Hochladen ablegen",
+    "browse": "Durchsuchen",
+    "hint": "oder per Drag & Drop",
+    "cancel": "Abbrechen",
+    "retry": "Erneut versuchen",
+    "error_type": "Dieser Dateityp ist nicht zulässig.",
+    "error_size": "Die Datei überschreitet das Limit von {max}.",
+    "error_upload": "Upload fehlgeschlagen.",
+    "queued": "In Warteschlange",
+    "uploading": "Wird hochgeladen…",
+    "done": "Fertig"
+  },
+  "table": {
+    "col_name": "Name",
+    "col_size": "Größe",
+    "col_uploader": "Hochgeladen von",
+    "col_status": "Status",
+    "col_actions": "Aktionen"
+  },
+  "status": {
+    "pending": "Ausstehend",
+    "ready": "Bereit",
+    "infected": "Infiziert",
+    "failed": "Fehlgeschlagen"
+  },
+  "action": {
+    "download": "Herunterladen",
+    "delete": "Löschen",
+    "delete_confirm": "Diese Datei löschen?"
+  },
+  "picker": {
+    "upload_button": "Hochladen",
+    "upload_hint": "Wählen Sie eine Quelle, um eine Datei hinzuzufügen",
+    "sheet_title": "Datei hinzufügen",
+    "source_camera": "Foto aufnehmen",
+    "source_camera_hint": "Nehmen Sie ein neues Foto mit der Kamera auf",
+    "source_library": "Fotomediathek",
+    "source_library_hint": "Wählen Sie ein Foto aus Ihrer Mediathek",
+    "source_document": "Dateien durchsuchen",
+    "source_document_hint": "Wählen Sie ein Dokument von diesem Gerät",
+    "cancel": "Abbrechen",
+    "cancel_hint": "Schließt dieses Menü, ohne eine Datei auszuwählen",
+    "permission_denied": "Für die Fortsetzung ist eine Berechtigung erforderlich.",
+    "error_upload": "Upload fehlgeschlagen.",
+    "avatar_button": "Foto ändern",
+    "avatar_hint": "Laden Sie ein neues Profilfoto aus Ihrer Mediathek hoch",
+    "avatar_uploaded": "Profilfoto aktualisiert."
+  }
+}

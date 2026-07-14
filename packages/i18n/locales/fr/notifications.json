@@ -1,0 +1,41 @@
+{
+  "coming_soon": "Les notifications arrivent bientôt.",
+  "messages": {
+    "count": "{count, plural, one {# message} other {# messages}}"
+  },
+  "bell": {
+    "aria_label": "Notifications",
+    "aria_label_unread": "Notifications, {count, plural, one {# non lue} other {# non lues}}"
+  },
+  "feed": {
+    "heading": "Notifications",
+    "mark_all_read": "Tout marquer comme lu",
+    "mark_all_read_hint": "Marque toutes les notifications comme lues",
+    "mark_read": "Marquer comme lu",
+    "mark_read_hint": "Marque cette notification comme lue",
+    "load_more": "Charger plus",
+    "view": "Voir",
+    "view_hint": "Ouvre la page associée à cette notification",
+    "loading": "Chargement des notifications…",
+    "error": "Impossible de charger les notifications.",
+    "empty": "Vous êtes à jour."
+  },
+  "banner": {
+    "dismiss_hint": "Ferme cette notification"
+  },
+  "preferences": {
+    "title": "Préférences de notification",
+    "description": "Choisissez comment vous souhaitez être informé de l'activité sur votre compte.",
+    "channel_email": "E-mail",
+    "channel_in_app": "Dans l'application",
+    "channel_push": "Push",
+    "save": "Enregistrer les préférences",
+    "saved": "Préférences enregistrées.",
+    "error_save": "Impossible d'enregistrer vos préférences.",
+    "type_member_invited": "Quelqu'un rejoint votre organisation",
+    "type_payment_failed": "Un paiement échoue",
+    "type_subscription_expiring": "Votre abonnement expire",
+    "type_weekly_summary": "Résumé hebdomadaire",
+    "type_file_uploaded": "Un fichier est importé"
+  }
+}

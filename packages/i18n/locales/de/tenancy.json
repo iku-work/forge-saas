@@ -1,0 +1,71 @@
+{
+  "org_create": {
+    "title": "Organisation erstellen",
+    "description": "Sie benötigen eine Organisation, bevor Sie Teammitglieder einladen oder die Abrechnung verwalten können.",
+    "name_label": "Name der Organisation",
+    "submit": "Organisation erstellen",
+    "submit_pending": "Wird erstellt…",
+    "error_default": "Die Organisation konnte nicht erstellt werden."
+  },
+  "org_settings": {
+    "title": "Organisation",
+    "description": "Verwalten Sie das Profil Ihrer Organisation.",
+    "name_label": "Name der Organisation",
+    "logo_upload": "Logo hochladen",
+    "coming_soon": "Demnächst verfügbar.",
+    "save": "Speichern",
+    "saved": "Gespeichert.",
+    "permission_notice": "Nur Owner und Admins können dies ändern.",
+    "error_default": "Die Organisation konnte nicht aktualisiert werden."
+  },
+  "members": {
+    "title": "Mitglieder",
+    "description": "Personen mit Zugriff auf diese Organisation.",
+    "invite_button": "Einladen",
+    "no_members": "Noch keine Mitglieder.",
+    "member_col": "Mitglied",
+    "role_col": "Rolle",
+    "action_col": "Aktion",
+    "you": "Sie",
+    "remove": "Entfernen",
+    "load_more": "Mehr laden",
+    "change_role_label": "Rolle ändern für {user_id}",
+    "role": {
+      "owner": "Owner",
+      "admin": "Admin",
+      "member": "Mitglied"
+    },
+    "error_load": "Mitglieder konnten nicht geladen werden.",
+    "error_role_change": "Die Rolle dieses Mitglieds konnte nicht aktualisiert werden.",
+    "error_remove": "Dieses Mitglied konnte nicht entfernt werden."
+  },
+  "invite": {
+    "title": "Teammitglied einladen",
+    "email_label": "E-Mail",
+    "role_label": "Rolle",
+    "submit": "Einladung senden",
+    "submit_pending": "Wird gesendet…",
+    "error_default": "Diese Einladung konnte nicht gesendet werden."
+  },
+  "invitation_accept": {
+    "title": "Sie sind eingeladen",
+    "join_description": "Treten Sie {org_name} als {role} bei.",
+    "loading_title": "Einladung wird geladen…",
+    "unavailable_title": "Einladung nicht verfügbar",
+    "unavailable_message": "Diese Einladung ist ungültig oder abgelaufen.",
+    "back_to_login": "Zurück zur Anmeldung",
+    "accept_button": "Einladung annehmen",
+    "accept_button_pending": "Wird beigetreten…",
+    "accept_hint": "Tritt dieser Organisation mit Ihrem Konto bei",
+    "not_logged_in": "Melden Sie sich an oder erstellen Sie ein Konto mit {email}, um diese Einladung anzunehmen.",
+    "login": "Anmelden",
+    "signup": "Registrieren",
+    "error_default": "Diese Einladung konnte nicht angenommen werden."
+  },
+  "error": {
+    "membership_not_found": "Mitgliedschaft nicht gefunden.",
+    "invite_invalid_or_expired": "Diese Einladung ist ungültig oder abgelaufen.",
+    "cannot_demote_last_owner": "Sie können den letzten Owner einer Organisation nicht herabstufen.",
+    "cannot_remove_last_owner": "Sie können den letzten Owner einer Organisation nicht entfernen."
+  }
+}

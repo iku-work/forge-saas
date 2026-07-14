@@ -1,0 +1,35 @@
+{
+  "title": "Facturación",
+  "current_plan": {
+    "title": "Plan actual",
+    "status": "Estado: {status}",
+    "badge": "Plan actual",
+    "free_label": "Gratis"
+  },
+  "available_plans": {
+    "title": "Planes disponibles",
+    "no_plans": "Aún no hay planes configurados.",
+    "per_month": "/mes"
+  },
+  "upgrade_button": "Mejorar plan",
+  "manage_button": "Administrar facturación",
+  "invoices": {
+    "title": "Facturas",
+    "not_available": "Aún no hay facturas.",
+    "date_col": "Fecha",
+    "amount_col": "Importe",
+    "status_col": "Estado",
+    "pdf_col": "Recibo",
+    "download_pdf": "Descargar PDF",
+    "load_more": "Cargar más",
+    "error_load": "No se pudieron cargar las facturas."
+  },
+  "error": {
+    "permission_denied": "No tienes permiso para ver la facturación de esta organización.",
+    "checkout_failed": "No se pudo iniciar el proceso de pago.",
+    "portal_failed": "No se pudo abrir el portal de facturación.",
+    "feature_unavailable": "La función '{feature}' no está disponible en tu plan.",
+    "plan_limit_reached": "Has alcanzado el límite de tu plan para '{feature}'.",
+    "plan_not_found": "No se pudo encontrar el plan '{plan_slug}'."
+  }
+}

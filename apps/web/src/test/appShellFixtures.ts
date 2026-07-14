@@ -153,7 +153,7 @@ export const fixtureConfig: ConfigResponse = {
     usage_metering: false,
     outbound_webhooks: false,
   },
-  supported_locales: ["en", "fi"],
+  supported_locales: ["en", "fi", "de", "es", "fr"],
   default_locale: "en",
 };
 

@@ -1,0 +1,14 @@
+{
+  "required": "Dieses Feld ist erforderlich.",
+  "email_invalid": "Geben Sie eine gültige E-Mail-Adresse ein.",
+  "password": {
+    "min_length": "Das Passwort muss mindestens 12 Zeichen lang sein",
+    "max_length": "Das Passwort darf höchstens 128 Zeichen lang sein",
+    "common_password": "Dieses Passwort ist zu gebräuchlich — wählen Sie ein schwerer zu erratendes"
+  },
+  "current_password_required": "Geben Sie Ihr aktuelles Passwort ein.",
+  "code_digits_only": "Nur Ziffern.",
+  "code_length": "Geben Sie den 6-stelligen Code ein.",
+  "org_name_required": "Der Name der Organisation ist erforderlich.",
+  "role_required": "Wählen Sie eine Rolle."
+}

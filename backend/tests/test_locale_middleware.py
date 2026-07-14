@@ -34,7 +34,7 @@ def test_negotiate_picks_highest_priority_supported_locale() -> None:
 
 
 def test_negotiate_falls_back_to_default_for_unsupported_locale() -> None:
-    assert _negotiate("de") == "en"
+    assert _negotiate("ja") == "en"
 
 
 def test_negotiate_truncates_region_subtag_to_match_bare_code() -> None:
@@ -98,6 +98,6 @@ def test_middleware_defaults_when_accept_language_absent() -> None:
 def test_middleware_falls_back_for_unsupported_accept_language() -> None:
     client = TestClient(_build_probe_app())
 
-    response = client.get("/probe", headers={"Accept-Language": "de"})
+    response = client.get("/probe", headers={"Accept-Language": "ja"})
 
     assert response.json() == {"locale": "en"}

@@ -3,6 +3,7 @@ import { fileURLToPath } from "node:url";
 
 import { describe, expect, it } from "vitest";
 
+import { SUPPORTED_LOCALES } from "../src/index";
 import { TRANSLATION_KEYS } from "../src/keys";
 import { collectTranslationKeys } from "./generate-types";
 
@@ -20,9 +21,14 @@ describe("generated keys.ts", () => {
 
 describe("locale JSON files", () => {
   it("parse as valid JSON for every namespace in every shipped locale", () => {
-    for (const locale of ["en", "fi"]) {
+    for (const locale of SUPPORTED_LOCALES) {
       const dir = localesDir(locale);
-      const files = readdirSync(dir).filter((file) => file.endsWith(".json"));
+      // "__review.json" (a T-230 machine-translation review marker, see
+      // check-locales.ts) is not a namespace file -- excluded here the same
+      // way check-locales.ts's collectKeyValues() skips it.
+      const files = readdirSync(dir).filter(
+        (file) => file.endsWith(".json") && !file.startsWith("__"),
+      );
       expect(files.sort()).toEqual([
         "auth.json",
         "billing.json",

@@ -1,0 +1,14 @@
+{
+  "required": "Ce champ est obligatoire.",
+  "email_invalid": "Saisissez une adresse e-mail valide.",
+  "password": {
+    "min_length": "Le mot de passe doit comporter au moins 12 caractères",
+    "max_length": "Le mot de passe doit comporter au plus 128 caractères",
+    "common_password": "Ce mot de passe est trop courant — choisissez quelque chose de moins facile à deviner"
+  },
+  "current_password_required": "Saisissez votre mot de passe actuel.",
+  "code_digits_only": "Chiffres uniquement.",
+  "code_length": "Saisissez le code à 6 chiffres.",
+  "org_name_required": "Le nom de l'organisation est obligatoire.",
+  "role_required": "Choisissez un rôle."
+}

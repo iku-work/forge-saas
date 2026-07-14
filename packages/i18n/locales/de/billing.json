@@ -1,0 +1,35 @@
+{
+  "title": "Abrechnung",
+  "current_plan": {
+    "title": "Aktueller Tarif",
+    "status": "Status: {status}",
+    "badge": "Aktueller Tarif",
+    "free_label": "Kostenlos"
+  },
+  "available_plans": {
+    "title": "Verfügbare Tarife",
+    "no_plans": "Es sind noch keine Tarife konfiguriert.",
+    "per_month": "/Monat"
+  },
+  "upgrade_button": "Upgrade",
+  "manage_button": "Abrechnung verwalten",
+  "invoices": {
+    "title": "Rechnungen",
+    "not_available": "Noch keine Rechnungen.",
+    "date_col": "Datum",
+    "amount_col": "Betrag",
+    "status_col": "Status",
+    "pdf_col": "Beleg",
+    "download_pdf": "PDF herunterladen",
+    "load_more": "Mehr laden",
+    "error_load": "Rechnungen konnten nicht geladen werden."
+  },
+  "error": {
+    "permission_denied": "Sie haben keine Berechtigung, die Abrechnung dieser Organisation einzusehen.",
+    "checkout_failed": "Der Bezahlvorgang konnte nicht gestartet werden.",
+    "portal_failed": "Das Abrechnungsportal konnte nicht geöffnet werden.",
+    "feature_unavailable": "Die Funktion „{feature}“ ist in Ihrem Tarif nicht verfügbar.",
+    "plan_limit_reached": "Sie haben das Limit Ihres Tarifs für „{feature}“ erreicht.",
+    "plan_not_found": "Der Tarif „{plan_slug}“ wurde nicht gefunden."
+  }
+}

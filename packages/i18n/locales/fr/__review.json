@@ -1,0 +1,5 @@
+{
+  "billing.upgrade_button": true,
+  "errors.missing_bearer_token": true,
+  "notifications.bell.aria_label_unread": true
+}

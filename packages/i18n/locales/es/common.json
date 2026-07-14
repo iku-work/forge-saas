@@ -1,0 +1,234 @@
+{
+  "app": {
+    "name": "ForgeSaaS"
+  },
+  "button": {
+    "save": "Guardar",
+    "cancel": "Cancelar",
+    "submit": "Enviar",
+    "load_more": "Cargar más",
+    "remove": "Eliminar",
+    "upload": "Subir"
+  },
+  "status": {
+    "loading": "Cargando…",
+    "saving": "Guardando…",
+    "saved": "Guardado.",
+    "logging_out": "Cerrando sesión…"
+  },
+  "nav": {
+    "dashboard": "Panel",
+    "files": "Archivos",
+    "files_hint": "Abre tus archivos subidos",
+    "settings": "Configuración",
+    "settings_hint": "Abre la configuración de tu cuenta y de la aplicación",
+    "profile": "Perfil",
+    "security": "Seguridad",
+    "organization": "Organización",
+    "members": "Miembros",
+    "billing": "Facturación",
+    "notifications": "Notificaciones",
+    "notifications_hint": "Abre tu lista de notificaciones",
+    "reports": "Informes avanzados",
+    "logout": "Cerrar sesión",
+    "logout_hint": "Cierra la sesión de esta cuenta en este dispositivo"
+  },
+  "reports": {
+    "description": "Los informes avanzados están incluidos en tu plan. Aún no hay nada que mostrar aquí."
+  },
+  "form": {
+    "enter_value_hint": "Ingresa tu {field}"
+  },
+  "org_switcher": {
+    "label": "Organizaciones",
+    "select": "Seleccionar organización",
+    "create": "Crear organización",
+    "loading": "Cargando…"
+  },
+  "locale_switcher": {
+    "label": "Idioma",
+    "select_hint": "Establece este como el idioma de tu aplicación"
+  },
+  "dashboard": {
+    "empty": "Aún no hay nada aquí."
+  },
+  "not_found": {
+    "title": "Página no encontrada",
+    "back": "Volver al panel"
+  },
+  "error": {
+    "unexpected": "Algo salió mal. Inténtalo de nuevo.",
+    "permission_denied": "No tienes permiso para hacer esto.",
+    "not_a_member": "No eres miembro de esta organización.",
+    "org_id_required": "Debe seleccionarse una organización para esta acción."
+  },
+  "error_boundary": {
+    "title": "Algo salió mal",
+    "reload": "Recargar"
+  },
+  "impersonation": {
+    "banner": "Suplantando a {email}",
+    "end": "Finalizar suplantación"
+  },
+  "admin": {
+    "badge": "Admin",
+    "back_to_app": "Volver a la aplicación",
+    "nav": {
+      "dashboard": "Panel",
+      "orgs": "Organizaciones",
+      "users": "Usuarios",
+      "audit": "Registro de auditoría"
+    },
+    "user_menu_link": "Admin",
+    "dashboard": {
+      "title": "Panel de administración",
+      "org_count": "Organizaciones",
+      "user_count": "Usuarios",
+      "mrr": "Estimación de MRR",
+      "mrr_unavailable": "Facturación deshabilitada",
+      "recent_signups": "Registros recientes",
+      "recent_payment_failures": "Fallos de pago recientes",
+      "no_signups": "No hay registros recientes.",
+      "no_payment_failures": "No hay fallos de pago recientes.",
+      "error_load": "No se pudo cargar el panel."
+    },
+    "orgs": {
+      "title": "Organizaciones",
+      "search_placeholder": "Buscar por nombre o slug",
+      "filter_status_label": "Estado",
+      "filter_status_all": "Todos los estados",
+      "col_name": "Organización",
+      "col_plan": "Plan",
+      "col_status": "Estado",
+      "col_created": "Creada",
+      "no_results": "No se encontraron organizaciones.",
+      "error_load": "No se pudieron cargar las organizaciones.",
+      "load_more": "Cargar más"
+    },
+    "org_detail": {
+      "back_to_orgs": "Volver a organizaciones",
+      "created_line": "Creada: {date}",
+      "members_label": "Miembros",
+      "files_label": "Archivos",
+      "last_activity_line": "Última actividad: {date}",
+      "never": "Nunca",
+      "not_available": "No disponible",
+      "tab_subscription": "Suscripción",
+      "tab_members": "Miembros",
+      "tab_files": "Archivos",
+      "tab_audit": "Auditoría",
+      "tab_feature_flags": "Feature flags",
+      "no_subscription": "Esta organización no tiene suscripción.",
+      "plan_label": "Plan",
+      "status_label": "Estado",
+      "billing_interval_label": "Intervalo de facturación",
+      "trial_end_label": "Fin de la prueba",
+      "period_end_label": "Fin del período actual",
+      "free_override_label": "Anulación gratuita",
+      "yes": "Sí",
+      "no": "No",
+      "flag_resolved_on": "activado",
+      "flag_resolved_off": "desactivado",
+      "flag_override_prefix": "anulación: {value}",
+      "flag_turn_on": "Activar",
+      "flag_turn_off": "Desactivar",
+      "error_load": "No se pudo cargar esta organización.",
+      "override_plan_button": "Forzar plan",
+      "extend_trial_button": "Extender prueba",
+      "comp_credit_button": "Emitir crédito de cortesía",
+      "error_action_default": "No se pudo completar esa acción."
+    },
+    "plan_override_modal": {
+      "title": "Forzar la asignación de un plan",
+      "plan_slug_label": "Slug del plan",
+      "billing_interval_label": "Intervalo de facturación",
+      "billing_interval_none": "Sin cambios",
+      "billing_interval_monthly": "Mensual",
+      "billing_interval_yearly": "Anual",
+      "free_override_label": "Anulación gratuita (sin facturación)",
+      "expires_at_label": "Expira el (opcional)",
+      "submit": "Aplicar",
+      "submit_pending": "Aplicando…",
+      "cancel": "Cancelar"
+    },
+    "extend_trial_modal": {
+      "title": "Extender prueba",
+      "days_label": "Días a añadir",
+      "submit": "Extender",
+      "submit_pending": "Extendiendo…",
+      "cancel": "Cancelar"
+    },
+    "comp_credit_modal": {
+      "title": "Emitir crédito de cortesía",
+      "amount_label": "Importe (centavos)",
+      "reason_label": "Motivo",
+      "submit": "Emitir crédito",
+      "submit_pending": "Emitiendo…",
+      "cancel": "Cancelar"
+    },
+    "users": {
+      "title": "Usuarios",
+      "search_placeholder": "Buscar por correo electrónico",
+      "filter_active_label": "Estado",
+      "filter_active_all": "Todos los usuarios",
+      "filter_active_true": "Solo activos",
+      "filter_active_false": "Solo inactivos",
+      "col_email": "Correo electrónico",
+      "col_name": "Nombre",
+      "col_status": "Estado",
+      "col_created": "Creado",
+      "status_active": "Activo",
+      "status_inactive": "Inactivo",
+      "no_results": "No se encontraron usuarios.",
+      "error_load": "No se pudieron cargar los usuarios.",
+      "load_more": "Cargar más"
+    },
+    "user_detail": {
+      "back_to_users": "Volver a usuarios",
+      "created_line": "Creado: {date}",
+      "superadmin_badge": "Superadministrador",
+      "impersonate_button": "Suplantar",
+      "memberships_title": "Membresías",
+      "no_memberships": "Sin membresías.",
+      "sessions_title": "Sesiones activas",
+      "no_sessions": "No hay sesiones activas.",
+      "audit_title": "Actividad reciente",
+      "audit_heading": "Actividad reciente — {count} eventos en total",
+      "no_audit": "No hay actividad registrada.",
+      "error_load": "No se pudo cargar este usuario.",
+      "col_org": "Organización",
+      "col_role": "Rol",
+      "col_device": "Dispositivo",
+      "col_last_seen": "Última actividad"
+    },
+    "impersonate_modal": {
+      "title": "Suplantar a {email}",
+      "reason_label": "Motivo (mín. 10 caracteres)",
+      "duration_label": "Duración (minutos, máx. 60)",
+      "submit": "Iniciar suplantación",
+      "submit_pending": "Iniciando…",
+      "cancel": "Cancelar",
+      "error_default": "No se pudo iniciar la suplantación."
+    },
+    "audit": {
+      "title": "Registro de auditoría",
+      "filter_actor_placeholder": "ID de usuario del actor",
+      "filter_action_placeholder": "Acción",
+      "filter_since_label": "Desde",
+      "filter_until_label": "Hasta",
+      "col_time": "Hora",
+      "col_actor": "Actor",
+      "col_action": "Acción",
+      "col_resource": "Recurso",
+      "col_org": "Organización",
+      "col_severity": "Severidad",
+      "system_actor": "Sistema",
+      "no_results": "No hay eventos de auditoría coincidentes.",
+      "error_load": "No se pudo cargar el registro de auditoría.",
+      "load_more": "Cargar más"
+    },
+    "guard": {
+      "denied": "No tienes acceso al área de administración."
+    }
+  }
+}

@@ -1,0 +1,14 @@
+{
+  "required": "Este campo es obligatorio.",
+  "email_invalid": "Ingresa una dirección de correo electrónico válida.",
+  "password": {
+    "min_length": "La contraseña debe tener al menos 12 caracteres",
+    "max_length": "La contraseña debe tener como máximo 128 caracteres",
+    "common_password": "La contraseña es demasiado común — elige algo menos fácil de adivinar"
+  },
+  "current_password_required": "Ingresa tu contraseña actual.",
+  "code_digits_only": "Solo dígitos.",
+  "code_length": "Ingresa el código de 6 dígitos.",
+  "org_name_required": "El nombre de la organización es obligatorio.",
+  "role_required": "Elige un rol."
+}
