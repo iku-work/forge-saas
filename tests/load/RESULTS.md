@@ -15,3 +15,7 @@ instead of per-PR.
 | 2026-07-14 | d780fb0 | browse | - | - | PASS |
 | 2026-07-14 | d780fb0 | presign | - | - | PASS |
 | 2026-07-14 | d780fb0 | mixed | - | - | FAIL |
+| 2026-07-15 | 1d0d589 | login-burst | - | - | FAIL |
+| 2026-07-15 | 1d0d589 | browse | - | - | PASS |
+| 2026-07-15 | 1d0d589 | presign | - | - | PASS |
+| 2026-07-15 | 1d0d589 | mixed | - | - | FAIL |
