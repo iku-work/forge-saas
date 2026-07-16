@@ -19,3 +19,7 @@ instead of per-PR.
 | 2026-07-15 | 1d0d589 | browse | - | - | PASS |
 | 2026-07-15 | 1d0d589 | presign | - | - | PASS |
 | 2026-07-15 | 1d0d589 | mixed | - | - | FAIL |
+| 2026-07-16 | becf6e6 | login-burst | - | - | FAIL |
+| 2026-07-16 | becf6e6 | browse | - | - | PASS |
+| 2026-07-16 | becf6e6 | presign | - | - | PASS |
+| 2026-07-16 | becf6e6 | mixed | - | - | FAIL |
