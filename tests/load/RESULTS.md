@@ -23,3 +23,7 @@ instead of per-PR.
 | 2026-07-16 | becf6e6 | browse | - | - | PASS |
 | 2026-07-16 | becf6e6 | presign | - | - | PASS |
 | 2026-07-16 | becf6e6 | mixed | - | - | FAIL |
+| 2026-07-17 | 7c9fd8c | login-burst | - | - | FAIL |
+| 2026-07-17 | 7c9fd8c | browse | - | - | PASS |
+| 2026-07-17 | 7c9fd8c | presign | - | - | PASS |
+| 2026-07-17 | 7c9fd8c | mixed | - | - | FAIL |
