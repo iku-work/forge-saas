@@ -30,6 +30,13 @@ vi.mock("@react-native-async-storage/async-storage", () => ({
     removeItem: vi.fn().mockResolvedValue(undefined),
   },
 }));
+// T-231: lib/i18n.ts's syncNativeDirection() calls Updates.reloadAsync() on
+// an rtl/ltr flip -- expo-updates needs the native `globalThis.expo` runtime
+// (expo-modules-core's EventEmitter), which doesn't exist under jsdom, same
+// category of "true native module" as the two mocks above.
+vi.mock("expo-updates", () => ({
+  reloadAsync: vi.fn().mockResolvedValue(undefined),
+}));
 
 beforeAll(async () => {
   const { initI18n } = await import("../lib/i18n");

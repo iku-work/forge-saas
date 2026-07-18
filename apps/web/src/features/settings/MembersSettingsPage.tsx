@@ -333,7 +333,7 @@ export function MembersSettingsPage() {
                   <TableHead>{t("tenancy.members.member_col")}</TableHead>
                   <TableHead>{t("tenancy.members.role_col")}</TableHead>
                   {canManage ? (
-                    <TableHead className="text-right">
+                    <TableHead className="text-end">
                       {t("tenancy.members.action_col")}
                     </TableHead>
                   ) : null}
@@ -389,7 +389,7 @@ export function MembersSettingsPage() {
                       )}
                     </TableCell>
                     {canManage ? (
-                      <TableCell className="text-right">
+                      <TableCell className="text-end">
                         <Button
                           type="button"
                           variant="outline"

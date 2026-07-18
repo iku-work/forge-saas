@@ -130,7 +130,7 @@ export function FilesPage() {
                 <TableHead>{t("files.table.col_size")}</TableHead>
                 <TableHead>{t("files.table.col_uploader")}</TableHead>
                 <TableHead>{t("files.table.col_status")}</TableHead>
-                <TableHead className="text-right">
+                <TableHead className="text-end">
                   {t("files.table.col_actions")}
                 </TableHead>
               </TableRow>
@@ -154,7 +154,7 @@ export function FilesPage() {
                       {t(statusKey(file.status))}
                     </Badge>
                   </TableCell>
-                  <TableCell className="text-right">
+                  <TableCell className="text-end">
                     <div className="flex justify-end gap-2">
                       <Button
                         type="button"

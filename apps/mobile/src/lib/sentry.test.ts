@@ -9,7 +9,16 @@ vi.mock("expo-constants", () => ({
   default: { expoConfig: { version: "1.2.3" } },
 }));
 
-const updates = vi.hoisted(() => ({ updateId: null as string | null }));
+// reloadAsync is unused by sentry.ts itself -- it's here because this
+// file's mock replaces the whole "expo-updates" module for every test file
+// in the run (Vitest resolves a module id to whichever vi.mock factory was
+// registered last -- see i18nLocaleDetection.test.ts's own comment on the
+// same behavior), and src/test/setup.ts's shared beforeAll(initI18n())
+// reaches lib/i18n.ts's syncNativeDirection() (T-231), which calls it.
+const updates = vi.hoisted(() => ({
+  updateId: null as string | null,
+  reloadAsync: vi.fn().mockResolvedValue(undefined),
+}));
 vi.mock("expo-updates", () => updates);
 
 const { initSentry, setSentryUser } = await import("./sentry");

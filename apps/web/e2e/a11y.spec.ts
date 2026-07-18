@@ -7,12 +7,16 @@
 // a11y-allowlist.ts; moderate-and-below are recorded as annotations
 // instead of failing the run.
 //
-// Two things this task's own spec calls for that this file deliberately
+// One thing this task's own spec calls for that this file deliberately
 // doesn't do yet:
 //   - Both color schemes: the product has no dark mode today (Storybook's
 //     `.dark` class toggle is a Storybook-only preview affordance, not a
 //     user-facing toggle anywhere in apps/web) -- nothing to scan twice.
-//   - The `ar` (RTL) locale: follow-up once T-231 lands.
+//
+// The `ar` (RTL) locale is covered below (T-231) -- dashboard + a settings
+// page, not the full page list above, mirroring visual.spec.ts's own ar
+// scope: this is a mirrored-layout regression check, not a second full
+// sweep of every page in a second language.
 //
 // Setup here deliberately duplicates a small slice of acceptance.spec.ts's
 // (T-220) own register/verify/invite flow rather than importing from it --
@@ -150,5 +154,60 @@ test("key pages have no serious/critical WCAG A/AA violations", async ({ page, b
     await page.goto("/files");
     await expect(page.getByTestId("app-shell")).toBeVisible();
     await checkA11y(page, testInfo, "file-upload");
+  });
+});
+
+// T-231: the ar (rtl) locale, on the two pages visual.spec.ts also snapshots
+// -- a mirrored-layout regression check, not a second full sweep of the
+// page list above. localStorage is seeded via addInitScript (the same
+// "forge.locale" key apps/web/src/i18n.ts's LOCALE_STORAGE_KEY persists to)
+// before the first navigation, so the app boots directly in ar/rtl the way
+// a returning ar user's browser would, rather than exercising the language
+// switcher UI itself (already covered by
+// apps/web/src/layouts/AppLayoutRtlSwitch.test.tsx).
+test("ar (rtl) locale has no serious/critical WCAG A/AA violations", async ({
+  page,
+}, testInfo) => {
+  const rtlRunId = `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`;
+  const email = `a11y-rtl+${rtlRunId}@example.com`;
+  const rtlPassword = `A11y-Rtl-${rtlRunId}!Aa1`;
+
+  await page.addInitScript(() => {
+    window.localStorage.setItem("forge.locale", "ar");
+  });
+
+  await page.goto("/register");
+  await expect(page.getByTestId("register-email-input")).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.dir)).toBe("rtl");
+  await page.getByTestId("register-email-input").fill(email);
+  await page.getByTestId("register-password-input").fill(rtlPassword);
+  await page.getByTestId("register-submit").click();
+  await expect(page.getByTestId("register-success")).toBeVisible();
+
+  const verifyLink = await waitForLink(
+    email,
+    /https:\/\/localhost\/verify-email\?token=[\w-]+/,
+  );
+  await page.goto(verifyLink);
+  await expect(page.getByTestId("verify-email-success")).toBeVisible();
+  await page.getByTestId("verify-email-continue-to-login").click();
+
+  await page.getByTestId("login-email-input").fill(email);
+  await page.getByTestId("login-password-input").fill(rtlPassword);
+  await page.getByTestId("login-submit").click();
+  await expect(page.getByTestId("create-first-org-prompt")).toBeVisible();
+
+  await page.getByTestId("create-org-name-input").fill(`A11y RTL Co ${rtlRunId}`);
+  await page.getByTestId("create-org-submit").click();
+  await expect(page.getByTestId("app-shell")).toBeVisible();
+
+  await test.step("dashboard (ar)", async () => {
+    await checkA11y(page, testInfo, "dashboard-ar");
+  });
+
+  await test.step("settings (ar)", async () => {
+    await page.goto("/settings/profile");
+    await expect(page.getByTestId("app-shell")).toBeVisible();
+    await checkA11y(page, testInfo, "settings-profile-ar");
   });
 });

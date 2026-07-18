@@ -11,6 +11,7 @@ from fastapi import FastAPI, Request
 from fastapi.testclient import TestClient
 from starlette.requests import Request as StarletteRequest
 
+from app.core.locales import EnabledLocales, LocaleConfig
 from app.middleware.locale import LocaleMiddleware, _negotiate, get_locale
 from product import config as product_config
 
@@ -44,7 +45,18 @@ def test_negotiate_truncates_region_subtag_to_match_bare_code() -> None:
 
 
 def test_negotiate_reflects_product_config_override(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(product_config, "SUPPORTED_LOCALES", ["en"])
+    monkeypatch.setattr(
+        product_config,
+        "LOCALES",
+        EnabledLocales(
+            en=LocaleConfig(enabled=True),
+            fi=LocaleConfig(enabled=False),
+            de=LocaleConfig(enabled=False),
+            es=LocaleConfig(enabled=False),
+            fr=LocaleConfig(enabled=False),
+            ar=LocaleConfig(enabled=False),
+        ),
+    )
     monkeypatch.setattr(product_config, "DEFAULT_LOCALE", "en")
 
     assert _negotiate("fi") == "en"

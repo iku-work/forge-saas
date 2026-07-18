@@ -42,6 +42,7 @@ import { initReactI18next } from "react-i18next";
 
 import {
   DEFAULT_LOCALE,
+  localeMeta,
   SUPPORTED_LOCALES,
   type SupportedLocale,
   type Translations,
@@ -230,6 +231,41 @@ async function loadFr(): Promise<Translations> {
   };
 }
 
+async function loadAr(): Promise<Translations> {
+  const [
+    common,
+    auth,
+    tenancy,
+    billing,
+    files,
+    notifications,
+    emails,
+    errors,
+    validation,
+  ] = await Promise.all([
+    import("@forge/i18n/locales/ar/common.json"),
+    import("@forge/i18n/locales/ar/auth.json"),
+    import("@forge/i18n/locales/ar/tenancy.json"),
+    import("@forge/i18n/locales/ar/billing.json"),
+    import("@forge/i18n/locales/ar/files.json"),
+    import("@forge/i18n/locales/ar/notifications.json"),
+    import("@forge/i18n/locales/ar/emails.json"),
+    import("@forge/i18n/locales/ar/errors.json"),
+    import("@forge/i18n/locales/ar/validation.json"),
+  ]);
+  return {
+    common: common.default,
+    auth: auth.default,
+    tenancy: tenancy.default,
+    billing: billing.default,
+    files: files.default,
+    notifications: notifications.default,
+    emails: emails.default,
+    errors: errors.default,
+    validation: validation.default,
+  };
+}
+
 // Add one entry here per new locale (T-230) -- SUPPORTED_LOCALES is the
 // candidate list; this map is what actually has to exist for a locale to be
 // loadable. A mismatch is a developer error caught immediately by
@@ -240,6 +276,7 @@ const LOCALE_LOADERS: Record<SupportedLocale, () => Promise<Translations>> = {
   de: loadDe,
   es: loadEs,
   fr: loadFr,
+  ar: loadAr,
 };
 
 // A hand-rolled i18nFormat plugin rather than i18next-icu: that package's
@@ -373,8 +410,10 @@ export function initI18n(): Promise<typeof i18next> {
       });
 
     document.documentElement.lang = i18next.language;
+    document.documentElement.dir = localeMeta(i18next.language)?.dir ?? "ltr";
     i18next.on("languageChanged", (lng: string) => {
       document.documentElement.lang = lng;
+      document.documentElement.dir = localeMeta(lng)?.dir ?? "ltr";
       try {
         localStorage.setItem(LOCALE_STORAGE_KEY, lng);
       } catch {

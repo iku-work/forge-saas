@@ -13,6 +13,7 @@ from pathlib import Path
 import pytest
 
 from app.core import i18n
+from app.core.locales import EnabledLocales, LocaleConfig
 from product import config as product_config
 
 
@@ -24,13 +25,25 @@ def _clear_translations_cache() -> Generator[None]:
 
 
 def test_get_supported_locales_reflects_product_config() -> None:
-    assert i18n.get_supported_locales() == list(product_config.SUPPORTED_LOCALES)
+    expected = [code for code, cfg in vars(product_config.LOCALES).items() if cfg.enabled]
+    assert i18n.get_supported_locales() == expected
 
 
 def test_get_supported_locales_reflects_product_config_override(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(product_config, "SUPPORTED_LOCALES", ["en"])
+    monkeypatch.setattr(
+        product_config,
+        "LOCALES",
+        EnabledLocales(
+            en=LocaleConfig(enabled=True),
+            fi=LocaleConfig(enabled=False),
+            de=LocaleConfig(enabled=False),
+            es=LocaleConfig(enabled=False),
+            fr=LocaleConfig(enabled=False),
+            ar=LocaleConfig(enabled=False),
+        ),
+    )
 
     assert i18n.get_supported_locales() == ["en"]
 

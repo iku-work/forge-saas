@@ -1,0 +1,234 @@
+{
+  "app": {
+    "name": "ForgeSaaS"
+  },
+  "button": {
+    "save": "حفظ",
+    "cancel": "إلغاء",
+    "submit": "إرسال",
+    "load_more": "تحميل المزيد",
+    "remove": "إزالة",
+    "upload": "رفع"
+  },
+  "status": {
+    "loading": "جارٍ التحميل…",
+    "saving": "جارٍ الحفظ…",
+    "saved": "تم الحفظ.",
+    "logging_out": "جارٍ تسجيل الخروج…"
+  },
+  "nav": {
+    "dashboard": "لوحة التحكم",
+    "files": "الملفات",
+    "files_hint": "يفتح ملفاتك المرفوعة",
+    "settings": "الإعدادات",
+    "settings_hint": "يفتح إعدادات حسابك والتطبيق",
+    "profile": "الملف الشخصي",
+    "security": "الأمان",
+    "organization": "المؤسسة",
+    "members": "الأعضاء",
+    "billing": "الفوترة",
+    "notifications": "الإشعارات",
+    "notifications_hint": "يفتح قائمة إشعاراتك",
+    "reports": "التقارير المتقدمة",
+    "logout": "تسجيل الخروج",
+    "logout_hint": "يسجّل خروجك من هذا الحساب على هذا الجهاز"
+  },
+  "reports": {
+    "description": "التقارير المتقدمة متوفرة ضمن خطتك. لا يوجد شيء لعرضه هنا بعد."
+  },
+  "form": {
+    "enter_value_hint": "أدخل {field} الخاص بك"
+  },
+  "org_switcher": {
+    "label": "المؤسسات",
+    "select": "اختر مؤسسة",
+    "create": "إنشاء مؤسسة",
+    "loading": "جارٍ التحميل…"
+  },
+  "locale_switcher": {
+    "label": "اللغة",
+    "select_hint": "يجعل هذه لغة تطبيقك"
+  },
+  "dashboard": {
+    "empty": "لا يوجد شيء هنا بعد."
+  },
+  "not_found": {
+    "title": "الصفحة غير موجودة",
+    "back": "العودة إلى لوحة التحكم"
+  },
+  "error": {
+    "unexpected": "حدث خطأ ما. يرجى المحاولة مرة أخرى.",
+    "permission_denied": "ليس لديك إذن للقيام بذلك.",
+    "not_a_member": "أنت لست عضوًا في هذه المؤسسة.",
+    "org_id_required": "يجب اختيار مؤسسة لتنفيذ هذا الإجراء."
+  },
+  "error_boundary": {
+    "title": "حدث خطأ ما",
+    "reload": "إعادة التحميل"
+  },
+  "impersonation": {
+    "banner": "انتحال شخصية {email}",
+    "end": "إنهاء الانتحال"
+  },
+  "admin": {
+    "badge": "مسؤول",
+    "back_to_app": "العودة إلى التطبيق",
+    "nav": {
+      "dashboard": "لوحة التحكم",
+      "orgs": "المؤسسات",
+      "users": "المستخدمون",
+      "audit": "سجل التدقيق"
+    },
+    "user_menu_link": "الإدارة",
+    "dashboard": {
+      "title": "لوحة تحكم المسؤول",
+      "org_count": "المؤسسات",
+      "user_count": "المستخدمون",
+      "mrr": "تقدير الإيراد الشهري المتكرر",
+      "mrr_unavailable": "الفوترة معطّلة",
+      "recent_signups": "الاشتراكات الأخيرة",
+      "recent_payment_failures": "أحدث حالات فشل الدفع",
+      "no_signups": "لا توجد اشتراكات حديثة.",
+      "no_payment_failures": "لا توجد حالات فشل دفع حديثة.",
+      "error_load": "تعذّر تحميل لوحة التحكم."
+    },
+    "orgs": {
+      "title": "المؤسسات",
+      "search_placeholder": "ابحث بالاسم أو المعرّف",
+      "filter_status_label": "الحالة",
+      "filter_status_all": "جميع الحالات",
+      "col_name": "المؤسسة",
+      "col_plan": "الخطة",
+      "col_status": "الحالة",
+      "col_created": "تاريخ الإنشاء",
+      "no_results": "لم يتم العثور على مؤسسات.",
+      "error_load": "تعذّر تحميل المؤسسات.",
+      "load_more": "تحميل المزيد"
+    },
+    "org_detail": {
+      "back_to_orgs": "العودة إلى المؤسسات",
+      "created_line": "تاريخ الإنشاء: {date}",
+      "members_label": "الأعضاء",
+      "files_label": "الملفات",
+      "last_activity_line": "آخر نشاط: {date}",
+      "never": "أبدًا",
+      "not_available": "غير متاح",
+      "tab_subscription": "الاشتراك",
+      "tab_members": "الأعضاء",
+      "tab_files": "الملفات",
+      "tab_audit": "التدقيق",
+      "tab_feature_flags": "أعلام الميزات",
+      "no_subscription": "لا يوجد اشتراك لهذه المؤسسة.",
+      "plan_label": "الخطة",
+      "status_label": "الحالة",
+      "billing_interval_label": "دورة الفوترة",
+      "trial_end_label": "تنتهي الفترة التجريبية",
+      "period_end_label": "تنتهي الفترة الحالية",
+      "free_override_label": "تجاوز مجاني",
+      "yes": "نعم",
+      "no": "لا",
+      "flag_resolved_on": "مفعّل",
+      "flag_resolved_off": "معطّل",
+      "flag_override_prefix": "تجاوز: {value}",
+      "flag_turn_on": "تفعيل",
+      "flag_turn_off": "تعطيل",
+      "error_load": "تعذّر تحميل هذه المؤسسة.",
+      "override_plan_button": "تجاوز الخطة",
+      "extend_trial_button": "تمديد الفترة التجريبية",
+      "comp_credit_button": "إصدار رصيد مجاني",
+      "error_action_default": "تعذّر إتمام هذا الإجراء."
+    },
+    "plan_override_modal": {
+      "title": "فرض تعيين خطة",
+      "plan_slug_label": "معرّف الخطة",
+      "billing_interval_label": "دورة الفوترة",
+      "billing_interval_none": "بدون تغيير",
+      "billing_interval_monthly": "شهري",
+      "billing_interval_yearly": "سنوي",
+      "free_override_label": "تجاوز مجاني (بدون فوترة)",
+      "expires_at_label": "تاريخ الانتهاء (اختياري)",
+      "submit": "تطبيق",
+      "submit_pending": "جارٍ التطبيق…",
+      "cancel": "إلغاء"
+    },
+    "extend_trial_modal": {
+      "title": "تمديد الفترة التجريبية",
+      "days_label": "عدد الأيام المضافة",
+      "submit": "تمديد",
+      "submit_pending": "جارٍ التمديد…",
+      "cancel": "إلغاء"
+    },
+    "comp_credit_modal": {
+      "title": "إصدار رصيد مجاني",
+      "amount_label": "المبلغ (بالسنت)",
+      "reason_label": "السبب",
+      "submit": "إصدار الرصيد",
+      "submit_pending": "جارٍ الإصدار…",
+      "cancel": "إلغاء"
+    },
+    "users": {
+      "title": "المستخدمون",
+      "search_placeholder": "ابحث بالبريد الإلكتروني",
+      "filter_active_label": "الحالة",
+      "filter_active_all": "جميع المستخدمين",
+      "filter_active_true": "النشطون فقط",
+      "filter_active_false": "غير النشطين فقط",
+      "col_email": "البريد الإلكتروني",
+      "col_name": "الاسم",
+      "col_status": "الحالة",
+      "col_created": "تاريخ الإنشاء",
+      "status_active": "نشط",
+      "status_inactive": "غير نشط",
+      "no_results": "لم يتم العثور على مستخدمين.",
+      "error_load": "تعذّر تحميل المستخدمين.",
+      "load_more": "تحميل المزيد"
+    },
+    "user_detail": {
+      "back_to_users": "العودة إلى المستخدمين",
+      "created_line": "تاريخ الإنشاء: {date}",
+      "superadmin_badge": "مسؤول عام",
+      "impersonate_button": "انتحال الشخصية",
+      "memberships_title": "العضويات",
+      "no_memberships": "لا توجد عضويات.",
+      "sessions_title": "الجلسات النشطة",
+      "no_sessions": "لا توجد جلسات نشطة.",
+      "audit_title": "النشاط الأخير",
+      "audit_heading": "النشاط الأخير — {count} حدث إجمالاً",
+      "no_audit": "لا يوجد نشاط مسجّل.",
+      "error_load": "تعذّر تحميل هذا المستخدم.",
+      "col_org": "المؤسسة",
+      "col_role": "الدور",
+      "col_device": "الجهاز",
+      "col_last_seen": "آخر ظهور"
+    },
+    "impersonate_modal": {
+      "title": "انتحال شخصية {email}",
+      "reason_label": "السبب (10 أحرف على الأقل)",
+      "duration_label": "المدة (بالدقائق، حد أقصى 60)",
+      "submit": "بدء الانتحال",
+      "submit_pending": "جارٍ البدء…",
+      "cancel": "إلغاء",
+      "error_default": "تعذّر بدء الانتحال."
+    },
+    "audit": {
+      "title": "سجل التدقيق",
+      "filter_actor_placeholder": "معرّف المستخدم الفاعل",
+      "filter_action_placeholder": "الإجراء",
+      "filter_since_label": "منذ",
+      "filter_until_label": "حتى",
+      "col_time": "الوقت",
+      "col_actor": "الفاعل",
+      "col_action": "الإجراء",
+      "col_resource": "المورد",
+      "col_org": "المؤسسة",
+      "col_severity": "الخطورة",
+      "system_actor": "النظام",
+      "no_results": "لا توجد أحداث تدقيق مطابقة.",
+      "error_load": "تعذّر تحميل سجل التدقيق.",
+      "load_more": "تحميل المزيد"
+    },
+    "guard": {
+      "denied": "ليس لديك صلاحية الوصول إلى قسم الإدارة."
+    }
+  }
+}

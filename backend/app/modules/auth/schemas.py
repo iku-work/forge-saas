@@ -1087,7 +1087,7 @@ class UpdateMeRequest(AppBaseModel):
     @field_validator("locale")
     @classmethod
     def _check_supported_locale(cls, locale: str) -> str:
-        # Lazy import: get_supported_locales() reads product.config.MODULES at
+        # Lazy import: get_supported_locales() reads product.config.LOCALES at
         # call time so a test's monkeypatch.setattr(product_config, ...) is
         # picked up here, same reasoning as module_loader.py/i18n.py.
         from app.core.i18n import get_supported_locales  # noqa: PLC0415

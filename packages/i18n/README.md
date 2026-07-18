@@ -59,11 +59,18 @@ scripts/check-locales.ts  -- CI gate: >5% of en keys missing, orphan keys, empty
    a `LOCALE_LOADERS` entry in `apps/web/src/i18n.ts` (mobile needs no
    equivalent change — it loads every `SUPPORTED_LOCALES` entry eagerly via
    `loadLocale()`).
-4. A product opts into shipping it by adding `<code>` to
-   `SUPPORTED_LOCALES` in `backend/product/config.py` and to
-   `locales.supported` in `product.config.ts`. Locales not listed there
-   aren't bundled by web/mobile or loadable by the backend, even if this
-   package ships data for them.
+4. A product opts into shipping it by adding a `<code>: true` entry to
+   `LOCALES` in `backend/product/config.py` (an `EnabledLocales` toggle,
+   mirroring how `MODULES` enables/disables modules there) and to `locales`
+   in `product.config.ts`. Locales not enabled there aren't bundled by
+   web/mobile or loadable by the backend, even if this package ships data
+   for them -- flip the toggle to `false` rather than deleting the locale's
+   data if you want to keep it around without shipping it.
+5. If it's a right-to-left script, add it to the `RTL_LOCALES` set in
+   `src/locales.ts` (see `ar`, added for T-231) -- everything else (web's
+   `<html dir>`, `packages/hooks`'s `useDirection()`, the logical-properties
+   convention in `packages/ui`) reads `dir` from this registry, not a
+   separate list.
 
 ## Coverage requirements (`check-locales`)
 
@@ -95,11 +102,16 @@ empty (or absent) as translations get human-reviewed.
 ## `SUPPORTED_LOCALES` vs. product config
 
 This package's own `SUPPORTED_LOCALES` answers "what locale data exists."
-`backend/product/config.py`'s `SUPPORTED_LOCALES` / `DEFAULT_LOCALE` and
-`product.config.ts`'s `locales.supported` / `locales.default` answer "what
-does *this product* expose to users" — a product may ship fewer locales than
-this package has data for. Keep the Python and TypeScript product config
-values in sync by hand; nothing currently enforces it automatically.
+`backend/product/config.py`'s `LOCALES` (an `EnabledLocales` per-locale
+toggle, T-231 -- `en=LocaleConfig(enabled=True)` etc., same shape as
+`MODULES`/`ModuleConfig`) / `DEFAULT_LOCALE`, and `product.config.ts`'s
+`locales` (`{ en: true, ..., default: "en" }`), answer "what does *this
+product* expose to users" — a product may ship fewer locales than this
+package has data for by setting a locale's `enabled` to `false`, without
+deleting its translation files. Keep the Python and TypeScript product
+config values in sync by hand; nothing currently enforces it automatically.
+`get_supported_locales()` (`backend/app/core/i18n.py`) fails fast at startup
+if `DEFAULT_LOCALE` names a disabled or unknown locale.
 
 ## Backend consumption
 

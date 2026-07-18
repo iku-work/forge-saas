@@ -3,6 +3,7 @@ Product configuration — this file is owned by the product, not the template.
 The template never modifies it. Edit freely.
 """
 
+from app.core.locales import EnabledLocales, LocaleConfig
 from app.core.modules import EnabledModules, ModuleConfig
 
 # ── Module toggles ──────────────────────────────────────────────────────────
@@ -30,9 +31,19 @@ LOGO_URL = "/logo.svg"
 SUPPORT_EMAIL = "support@example.com"
 
 # ── Internationalisation ────────────────────────────────────────────────────
-# Locale codes must each have a directory under packages/i18n/locales/ --
-# see packages/i18n/README.md for the key-naming conventions every
-# translatable string follows. Keep this in sync with product.config.ts's
-# `locales` field.
-SUPPORTED_LOCALES = ["en", "fi", "de", "es", "fr"]
+# Each locale toggle mirrors MODULES above -- enabled=False excludes it from
+# get_supported_locales() (and therefore the /config endpoint and web/mobile
+# bundles) without deleting its translation data, same as a disabled module's
+# routes/tables staying inert rather than removed. Every code here must have
+# a directory under packages/i18n/locales/ -- see packages/i18n/README.md for
+# the key-naming conventions every translatable string follows. Keep this in
+# sync with product.config.ts's `locales` field.
+LOCALES = EnabledLocales(
+    en=LocaleConfig(enabled=True),
+    fi=LocaleConfig(enabled=True),
+    de=LocaleConfig(enabled=True),
+    es=LocaleConfig(enabled=True),
+    fr=LocaleConfig(enabled=True),
+    ar=LocaleConfig(enabled=True),
+)
 DEFAULT_LOCALE = "en"

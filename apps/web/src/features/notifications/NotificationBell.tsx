@@ -65,7 +65,7 @@ export function NotificationBell() {
             <Badge
               variant="destructive"
               data-testid="notification-badge"
-              className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full px-1 text-[10px] leading-none"
+              className="absolute -inset-e-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full px-1 text-[10px] leading-none"
             >
               {unreadCount > MAX_BADGE_COUNT ? `${String(MAX_BADGE_COUNT)}+` : unreadCount}
             </Badge>

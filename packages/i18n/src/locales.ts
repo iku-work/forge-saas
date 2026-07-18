@@ -3,7 +3,7 @@
 // index.ts re-exports SUPPORTED_LOCALES/SupportedLocale from here rather than
 // the other way around, so this file has no dependency on index.ts (avoids
 // an import cycle between "what locales exist" and "how to describe them").
-export const SUPPORTED_LOCALES = ["en", "fi", "de", "es", "fr"] as const;
+export const SUPPORTED_LOCALES = ["en", "fi", "de", "es", "fr", "ar"] as const;
 export type SupportedLocale = (typeof SUPPORTED_LOCALES)[number];
 
 export interface LocaleMeta {
@@ -12,9 +12,9 @@ export interface LocaleMeta {
   dir: "ltr" | "rtl";
 }
 
-// T-231 adds "ar" here (the template's first right-to-left locale). Every
-// locale not listed is "ltr" -- see the `dir` computation below.
-const RTL_LOCALES: ReadonlySet<string> = new Set([]);
+// The template's first right-to-left locale (T-231). Every locale not
+// listed is "ltr" -- see the `dir` computation below.
+const RTL_LOCALES: ReadonlySet<string> = new Set(["ar"]);
 
 // nativeName is derived from Intl.DisplayNames rather than a hardcoded map --
 // asking a locale to display *itself* (e.g.

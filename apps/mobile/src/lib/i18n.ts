@@ -15,17 +15,29 @@
  *     web avoids that same dist specifically to keep per-locale chunks).
  *  2. First-launch detection and persistence use expo-localization and
  *     AsyncStorage instead of navigator.languages/localStorage.
+ *
+ * T-231 (RTL): syncNativeDirection() below wires I18nManager to the active
+ * locale's `dir` and reloads the app when it flips, so the auth screens and
+ * `app/(app)/settings.tsx` (which this task verified) render mirrored under
+ * `ar`. It's a native, process-wide flag, not a live style -- see that
+ * function's own comment for why a flip needs a reload. Deliberately not
+ * done here: a full NativeWind class sweep of every other screen the way
+ * packages/ui's web components got (T-231's spec allows deferring the rest
+ * of mobile RTL polish with this note; web/packages/ui may not defer).
  */
 import { useEffect } from "react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as Localization from "expo-localization";
+import * as Updates from "expo-updates";
 import i18next, { type I18nFormatModule, type Resource } from "i18next";
 import { IntlMessageFormat } from "intl-messageformat";
 import { initReactI18next } from "react-i18next";
+import { I18nManager } from "react-native";
 
 import {
   DEFAULT_LOCALE,
   loadLocale,
+  localeMeta,
   SUPPORTED_LOCALES,
   type SupportedLocale,
 } from "@forge/i18n";
@@ -129,6 +141,33 @@ async function detectInitialLocale(): Promise<SupportedLocale> {
   return detectDeviceLocale();
 }
 
+// T-231: React Native's layout-direction engine is a native, process-wide
+// flag (I18nManager.isRTL) -- unlike the DOM's `dir` attribute, it can't be
+// live-toggled. forceRTL() only takes effect after the JS bundle reloads, so
+// switching into/out of ar mid-session requires an actual reload for the
+// mirrored layout to appear; until that reload happens the app keeps
+// rendering in whatever direction it launched with, even though i18next's
+// own language (strings, ICU plurals, etc.) already switched. allowRTL(true)
+// is safe to call every time -- it only controls whether the OS is allowed
+// to report RTL to begin with, not the current setting.
+function syncNativeDirection(lng: string): void {
+  I18nManager.allowRTL(true);
+  const isRtl = localeMeta(lng)?.dir === "rtl";
+  if (I18nManager.isRTL === isRtl) {
+    return;
+  }
+  I18nManager.forceRTL(isRtl);
+  // Reload so the native layout engine picks up the new direction. Throws
+  // in environments expo-updates doesn't support reloading in (Expo Go,
+  // some dev-client configurations) -- caught rather than surfaced, since
+  // the alternative is a broken app, not a missing feature: the language
+  // itself is already applied, and a manual app restart (documented in
+  // TEMPLATE.md / this comment) finishes the RTL flip in those cases.
+  Updates.reloadAsync().catch(() => {
+    // No-op reload path (dev/Expo Go) -- see comment above.
+  });
+}
+
 let initPromise: Promise<typeof i18next> | null = null;
 
 export function initI18n(): Promise<typeof i18next> {
@@ -157,6 +196,8 @@ export function initI18n(): Promise<typeof i18next> {
         react: { useSuspense: false },
       });
 
+    syncNativeDirection(initialLocale);
+
     // Every later language change -- an explicit pick in settings
     // (lib/locale.ts's setLocale), a signed-in user's saved profile locale
     // (applyProfileLocale below), or a live OS language change
@@ -165,6 +206,7 @@ export function initI18n(): Promise<typeof i18next> {
     // language directly without going through changeLanguage(), so this
     // listener never fires for the locale detectInitialLocale() just chose.
     i18next.on("languageChanged", (lng: string) => {
+      syncNativeDirection(lng);
       AsyncStorage.setItem(LOCALE_STORAGE_KEY, lng).catch(() => {
         // Storage disabled -- the in-memory language is still correct for
         // this session, it just won't survive a restart.

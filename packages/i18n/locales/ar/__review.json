@@ -1,0 +1,9 @@
+{
+  "billing.error.plan_limit_reached": true,
+  "billing.error.feature_unavailable": true,
+  "errors.superadmin_2fa_required": true,
+  "errors.step_up_auth_required": true,
+  "auth.security_keys.description": true,
+  "emails.security_notification.events.totp_replay_rejected": true,
+  "emails.security_notification.events.email_change_requested": true
+}

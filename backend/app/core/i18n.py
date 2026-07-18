@@ -23,6 +23,8 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
+from app.core.locales import validate_locales
+
 _PLACEHOLDER_RE = re.compile(r"\{(\w+)\}")
 
 # packages/i18n/locales/ lives outside backend/'s own Docker build context --
@@ -43,13 +45,16 @@ def _locales_dir() -> Path:
 
 
 def get_supported_locales() -> list[str]:
-    """Returns list from product.config -- frontend reads this via /config endpoint."""
+    """Returns the enabled locale codes from product.config.LOCALES (T-231's
+    per-locale toggle, mirroring get_modules()'s EnabledModules) -- frontend
+    reads this via /config endpoint."""
     # Lazy import so a test's monkeypatch.setattr(product_config, ...) is
     # picked up here instead of being invisible behind a name already bound
     # at this module's import time -- same reasoning as module_loader.py.
-    from product.config import SUPPORTED_LOCALES  # noqa: PLC0415
+    from product.config import DEFAULT_LOCALE, LOCALES  # noqa: PLC0415
 
-    return list(SUPPORTED_LOCALES)
+    validate_locales(LOCALES, DEFAULT_LOCALE)
+    return [code for code, config in vars(LOCALES).items() if config.enabled]
 
 
 def get_default_locale() -> str:

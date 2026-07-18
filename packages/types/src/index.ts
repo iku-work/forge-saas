@@ -95,11 +95,18 @@ export interface ProductConfig {
     usageMetering: boolean;
     outboundWebhooks: boolean;
   };
-  // Which @forge/i18n locales this product exposes to users -- a subset of
-  // (or equal to) @forge/i18n's own SUPPORTED_LOCALES. Keep in sync with
-  // backend/product/config.py's SUPPORTED_LOCALES / DEFAULT_LOCALE.
+  // Per-locale toggle, mirroring `modules` above (and
+  // backend/product/config.py's EnabledLocales/LocaleConfig, T-231) -- each
+  // key is a @forge/i18n locale this product may expose to users, `default`
+  // names which one loads before any detection runs. Keep in sync with
+  // backend/product/config.py's LOCALES / DEFAULT_LOCALE.
   locales: {
-    supported: readonly string[];
+    en: boolean;
+    fi: boolean;
+    de: boolean;
+    es: boolean;
+    fr: boolean;
+    ar: boolean;
     default: string;
   };
 }

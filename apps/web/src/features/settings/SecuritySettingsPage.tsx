@@ -141,7 +141,7 @@ function SessionsCard() {
               <TableRow>
                 <TableHead>{t("auth.sessions.device_col")}</TableHead>
                 <TableHead>{t("auth.sessions.last_seen_col")}</TableHead>
-                <TableHead className="text-right">
+                <TableHead className="text-end">
                   {t("auth.sessions.action_col")}
                 </TableHead>
               </TableRow>
@@ -161,7 +161,7 @@ function SessionsCard() {
                   <TableCell>
                     {formatDate(session.last_seen_at, i18n.language)}
                   </TableCell>
-                  <TableCell className="text-right">
+                  <TableCell className="text-end">
                     <Button
                       type="button"
                       variant="outline"
@@ -540,7 +540,7 @@ function SecurityKeysCard() {
               <TableRow>
                 <TableHead>{t("auth.security_keys.name_col")}</TableHead>
                 <TableHead>{t("auth.security_keys.last_used_col")}</TableHead>
-                <TableHead className="text-right">
+                <TableHead className="text-end">
                   {t("auth.security_keys.action_col")}
                 </TableHead>
               </TableRow>
@@ -556,7 +556,7 @@ function SecurityKeysCard() {
                       ? formatDate(credential.last_used_at, i18n.language)
                       : t("auth.security_keys.never_used")}
                   </TableCell>
-                  <TableCell className="text-right">
+                  <TableCell className="text-end">
                     <Button
                       type="button"
                       variant="outline"
@@ -713,7 +713,7 @@ function ChangeEmailCard() {
       await requestEmailChangeApiV1AuthChangeEmailPost({
         body: {
           new_email: input.newEmail,
-          current_password: input.currentPassword || null,
+          current_password: input.currentPassword === "" ? null : input.currentPassword,
         },
         throwOnError: true,
       });

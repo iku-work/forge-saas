@@ -1,0 +1,57 @@
+{
+  "page": {
+    "title": "الملفات",
+    "empty": "لا توجد ملفات بعد. ارفع ملفًا للبدء.",
+    "error_load": "تعذّر تحميل الملفات."
+  },
+  "uploader": {
+    "drop_here": "أفلت الملفات هنا",
+    "drag_active": "أفلت للرفع",
+    "browse": "تصفّح",
+    "hint": "أو اسحب وأفلت",
+    "cancel": "إلغاء",
+    "retry": "إعادة المحاولة",
+    "error_type": "نوع الملف غير مسموح به.",
+    "error_size": "يتجاوز الملف الحد الأقصى البالغ {max}.",
+    "error_upload": "فشل الرفع.",
+    "queued": "في قائمة الانتظار",
+    "uploading": "جارٍ الرفع…",
+    "done": "تم"
+  },
+  "table": {
+    "col_name": "الاسم",
+    "col_size": "الحجم",
+    "col_uploader": "تم الرفع بواسطة",
+    "col_status": "الحالة",
+    "col_actions": "الإجراءات"
+  },
+  "status": {
+    "pending": "قيد الانتظار",
+    "ready": "جاهز",
+    "infected": "مصاب",
+    "failed": "فشل"
+  },
+  "action": {
+    "download": "تنزيل",
+    "delete": "حذف",
+    "delete_confirm": "هل تريد حذف هذا الملف؟"
+  },
+  "picker": {
+    "upload_button": "رفع",
+    "upload_hint": "اختر مصدرًا لإضافة ملف",
+    "sheet_title": "إضافة ملف",
+    "source_camera": "التقاط صورة",
+    "source_camera_hint": "التقاط صورة جديدة بالكاميرا",
+    "source_library": "مكتبة الصور",
+    "source_library_hint": "اختر صورة من مكتبتك",
+    "source_document": "تصفّح الملفات",
+    "source_document_hint": "اختر مستندًا من هذا الجهاز",
+    "cancel": "إلغاء",
+    "cancel_hint": "يغلق هذه القائمة دون اختيار ملف",
+    "permission_denied": "الإذن مطلوب للمتابعة.",
+    "error_upload": "فشل الرفع.",
+    "avatar_button": "تغيير الصورة",
+    "avatar_hint": "رفع صورة شخصية جديدة من مكتبتك",
+    "avatar_uploaded": "تم تحديث الصورة الشخصية."
+  }
+}

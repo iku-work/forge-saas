@@ -22,7 +22,7 @@ const PasswordInput = forwardRef<HTMLInputElement, PasswordInputProps>(
       <div className="relative">
         <Input
           type={visible ? "text" : "password"}
-          className={cn("pr-9", className)}
+          className={cn("pe-9", className)}
           ref={ref}
           {...props}
         />
@@ -33,7 +33,7 @@ const PasswordInput = forwardRef<HTMLInputElement, PasswordInputProps>(
             visible ? t("auth.password_field.hide") : t("auth.password_field.show")
           }
           aria-pressed={visible}
-          className="absolute inset-y-0 right-0 flex items-center px-3 text-muted-foreground hover:text-foreground"
+          className="absolute inset-y-0 inset-e-0 flex items-center px-3 text-muted-foreground hover:text-foreground"
         >
           {visible ? (
             <EyeOff className="size-4" aria-hidden="true" />

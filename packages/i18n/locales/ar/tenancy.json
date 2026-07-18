@@ -1,0 +1,71 @@
+{
+  "org_create": {
+    "title": "أنشئ مؤسستك",
+    "description": "تحتاج إلى مؤسسة قبل أن تتمكن من دعوة زملائك أو إدارة الفوترة.",
+    "name_label": "اسم المؤسسة",
+    "submit": "إنشاء مؤسسة",
+    "submit_pending": "جارٍ الإنشاء…",
+    "error_default": "تعذّر إنشاء المؤسسة."
+  },
+  "org_settings": {
+    "title": "المؤسسة",
+    "description": "إدارة ملف مؤسستك.",
+    "name_label": "اسم المؤسسة",
+    "logo_upload": "رفع الشعار",
+    "coming_soon": "قريبًا.",
+    "save": "حفظ",
+    "saved": "تم الحفظ.",
+    "permission_notice": "يمكن للمالكين والمسؤولين فقط تغيير هذا.",
+    "error_default": "تعذّر تحديث المؤسسة."
+  },
+  "members": {
+    "title": "الأعضاء",
+    "description": "الأشخاص الذين لديهم إمكانية الوصول إلى هذه المؤسسة.",
+    "invite_button": "دعوة",
+    "no_members": "لا يوجد أعضاء بعد.",
+    "member_col": "العضو",
+    "role_col": "الدور",
+    "action_col": "الإجراء",
+    "you": "أنت",
+    "remove": "إزالة",
+    "load_more": "تحميل المزيد",
+    "change_role_label": "تغيير دور {user_id}",
+    "role": {
+      "owner": "مالك",
+      "admin": "مسؤول",
+      "member": "عضو"
+    },
+    "error_load": "تعذّر تحميل الأعضاء.",
+    "error_role_change": "تعذّر تحديث دور هذا العضو.",
+    "error_remove": "تعذّر إزالة هذا العضو."
+  },
+  "invite": {
+    "title": "دعوة زميل",
+    "email_label": "البريد الإلكتروني",
+    "role_label": "الدور",
+    "submit": "إرسال الدعوة",
+    "submit_pending": "جارٍ الإرسال…",
+    "error_default": "تعذّر إرسال هذه الدعوة."
+  },
+  "invitation_accept": {
+    "title": "أنت مدعو",
+    "join_description": "انضم إلى {org_name} بصفة {role}.",
+    "loading_title": "جارٍ تحميل الدعوة…",
+    "unavailable_title": "الدعوة غير متاحة",
+    "unavailable_message": "هذه الدعوة غير صالحة أو منتهية الصلاحية.",
+    "back_to_login": "العودة إلى تسجيل الدخول",
+    "accept_button": "قبول الدعوة",
+    "accept_button_pending": "جارٍ الانضمام…",
+    "accept_hint": "ينضم إلى هذه المؤسسة بحسابك",
+    "not_logged_in": "سجّل الدخول أو أنشئ حسابًا باستخدام {email} لقبول هذه الدعوة.",
+    "login": "تسجيل الدخول",
+    "signup": "إنشاء حساب",
+    "error_default": "تعذّر قبول هذه الدعوة."
+  },
+  "error": {
+    "membership_not_found": "العضوية غير موجودة.",
+    "invite_invalid_or_expired": "هذه الدعوة غير صالحة أو منتهية الصلاحية.",
+    "cannot_demote_last_owner": "لا يمكنك خفض رتبة المالك الأخير للمؤسسة.",
+    "cannot_remove_last_owner": "لا يمكنك إزالة المالك الأخير للمؤسسة."
+  }
+}

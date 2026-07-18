@@ -314,7 +314,7 @@ export function BillingSettingsPage() {
                   <TableHead>{t("billing.invoices.date_col")}</TableHead>
                   <TableHead>{t("billing.invoices.amount_col")}</TableHead>
                   <TableHead>{t("billing.invoices.status_col")}</TableHead>
-                  <TableHead className="text-right">
+                  <TableHead className="text-end">
                     {t("billing.invoices.pdf_col")}
                   </TableHead>
                 </TableRow>
@@ -337,7 +337,7 @@ export function BillingSettingsPage() {
                         <Badge variant="secondary">{invoice.status}</Badge>
                       ) : null}
                     </TableCell>
-                    <TableCell className="text-right">
+                    <TableCell className="text-end">
                       {invoice.invoice_pdf ? (
                         <a
                           href={invoice.invoice_pdf}

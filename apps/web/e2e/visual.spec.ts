@@ -80,4 +80,36 @@ test.describe("visual regression: dashboard + settings", () => {
       }
     }
   });
+
+  // T-231: dashboard + settings-profile in the ar (rtl) locale, desktop
+  // width only -- proving the layout mirrors (sidebar, nav, and text
+  // alignment flip), not re-running the full page x viewport matrix above
+  // in a second language. localStorage is seeded via addInitScript (the
+  // same "forge.locale" key apps/web/src/i18n.ts's LOCALE_STORAGE_KEY
+  // persists to) before login, so the app renders rtl from first paint.
+  test("dashboard and settings-profile mirror correctly in the ar (rtl) locale", async ({
+    page,
+  }) => {
+    await page.addInitScript(() => {
+      window.localStorage.setItem("forge.locale", "ar");
+    });
+    await page.setViewportSize(DESKTOP_VIEWPORT);
+    await page.goto("/login");
+    expect(await page.evaluate(() => document.documentElement.dir)).toBe("rtl");
+    await page.getByTestId("login-email-input").fill(SUPERADMIN_EMAIL);
+    await page.getByTestId("login-password-input").fill(SUPERADMIN_PASSWORD);
+    await page.getByTestId("login-submit").click();
+    await expect(page.getByTestId("app-shell")).toBeVisible();
+
+    for (const target of SNAPSHOT_TARGETS.filter((t) => t.name !== "settings-org")) {
+      await test.step(`${target.name} @ desktop (ar)`, async () => {
+        await page.goto(target.path);
+        await expect(page.getByTestId(target.readyTestId)).toBeVisible();
+        await stabilizeForSnapshot(page);
+        await expect(page).toHaveScreenshot(`${target.name}-desktop-ar.png`, {
+          mask: dynamicRegionMasks(page),
+        });
+      });
+    }
+  });
 });

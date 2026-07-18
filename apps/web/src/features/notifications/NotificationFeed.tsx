@@ -143,7 +143,7 @@ export function NotificationFeed({
               key={notification.id}
               data-index={virtualItem.index}
               ref={virtualizer.measureElement}
-              className="absolute left-0 top-0 w-full"
+              className="absolute start-0 top-0 w-full"
               style={{ transform: `translateY(${String(virtualItem.start)}px)` }}
             >
               <NotificationRow notification={notification} onMarkRead={onMarkRead} />

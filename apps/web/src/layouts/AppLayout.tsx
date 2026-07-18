@@ -252,7 +252,7 @@ function UserMenu() {
       <DropdownMenuTrigger asChild>
         <button
           type="button"
-          className="flex w-full items-center gap-2 rounded-md px-2 py-2 text-left text-sm hover:bg-accent"
+          className="flex w-full items-center gap-2 rounded-md px-2 py-2 text-start text-sm hover:bg-accent"
         >
           <Avatar className="size-7" data-testid="user-menu-avatar">
             <AvatarFallback>{initialsFor(user.email)}</AvatarFallback>
@@ -340,7 +340,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
 
   return (
     <div className="flex min-h-screen" data-testid="app-shell">
-      <aside className="flex w-64 shrink-0 flex-col border-r p-4">
+      <aside className="flex w-64 shrink-0 flex-col border-e p-4">
         <div className="px-2 pb-4 text-lg font-semibold">
           {t("common.app.name")}
         </div>

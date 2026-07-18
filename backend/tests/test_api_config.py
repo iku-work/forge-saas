@@ -14,6 +14,8 @@ import httpx
 import pytest
 
 from app.core import module_loader
+from app.core.i18n import get_supported_locales
+from app.core.locales import EnabledLocales, LocaleConfig
 from app.core.modules import EnabledModules, ModuleConfig
 from product import config as product_config
 
@@ -51,7 +53,7 @@ async def test_returns_branding_and_default_module_config(
         "usage_metering": False,
         "outbound_webhooks": False,
     }
-    assert data["supported_locales"] == list(product_config.SUPPORTED_LOCALES)
+    assert data["supported_locales"] == get_supported_locales()
     assert data["default_locale"] == product_config.DEFAULT_LOCALE
 
 
@@ -75,6 +77,27 @@ async def test_reflects_disabled_modules(
     assert data["modules"]["notifications"] is False
     assert data["modules"]["file_storage"] is False
     assert data["modules"]["gdpr"] is True
+
+
+async def test_reflects_disabled_locales(
+    client: httpx.AsyncClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(
+        product_config,
+        "LOCALES",
+        EnabledLocales(
+            en=LocaleConfig(enabled=True),
+            fi=LocaleConfig(enabled=False),
+            de=LocaleConfig(enabled=False),
+            es=LocaleConfig(enabled=False),
+            fr=LocaleConfig(enabled=False),
+            ar=LocaleConfig(enabled=False),
+        ),
+    )
+
+    response = await client.get("/api/v1/config")
+
+    assert response.json()["data"]["supported_locales"] == ["en"]
 
 
 async def test_accessible_without_auth_token(client: httpx.AsyncClient) -> None:

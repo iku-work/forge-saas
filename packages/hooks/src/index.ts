@@ -11,6 +11,8 @@ export { useModules, getModulesSnapshot, bootstrapModules } from "./useModules";
 export type { ActiveModules } from "./useModules";
 export { useLocale } from "./useLocale";
 export type { UseLocaleResult } from "./useLocale";
+export { useDirection } from "./useDirection";
+export type { Direction } from "./useDirection";
 export { useNotifications } from "./useNotifications";
 export type {
   NotificationStreamHandlers,

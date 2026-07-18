@@ -59,6 +59,16 @@ import notificationsFr from "../locales/fr/notifications.json";
 import tenancyFr from "../locales/fr/tenancy.json";
 import validationFr from "../locales/fr/validation.json";
 
+import authAr from "../locales/ar/auth.json";
+import billingAr from "../locales/ar/billing.json";
+import commonAr from "../locales/ar/common.json";
+import emailsAr from "../locales/ar/emails.json";
+import errorsAr from "../locales/ar/errors.json";
+import filesAr from "../locales/ar/files.json";
+import notificationsAr from "../locales/ar/notifications.json";
+import tenancyAr from "../locales/ar/tenancy.json";
+import validationAr from "../locales/ar/validation.json";
+
 // A leaf is always a string -- locale JSON files never contain numbers,
 // booleans, or arrays. See packages/i18n/README.md.
 export type TranslationNode = string | { [key: string]: TranslationNode };
@@ -127,6 +137,17 @@ const TRANSLATIONS_BY_LOCALE: Record<SupportedLocale, Translations> = {
     emails: emailsFr,
     errors: errorsFr,
     validation: validationFr,
+  },
+  ar: {
+    common: commonAr,
+    auth: authAr,
+    tenancy: tenancyAr,
+    billing: billingAr,
+    files: filesAr,
+    notifications: notificationsAr,
+    emails: emailsAr,
+    errors: errorsAr,
+    validation: validationAr,
   },
 };
 

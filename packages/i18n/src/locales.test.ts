@@ -14,9 +14,9 @@ describe("LOCALES registry", () => {
     }
   });
 
-  it("defaults every current locale to ltr (T-231 adds the first rtl locale)", () => {
+  it("defaults every locale to ltr except ar, the first rtl locale (T-231)", () => {
     for (const locale of LOCALES) {
-      expect(locale.dir).toBe("ltr");
+      expect(locale.dir).toBe(locale.code === "ar" ? "rtl" : "ltr");
     }
   });
 });
@@ -24,6 +24,10 @@ describe("LOCALES registry", () => {
 describe("localeMeta", () => {
   it("looks up a known locale", () => {
     expect(localeMeta("fi")?.dir).toBe("ltr");
+  });
+
+  it("looks up the rtl locale (T-231)", () => {
+    expect(localeMeta("ar")?.dir).toBe("rtl");
   });
 
   it("returns undefined for an unknown code", () => {

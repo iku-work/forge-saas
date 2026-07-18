@@ -45,6 +45,45 @@ jobs:
           pnpm lint
           pnpm type-check
 
+      # T-231's own "Done when": zero unannotated physical-direction Tailwind
+      # classes in packages/ui or apps/web. A plain grep can't tell a
+      # deliberately-physical class (Radix's viewport-relative `side`
+      # animations, a close button pinned to one corner) from an
+      # accidental one, so this checks for an `rtl-ok: <reason>` comment
+      # within a few lines above the match instead of failing outright --
+      # still cheap enough that a dedicated eslint rule isn't worth
+      # authoring, same reasoning as the data-testid grep above.
+      - name: Enforce logical direction classes in packages/ui + apps/web (T-231)
+        run: |
+          python3 - <<'PY'
+          import re, sys, pathlib
+
+          PATTERN = re.compile(
+              r"\b(ml-|mr-|pl-|pr-|left-[\d\[]|right-[\d\[]|text-left\b|text-right\b|"
+              r"rounded-l[trb]?\b|rounded-r[trb]?\b|border-l\b|border-r\b)"
+          )
+          ROOTS = ["packages/ui/src", "apps/web/src"]
+          violations = []
+          for root in ROOTS:
+              for path in pathlib.Path(root).rglob("*.tsx"):
+                  if path.name.endswith((".stories.tsx", ".test.tsx")):
+                      continue
+                  lines = path.read_text().splitlines()
+                  for i, line in enumerate(lines):
+                      if PATTERN.search(line):
+                          window = lines[max(0, i - 8):i + 1]
+                          if not any("rtl-ok" in w for w in window):
+                              violations.append(f"{path}:{i + 1}: {line.strip()}")
+          if violations:
+              print("Physical direction classes require ms-/me-/ps-/pe-/start-/end-/"
+                    "text-start/text-end logical equivalents, or an 'rtl-ok: <reason>' "
+                    "comment within a few lines above (T-231):")
+              for v in violations:
+                  print(f"  {v}")
+              sys.exit(1)
+          print("T-231: no unannotated physical direction classes found")
+          PY
+
   test:
     needs: lint
     runs-on: ubuntu-latest

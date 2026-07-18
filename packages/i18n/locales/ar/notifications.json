@@ -1,0 +1,41 @@
+{
+  "coming_soon": "الإشعارات قادمة قريبًا.",
+  "messages": {
+    "count": "{count, plural, one {رسالة واحدة} other {# رسائل}}"
+  },
+  "bell": {
+    "aria_label": "الإشعارات",
+    "aria_label_unread": "الإشعارات، {count, plural, one {إشعار واحد غير مقروء} other {# إشعارات غير مقروءة}}"
+  },
+  "feed": {
+    "heading": "الإشعارات",
+    "mark_all_read": "تحديد الكل كمقروء",
+    "mark_all_read_hint": "يحدّد كل الإشعارات كمقروءة",
+    "mark_read": "تحديد كمقروء",
+    "mark_read_hint": "يحدّد هذا الإشعار كمقروء",
+    "load_more": "تحميل المزيد",
+    "view": "عرض",
+    "view_hint": "يفتح الصفحة المرتبطة بهذا الإشعار",
+    "loading": "جارٍ تحميل الإشعارات…",
+    "error": "تعذّر تحميل الإشعارات.",
+    "empty": "لقد اطّلعت على كل شيء."
+  },
+  "banner": {
+    "dismiss_hint": "يخفي هذا الإشعار"
+  },
+  "preferences": {
+    "title": "تفضيلات الإشعارات",
+    "description": "اختر كيف تريد معرفة النشاط في حسابك.",
+    "channel_email": "البريد الإلكتروني",
+    "channel_in_app": "داخل التطبيق",
+    "channel_push": "إشعارات فورية",
+    "save": "حفظ التفضيلات",
+    "saved": "تم حفظ التفضيلات.",
+    "error_save": "تعذّر حفظ تفضيلاتك.",
+    "type_member_invited": "عندما ينضم شخص إلى مؤسستك",
+    "type_payment_failed": "عندما تفشل عملية دفع",
+    "type_subscription_expiring": "عندما يكون اشتراكك على وشك الانتهاء",
+    "type_weekly_summary": "ملخص أسبوعي",
+    "type_file_uploaded": "عند رفع ملف"
+  }
+}

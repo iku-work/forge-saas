@@ -1,0 +1,35 @@
+{
+  "title": "الفوترة",
+  "current_plan": {
+    "title": "الخطة الحالية",
+    "status": "الحالة: {status}",
+    "badge": "الخطة الحالية",
+    "free_label": "مجانية"
+  },
+  "available_plans": {
+    "title": "الخطط المتاحة",
+    "no_plans": "لم يتم تكوين أي خطط بعد.",
+    "per_month": "/شهريًا"
+  },
+  "upgrade_button": "ترقية",
+  "manage_button": "إدارة الفوترة",
+  "invoices": {
+    "title": "الفواتير",
+    "not_available": "لا توجد فواتير بعد.",
+    "date_col": "التاريخ",
+    "amount_col": "المبلغ",
+    "status_col": "الحالة",
+    "pdf_col": "الإيصال",
+    "download_pdf": "تنزيل PDF",
+    "load_more": "تحميل المزيد",
+    "error_load": "تعذّر تحميل الفواتير."
+  },
+  "error": {
+    "permission_denied": "ليس لديك إذن لعرض الفوترة لهذه المؤسسة.",
+    "checkout_failed": "تعذّر بدء عملية الدفع.",
+    "portal_failed": "تعذّر فتح بوابة الفوترة.",
+    "feature_unavailable": "ميزة '{feature}' غير متاحة في خطتك.",
+    "plan_limit_reached": "لقد وصلت إلى الحد الأقصى لخطتك لـ '{feature}'.",
+    "plan_not_found": "تعذّر العثور على الخطة '{plan_slug}'."
+  }
+}
