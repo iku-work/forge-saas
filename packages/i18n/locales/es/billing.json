@@ -13,6 +13,14 @@
   },
   "upgrade_button": "Mejorar plan",
   "manage_button": "Administrar facturación",
+  "usage": {
+    "title": "Uso de este período",
+    "metric_col": "Métrica",
+    "quantity_col": "Cantidad",
+    "estimated_cost_col": "Costo estimado",
+    "no_price_configured": "Sin precio",
+    "error_load": "No se pudo cargar el uso."
+  },
   "invoices": {
     "title": "Facturas",
     "not_available": "Aún no hay facturas.",

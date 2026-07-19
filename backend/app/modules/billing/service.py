@@ -63,6 +63,8 @@ from app.modules.billing.dunning import DunningService
 from app.modules.billing.invoices import InvoiceService
 from app.modules.billing.models import Plan, Subscription, WebhookEvent
 from app.modules.billing.repository import PlanRepository, SubscriptionRepository
+from app.modules.billing.schemas import UsageSummary
+from app.modules.billing.usage_service import UsageService
 from app.modules.feature_flags.service import FeatureFlagService
 from app.modules.tenancy.models import Organization
 
@@ -246,3 +248,37 @@ class BillingService:
 
     async def list_active_plans(self) -> list[Plan]:
         return await self._plans.list_active()
+
+    async def get_usage_summary(self, org_id: UUID) -> list[UsageSummary]:
+        """Estimated usage cost per metered dimension for the org's current
+        billing period -- see docs/runbooks/stripe-usage-pricing.md.
+        Iterates Plan.usage_meter_event_names (the metrics actually tracked/
+        reported), not usage_prices_micros, since a metric can be tracked
+        without being priced locally."""
+        subscription = await self._subscriptions.get_by_org_id(org_id)
+        if subscription is None:
+            return []
+        plan = await self._plans.get_by_id(subscription.plan_id)
+        if plan is None:
+            return []
+
+        usage = UsageService(self._session, org_id)
+        summaries: list[UsageSummary] = []
+        for metric in plan.usage_meter_event_names:
+            quantity = await usage.aggregate(
+                metric=metric,
+                since=subscription.current_period_start,
+                until=subscription.current_period_end,
+            )
+            unit_price_micros = plan.usage_prices_micros.get(metric)
+            summaries.append(
+                UsageSummary(
+                    metric=metric,
+                    quantity=quantity,
+                    unit_price_micros=unit_price_micros,
+                    estimated_cost_micros=(
+                        quantity * unit_price_micros if unit_price_micros is not None else None
+                    ),
+                )
+            )
+        return summaries

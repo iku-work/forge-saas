@@ -49,3 +49,17 @@ class PlanPublic(AppBaseModel):
     price_monthly: int
     price_yearly: int
     features: dict[str, int]
+
+
+# One metered dimension's usage + estimated cost for the org's current
+# billing period (BillingService.get_usage_summary). unit_price_micros/
+# estimated_cost_micros are None when the plan tracks this metric
+# (Plan.usage_meter_event_names) without pricing it locally
+# (Plan.usage_prices_micros) -- see docs/runbooks/stripe-usage-pricing.md.
+# Estimate only: Stripe's own metered Price is authoritative for what
+# actually gets invoiced.
+class UsageSummary(AppBaseModel):
+    metric: str
+    quantity: int
+    unit_price_micros: int | None
+    estimated_cost_micros: int | None

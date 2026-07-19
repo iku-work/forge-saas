@@ -7,6 +7,8 @@ import {
   createPortalSessionApiV1BillingPortalSessionPost,
   getSubscriptionApiV1BillingSubscriptionGet,
   getSubscriptionApiV1BillingSubscriptionGetQueryKey,
+  getUsageApiV1BillingUsageGet,
+  getUsageApiV1BillingUsageGetQueryKey,
   listInvoicesApiV1BillingInvoicesGet,
   listInvoicesApiV1BillingInvoicesGetInfiniteQueryKey,
   listPlansApiV1BillingPlansGet,
@@ -59,6 +61,19 @@ function formatInvoiceAmount(cents: number, currency: string, locale: string): s
   }).format(cents / 100);
 }
 
+// Usage prices are stored in micros (1,000,000 micros = $1 USD, see
+// Plan.usage_prices_micros / docs/runbooks/stripe-usage-pricing.md) rather
+// than cents -- a plain cents field can't represent sub-cent per-unit
+// pricing like $0.0001/API call. Same USD assumption as formatPrice above
+// (Plan has no currency field).
+function formatMicros(micros: number, locale: string): string {
+  return new Intl.NumberFormat(locale, {
+    style: "currency",
+    currency: "USD",
+    maximumFractionDigits: 6,
+  }).format(micros / 1_000_000);
+}
+
 // A plain top-level function rather than inlining `window.location.href =
 // url` at the call site -- the latter, written directly inside an async
 // handler after an `await`, trips react-hooks' compiler-based
@@ -93,6 +108,16 @@ export function BillingSettingsPage() {
     queryKey: listPlansApiV1BillingPlansGetQueryKey(),
     queryFn: async () => {
       const { data } = await listPlansApiV1BillingPlansGet({
+        throwOnError: true,
+      });
+      return data;
+    },
+    enabled: Boolean(org) && canRead,
+  });
+  const usageQuery = useQuery({
+    queryKey: getUsageApiV1BillingUsageGetQueryKey(),
+    queryFn: async () => {
+      const { data } = await getUsageApiV1BillingUsageGet({
         throwOnError: true,
       });
       return data;
@@ -139,6 +164,7 @@ export function BillingSettingsPage() {
 
   const subscription = subscriptionQuery.data?.data ?? null;
   const plans = plansQuery.data?.data ?? [];
+  const usage = usageQuery.data?.data ?? [];
   const invoices =
     invoicesQuery.data?.pages.flatMap((page) => page.data ?? []) ?? [];
   const currentPlan = subscription
@@ -243,6 +269,54 @@ export function BillingSettingsPage() {
           </CardFooter>
         ) : null}
       </Card>
+
+      {usageQuery.isLoading || usageQuery.isError || usage.length > 0 ? (
+        <Card>
+          <CardHeader>
+            <CardDescription>{t("billing.usage.title")}</CardDescription>
+          </CardHeader>
+          <CardContent>
+            {usageQuery.isLoading ? (
+              <Skeleton className="h-16 w-full" />
+            ) : usageQuery.isError ? (
+              <Alert variant="destructive">
+                <AlertDescription>
+                  {getErrorMessage(usageQuery.error, "billing.usage.error_load")}
+                </AlertDescription>
+              </Alert>
+            ) : (
+              <Table data-testid="billing-usage-table">
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>{t("billing.usage.metric_col")}</TableHead>
+                    <TableHead>{t("billing.usage.quantity_col")}</TableHead>
+                    <TableHead className="text-end">
+                      {t("billing.usage.estimated_cost_col")}
+                    </TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {usage.map((item) => (
+                    <TableRow key={item.metric}>
+                      <TableCell>{item.metric}</TableCell>
+                      <TableCell>{item.quantity}</TableCell>
+                      <TableCell className="text-end">
+                        {item.estimated_cost_micros === null ? (
+                          <span className="text-muted-foreground">
+                            {t("billing.usage.no_price_configured")}
+                          </span>
+                        ) : (
+                          formatMicros(item.estimated_cost_micros, i18n.language)
+                        )}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            )}
+          </CardContent>
+        </Card>
+      ) : null}
 
       {canManage ? (
         <Card>

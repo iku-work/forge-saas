@@ -16,6 +16,7 @@ see that file's docstring for why TestClient is avoided.
 """
 
 from collections.abc import AsyncGenerator, Callable, Iterator
+from datetime import UTC, datetime, timedelta
 from uuid import uuid4
 
 import httpx
@@ -43,6 +44,7 @@ from app.modules.auth.models import User
 from app.modules.auth.permissions import MemberRole
 from app.modules.auth.utils import create_access_token
 from app.modules.billing.models import Plan, Subscription, WebhookEvent
+from app.modules.billing.usage_models import UsageRecord
 from app.modules.tenancy.models import Membership, Organization
 
 _TABLES = [
@@ -52,6 +54,7 @@ _TABLES = [
     WebhookEvent.__table__,
     Organization.__table__,
     Membership.__table__,
+    UsageRecord.__table__,
 ]
 
 
@@ -202,6 +205,24 @@ async def _make_plan(session: AsyncSession, *, is_active: bool = True) -> Plan:
     await session.flush()
     await session.commit()
     return plan
+
+
+async def _make_subscription(
+    session: AsyncSession, *, org: Organization, plan: Plan
+) -> Subscription:
+    now = datetime.now(UTC)
+    subscription = Subscription(
+        org_id=org.id,
+        plan_id=plan.id,
+        stripe_subscription_id=f"sub_{uuid4().hex[:8]}",
+        status="active",
+        current_period_start=now - timedelta(days=1),
+        current_period_end=now + timedelta(days=29),
+    )
+    session.add(subscription)
+    await session.flush()
+    await session.commit()
+    return subscription
 
 
 def _headers(user: User, org: Organization) -> dict[str, str]:
@@ -380,6 +401,78 @@ async def test_get_subscription_admin_can_read(
 
     assert response.status_code == 200
     assert response.json()["data"] is None
+
+
+# --- GET /billing/usage -------------------------------------------------------------
+
+
+async def test_get_usage_requires_auth(client: httpx.AsyncClient, org: Organization) -> None:
+    response = await client.get("/api/v1/billing/usage", headers={"X-Org-ID": str(org.id)})
+
+    assert response.status_code == 401
+
+
+async def test_get_usage_member_without_billing_read_returns_403(
+    client: httpx.AsyncClient, session: AsyncSession, org: Organization
+) -> None:
+    member = await _add_member(session, org)
+
+    response = await client.get("/api/v1/billing/usage", headers=_headers(member, org))
+
+    assert response.status_code == 403
+
+
+async def test_get_usage_admin_with_no_subscription_returns_empty_list(
+    client: httpx.AsyncClient, session: AsyncSession, org: Organization
+) -> None:
+    admin = await _add_member(session, org, role=MemberRole.ADMIN)
+
+    response = await client.get("/api/v1/billing/usage", headers=_headers(admin, org))
+
+    assert response.status_code == 200
+    assert response.json()["data"] == []
+
+
+async def test_get_usage_admin_reads_estimated_cost(
+    client: httpx.AsyncClient, session: AsyncSession, org: Organization
+) -> None:
+    admin = await _add_member(session, org, role=MemberRole.ADMIN)
+    plan = Plan(
+        name="Pro",
+        slug=f"pro-{uuid4().hex[:8]}",
+        stripe_price_id_monthly="price_monthly_usage",
+        stripe_price_id_yearly="price_yearly_usage",
+        price_monthly=2900,
+        price_yearly=29000,
+        features={"seats": 5},
+        usage_meter_event_names={"api_calls": "api_calls_meter"},
+        usage_prices_micros={"api_calls": 100},  # $0.0001/call
+    )
+    session.add(plan)
+    await session.flush()
+    await session.commit()
+    subscription = await _make_subscription(session, org=org, plan=plan)
+    session.add(
+        UsageRecord(
+            org_id=org.id,
+            metric="api_calls",
+            quantity=42,
+            occurred_at=subscription.current_period_start + timedelta(hours=1),
+        )
+    )
+    await session.commit()
+
+    response = await client.get("/api/v1/billing/usage", headers=_headers(admin, org))
+
+    assert response.status_code == 200
+    assert response.json()["data"] == [
+        {
+            "metric": "api_calls",
+            "quantity": 42,
+            "unit_price_micros": 100,
+            "estimated_cost_micros": 4_200,
+        }
+    ]
 
 
 # --- GET /billing/plans -------------------------------------------------------------

@@ -13,6 +13,14 @@
   },
   "upgrade_button": "Mettre à niveau",
   "manage_button": "Gérer la facturation",
+  "usage": {
+    "title": "Utilisation sur cette période",
+    "metric_col": "Mesure",
+    "quantity_col": "Quantité",
+    "estimated_cost_col": "Coût estimé",
+    "no_price_configured": "Non tarifé",
+    "error_load": "Impossible de charger l'utilisation."
+  },
   "invoices": {
     "title": "Factures",
     "not_available": "Aucune facture pour le moment.",

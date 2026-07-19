@@ -713,7 +713,7 @@ function ChangeEmailCard() {
       await requestEmailChangeApiV1AuthChangeEmailPost({
         body: {
           new_email: input.newEmail,
-          current_password: input.currentPassword === "" ? null : input.currentPassword,
+          current_password: input.currentPassword ?? null,
         },
         throwOnError: true,
       });

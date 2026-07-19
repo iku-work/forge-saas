@@ -13,6 +13,14 @@
   },
   "upgrade_button": "Upgrade",
   "manage_button": "Abrechnung verwalten",
+  "usage": {
+    "title": "Nutzung in diesem Zeitraum",
+    "metric_col": "Messgröße",
+    "quantity_col": "Menge",
+    "estimated_cost_col": "Geschätzte Kosten",
+    "no_price_configured": "Nicht bepreist",
+    "error_load": "Nutzung konnte nicht geladen werden."
+  },
   "invoices": {
     "title": "Rechnungen",
     "not_available": "Noch keine Rechnungen.",

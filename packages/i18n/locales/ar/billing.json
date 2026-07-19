@@ -13,6 +13,14 @@
   },
   "upgrade_button": "ترقية",
   "manage_button": "إدارة الفوترة",
+  "usage": {
+    "title": "الاستخدام لهذه الفترة",
+    "metric_col": "المقياس",
+    "quantity_col": "الكمية",
+    "estimated_cost_col": "التكلفة المقدّرة",
+    "no_price_configured": "بدون تسعير",
+    "error_load": "تعذّر تحميل بيانات الاستخدام."
+  },
   "invoices": {
     "title": "الفواتير",
     "not_available": "لا توجد فواتير بعد.",

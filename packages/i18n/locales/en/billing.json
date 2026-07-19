@@ -13,6 +13,14 @@
   },
   "upgrade_button": "Upgrade",
   "manage_button": "Manage billing",
+  "usage": {
+    "title": "Usage this period",
+    "metric_col": "Metric",
+    "quantity_col": "Quantity",
+    "estimated_cost_col": "Estimated cost",
+    "no_price_configured": "Not priced",
+    "error_load": "Unable to load usage."
+  },
   "invoices": {
     "title": "Invoices",
     "not_available": "No invoices yet.",

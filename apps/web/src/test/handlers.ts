@@ -225,6 +225,9 @@ export const handlers = [
   http.get(`${API}/api/v1/billing/invoices`, () =>
     HttpResponse.json(envelope([])),
   ),
+  http.get(`${API}/api/v1/billing/usage`, () =>
+    HttpResponse.json(envelope([])),
+  ),
   http.post(`${API}/api/v1/billing/webhooks/stripe`, () =>
     HttpResponse.json({ received: true }),
   ),

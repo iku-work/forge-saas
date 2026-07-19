@@ -36,6 +36,7 @@ from app.modules.billing.schemas import (
     PlanPublic,
     PortalSessionResponse,
     SubscriptionPublic,
+    UsageSummary,
 )
 from app.modules.billing.service import BillingService
 from app.modules.tenancy.models import Membership, Organization
@@ -101,6 +102,22 @@ async def get_subscription(
     org, _ = org_and_membership
     subscription = await BillingService(session, redis).get_subscription(org.id)
     data = SubscriptionPublic.model_validate(subscription) if subscription is not None else None
+    return Envelope(data=data, meta=Meta(request_id=_request_id(request)))
+
+
+@router.get("/usage")
+@api_limit
+async def get_usage(
+    request: Request,
+    org_and_membership: Annotated[tuple[Organization, Membership], Depends(get_current_org)],
+    membership: Annotated[  # noqa: ARG001 — required to gate on BILLING_READ
+        Membership, Depends(require_permission(Permission.BILLING_READ))
+    ],
+    session: Annotated[AsyncSession, Depends(get_session)],
+    redis: Annotated[Redis, Depends(get_redis)],
+) -> Envelope[list[UsageSummary]]:
+    org, _ = org_and_membership
+    data = await BillingService(session, redis).get_usage_summary(org.id)
     return Envelope(data=data, meta=Meta(request_id=_request_id(request)))
 
 

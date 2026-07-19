@@ -5,9 +5,15 @@ import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { getApiBaseUrl } from "@forge/api-client";
-import type { InvoiceDto, PlanPublic, SubscriptionPublic } from "@forge/api-client";
+import type {
+  InvoiceDto,
+  PlanPublic,
+  SubscriptionPublic,
+  UsageSummary,
+} from "@forge/api-client";
+import { t } from "@forge/i18n";
 
-import { envelope, fixtureOrg } from "../../test/appShellFixtures";
+import { envelope, errorEnvelope, fixtureOrg } from "../../test/appShellFixtures";
 import { server } from "../../test/server";
 
 const hooks = vi.hoisted(() => ({ useOrg: vi.fn(), usePermission: vi.fn() }));
@@ -51,7 +57,12 @@ function makeInvoice(id: string): InvoiceDto {
 }
 
 function renderPage() {
-  const queryClient = new QueryClient();
+  // retry: false -- see FilesPage.test.tsx's own renderPage() for why: an
+  // error-response test would otherwise wait through React Query's default
+  // retry/backoff before settling, well past a single test's timeout.
+  const queryClient = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
   return render(
     <QueryClientProvider client={queryClient}>
       <BillingSettingsPage />
@@ -218,5 +229,80 @@ describe("BillingSettingsPage", () => {
     expect(
       screen.queryByRole("button", { name: "Load more" }),
     ).not.toBeInTheDocument();
+  });
+
+  it("shows no usage section when the org has no metered usage", async () => {
+    hooks.usePermission.mockReturnValue(true);
+    server.use(
+      http.get(`${API}/api/v1/billing/subscription`, () =>
+        HttpResponse.json(envelope(null)),
+      ),
+      http.get(`${API}/api/v1/billing/plans`, () =>
+        HttpResponse.json(envelope([freePlan])),
+      ),
+    );
+
+    renderPage();
+
+    await screen.findByTestId("billing-upgrade-free");
+    expect(screen.queryByTestId("billing-usage-table")).not.toBeInTheDocument();
+  });
+
+  it("shows usage this period with a formatted sub-cent estimated cost", async () => {
+    hooks.usePermission.mockReturnValue(true);
+    const usage: UsageSummary[] = [
+      {
+        metric: "api_calls",
+        quantity: 42,
+        unit_price_micros: 100, // $0.0001/call
+        estimated_cost_micros: 4_200,
+      },
+      {
+        metric: "exports",
+        quantity: 3,
+        unit_price_micros: null,
+        estimated_cost_micros: null,
+      },
+    ];
+    server.use(
+      http.get(`${API}/api/v1/billing/subscription`, () =>
+        HttpResponse.json(envelope(null)),
+      ),
+      http.get(`${API}/api/v1/billing/plans`, () =>
+        HttpResponse.json(envelope([freePlan])),
+      ),
+      http.get(`${API}/api/v1/billing/usage`, () =>
+        HttpResponse.json(envelope(usage)),
+      ),
+    );
+
+    renderPage();
+
+    expect(await screen.findByText("api_calls")).toBeInTheDocument();
+    expect(screen.getByText("42")).toBeInTheDocument();
+    expect(screen.getByText("$0.0042")).toBeInTheDocument();
+    expect(screen.getByText("exports")).toBeInTheDocument();
+    expect(screen.getByText("Not priced")).toBeInTheDocument();
+  });
+
+  it("shows an error message when usage fails to load", async () => {
+    hooks.usePermission.mockReturnValue(true);
+    server.use(
+      http.get(`${API}/api/v1/billing/subscription`, () =>
+        HttpResponse.json(envelope(null)),
+      ),
+      http.get(`${API}/api/v1/billing/plans`, () =>
+        HttpResponse.json(envelope([freePlan])),
+      ),
+      http.get(`${API}/api/v1/billing/usage`, () =>
+        HttpResponse.json(errorEnvelope("network down"), { status: 500 }),
+      ),
+    );
+
+    renderPage();
+
+    expect(
+      await screen.findByText(t("errors.internal_error", {}, "en")),
+    ).toBeInTheDocument();
   });
 });

@@ -116,3 +116,36 @@ async def test_subscription_org_id_unique_constraint_enforced_by_database(
     )
     with pytest.raises(IntegrityError):
         await migrated_session.flush()
+
+
+async def test_plan_usage_prices_micros_defaults_empty_and_round_trips(
+    migrated_session: AsyncSession,
+) -> None:
+    default_plan = Plan(
+        name="Free",
+        slug="free-usage-prices-default",
+        stripe_price_id_monthly="price_free_monthly",
+        stripe_price_id_yearly="price_free_yearly",
+        price_monthly=0,
+        price_yearly=0,
+        features={"seats": 1},
+    )
+    migrated_session.add(default_plan)
+    await migrated_session.flush()
+    assert default_plan.usage_prices_micros == {}
+
+    priced_plan = Plan(
+        name="Pro",
+        slug="pro-usage-prices",
+        stripe_price_id_monthly="price_pro_monthly",
+        stripe_price_id_yearly="price_pro_yearly",
+        price_monthly=2900,
+        price_yearly=29000,
+        features={"seats": 5},
+        usage_meter_event_names={"api_calls": "api_calls_meter"},
+        usage_prices_micros={"api_calls": 100},  # $0.0001/call
+    )
+    migrated_session.add(priced_plan)
+    await migrated_session.flush()
+    await migrated_session.refresh(priced_plan)
+    assert priced_plan.usage_prices_micros == {"api_calls": 100}

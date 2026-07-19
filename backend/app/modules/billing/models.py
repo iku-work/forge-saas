@@ -39,6 +39,17 @@ class Plan(UUIDPKMixin, TimestampMixin, SoftDeleteMixin, SQLModel, table=True):
     usage_meter_event_names: dict[str, str] = Field(
         default_factory=dict, sa_column=Column(JSONB, nullable=False)
     )
+    # Local mirror of the metered Price's Stripe-side `unit_amount_decimal`
+    # -- metric -> price per unit in micros (1,000,000 micros = $1 USD), see
+    # docs/runbooks/stripe-usage-pricing.md. Estimate-only: Stripe's own
+    # Price is authoritative for actual invoicing, this just lets the app
+    # compute a local "estimated cost so far" (BillingService.
+    # get_usage_summary) without calling Stripe on every render. A metric
+    # can appear in usage_meter_event_names without an entry here -- not
+    # every tracked dimension is priced.
+    usage_prices_micros: dict[str, int] = Field(
+        default_factory=dict, sa_column=Column(JSONB, nullable=False)
+    )
 
 
 class Subscription(UUIDPKMixin, TimestampMixin, SQLModel, table=True):
