@@ -35,3 +35,7 @@ instead of per-PR.
 | 2026-07-19 | f341b11 | browse | - | - | PASS |
 | 2026-07-19 | f341b11 | presign | - | - | PASS |
 | 2026-07-19 | f341b11 | mixed | - | - | FAIL |
+| 2026-07-20 | af2121b | login-burst | - | - | FAIL |
+| 2026-07-20 | af2121b | browse | - | - | PASS |
+| 2026-07-20 | af2121b | presign | - | - | PASS |
+| 2026-07-20 | af2121b | mixed | - | - | FAIL |
