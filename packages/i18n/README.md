@@ -37,6 +37,10 @@ src/keys.ts          -- generated; do not edit (see below)
 src/load-python.py   -- reference loader the backend adapts in T-068
 scripts/generate-types.ts -- walks locales/en/, (re)writes src/keys.ts
 scripts/check-locales.ts  -- CI gate: >5% of en keys missing, orphan keys, empty en values (see below)
+scripts/i18n-transfer.ts  -- shared export/import/CSV/PO logic (see "Translator workflow" below)
+scripts/i18n-export.ts    -- `pnpm i18n:export` CLI
+scripts/i18n-import.ts    -- `pnpm i18n:import` CLI
+scripts/check-roundtrip.ts -- CI gate: en export -> import must be lossless
 ```
 
 ## Adding a key
@@ -98,6 +102,23 @@ key to a `locales/<code>/__review.json` sibling file, mapping each key to
 `check-locales` doesn't fail on a non-empty `__review.json` (a first pass
 should ship, not block CI) — the goal state is simply for that file to become
 empty (or absent) as translations get human-reviewed.
+
+## Translator workflow (`i18n:export` / `i18n:import`)
+
+A non-developer translates via CSV, no git required:
+
+```bash
+pnpm --filter @forge/i18n run i18n:export -- --locale de          # -> i18n-export/de.csv, de.po
+pnpm --filter @forge/i18n run i18n:export -- --locale de --missing-only
+pnpm --filter @forge/i18n run i18n:import i18n-export/de.csv       # merges translation column back in
+```
+
+`i18n:import` fails (non-zero exit, offending key named) on any CSV key not
+present in `en`, and never partially writes on failure. An unmodified
+export → import round-trip is a no-op — `check-roundtrip` (wired into `pnpm
+--filter @forge/i18n run lint`, same as `check-locales`) enforces this against
+`en` in CI. Full details, plus the Crowdin/Lokalise TMS setups, are in
+`docs/runbooks/translations.md`.
 
 ## `SUPPORTED_LOCALES` vs. product config
 

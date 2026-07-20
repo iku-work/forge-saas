@@ -18,6 +18,9 @@ dist/
 packages/api-client/src/generated/
 packages/i18n/src/keys.ts
 
+# i18n translator export (T-232) -- generated CSV/PO output, not checked in
+packages/i18n/i18n-export/
+
 # Storybook (T-150)
 storybook-static/
 test-results/

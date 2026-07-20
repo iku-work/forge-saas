@@ -16,9 +16,12 @@
   "scripts": {
     "generate-types": "tsx scripts/generate-types.ts",
     "check-locales": "tsx scripts/check-locales.ts",
+    "check-roundtrip": "tsx scripts/check-roundtrip.ts",
+    "i18n:export": "tsx scripts/i18n-export.ts",
+    "i18n:import": "tsx scripts/i18n-import.ts",
     "build": "pnpm run generate-types && tsup",
     "dev": "tsup --watch",
-    "lint": "pnpm run check-locales",
+    "lint": "pnpm run check-locales && pnpm run check-roundtrip",
     "type-check": "tsc --noEmit",
     "test": "vitest run"
   },
