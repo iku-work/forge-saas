@@ -39,3 +39,7 @@ instead of per-PR.
 | 2026-07-20 | af2121b | browse | - | - | PASS |
 | 2026-07-20 | af2121b | presign | - | - | PASS |
 | 2026-07-20 | af2121b | mixed | - | - | FAIL |
+| 2026-07-21 | 775918c | login-burst | - | - | FAIL |
+| 2026-07-21 | 775918c | browse | - | - | PASS |
+| 2026-07-21 | 775918c | presign | - | - | PASS |
+| 2026-07-21 | 775918c | mixed | - | - | FAIL |
