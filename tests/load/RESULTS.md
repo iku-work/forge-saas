@@ -43,3 +43,7 @@ instead of per-PR.
 | 2026-07-21 | 775918c | browse | - | - | PASS |
 | 2026-07-21 | 775918c | presign | - | - | PASS |
 | 2026-07-21 | 775918c | mixed | - | - | FAIL |
+| 2026-07-22 | 7ef201c | login-burst | - | - | FAIL |
+| 2026-07-22 | 7ef201c | browse | - | - | PASS |
+| 2026-07-22 | 7ef201c | presign | - | - | PASS |
+| 2026-07-22 | 7ef201c | mixed | - | - | FAIL |
