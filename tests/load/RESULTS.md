@@ -47,3 +47,7 @@ instead of per-PR.
 | 2026-07-22 | 7ef201c | browse | - | - | PASS |
 | 2026-07-22 | 7ef201c | presign | - | - | PASS |
 | 2026-07-22 | 7ef201c | mixed | - | - | FAIL |
+| 2026-07-23 | 5ea56b8 | login-burst | - | - | FAIL |
+| 2026-07-23 | 5ea56b8 | browse | - | - | PASS |
+| 2026-07-23 | 5ea56b8 | presign | - | - | PASS |
+| 2026-07-23 | 5ea56b8 | mixed | - | - | FAIL |
