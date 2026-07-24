@@ -51,3 +51,7 @@ instead of per-PR.
 | 2026-07-23 | 5ea56b8 | browse | - | - | PASS |
 | 2026-07-23 | 5ea56b8 | presign | - | - | PASS |
 | 2026-07-23 | 5ea56b8 | mixed | - | - | FAIL |
+| 2026-07-24 | d2c0252 | login-burst | - | - | FAIL |
+| 2026-07-24 | d2c0252 | browse | - | - | PASS |
+| 2026-07-24 | d2c0252 | presign | - | - | PASS |
+| 2026-07-24 | d2c0252 | mixed | - | - | FAIL |
