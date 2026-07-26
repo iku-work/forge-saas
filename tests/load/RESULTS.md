@@ -59,3 +59,7 @@ instead of per-PR.
 | 2026-07-25 | 51ebf2c | browse | - | - | PASS |
 | 2026-07-25 | 51ebf2c | presign | - | - | PASS |
 | 2026-07-25 | 51ebf2c | mixed | - | - | FAIL |
+| 2026-07-26 | dc4ffbf | login-burst | - | - | FAIL |
+| 2026-07-26 | dc4ffbf | browse | - | - | PASS |
+| 2026-07-26 | dc4ffbf | presign | - | - | PASS |
+| 2026-07-26 | dc4ffbf | mixed | - | - | FAIL |
