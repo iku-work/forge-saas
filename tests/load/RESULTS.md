@@ -63,3 +63,7 @@ instead of per-PR.
 | 2026-07-26 | dc4ffbf | browse | - | - | PASS |
 | 2026-07-26 | dc4ffbf | presign | - | - | PASS |
 | 2026-07-26 | dc4ffbf | mixed | - | - | FAIL |
+| 2026-07-27 | 98bc3a7 | login-burst | - | - | FAIL |
+| 2026-07-27 | 98bc3a7 | browse | - | - | PASS |
+| 2026-07-27 | 98bc3a7 | presign | - | - | PASS |
+| 2026-07-27 | 98bc3a7 | mixed | - | - | FAIL |
