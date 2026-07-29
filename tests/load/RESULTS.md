@@ -71,3 +71,7 @@ instead of per-PR.
 | 2026-07-28 | 6c1a3ba | browse | - | - | PASS |
 | 2026-07-28 | 6c1a3ba | presign | - | - | PASS |
 | 2026-07-28 | 6c1a3ba | mixed | - | - | FAIL |
+| 2026-07-29 | 7f112fa | login-burst | - | - | FAIL |
+| 2026-07-29 | 7f112fa | browse | - | - | PASS |
+| 2026-07-29 | 7f112fa | presign | - | - | PASS |
+| 2026-07-29 | 7f112fa | mixed | - | - | FAIL |
