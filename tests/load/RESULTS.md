@@ -79,3 +79,7 @@ instead of per-PR.
 | 2026-07-30 | c21b692 | browse | - | - | PASS |
 | 2026-07-30 | c21b692 | presign | - | - | PASS |
 | 2026-07-30 | c21b692 | mixed | - | - | PASS |
+| 2026-07-31 | e9c19ad | login-burst | - | - | FAIL |
+| 2026-07-31 | e9c19ad | browse | - | - | PASS |
+| 2026-07-31 | e9c19ad | presign | - | - | PASS |
+| 2026-07-31 | e9c19ad | mixed | - | - | FAIL |
