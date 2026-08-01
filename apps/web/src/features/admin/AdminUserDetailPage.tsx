@@ -21,10 +21,12 @@ import {
 } from "@forge/ui";
 import { formatDate } from "@forge/utils";
 
+import { useRouteLocale } from "../../lib/useRouteLocale";
 import { getErrorMessage } from "../auth/getErrorMessage";
 import { ImpersonateModal } from "./ImpersonateModal";
 
 export function AdminUserDetailPage({ userId }: { userId: string }) {
+  const locale = useRouteLocale();
   const { t, i18n } = useTranslation();
   const [impersonateOpen, setImpersonateOpen] = useState(false);
 
@@ -40,7 +42,8 @@ export function AdminUserDetailPage({ userId }: { userId: string }) {
   return (
     <div className="max-w-4xl space-y-6 p-6">
       <Link
-        to="/admin/users"
+        to="/$locale/admin/users"
+        params={{ locale }}
         className="text-sm text-muted-foreground underline underline-offset-4"
       >
         {t("common.admin.user_detail.back_to_users")}
@@ -107,8 +110,8 @@ export function AdminUserDetailPage({ userId }: { userId: string }) {
                       <TableRow key={membership.org_id}>
                         <TableCell>
                           <Link
-                            to="/admin/orgs/$id"
-                            params={{ id: membership.org_id }}
+                            to="/$locale/admin/orgs/$id"
+                            params={{ locale, id: membership.org_id }}
                             className="underline underline-offset-4"
                           >
                             {membership.org_name}

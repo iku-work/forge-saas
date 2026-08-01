@@ -7,7 +7,7 @@ const resetPasswordSearchSchema = z.object({
   token: z.string().optional(),
 });
 
-export const Route = createFileRoute("/reset-password")({
+export const Route = createFileRoute("/$locale/reset-password")({
   validateSearch: (search) => resetPasswordSearchSchema.parse(search),
   component: ResetPasswordRoute,
 });

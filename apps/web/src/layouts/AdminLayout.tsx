@@ -6,17 +6,49 @@ import { useTranslation } from "react-i18next";
 import { useAuth } from "@forge/hooks";
 import { Badge, Toaster } from "@forge/ui";
 
+import { stripLocale } from "../lib/locale-url";
+import { useRouteLocale } from "../lib/useRouteLocale";
+
 interface AdminNavItem {
-  to: string;
+  // T-233: the router path (locale-prefixed) and the locale-less path the
+  // active-state check compares against are deliberately separate fields --
+  // deriving the second by string-surgery on the first is the kind of thing
+  // that silently stops matching when a route is renamed.
+  to:
+    | "/$locale/admin"
+    | "/$locale/admin/orgs"
+    | "/$locale/admin/users"
+    | "/$locale/admin/audit";
+  path: string;
   labelKey: string;
   icon: typeof LayoutDashboard;
 }
 
 const ADMIN_NAV: AdminNavItem[] = [
-  { to: "/admin", labelKey: "common.admin.nav.dashboard", icon: LayoutDashboard },
-  { to: "/admin/orgs", labelKey: "common.admin.nav.orgs", icon: ListChecks },
-  { to: "/admin/users", labelKey: "common.admin.nav.users", icon: Users },
-  { to: "/admin/audit", labelKey: "common.admin.nav.audit", icon: ScrollText },
+  {
+    to: "/$locale/admin",
+    path: "/admin",
+    labelKey: "common.admin.nav.dashboard",
+    icon: LayoutDashboard,
+  },
+  {
+    to: "/$locale/admin/orgs",
+    path: "/admin/orgs",
+    labelKey: "common.admin.nav.orgs",
+    icon: ListChecks,
+  },
+  {
+    to: "/$locale/admin/users",
+    path: "/admin/users",
+    labelKey: "common.admin.nav.users",
+    icon: Users,
+  },
+  {
+    to: "/$locale/admin/audit",
+    path: "/admin/audit",
+    labelKey: "common.admin.nav.audit",
+    icon: ScrollText,
+  },
 ];
 
 // T-143: a deliberately distinct shell (dark header, red "Admin" badge, no
@@ -28,10 +60,12 @@ export function AdminLayout({ children }: { children: ReactNode }) {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
+  const locale = useRouteLocale();
+  const activePath = stripLocale(location.pathname);
 
   const handleLogout = async (): Promise<void> => {
     await logout();
-    await navigate({ to: "/login" });
+    await navigate({ to: "/$locale/login", params: { locale } });
   };
 
   return (
@@ -45,13 +79,14 @@ export function AdminLayout({ children }: { children: ReactNode }) {
           {ADMIN_NAV.map((item) => {
             const Icon = item.icon;
             const isActive =
-              item.to === "/admin"
-                ? location.pathname === "/admin"
-                : location.pathname.startsWith(item.to);
+              item.path === "/admin"
+                ? activePath === "/admin"
+                : activePath.startsWith(item.path);
             return (
               <Link
                 key={item.to}
                 to={item.to}
+                params={{ locale }}
                 className={`flex items-center gap-2 rounded-md px-3 py-2 text-sm transition-colors hover:bg-slate-800 ${
                   isActive ? "bg-slate-800 text-white" : "text-slate-300"
                 }`}
@@ -64,7 +99,8 @@ export function AdminLayout({ children }: { children: ReactNode }) {
         </nav>
         <div className="flex items-center gap-4">
           <Link
-            to="/"
+            to="/$locale"
+            params={{ locale }}
             className="text-sm text-slate-300 underline underline-offset-4 hover:text-white"
           >
             {t("common.admin.back_to_app")}

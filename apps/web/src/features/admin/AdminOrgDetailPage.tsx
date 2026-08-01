@@ -25,6 +25,7 @@ import {
 } from "@forge/ui";
 import { formatDate } from "@forge/utils";
 
+import { useRouteLocale } from "../../lib/useRouteLocale";
 import { getErrorMessage } from "../auth/getErrorMessage";
 import { CompCreditModal } from "./CompCreditModal";
 import { ExtendTrialModal } from "./ExtendTrialModal";
@@ -373,6 +374,7 @@ function FeatureFlagsTab({ orgId }: { orgId: string }) {
 }
 
 export function AdminOrgDetailPage({ orgId }: { orgId: string }) {
+  const locale = useRouteLocale();
   const { t, i18n } = useTranslation();
 
   const detailQuery = useQuery({
@@ -387,7 +389,8 @@ export function AdminOrgDetailPage({ orgId }: { orgId: string }) {
   return (
     <div className="max-w-4xl space-y-6 p-6">
       <Link
-        to="/admin/orgs"
+        to="/$locale/admin/orgs"
+        params={{ locale }}
         className="text-sm text-muted-foreground underline underline-offset-4"
       >
         {t("common.admin.org_detail.back_to_orgs")}

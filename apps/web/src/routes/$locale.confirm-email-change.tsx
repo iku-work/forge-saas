@@ -7,7 +7,7 @@ const confirmEmailChangeSearchSchema = z.object({
   token: z.string().optional(),
 });
 
-export const Route = createFileRoute("/confirm-email-change")({
+export const Route = createFileRoute("/$locale/confirm-email-change")({
   validateSearch: (search) => confirmEmailChangeSearchSchema.parse(search),
   component: ConfirmEmailChangeRoute,
 });

@@ -48,6 +48,15 @@ const SNAPSHOT_TARGETS = [
   { path: "/settings/org", name: "settings-org", readyTestId: "org-avatar" },
 ];
 
+// T-233: every URL is locale-prefixed now. Navigating to the prefixed form
+// directly (rather than letting the locale-less path redirect) keeps each
+// snapshot one navigation, and is what makes the ar run below actually
+// render in Arabic -- the locale in the URL is what decides, not a stored
+// preference.
+function localePath(locale: string, path: string): string {
+  return path === "/" ? `/${locale}` : `/${locale}${path}`;
+}
+
 const VIEWPORTS = [
   { name: "desktop", size: DESKTOP_VIEWPORT },
   { name: "mobile", size: MOBILE_VIEWPORT },
@@ -60,7 +69,7 @@ test.describe("visual regression: dashboard + settings", () => {
     page,
   }) => {
     await page.setViewportSize(DESKTOP_VIEWPORT);
-    await page.goto("/login");
+    await page.goto("/en/login");
     await page.getByTestId("login-email-input").fill(SUPERADMIN_EMAIL);
     await page.getByTestId("login-password-input").fill(SUPERADMIN_PASSWORD);
     await page.getByTestId("login-submit").click();
@@ -70,7 +79,7 @@ test.describe("visual regression: dashboard + settings", () => {
       await page.setViewportSize(viewport.size);
       for (const target of SNAPSHOT_TARGETS) {
         await test.step(`${target.name} @ ${viewport.name}`, async () => {
-          await page.goto(target.path);
+          await page.goto(localePath("en", target.path));
           await expect(page.getByTestId(target.readyTestId)).toBeVisible();
           await stabilizeForSnapshot(page);
           await expect(page).toHaveScreenshot(`${target.name}-${viewport.name}.png`, {
@@ -84,17 +93,18 @@ test.describe("visual regression: dashboard + settings", () => {
   // T-231: dashboard + settings-profile in the ar (rtl) locale, desktop
   // width only -- proving the layout mirrors (sidebar, nav, and text
   // alignment flip), not re-running the full page x viewport matrix above
-  // in a second language. localStorage is seeded via addInitScript (the
-  // same "forge.locale" key apps/web/src/i18n.ts's LOCALE_STORAGE_KEY
-  // persists to) before login, so the app renders rtl from first paint.
+  // in a second language.
+  //
+  // T-233 replaced the old addInitScript that seeded localStorage's
+  // "forge.locale": the URL is the source of truth for the rendered locale
+  // now, so /ar/login is both simpler and a stricter test -- the seeded
+  // superadmin's own User.locale is "en", and rtl still has to win here
+  // because that's what the URL says.
   test("dashboard and settings-profile mirror correctly in the ar (rtl) locale", async ({
     page,
   }) => {
-    await page.addInitScript(() => {
-      window.localStorage.setItem("forge.locale", "ar");
-    });
     await page.setViewportSize(DESKTOP_VIEWPORT);
-    await page.goto("/login");
+    await page.goto("/ar/login");
     expect(await page.evaluate(() => document.documentElement.dir)).toBe("rtl");
     await page.getByTestId("login-email-input").fill(SUPERADMIN_EMAIL);
     await page.getByTestId("login-password-input").fill(SUPERADMIN_PASSWORD);
@@ -103,7 +113,7 @@ test.describe("visual regression: dashboard + settings", () => {
 
     for (const target of SNAPSHOT_TARGETS.filter((t) => t.name !== "settings-org")) {
       await test.step(`${target.name} @ desktop (ar)`, async () => {
-        await page.goto(target.path);
+        await page.goto(localePath("ar", target.path));
         await expect(page.getByTestId(target.readyTestId)).toBeVisible();
         await stabilizeForSnapshot(page);
         await expect(page).toHaveScreenshot(`${target.name}-desktop-ar.png`, {

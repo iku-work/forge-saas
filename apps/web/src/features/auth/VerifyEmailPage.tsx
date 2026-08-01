@@ -5,6 +5,8 @@ import { useTranslation } from "react-i18next";
 import { verifyEmailApiV1AuthVerifyEmailPost } from "@forge/api-client";
 import { Alert, AlertDescription, Skeleton } from "@forge/ui";
 
+import { useRouteLocale } from "../../lib/useRouteLocale";
+
 import { AuthCard } from "./AuthCard";
 import { getErrorMessage } from "./getErrorMessage";
 
@@ -16,6 +18,7 @@ interface VerifyEmailPageProps {
 
 export function VerifyEmailPage({ token }: VerifyEmailPageProps) {
   const { t } = useTranslation();
+  const locale = useRouteLocale();
   const [state, setState] = useState<VerifyState>(
     token ? "verifying" : "error",
   );
@@ -64,7 +67,8 @@ export function VerifyEmailPage({ token }: VerifyEmailPageProps) {
         </Alert>
         <p className="text-center text-sm text-muted-foreground">
           <Link
-            to="/login"
+            to="/$locale/login"
+            params={{ locale }}
             className="underline underline-offset-4"
             data-testid="verify-email-continue-to-login"
           >
@@ -83,11 +87,19 @@ export function VerifyEmailPage({ token }: VerifyEmailPageProps) {
         </AlertDescription>
       </Alert>
       <p className="text-center text-sm text-muted-foreground">
-        <Link to="/register" className="underline underline-offset-4">
+        <Link
+          to="/$locale/register"
+          params={{ locale }}
+          className="underline underline-offset-4"
+        >
           {t("auth.verify_email.create_account")}
         </Link>{" "}
         {t("auth.verify_email.or")}{" "}
-        <Link to="/login" className="underline underline-offset-4">
+        <Link
+          to="/$locale/login"
+          params={{ locale }}
+          className="underline underline-offset-4"
+        >
           {t("auth.verify_email.login")}
         </Link>
       </p>

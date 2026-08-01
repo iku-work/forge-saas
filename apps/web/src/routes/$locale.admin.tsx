@@ -6,13 +6,13 @@ import { AdminLayout } from "../layouts/AdminLayout";
 // distinct) so support staff always know they're on the admin surface, not
 // the ordinary user-facing app. Reachable at a real "/admin" URL -- unlike
 // `_app`'s pathless layout -- so it's directly bookmarkable/linkable.
-export const Route = createFileRoute("/admin")({
-  beforeLoad: ({ context }) => {
+export const Route = createFileRoute("/$locale/admin")({
+  beforeLoad: ({ context, params }) => {
     if (!context.auth.user) {
-      throw redirect({ to: "/login" });
+      throw redirect({ to: "/$locale/login", params });
     }
     if (!context.auth.user.is_superadmin) {
-      throw redirect({ to: "/" });
+      throw redirect({ to: "/$locale", params });
     }
   },
   component: AdminShell,

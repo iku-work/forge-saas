@@ -1,13 +1,18 @@
 import { IntlMessageFormat } from "intl-messageformat";
 
 export {
+  isSupportedLocale,
   type LocaleMeta,
   LOCALES as LOCALE_REGISTRY,
   localeMeta,
   SUPPORTED_LOCALES,
   type SupportedLocale,
 } from "./locales";
-import { SUPPORTED_LOCALES, type SupportedLocale } from "./locales";
+import {
+  isSupportedLocale,
+  SUPPORTED_LOCALES,
+  type SupportedLocale,
+} from "./locales";
 
 import authEn from "../locales/en/auth.json";
 import billingEn from "../locales/en/billing.json";
@@ -150,10 +155,6 @@ const TRANSLATIONS_BY_LOCALE: Record<SupportedLocale, Translations> = {
     validation: validationAr,
   },
 };
-
-function isSupportedLocale(locale: string): locale is SupportedLocale {
-  return (SUPPORTED_LOCALES as readonly string[]).includes(locale);
-}
 
 export function loadLocale(locale: string): Translations {
   if (!isSupportedLocale(locale)) {

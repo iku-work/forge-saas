@@ -7,6 +7,7 @@ pattern as test_auth_repository.py.
 
 from collections.abc import AsyncGenerator
 from datetime import UTC, datetime, timedelta
+from typing import Any
 
 import pytest
 from sqlalchemy import func, select
@@ -19,6 +20,7 @@ from sqlalchemy.ext.asyncio import (
 from sqlmodel import SQLModel
 from testcontainers.postgres import PostgresContainer
 
+from app.core.config import get_settings
 from app.core.exceptions import AuthenticationError
 from app.modules.audit.models import AuditEvent
 from app.modules.auth.models import EmailVerificationToken, User
@@ -119,6 +121,23 @@ async def test_register_creates_verification_token_for_new_user(
         )
     ).scalar_one()
     assert token_count == 1
+
+
+async def test_register_verification_link_is_locale_prefixed(
+    service: AuthService,
+    enqueued_jobs: list[tuple[str, Any]],
+) -> None:
+    """T-233: every link into the web app carries a locale segment. A brand-new
+    registrant has no stored preference yet, so this is the product default --
+    what matters is that the segment is there at all, since
+    apps/web/src/routes/$locale.tsx is what serves the page it points at."""
+    await service.register(RegisterRequest(email="carol@example.com", password=_VALID_PASSWORD))
+
+    kwargs = next(k for f, k in enqueued_jobs if f == "send_email")
+    assert kwargs["template"] == "verify_email"
+    assert kwargs["context"]["verification_url"].startswith(
+        f"{get_settings().FRONTEND_URL}/en/verify-email?token="
+    )
 
 
 async def test_register_writes_audit_event(

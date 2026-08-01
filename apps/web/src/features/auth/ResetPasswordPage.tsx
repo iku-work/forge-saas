@@ -23,6 +23,8 @@ import {
   type PasswordResetInput,
 } from "@forge/validation";
 
+import { useRouteLocale } from "../../lib/useRouteLocale";
+
 import { AuthCard } from "./AuthCard";
 import { getErrorMessage } from "./getErrorMessage";
 
@@ -32,6 +34,7 @@ interface ResetPasswordPageProps {
 
 export function ResetPasswordPage({ token }: ResetPasswordPageProps) {
   const { t } = useTranslation();
+  const locale = useRouteLocale();
   const [formError, setFormError] = useState<string | null>(null);
   const [submitted, setSubmitted] = useState(false);
 
@@ -49,7 +52,11 @@ export function ResetPasswordPage({ token }: ResetPasswordPageProps) {
           </AlertDescription>
         </Alert>
         <p className="text-center text-sm text-muted-foreground">
-          <Link to="/forgot-password" className="underline underline-offset-4">
+          <Link
+            to="/$locale/forgot-password"
+            params={{ locale }}
+            className="underline underline-offset-4"
+          >
             {t("auth.reset_password.request_new")}
           </Link>
         </p>
@@ -81,7 +88,11 @@ export function ResetPasswordPage({ token }: ResetPasswordPageProps) {
           </AlertDescription>
         </Alert>
         <p className="text-center text-sm text-muted-foreground">
-          <Link to="/login" className="underline underline-offset-4">
+          <Link
+            to="/$locale/login"
+            params={{ locale }}
+            className="underline underline-offset-4"
+          >
             {t("auth.reset_password.continue_to_login")}
           </Link>
         </p>

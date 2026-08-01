@@ -22,6 +22,8 @@ import {
 } from "@forge/ui";
 import { loginSchema, type LoginInput } from "@forge/validation";
 
+import { useRouteLocale } from "../../lib/useRouteLocale";
+
 import { AuthCard } from "./AuthCard";
 import { getErrorMessage } from "./getErrorMessage";
 import { getOAuthStartUrl } from "./oauth";
@@ -29,6 +31,7 @@ import { TwoFactorChallenge } from "./TwoFactorChallenge";
 
 export function LoginPage() {
   const { t } = useTranslation();
+  const locale = useRouteLocale();
   const { login, completeTwoFactorLogin } = useAuth();
   const modules = useModules();
   const navigate = useNavigate();
@@ -44,7 +47,7 @@ export function LoginPage() {
     setFormError(null);
     try {
       await login(values.email, values.password);
-      await navigate({ to: "/" });
+      await navigate({ to: "/$locale", params: { locale } });
     } catch (error) {
       if (error instanceof TwoFactorRequiredError) {
         setTempToken(error.tempToken);
@@ -67,7 +70,7 @@ export function LoginPage() {
     // React commit AppRoot's re-render (and thus the router's new context)
     // first.
     setTimeout(() => {
-      void navigate({ to: "/" });
+      void navigate({ to: "/$locale", params: { locale } });
     }, 0);
   };
 
@@ -93,19 +96,28 @@ export function LoginPage() {
         <>
           <p>
             <Link
-              to="/forgot-password"
+              to="/$locale/forgot-password"
+              params={{ locale }}
               className="underline underline-offset-4"
             >
               {t("auth.login.forgot_password")}
             </Link>
             {" · "}
-            <Link to="/magic-link" className="underline underline-offset-4">
+            <Link
+              to="/$locale/magic-link"
+              params={{ locale }}
+              className="underline underline-offset-4"
+            >
               {t("auth.login.magic_link_cta")}
             </Link>
           </p>
           <p>
             {t("auth.login.no_account")}{" "}
-            <Link to="/register" className="underline underline-offset-4">
+            <Link
+              to="/$locale/register"
+              params={{ locale }}
+              className="underline underline-offset-4"
+            >
               {t("auth.login.signup_link")}
             </Link>
           </p>

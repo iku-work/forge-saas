@@ -22,11 +22,14 @@ import {
   type ForgotPasswordInput,
 } from "@forge/validation";
 
+import { useRouteLocale } from "../../lib/useRouteLocale";
+
 import { AuthCard } from "./AuthCard";
 import { getErrorMessage } from "./getErrorMessage";
 
 export function ForgotPasswordPage() {
   const { t } = useTranslation();
+  const locale = useRouteLocale();
   const [formError, setFormError] = useState<string | null>(null);
   const [submitted, setSubmitted] = useState(false);
 
@@ -59,7 +62,11 @@ export function ForgotPasswordPage() {
           </AlertDescription>
         </Alert>
         <p className="text-center text-sm text-muted-foreground">
-          <Link to="/login" className="underline underline-offset-4">
+          <Link
+            to="/$locale/login"
+            params={{ locale }}
+            className="underline underline-offset-4"
+          >
             {t("auth.forgot_password.back_to_login")}
           </Link>
         </p>
@@ -73,7 +80,11 @@ export function ForgotPasswordPage() {
       description={t("auth.forgot_password.description")}
       footer={
         <p>
-          <Link to="/login" className="underline underline-offset-4">
+          <Link
+            to="/$locale/login"
+            params={{ locale }}
+            className="underline underline-offset-4"
+          >
             {t("auth.forgot_password.back_to_login")}
           </Link>
         </p>

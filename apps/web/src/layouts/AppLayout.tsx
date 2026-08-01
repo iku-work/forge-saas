@@ -49,9 +49,28 @@ import {
 
 import { CreateOrgForm } from "../features/settings/CreateOrgForm";
 import { NotificationBell } from "../features/notifications/NotificationBell";
+import { stripLocale } from "../lib/locale-url";
+import { useRouteLocale } from "../lib/useRouteLocale";
+
+// T-233: every in-app destination is locale-prefixed. `to` is the router's
+// path (with the `$locale` param it now needs); `path` is the same
+// destination without it, and is what the breadcrumb, the active-state
+// check, and the `data-testid` slugs are keyed on -- none of those should
+// change shape just because the URL grew a locale segment.
+type NavTo =
+  | "/$locale"
+  | "/$locale/files"
+  | "/$locale/reports"
+  | "/$locale/settings/profile"
+  | "/$locale/settings/security"
+  | "/$locale/settings/org"
+  | "/$locale/settings/members"
+  | "/$locale/settings/billing"
+  | "/$locale/settings/notifications";
 
 interface NavItem {
-  to: string;
+  to: NavTo;
+  path: string;
   labelKey: string;
   icon: typeof LayoutDashboard;
   permission?: Permission;
@@ -62,15 +81,22 @@ interface NavItem {
 }
 
 const PRIMARY_NAV: NavItem[] = [
-  { to: "/", labelKey: "common.nav.dashboard", icon: LayoutDashboard },
   {
-    to: "/files",
+    to: "/$locale",
+    path: "/",
+    labelKey: "common.nav.dashboard",
+    icon: LayoutDashboard,
+  },
+  {
+    to: "/$locale/files",
+    path: "/files",
     labelKey: "common.nav.files",
     icon: FolderOpen,
     module: "fileStorage",
   },
   {
-    to: "/reports",
+    to: "/$locale/reports",
+    path: "/reports",
     labelKey: "common.nav.reports",
     icon: BarChart3,
     module: "featureFlags",
@@ -79,19 +105,41 @@ const PRIMARY_NAV: NavItem[] = [
 ];
 
 const SETTINGS_NAV: NavItem[] = [
-  { to: "/settings/profile", labelKey: "common.nav.profile", icon: UserIcon },
-  { to: "/settings/security", labelKey: "common.nav.security", icon: Shield },
-  { to: "/settings/org", labelKey: "common.nav.organization", icon: Building2 },
-  { to: "/settings/members", labelKey: "common.nav.members", icon: Users },
   {
-    to: "/settings/billing",
+    to: "/$locale/settings/profile",
+    path: "/settings/profile",
+    labelKey: "common.nav.profile",
+    icon: UserIcon,
+  },
+  {
+    to: "/$locale/settings/security",
+    path: "/settings/security",
+    labelKey: "common.nav.security",
+    icon: Shield,
+  },
+  {
+    to: "/$locale/settings/org",
+    path: "/settings/org",
+    labelKey: "common.nav.organization",
+    icon: Building2,
+  },
+  {
+    to: "/$locale/settings/members",
+    path: "/settings/members",
+    labelKey: "common.nav.members",
+    icon: Users,
+  },
+  {
+    to: "/$locale/settings/billing",
+    path: "/settings/billing",
     labelKey: "common.nav.billing",
     icon: CreditCard,
     permission: Permission.BILLING_READ,
     module: "billing",
   },
   {
-    to: "/settings/notifications",
+    to: "/$locale/settings/notifications",
+    path: "/settings/notifications",
     labelKey: "common.nav.notifications",
     icon: Bell,
     module: "notifications",
@@ -124,12 +172,15 @@ function initialsFor(email: string): string {
 }
 
 // "/" -> "dashboard", "/settings/members" -> "settings-members"
-function navTestSlug(to: string): string {
-  return to === "/" ? "dashboard" : to.replace(/^\//, "").replace(/\//g, "-");
+function navTestSlug(path: string): string {
+  return path === "/"
+    ? "dashboard"
+    : path.replace(/^\//, "").replace(/\//g, "-");
 }
 
 function NavLink({ item }: { item: NavItem }) {
   const { t } = useTranslation();
+  const locale = useRouteLocale();
   // usePermission must run unconditionally (hooks can't be called
   // conditionally) -- MEMBERS_READ is just a harmless placeholder for items
   // with no `permission`, since the result below is only consulted when one
@@ -150,12 +201,13 @@ function NavLink({ item }: { item: NavItem }) {
   return (
     <Link
       to={item.to}
+      params={{ locale }}
       className="flex items-center gap-2 rounded-md px-3 py-2 text-sm text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
       activeProps={{
         className: "bg-accent text-accent-foreground font-medium",
       }}
-      activeOptions={{ exact: item.to === "/" }}
-      data-testid={`nav-${navTestSlug(item.to)}`}
+      activeOptions={{ exact: item.path === "/" }}
+      data-testid={`nav-${navTestSlug(item.path)}`}
     >
       <Icon className="size-4" aria-hidden="true" />
       {t(item.labelKey)}
@@ -237,6 +289,7 @@ function UserMenu() {
   const { t } = useTranslation();
   const { user, logout } = useAuth();
   const navigate = useNavigate();
+  const locale = useRouteLocale();
 
   if (!user) {
     return null;
@@ -244,7 +297,7 @@ function UserMenu() {
 
   const handleLogout = async (): Promise<void> => {
     await logout();
-    await navigate({ to: "/login" });
+    await navigate({ to: "/$locale/login", params: { locale } });
   };
 
   return (
@@ -268,7 +321,7 @@ function UserMenu() {
         {user.is_superadmin ? (
           <>
             <DropdownMenuItem asChild>
-              <Link to="/admin">
+              <Link to="/$locale/admin" params={{ locale }}>
                 <ShieldAlert className="size-4" aria-hidden="true" />
                 {t("common.admin.user_menu_link")}
               </Link>
@@ -336,7 +389,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
     return <CreateFirstOrgPrompt />;
   }
 
-  const pageTitle = pageTitleFor(location.pathname, t);
+  const pageTitle = pageTitleFor(stripLocale(location.pathname), t);
 
   return (
     <div className="flex min-h-screen" data-testid="app-shell">

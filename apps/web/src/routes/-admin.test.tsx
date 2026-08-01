@@ -11,21 +11,21 @@ describe("/admin auth guard", () => {
   it("redirects to /login when there is no authenticated user", async () => {
     const { router } = renderApp({ initialPath: "/admin", user: null });
     await waitFor(() => {
-      expect(router.state.location.pathname).toBe("/login");
+      expect(router.state.location.pathname).toBe("/en/login");
     });
   });
 
   it("redirects a non-superadmin back to the user-facing app", async () => {
     const { router } = renderApp({ initialPath: "/admin", user: plainUser });
     await waitFor(() => {
-      expect(router.state.location.pathname).toBe("/");
+      expect(router.state.location.pathname).toBe("/en");
     });
   });
 
   it("does not redirect a superadmin away from /admin", async () => {
     const { router } = renderApp({ initialPath: "/admin", user: superadmin });
     await waitFor(() => {
-      expect(router.state.location.pathname).toBe("/admin");
+      expect(router.state.location.pathname).toBe("/en/admin");
     });
   });
 });

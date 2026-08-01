@@ -22,12 +22,14 @@ import {
 } from "@forge/ui";
 import { formatDate } from "@forge/utils";
 
+import { useRouteLocale } from "../../lib/useRouteLocale";
 import { getErrorMessage } from "../auth/getErrorMessage";
 import { useDebouncedValue } from "./useDebouncedValue";
 
 type ActiveFilter = "" | "true" | "false";
 
 export function AdminUsersPage() {
+  const locale = useRouteLocale();
   const { t, i18n } = useTranslation();
   const [search, setSearch] = useState("");
   const [active, setActive] = useState<ActiveFilter>("");
@@ -108,8 +110,8 @@ export function AdminUsersPage() {
                   <TableRow key={user.id}>
                     <TableCell>
                       <Link
-                        to="/admin/users/$id"
-                        params={{ id: user.id }}
+                        to="/$locale/admin/users/$id"
+                        params={{ locale, id: user.id }}
                         className="underline underline-offset-4"
                       >
                         {user.email}

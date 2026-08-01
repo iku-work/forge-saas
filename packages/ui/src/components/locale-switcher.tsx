@@ -21,9 +21,21 @@ function nativeNameFor(code: string): string {
   return localeMeta(code)?.nativeName ?? code;
 }
 
-export function LocaleSwitcher() {
+export interface LocaleSwitcherProps {
+  /**
+   * Replaces the default "just change the language" behaviour. Web passes a
+   * handler that *also* rewrites the URL's locale segment in place (T-233),
+   * so switching language never loses the page the user is on; mobile and
+   * Storybook keep the default. Handlers are responsible for calling
+   * useLocale()'s own setLocale -- see apps/web/src/lib/RoutedLocaleSwitcher.tsx.
+   */
+  onSwitch?: (locale: string) => void | Promise<void>;
+}
+
+export function LocaleSwitcher({ onSwitch }: LocaleSwitcherProps = {}) {
   const { t } = useTranslation();
   const { locale, supportedLocales, setLocale } = useLocale();
+  const switchTo = onSwitch ?? setLocale;
 
   return (
     <DropdownMenu>
@@ -52,7 +64,7 @@ export function LocaleSwitcher() {
           <DropdownMenuItem
             key={code}
             onSelect={() => {
-              void setLocale(code);
+              void switchTo(code);
             }}
           >
             <span className="flex-1">{nativeNameFor(code)}</span>

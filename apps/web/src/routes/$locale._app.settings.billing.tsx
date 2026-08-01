@@ -4,7 +4,7 @@ import { bootstrapModules, getModulesSnapshot } from "@forge/hooks";
 
 import { BillingSettingsPage } from "../features/settings/BillingSettingsPage";
 
-export const Route = createFileRoute("/_app/settings/billing")({
+export const Route = createFileRoute("/$locale/_app/settings/billing")({
   beforeLoad: async () => {
     await bootstrapModules();
     if (!getModulesSnapshot().billing) {

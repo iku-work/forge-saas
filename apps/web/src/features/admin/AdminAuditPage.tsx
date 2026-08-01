@@ -23,10 +23,12 @@ import {
 } from "@forge/ui";
 import { formatDate } from "@forge/utils";
 
+import { useRouteLocale } from "../../lib/useRouteLocale";
 import { getErrorMessage } from "../auth/getErrorMessage";
 import { useDebouncedValue } from "./useDebouncedValue";
 
 export function AdminAuditPage() {
+  const locale = useRouteLocale();
   const { t, i18n } = useTranslation();
   const [actor, setActor] = useState("");
   const [action, setAction] = useState("");
@@ -144,8 +146,8 @@ export function AdminAuditPage() {
                     <TableCell>
                       {event.org_id && event.org_name ? (
                         <Link
-                          to="/admin/orgs/$id"
-                          params={{ id: event.org_id }}
+                          to="/$locale/admin/orgs/$id"
+                          params={{ locale, id: event.org_id }}
                           className="underline underline-offset-4"
                         >
                           {event.org_name}

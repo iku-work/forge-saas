@@ -12,14 +12,14 @@ describe("/_app auth guard", () => {
   it("redirects to /login when there is no authenticated user", async () => {
     const { router } = renderApp({ initialPath: "/", user: null });
     await waitFor(() => {
-      expect(router.state.location.pathname).toBe("/login");
+      expect(router.state.location.pathname).toBe("/en/login");
     });
   });
 
   it("redirects to /verify-email when the user has not verified their email", async () => {
     const { router } = renderApp({ initialPath: "/", user: unverifiedUser });
     await waitFor(() => {
-      expect(router.state.location.pathname).toBe("/verify-email");
+      expect(router.state.location.pathname).toBe("/en/verify-email");
     });
   });
 

@@ -42,11 +42,14 @@ import { initReactI18next } from "react-i18next";
 
 import {
   DEFAULT_LOCALE,
+  isSupportedLocale,
   localeMeta,
   SUPPORTED_LOCALES,
   type SupportedLocale,
   type Translations,
 } from "@forge/i18n";
+
+import { resolvePreferredLocale } from "./lib/locale-url";
 
 export const LOCALE_STORAGE_KEY = "forge.locale";
 
@@ -329,7 +332,7 @@ class LazyBackend implements BackendModule {
     _namespace: string,
     callback: (error: Error | null, data: Resource[string] | false) => void,
   ): void {
-    if (!isSupported(language)) {
+    if (!isSupportedLocale(language)) {
       callback(
         new Error(`@forge/i18n: no loader registered for locale "${language}"`),
         false,
@@ -349,7 +352,7 @@ class LazyBackend implements BackendModule {
   }
 }
 
-function readStoredLocale(): string | null {
+export function readStoredLocale(): string | null {
   try {
     return localStorage.getItem(LOCALE_STORAGE_KEY);
   } catch {
@@ -358,35 +361,51 @@ function readStoredLocale(): string | null {
   }
 }
 
-function isSupported(locale: string | null): locale is SupportedLocale {
-  return (
-    locale !== null && (SUPPORTED_LOCALES as readonly string[]).includes(locale)
-  );
+/**
+ * Which locale a *locale-less* entry point should resolve to (T-233's
+ * redirect rule, and this module's own pre-router bootstrap). The signed-in
+ * user's own preference is the top tier but isn't knowable here -- the
+ * router passes it in from `context.auth.user` once useAuth() has resolved.
+ */
+export function detectPreferredLocale(
+  userLocale?: string | null,
+): SupportedLocale {
+  return resolvePreferredLocale({
+    userLocale,
+    storedLocale: readStoredLocale(),
+    browserLocales: navigator.languages,
+  });
 }
 
-// Detection order (T-069): explicit localStorage choice -> browser language
-// -> default. The remaining tier -- the signed-in user's own profile locale
-// -- isn't knowable until useAuth() resolves, so AppRoot reconciles it
-// afterwards via applyProfileLocale() below, before the app's first render.
-function detectInitialLocale(): SupportedLocale {
-  const stored = readStoredLocale();
-  if (isSupported(stored)) {
-    return stored;
+// True only while the URL -- not the user -- is driving a language change.
+// T-233: "the active URL locale wins over the stored preference for
+// rendering [...] but does not silently overwrite" it. Rendering a shared
+// /de/... link must therefore not leave "de" behind in localStorage (nor,
+// via useLocale().setLocale, in User.locale) for the visitor's next
+// locale-less visit.
+let localeChangeIsUrlDriven = false;
+
+/**
+ * Applies the locale a matched `/$locale/...` route carries. Idempotent, so
+ * every navigation can call it unconditionally.
+ */
+export async function setUrlLocale(locale: SupportedLocale): Promise<void> {
+  if (i18next.language === locale) {
+    return;
   }
-  for (const candidate of navigator.languages) {
-    const base = candidate.split("-")[0] ?? candidate;
-    if (isSupported(base)) {
-      return base;
-    }
+  localeChangeIsUrlDriven = true;
+  try {
+    await i18next.changeLanguage(locale);
+  } finally {
+    localeChangeIsUrlDriven = false;
   }
-  return DEFAULT_LOCALE;
 }
 
 let initPromise: Promise<typeof i18next> | null = null;
 
 export function initI18n(): Promise<typeof i18next> {
   initPromise ??= (async () => {
-    const initialLocale = detectInitialLocale();
+    const initialLocale = detectPreferredLocale();
     const resources: Resource = {
       [DEFAULT_LOCALE]: { [NAMESPACE]: await loadEn() },
     };
@@ -414,6 +433,12 @@ export function initI18n(): Promise<typeof i18next> {
     i18next.on("languageChanged", (lng: string) => {
       document.documentElement.lang = lng;
       document.documentElement.dir = localeMeta(lng)?.dir ?? "ltr";
+      if (localeChangeIsUrlDriven) {
+        // Viewing a shared /de/... link is not a preference change -- see
+        // localeChangeIsUrlDriven above. <html lang>/<html dir> still track
+        // it, since those describe what's on screen right now.
+        return;
+      }
       try {
         localStorage.setItem(LOCALE_STORAGE_KEY, lng);
       } catch {
@@ -425,21 +450,6 @@ export function initI18n(): Promise<typeof i18next> {
     return i18next;
   })();
   return initPromise;
-}
-
-// AppRoot calls this once useAuth() resolves: a signed-in user's saved
-// preference outranks the browser-language guess initI18n() made before
-// anyone was known to be logged in, but never overrides an explicit
-// in-session localStorage choice (T-069's detection-order contract).
-export async function applyProfileLocale(
-  profileLocale: string | null | undefined,
-): Promise<void> {
-  if (!profileLocale || isSupported(readStoredLocale())) {
-    return;
-  }
-  if (isSupported(profileLocale) && profileLocale !== i18next.language) {
-    await i18next.changeLanguage(profileLocale);
-  }
 }
 
 export default i18next;

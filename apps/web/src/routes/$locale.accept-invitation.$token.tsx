@@ -2,7 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 
 import { AcceptInvitationPage } from "../features/auth/AcceptInvitationPage";
 
-export const Route = createFileRoute("/accept-invitation/$token")({
+export const Route = createFileRoute("/$locale/accept-invitation/$token")({
   component: AcceptInvitationRoute,
 });
 

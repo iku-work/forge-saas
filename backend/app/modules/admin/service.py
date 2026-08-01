@@ -29,6 +29,7 @@ from app.core.exceptions import ConflictError, DomainError, NotFoundError, Permi
 from app.core.module_loader import is_enabled
 from app.core.repository import DEFAULT_PAGE_SIZE
 from app.core.token_blocklist import block_jti
+from app.core.urls import frontend_url
 from app.models._mixins import utcnow
 from app.modules.admin.repository import AdminOrgRepository, AdminStatsRepository
 from app.modules.admin.schemas import (
@@ -695,7 +696,6 @@ class AdminAccountRecoveryService:
             ua=ua,
             severity="elevated",
         )
-        settings = get_settings()
         await jobs.enqueue_job(
             "send_email",
             to=target.email,
@@ -706,6 +706,6 @@ class AdminAccountRecoveryService:
                 "event": "totp_disabled_by_admin",
                 "provider": None,
                 "new_email": None,
-                "settings_url": f"{settings.FRONTEND_URL}/settings/security",
+                "settings_url": frontend_url("/settings/security", target.locale),
             },
         )

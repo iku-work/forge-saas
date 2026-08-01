@@ -5,6 +5,8 @@ import { useTranslation } from "react-i18next";
 import { cancelEmailChangeApiV1AuthChangeEmailCancelPost } from "@forge/api-client";
 import { Alert, AlertDescription, Skeleton } from "@forge/ui";
 
+import { useRouteLocale } from "../../lib/useRouteLocale";
+
 import { AuthCard } from "./AuthCard";
 import { getErrorMessage } from "./getErrorMessage";
 
@@ -22,6 +24,7 @@ interface CancelEmailChangePageProps {
 // ever clicked.
 export function CancelEmailChangePage({ token }: CancelEmailChangePageProps) {
   const { t } = useTranslation();
+  const locale = useRouteLocale();
   const [state, setState] = useState<CancelState>(token ? "verifying" : "error");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   // Single-use token -- without this guard, React 18 Strict Mode's
@@ -65,7 +68,11 @@ export function CancelEmailChangePage({ token }: CancelEmailChangePageProps) {
           <AlertDescription>{t("auth.cancel_email_change.success_message")}</AlertDescription>
         </Alert>
         <p className="text-center text-sm text-muted-foreground">
-          <Link to="/login" className="underline underline-offset-4">
+          <Link
+            to="/$locale/login"
+            params={{ locale }}
+            className="underline underline-offset-4"
+          >
             {t("auth.cancel_email_change.continue_to_login")}
           </Link>
         </p>

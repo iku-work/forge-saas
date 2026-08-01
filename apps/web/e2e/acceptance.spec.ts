@@ -41,7 +41,7 @@ test("signup -> verify -> invite -> upgrade", async ({ page, browser }) => {
   // --- 2. Verify email via MailHog --------------------------------------
   const verifyLink = await waitForLink(
     ownerEmail,
-    /https:\/\/localhost\/verify-email\?token=[\w-]+/,
+    /https:\/\/localhost\/[a-z]{2}\/verify-email\?token=[\w-]+/,
   );
   await page.goto(verifyLink);
   await expect(page.getByTestId("verify-email-success")).toBeVisible();
@@ -84,7 +84,7 @@ test("signup -> verify -> invite -> upgrade", async ({ page, browser }) => {
 
   const acceptInvitationLink = await waitForLink(
     teammateEmail,
-    /https:\/\/localhost\/accept-invitation\/[\w.-]+/,
+    /https:\/\/localhost\/[a-z]{2}\/accept-invitation\/[\w.-]+/,
   );
 
   // --- 4. Second browser context: register, verify, log in, accept ------
@@ -99,7 +99,7 @@ test("signup -> verify -> invite -> upgrade", async ({ page, browser }) => {
 
     const teammateVerifyLink = await waitForLink(
       teammateEmail,
-      /https:\/\/localhost\/verify-email\?token=[\w-]+/,
+      /https:\/\/localhost\/[a-z]{2}\/verify-email\?token=[\w-]+/,
     );
     await teammatePage.goto(teammateVerifyLink);
     await expect(teammatePage.getByTestId("verify-email-success")).toBeVisible();
@@ -135,4 +135,27 @@ test("signup -> verify -> invite -> upgrade", async ({ page, browser }) => {
   await expect(page.getByTestId("billing-current-plan")).toHaveText("Pro");
   await page.goto("/");
   await expect(page.getByTestId("nav-reports")).toBeVisible();
+
+  // --- 7. T-233: locale-prefixed URLs, in a real browser ------------------
+  // Every goto above was deliberately locale-less -- i.e. the shape of a
+  // pre-T-233 bookmark -- and each one landed on a working page, so the
+  // backwards-compatibility redirect is already proven by the journey
+  // itself. These two assertions pin down what it redirected *to*, and the
+  // head tags T-305 will build on. Head tags are read via evaluate() rather
+  // than a locator: <link>/<meta> carry no data-testid, and this suite is
+  // data-testid-only (see the CI grep).
+  await expect(page).toHaveURL(/\/en\/?$/);
+  await page.goto("/settings/profile");
+  await expect(page).toHaveURL(/\/en\/settings\/profile$/);
+  const head = await page.evaluate(() => ({
+    canonical: document
+      .querySelector('link[rel="canonical"]')
+      ?.getAttribute("href"),
+    robots: document.querySelector('meta[name="robots"]')?.getAttribute("content"),
+    alternates: document.querySelectorAll('link[rel="alternate"]').length,
+  }));
+  expect(head.canonical).toBe("https://localhost/en/settings/profile");
+  // Behind auth: canonical only, noindex on, no hreflang alternates.
+  expect(head.robots).toBe("noindex, nofollow");
+  expect(head.alternates).toBe(0);
 });

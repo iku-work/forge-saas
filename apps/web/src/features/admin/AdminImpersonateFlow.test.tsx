@@ -133,7 +133,7 @@ describe("Admin impersonation flow (T-142/T-143)", () => {
     expect(banner).toHaveTextContent(`Impersonating ${target.email}`);
 
     await waitFor(() => {
-      expect(router.state.location.pathname).toBe("/");
+      expect(router.state.location.pathname).toBe("/en");
     });
 
     await userEvent.click(
@@ -144,7 +144,7 @@ describe("Admin impersonation flow (T-142/T-143)", () => {
       expect(screen.queryByRole("alert")).not.toBeInTheDocument();
     });
     await waitFor(() => {
-      expect(router.state.location.pathname).toBe("/admin");
+      expect(router.state.location.pathname).toBe("/en/admin");
     });
   }, 15000);
 });

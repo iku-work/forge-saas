@@ -14,6 +14,7 @@ import {
 } from "@forge/ui";
 import { formatDate } from "@forge/utils";
 
+import { useRouteLocale } from "../../lib/useRouteLocale";
 import { getErrorMessage } from "../auth/getErrorMessage";
 
 function formatMrr(cents: number, locale: string): string {
@@ -23,6 +24,7 @@ function formatMrr(cents: number, locale: string): string {
 }
 
 export function AdminDashboardPage() {
+  const locale = useRouteLocale();
   const { t, i18n } = useTranslation();
 
   const dashboardQuery = useQuery({
@@ -100,8 +102,8 @@ export function AdminDashboardPage() {
                     className="flex items-center justify-between text-sm"
                   >
                     <Link
-                      to="/admin/users/$id"
-                      params={{ id: signup.id }}
+                      to="/$locale/admin/users/$id"
+                      params={{ locale, id: signup.id }}
                       className="underline underline-offset-4"
                     >
                       {signup.email}
@@ -133,8 +135,8 @@ export function AdminDashboardPage() {
                     className="flex items-center justify-between text-sm"
                   >
                     <Link
-                      to="/admin/orgs/$id"
-                      params={{ id: failure.org_id }}
+                      to="/$locale/admin/orgs/$id"
+                      params={{ locale, id: failure.org_id }}
                       className="underline underline-offset-4"
                     >
                       {failure.org_name}

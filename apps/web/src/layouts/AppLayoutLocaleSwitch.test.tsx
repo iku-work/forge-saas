@@ -54,7 +54,7 @@ describe("Profile settings: language switcher (T-069)", () => {
   });
 
   it("switches the UI language, persists it, and updates <html lang>", async () => {
-    renderApp({ initialPath: "/settings/profile", user });
+    const { router } = renderApp({ initialPath: "/settings/profile", user });
 
     // ProfileSettingsPage's email field is read-only (a <p>, not an
     // <input>) -- assert on the label's own text rather than
@@ -80,6 +80,13 @@ describe("Profile settings: language switcher (T-069)", () => {
     });
     await waitFor(() => {
       expect(patchedLocaleBody).toEqual({ locale: "fi" });
+    });
+    // T-233: the switch rewrites the locale segment of the URL the user is
+    // already on -- it must not bounce them back to the dashboard, and the
+    // locale-less path they arrived on (redirected to /en/... on the way in)
+    // must come out as /fi/... , not as a second prefix.
+    await waitFor(() => {
+      expect(router.state.location.pathname).toBe("/fi/settings/profile");
     });
   });
 

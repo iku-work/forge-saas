@@ -14,17 +14,18 @@ from redis.asyncio import Redis
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core import jobs
-from app.core.config import get_settings
 from app.core.exceptions import (
     AuthenticationError,
     ConflictError,
     NotFoundError,
     PermissionDeniedError,
 )
+from app.core.urls import frontend_url
 from app.models._mixins import utcnow
 from app.modules.audit.service import AuditService
 from app.modules.auth.models import User
 from app.modules.auth.permissions import ROLE_PERMISSIONS, MemberRole, Permission
+from app.modules.auth.repository import UserRepository
 from app.modules.auth.utils import hash_token, sign_url_token, verify_url_token
 from app.modules.notifications.service import NotificationService
 from app.modules.tenancy.models import Invitation, Membership, Organization
@@ -70,7 +71,10 @@ class TenancyService:
     async def invite(
         self, org_id: UUID, inviter: Membership, email: str, role: MemberRole, redis: Redis
     ) -> None:
-        # No user lookup -- the invitee may not have an account yet.
+        # The invitation row itself is keyed on the email, not on a user --
+        # the invitee may not have an account yet. (T-233's _invitee_locale
+        # does look one up, but only to pick a language, and treats "no such
+        # user" as an ordinary case rather than an error.)
         invitation_id = uuid4()
         plain_token = sign_url_token({"invitation_id": str(invitation_id)}, _INVITATION_TTL_SECONDS)
         await self._invitations.create(
@@ -85,7 +89,9 @@ class TenancyService:
         org = await self._orgs.get_by_id(org_id)
         if org is None:
             raise NotFoundError("errors.org_not_found", fallback="Organization not found")
-        await self._enqueue_invitation_email(org.name, email, plain_token)
+        await self._enqueue_invitation_email(
+            org.name, email, plain_token, await self._invitee_locale(email, inviter.user_id)
+        )
         # Confirms to the inviter (not the invitee, who may have no account
         # yet to notify in-app) that the invite went out -- T-160's
         # notifications happy path checks this lands in the inviter's bell
@@ -226,20 +232,44 @@ class TenancyService:
             )
         return invitation, org
 
-    async def _enqueue_invitation_email(self, org_name: str, email: str, token: str) -> None:
-        settings = get_settings()
+    async def _invitee_locale(self, email: str, inviter_id: UUID) -> str | None:
+        """T-233: which language the invitation email -- and the locale
+        segment of its accept link -- should be in.
+
+        An invitee who already has an account gets their own stored
+        preference, exactly like every other transactional email (§0.11).
+        One who doesn't yet gets the *inviter's*, which is the only signal
+        available and a much better guess than the product default: they are
+        being invited into the inviter's organization.
+        """
+        users = UserRepository(self._session)
+        invitee = await users.get_by_email(email)
+        if invitee is not None:
+            return invitee.locale
+        inviter = await users.get_by_id(inviter_id)
+        return inviter.locale if inviter is not None else None
+
+    async def _enqueue_invitation_email(
+        self, org_name: str, email: str, token: str, locale: str | None
+    ) -> None:
         await jobs.enqueue_job(
             "send_email",
             to=email,
             template="invitation",
+            locale=locale,
             context={
                 "org_name": org_name,
                 # T-220: must match the frontend's actual route
-                # (apps/web/src/routes/accept-invitation.$token.tsx), not the
-                # backend's own GET /api/v1/invitations/{token} preview
-                # endpoint path -- confirmed via a real Playwright run that
-                # the old "/invitations/{token}" link 404'd in the SPA (no
+                # (apps/web/src/routes/$locale.accept-invitation.$token.tsx),
+                # not the backend's own GET /api/v1/invitations/{token}
+                # preview endpoint path -- confirmed via a real Playwright run
+                # that the old "/invitations/{token}" link 404'd in the SPA (no
                 # such route was ever defined there).
-                "accept_url": f"{settings.FRONTEND_URL}/accept-invitation/{token}",
+                # T-233: locale-prefixed. A pre-T-233 link without the segment
+                # still works (the SPA redirects it), but only after a
+                # client-side round trip, and lands the invitee in whatever
+                # locale *their browser* resolves to rather than the one this
+                # email is written in.
+                "accept_url": frontend_url(f"/accept-invitation/{token}", locale),
             },
         )

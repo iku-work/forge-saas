@@ -57,7 +57,7 @@ test("key pages have no serious/critical WCAG A/AA violations", async ({ page, b
 
   const verifyLink = await waitForLink(
     ownerEmail,
-    /https:\/\/localhost\/verify-email\?token=[\w-]+/,
+    /https:\/\/localhost\/[a-z]{2}\/verify-email\?token=[\w-]+/,
   );
   await page.goto(verifyLink);
   await expect(page.getByTestId("verify-email-success")).toBeVisible();
@@ -101,7 +101,7 @@ test("key pages have no serious/critical WCAG A/AA violations", async ({ page, b
 
     const inviteLink = await waitForLink(
       teammateEmail,
-      /https:\/\/localhost\/accept-invitation\/[\w.-]+/,
+      /https:\/\/localhost\/[a-z]{2}\/accept-invitation\/[\w.-]+/,
     );
 
     const teammateContext = await browser.newContext({ ignoreHTTPSErrors: true });
@@ -115,7 +115,7 @@ test("key pages have no serious/critical WCAG A/AA violations", async ({ page, b
 
       const teammateVerifyLink = await waitForLink(
         teammateEmail,
-        /https:\/\/localhost\/verify-email\?token=[\w-]+/,
+        /https:\/\/localhost\/[a-z]{2}\/verify-email\?token=[\w-]+/,
       );
       await teammatePage.goto(teammateVerifyLink);
       await expect(teammatePage.getByTestId("verify-email-success")).toBeVisible();
@@ -159,12 +159,16 @@ test("key pages have no serious/critical WCAG A/AA violations", async ({ page, b
 
 // T-231: the ar (rtl) locale, on the two pages visual.spec.ts also snapshots
 // -- a mirrored-layout regression check, not a second full sweep of the
-// page list above. localStorage is seeded via addInitScript (the same
-// "forge.locale" key apps/web/src/i18n.ts's LOCALE_STORAGE_KEY persists to)
-// before the first navigation, so the app boots directly in ar/rtl the way
-// a returning ar user's browser would, rather than exercising the language
-// switcher UI itself (already covered by
-// apps/web/src/layouts/AppLayoutRtlSwitch.test.tsx).
+// page list above. It doesn't exercise the language switcher UI itself
+// (already covered by apps/web/src/layouts/AppLayoutRtlSwitch.test.tsx).
+//
+// T-233: reaches ar through /ar/... URLs rather than the localStorage seed
+// this used to use. That seed stopped meaning anything past the login step
+// once the URL became the source of truth -- the account registered below
+// has the default "en" locale, so every post-login navigation resolved back
+// to /en/... and the two a11y checks silently became ltr checks. Each
+// check is now preceded by its own `dir` assertion so that can't recur
+// unnoticed.
 test("ar (rtl) locale has no serious/critical WCAG A/AA violations", async ({
   page,
 }, testInfo) => {
@@ -172,11 +176,7 @@ test("ar (rtl) locale has no serious/critical WCAG A/AA violations", async ({
   const email = `a11y-rtl+${rtlRunId}@example.com`;
   const rtlPassword = `A11y-Rtl-${rtlRunId}!Aa1`;
 
-  await page.addInitScript(() => {
-    window.localStorage.setItem("forge.locale", "ar");
-  });
-
-  await page.goto("/register");
+  await page.goto("/ar/register");
   await expect(page.getByTestId("register-email-input")).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.dir)).toBe("rtl");
   await page.getByTestId("register-email-input").fill(email);
@@ -186,7 +186,7 @@ test("ar (rtl) locale has no serious/critical WCAG A/AA violations", async ({
 
   const verifyLink = await waitForLink(
     email,
-    /https:\/\/localhost\/verify-email\?token=[\w-]+/,
+    /https:\/\/localhost\/[a-z]{2}\/verify-email\?token=[\w-]+/,
   );
   await page.goto(verifyLink);
   await expect(page.getByTestId("verify-email-success")).toBeVisible();
@@ -202,12 +202,16 @@ test("ar (rtl) locale has no serious/critical WCAG A/AA violations", async ({
   await expect(page.getByTestId("app-shell")).toBeVisible();
 
   await test.step("dashboard (ar)", async () => {
+    await page.goto("/ar");
+    await expect(page.getByTestId("app-shell")).toBeVisible();
+    expect(await page.evaluate(() => document.documentElement.dir)).toBe("rtl");
     await checkA11y(page, testInfo, "dashboard-ar");
   });
 
   await test.step("settings (ar)", async () => {
-    await page.goto("/settings/profile");
+    await page.goto("/ar/settings/profile");
     await expect(page.getByTestId("app-shell")).toBeVisible();
+    expect(await page.evaluate(() => document.documentElement.dir)).toBe("rtl");
     await checkA11y(page, testInfo, "settings-profile-ar");
   });
 });

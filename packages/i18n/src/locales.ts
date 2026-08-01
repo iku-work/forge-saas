@@ -43,3 +43,16 @@ export const LOCALES: readonly LocaleMeta[] = SUPPORTED_LOCALES.map((code) => ({
 export function localeMeta(code: string): LocaleMeta | undefined {
   return LOCALES.find((locale) => locale.code === code);
 }
+
+// The registry's own membership test, exported because T-233's URL routing
+// needs it in three separate places (route validation, path rewriting,
+// preference resolution) and none of them should re-derive it from
+// SUPPORTED_LOCALES by hand.
+export function isSupportedLocale(
+  code: string | null | undefined,
+): code is SupportedLocale {
+  return (
+    typeof code === "string" &&
+    (SUPPORTED_LOCALES as readonly string[]).includes(code)
+  );
+}

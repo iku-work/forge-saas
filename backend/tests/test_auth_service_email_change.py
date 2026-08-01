@@ -23,6 +23,7 @@ from sqlalchemy.ext.asyncio import (
 from sqlmodel import SQLModel
 from testcontainers.postgres import PostgresContainer
 
+from app.core.config import get_settings
 from app.core.exceptions import AuthenticationError, ConflictError, RateLimitError
 from app.modules.auth.models import EmailChangeToken, User
 from app.modules.auth.models import Session as SessionModel
@@ -428,3 +429,37 @@ async def test_cancel_email_change_confirm_token_does_not_work_as_cancel_token(
 
     with pytest.raises(AuthenticationError):
         await service.cancel_email_change(confirm_token)
+
+
+# --- locale-prefixed deep links (T-233) ---------------------------------------
+
+
+async def test_change_email_links_carry_the_recipients_locale(
+    service: AuthService,
+    verified_user: User,
+    session: AsyncSession,
+    _redis_client: Redis,  # noqa: PT019 -- conftest names it this; its value is used below
+    enqueued_jobs: list[tuple[str, dict[str, Any]]],
+) -> None:
+    """Both halves of the flow -- the confirm link mailed to the *new*
+    address and the cancel link mailed to the current one -- are built from
+    the account owner's own locale, not from a request-scoped default."""
+    verified_user.locale = "fr"
+    session.add(verified_user)
+    await session.flush()
+
+    await _request(service, _redis_client, verified_user, "new@example.com")
+
+    confirm_job = next(k for _, k in enqueued_jobs if k.get("template") == "change_email")
+    assert "/fr/confirm-email-change?token=" in confirm_job["context"]["confirm_url"]
+
+    notification = next(
+        k
+        for _, k in enqueued_jobs
+        if k.get("template") == "security_notification"
+        and k["context"]["event"] == "email_change_requested"
+    )
+    assert "/fr/cancel-email-change?token=" in notification["context"]["cancel_url"]
+    assert notification["context"]["settings_url"] == (
+        f"{get_settings().FRONTEND_URL}/fr/settings/security"
+    )

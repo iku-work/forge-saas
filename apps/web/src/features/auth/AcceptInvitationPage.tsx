@@ -10,6 +10,8 @@ import {
 import { useAuth } from "@forge/hooks";
 import { Alert, AlertDescription, Button, Skeleton } from "@forge/ui";
 
+import { useRouteLocale } from "../../lib/useRouteLocale";
+
 import { AuthCard } from "./AuthCard";
 import { getErrorMessage } from "./getErrorMessage";
 
@@ -19,6 +21,7 @@ interface AcceptInvitationPageProps {
 
 export function AcceptInvitationPage({ token }: AcceptInvitationPageProps) {
   const { t } = useTranslation();
+  const locale = useRouteLocale();
   const { user, isLoading: authLoading } = useAuth();
   const navigate = useNavigate();
 
@@ -61,7 +64,7 @@ export function AcceptInvitationPage({ token }: AcceptInvitationPageProps) {
         path: { token },
         throwOnError: true,
       });
-      await navigate({ to: "/" });
+      await navigate({ to: "/$locale", params: { locale } });
     } catch (error) {
       setAcceptError(
         getErrorMessage(error, "tenancy.invitation_accept.error_default"),
@@ -77,7 +80,11 @@ export function AcceptInvitationPage({ token }: AcceptInvitationPageProps) {
           <AlertDescription>{previewError}</AlertDescription>
         </Alert>
         <p className="text-center text-sm text-muted-foreground">
-          <Link to="/login" className="underline underline-offset-4">
+          <Link
+            to="/$locale/login"
+            params={{ locale }}
+            className="underline underline-offset-4"
+          >
             {t("tenancy.invitation_accept.back_to_login")}
           </Link>
         </p>
@@ -129,12 +136,20 @@ export function AcceptInvitationPage({ token }: AcceptInvitationPageProps) {
             })}
           </p>
           <Button asChild className="w-full">
-            <Link to="/login" data-testid="accept-invitation-login-link">
+            <Link
+              to="/$locale/login"
+              params={{ locale }}
+              data-testid="accept-invitation-login-link"
+            >
               {t("tenancy.invitation_accept.login")}
             </Link>
           </Button>
           <Button asChild variant="outline" className="w-full">
-            <Link to="/register" data-testid="accept-invitation-signup-link">
+            <Link
+              to="/$locale/register"
+              params={{ locale }}
+              data-testid="accept-invitation-signup-link"
+            >
               {t("tenancy.invitation_accept.signup")}
             </Link>
           </Button>

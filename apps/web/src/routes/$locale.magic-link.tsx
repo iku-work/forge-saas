@@ -7,7 +7,7 @@ const magicLinkSearchSchema = z.object({
   token: z.string().optional(),
 });
 
-export const Route = createFileRoute("/magic-link")({
+export const Route = createFileRoute("/$locale/magic-link")({
   validateSearch: (search) => magicLinkSearchSchema.parse(search),
   component: MagicLinkRoute,
 });

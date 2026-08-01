@@ -22,12 +22,14 @@ import {
 } from "@forge/ui";
 import { formatDate } from "@forge/utils";
 
+import { useRouteLocale } from "../../lib/useRouteLocale";
 import { getErrorMessage } from "../auth/getErrorMessage";
 import { useDebouncedValue } from "./useDebouncedValue";
 
 const STATUS_OPTIONS = ["active", "trialing", "past_due", "canceled", "incomplete"];
 
 export function AdminOrgsPage() {
+  const locale = useRouteLocale();
   const { t, i18n } = useTranslation();
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState("");
@@ -111,8 +113,8 @@ export function AdminOrgsPage() {
                   <TableRow key={org.id}>
                     <TableCell>
                       <Link
-                        to="/admin/orgs/$id"
-                        params={{ id: org.id }}
+                        to="/$locale/admin/orgs/$id"
+                        params={{ locale, id: org.id }}
                         className="underline underline-offset-4"
                       >
                         {org.name}

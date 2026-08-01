@@ -38,6 +38,7 @@ from app.core.exceptions import (
     NotFoundError,
     RateLimitError,
 )
+from app.core.urls import frontend_url
 from app.models._mixins import utcnow
 from app.modules.audit.service import AuditService
 from app.modules.auth.models import OAuthAccount, TOTPSecret, User, WebAuthnCredential
@@ -612,7 +613,6 @@ class AuthService:
             requested_ip=ip,
             requested_user_agent=user_agent,
         )
-        settings = get_settings()
         await jobs.enqueue_job(
             "send_email",
             to=new_email,
@@ -620,7 +620,9 @@ class AuthService:
             locale=user.locale,
             context={
                 "user_name": user.full_name,
-                "confirm_url": f"{settings.FRONTEND_URL}/confirm-email-change?token={plain_token}",
+                "confirm_url": frontend_url(
+                    f"/confirm-email-change?token={plain_token}", user.locale
+                ),
             },
         )
         # Notifies the *current* address too (ASVS V2.5.5) -- so a real
@@ -632,7 +634,9 @@ class AuthService:
             user,
             "email_change_requested",
             new_email=new_email,
-            cancel_url=(f"{settings.FRONTEND_URL}/cancel-email-change?token={cancel_plain_token}"),
+            cancel_url=frontend_url(
+                f"/cancel-email-change?token={cancel_plain_token}", user.locale
+            ),
         )
 
     async def cancel_email_change(self, cancel_token: str) -> None:
@@ -1057,7 +1061,6 @@ class AuthService:
         return await self._create_session(user, ip, user_agent)
 
     async def _enqueue_verification_email(self, user: User, token: str) -> None:
-        settings = get_settings()
         await jobs.enqueue_job(
             "send_email",
             to=user.email,
@@ -1065,12 +1068,11 @@ class AuthService:
             locale=user.locale,
             context={
                 "user_name": user.full_name,
-                "verification_url": f"{settings.FRONTEND_URL}/verify-email?token={token}",
+                "verification_url": frontend_url(f"/verify-email?token={token}", user.locale),
             },
         )
 
     async def _enqueue_password_reset_email(self, user: User, token: str) -> None:
-        settings = get_settings()
         await jobs.enqueue_job(
             "send_email",
             to=user.email,
@@ -1078,12 +1080,11 @@ class AuthService:
             locale=user.locale,
             context={
                 "user_name": user.full_name,
-                "reset_url": f"{settings.FRONTEND_URL}/reset-password?token={token}",
+                "reset_url": frontend_url(f"/reset-password?token={token}", user.locale),
             },
         )
 
     async def _enqueue_magic_link_email(self, user: User, token: str) -> None:
-        settings = get_settings()
         await jobs.enqueue_job(
             "send_email",
             to=user.email,
@@ -1091,7 +1092,7 @@ class AuthService:
             locale=user.locale,
             context={
                 "user_name": user.full_name,
-                "login_url": f"{settings.FRONTEND_URL}/magic-link/consume?token={token}",
+                "login_url": frontend_url(f"/magic-link?token={token}", user.locale),
             },
         )
 
@@ -1113,7 +1114,6 @@ class AuthService:
         # Always sent to `user.email` -- callers around an email-change flow
         # must pass a `user` object whose `.email` still reads as whichever
         # address (old or new) is the intended recipient at that point.
-        settings = get_settings()
         await jobs.enqueue_job(
             "send_email",
             to=user.email,
@@ -1128,6 +1128,6 @@ class AuthService:
                 # cancel a request they didn't make straight from this email
                 # (T-226), instead of just being told to go check settings.
                 "cancel_url": cancel_url,
-                "settings_url": f"{settings.FRONTEND_URL}/settings/security",
+                "settings_url": frontend_url("/settings/security", user.locale),
             },
         )

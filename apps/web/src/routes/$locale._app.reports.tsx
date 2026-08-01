@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useTranslation } from "react-i18next";
 
-export const Route = createFileRoute("/_app/reports")({
+export const Route = createFileRoute("/$locale/_app/reports")({
   component: ReportsPage,
 });
 

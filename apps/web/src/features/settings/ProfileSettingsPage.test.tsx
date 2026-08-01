@@ -13,6 +13,15 @@ const hooks = vi.hoisted(() => ({
 }));
 vi.mock("@forge/hooks", () => hooks);
 
+// T-233: the language switcher on this page now rewrites the URL's locale
+// segment, so it needs a live router -- which this file deliberately doesn't
+// build (it renders the page bare to unit-test the profile card itself). The
+// real switcher, wired through the real router, is covered by
+// layouts/AppLayoutLocaleSwitch.test.tsx.
+vi.mock("../../lib/RoutedLocaleSwitcher", () => ({
+  RoutedLocaleSwitcher: () => <div data-testid="locale-switcher" />,
+}));
+
 const { ProfileSettingsPage } = await import("./ProfileSettingsPage");
 
 const user: UserPublic = {

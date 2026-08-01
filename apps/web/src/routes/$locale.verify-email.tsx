@@ -7,7 +7,7 @@ const verifyEmailSearchSchema = z.object({
   token: z.string().optional(),
 });
 
-export const Route = createFileRoute("/verify-email")({
+export const Route = createFileRoute("/$locale/verify-email")({
   validateSearch: (search) => verifyEmailSearchSchema.parse(search),
   component: VerifyEmailRoute,
 });

@@ -11,9 +11,10 @@ import {
   CardHeader,
   FileUploader,
   Label,
-  LocaleSwitcher,
   Skeleton,
 } from "@forge/ui";
+
+import { RoutedLocaleSwitcher } from "../../lib/RoutedLocaleSwitcher";
 
 function initialsFor(email: string): string {
   return email.slice(0, 2).toUpperCase();
@@ -78,7 +79,7 @@ export function ProfileSettingsPage() {
             <div className="space-y-1">
               <Label>{t("common.locale_switcher.label")}</Label>
               <div>
-                <LocaleSwitcher />
+                <RoutedLocaleSwitcher />
               </div>
             </div>
           </CardContent>

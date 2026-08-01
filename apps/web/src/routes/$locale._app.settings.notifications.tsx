@@ -4,7 +4,7 @@ import { bootstrapModules, getModulesSnapshot } from "@forge/hooks";
 
 import { NotificationsSettingsPage } from "../features/settings/NotificationsSettingsPage";
 
-export const Route = createFileRoute("/_app/settings/notifications")({
+export const Route = createFileRoute("/$locale/_app/settings/notifications")({
   beforeLoad: async () => {
     await bootstrapModules();
     if (!getModulesSnapshot().notifications) {

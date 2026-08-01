@@ -9,589 +9,669 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
-import { Route as VerifyEmailRouteImport } from './routes/verify-email'
-import { Route as ResetPasswordRouteImport } from './routes/reset-password'
-import { Route as RegisterRouteImport } from './routes/register'
-import { Route as MagicLinkRouteImport } from './routes/magic-link'
-import { Route as LoginRouteImport } from './routes/login'
-import { Route as ForgotPasswordRouteImport } from './routes/forgot-password'
-import { Route as ConfirmEmailChangeRouteImport } from './routes/confirm-email-change'
-import { Route as CancelEmailChangeRouteImport } from './routes/cancel-email-change'
-import { Route as AdminRouteImport } from './routes/admin'
-import { Route as AppRouteImport } from './routes/_app'
-import { Route as AdminIndexRouteImport } from './routes/admin.index'
-import { Route as AppIndexRouteImport } from './routes/_app.index'
-import { Route as AdminUsersRouteImport } from './routes/admin.users'
-import { Route as AdminOrgsRouteImport } from './routes/admin.orgs'
-import { Route as AdminAuditRouteImport } from './routes/admin.audit'
-import { Route as AcceptInvitationTokenRouteImport } from './routes/accept-invitation.$token'
-import { Route as AppReportsRouteImport } from './routes/_app.reports'
-import { Route as AppFilesRouteImport } from './routes/_app.files'
-import { Route as AdminUsersIdRouteImport } from './routes/admin.users_.$id'
-import { Route as AdminOrgsIdRouteImport } from './routes/admin.orgs_.$id'
-import { Route as AppSettingsSecurityRouteImport } from './routes/_app.settings.security'
-import { Route as AppSettingsProfileRouteImport } from './routes/_app.settings.profile'
-import { Route as AppSettingsOrgRouteImport } from './routes/_app.settings.org'
-import { Route as AppSettingsNotificationsRouteImport } from './routes/_app.settings.notifications'
-import { Route as AppSettingsMembersRouteImport } from './routes/_app.settings.members'
-import { Route as AppSettingsBillingRouteImport } from './routes/_app.settings.billing'
+import { Route as LocaleRouteImport } from './routes/$locale'
+import { Route as SplatRouteImport } from './routes/$'
+import { Route as IndexRouteImport } from './routes/index'
+import { Route as LocaleVerifyEmailRouteImport } from './routes/$locale.verify-email'
+import { Route as LocaleResetPasswordRouteImport } from './routes/$locale.reset-password'
+import { Route as LocaleRegisterRouteImport } from './routes/$locale.register'
+import { Route as LocaleMagicLinkRouteImport } from './routes/$locale.magic-link'
+import { Route as LocaleLoginRouteImport } from './routes/$locale.login'
+import { Route as LocaleForgotPasswordRouteImport } from './routes/$locale.forgot-password'
+import { Route as LocaleConfirmEmailChangeRouteImport } from './routes/$locale.confirm-email-change'
+import { Route as LocaleCancelEmailChangeRouteImport } from './routes/$locale.cancel-email-change'
+import { Route as LocaleAdminRouteImport } from './routes/$locale.admin'
+import { Route as LocaleAppRouteImport } from './routes/$locale._app'
+import { Route as LocaleAdminIndexRouteImport } from './routes/$locale.admin.index'
+import { Route as LocaleAppIndexRouteImport } from './routes/$locale._app.index'
+import { Route as LocaleAdminUsersRouteImport } from './routes/$locale.admin.users'
+import { Route as LocaleAdminOrgsRouteImport } from './routes/$locale.admin.orgs'
+import { Route as LocaleAdminAuditRouteImport } from './routes/$locale.admin.audit'
+import { Route as LocaleAcceptInvitationTokenRouteImport } from './routes/$locale.accept-invitation.$token'
+import { Route as LocaleAppReportsRouteImport } from './routes/$locale._app.reports'
+import { Route as LocaleAppFilesRouteImport } from './routes/$locale._app.files'
+import { Route as LocaleAdminUsersIdRouteImport } from './routes/$locale.admin.users_.$id'
+import { Route as LocaleAdminOrgsIdRouteImport } from './routes/$locale.admin.orgs_.$id'
+import { Route as LocaleAppSettingsSecurityRouteImport } from './routes/$locale._app.settings.security'
+import { Route as LocaleAppSettingsProfileRouteImport } from './routes/$locale._app.settings.profile'
+import { Route as LocaleAppSettingsOrgRouteImport } from './routes/$locale._app.settings.org'
+import { Route as LocaleAppSettingsNotificationsRouteImport } from './routes/$locale._app.settings.notifications'
+import { Route as LocaleAppSettingsMembersRouteImport } from './routes/$locale._app.settings.members'
+import { Route as LocaleAppSettingsBillingRouteImport } from './routes/$locale._app.settings.billing'
 
-const VerifyEmailRoute = VerifyEmailRouteImport.update({
+const LocaleRoute = LocaleRouteImport.update({
+  id: '/$locale',
+  path: '/$locale',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SplatRoute = SplatRouteImport.update({
+  id: '/$',
+  path: '/$',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const IndexRoute = IndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const LocaleVerifyEmailRoute = LocaleVerifyEmailRouteImport.update({
   id: '/verify-email',
   path: '/verify-email',
-  getParentRoute: () => rootRouteImport,
+  getParentRoute: () => LocaleRoute,
 } as any)
-const ResetPasswordRoute = ResetPasswordRouteImport.update({
+const LocaleResetPasswordRoute = LocaleResetPasswordRouteImport.update({
   id: '/reset-password',
   path: '/reset-password',
-  getParentRoute: () => rootRouteImport,
+  getParentRoute: () => LocaleRoute,
 } as any)
-const RegisterRoute = RegisterRouteImport.update({
+const LocaleRegisterRoute = LocaleRegisterRouteImport.update({
   id: '/register',
   path: '/register',
-  getParentRoute: () => rootRouteImport,
+  getParentRoute: () => LocaleRoute,
 } as any)
-const MagicLinkRoute = MagicLinkRouteImport.update({
+const LocaleMagicLinkRoute = LocaleMagicLinkRouteImport.update({
   id: '/magic-link',
   path: '/magic-link',
-  getParentRoute: () => rootRouteImport,
+  getParentRoute: () => LocaleRoute,
 } as any)
-const LoginRoute = LoginRouteImport.update({
+const LocaleLoginRoute = LocaleLoginRouteImport.update({
   id: '/login',
   path: '/login',
-  getParentRoute: () => rootRouteImport,
+  getParentRoute: () => LocaleRoute,
 } as any)
-const ForgotPasswordRoute = ForgotPasswordRouteImport.update({
+const LocaleForgotPasswordRoute = LocaleForgotPasswordRouteImport.update({
   id: '/forgot-password',
   path: '/forgot-password',
-  getParentRoute: () => rootRouteImport,
+  getParentRoute: () => LocaleRoute,
 } as any)
-const ConfirmEmailChangeRoute = ConfirmEmailChangeRouteImport.update({
-  id: '/confirm-email-change',
-  path: '/confirm-email-change',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const CancelEmailChangeRoute = CancelEmailChangeRouteImport.update({
+const LocaleConfirmEmailChangeRoute =
+  LocaleConfirmEmailChangeRouteImport.update({
+    id: '/confirm-email-change',
+    path: '/confirm-email-change',
+    getParentRoute: () => LocaleRoute,
+  } as any)
+const LocaleCancelEmailChangeRoute = LocaleCancelEmailChangeRouteImport.update({
   id: '/cancel-email-change',
   path: '/cancel-email-change',
-  getParentRoute: () => rootRouteImport,
+  getParentRoute: () => LocaleRoute,
 } as any)
-const AdminRoute = AdminRouteImport.update({
+const LocaleAdminRoute = LocaleAdminRouteImport.update({
   id: '/admin',
   path: '/admin',
-  getParentRoute: () => rootRouteImport,
+  getParentRoute: () => LocaleRoute,
 } as any)
-const AppRoute = AppRouteImport.update({
+const LocaleAppRoute = LocaleAppRouteImport.update({
   id: '/_app',
-  getParentRoute: () => rootRouteImport,
+  getParentRoute: () => LocaleRoute,
 } as any)
-const AdminIndexRoute = AdminIndexRouteImport.update({
+const LocaleAdminIndexRoute = LocaleAdminIndexRouteImport.update({
   id: '/',
   path: '/',
-  getParentRoute: () => AdminRoute,
+  getParentRoute: () => LocaleAdminRoute,
 } as any)
-const AppIndexRoute = AppIndexRouteImport.update({
+const LocaleAppIndexRoute = LocaleAppIndexRouteImport.update({
   id: '/',
   path: '/',
-  getParentRoute: () => AppRoute,
+  getParentRoute: () => LocaleAppRoute,
 } as any)
-const AdminUsersRoute = AdminUsersRouteImport.update({
+const LocaleAdminUsersRoute = LocaleAdminUsersRouteImport.update({
   id: '/users',
   path: '/users',
-  getParentRoute: () => AdminRoute,
+  getParentRoute: () => LocaleAdminRoute,
 } as any)
-const AdminOrgsRoute = AdminOrgsRouteImport.update({
+const LocaleAdminOrgsRoute = LocaleAdminOrgsRouteImport.update({
   id: '/orgs',
   path: '/orgs',
-  getParentRoute: () => AdminRoute,
+  getParentRoute: () => LocaleAdminRoute,
 } as any)
-const AdminAuditRoute = AdminAuditRouteImport.update({
+const LocaleAdminAuditRoute = LocaleAdminAuditRouteImport.update({
   id: '/audit',
   path: '/audit',
-  getParentRoute: () => AdminRoute,
+  getParentRoute: () => LocaleAdminRoute,
 } as any)
-const AcceptInvitationTokenRoute = AcceptInvitationTokenRouteImport.update({
-  id: '/accept-invitation/$token',
-  path: '/accept-invitation/$token',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const AppReportsRoute = AppReportsRouteImport.update({
+const LocaleAcceptInvitationTokenRoute =
+  LocaleAcceptInvitationTokenRouteImport.update({
+    id: '/accept-invitation/$token',
+    path: '/accept-invitation/$token',
+    getParentRoute: () => LocaleRoute,
+  } as any)
+const LocaleAppReportsRoute = LocaleAppReportsRouteImport.update({
   id: '/reports',
   path: '/reports',
-  getParentRoute: () => AppRoute,
+  getParentRoute: () => LocaleAppRoute,
 } as any)
-const AppFilesRoute = AppFilesRouteImport.update({
+const LocaleAppFilesRoute = LocaleAppFilesRouteImport.update({
   id: '/files',
   path: '/files',
-  getParentRoute: () => AppRoute,
+  getParentRoute: () => LocaleAppRoute,
 } as any)
-const AdminUsersIdRoute = AdminUsersIdRouteImport.update({
+const LocaleAdminUsersIdRoute = LocaleAdminUsersIdRouteImport.update({
   id: '/users_/$id',
   path: '/users/$id',
-  getParentRoute: () => AdminRoute,
+  getParentRoute: () => LocaleAdminRoute,
 } as any)
-const AdminOrgsIdRoute = AdminOrgsIdRouteImport.update({
+const LocaleAdminOrgsIdRoute = LocaleAdminOrgsIdRouteImport.update({
   id: '/orgs_/$id',
   path: '/orgs/$id',
-  getParentRoute: () => AdminRoute,
+  getParentRoute: () => LocaleAdminRoute,
 } as any)
-const AppSettingsSecurityRoute = AppSettingsSecurityRouteImport.update({
-  id: '/settings/security',
-  path: '/settings/security',
-  getParentRoute: () => AppRoute,
-} as any)
-const AppSettingsProfileRoute = AppSettingsProfileRouteImport.update({
-  id: '/settings/profile',
-  path: '/settings/profile',
-  getParentRoute: () => AppRoute,
-} as any)
-const AppSettingsOrgRoute = AppSettingsOrgRouteImport.update({
+const LocaleAppSettingsSecurityRoute =
+  LocaleAppSettingsSecurityRouteImport.update({
+    id: '/settings/security',
+    path: '/settings/security',
+    getParentRoute: () => LocaleAppRoute,
+  } as any)
+const LocaleAppSettingsProfileRoute =
+  LocaleAppSettingsProfileRouteImport.update({
+    id: '/settings/profile',
+    path: '/settings/profile',
+    getParentRoute: () => LocaleAppRoute,
+  } as any)
+const LocaleAppSettingsOrgRoute = LocaleAppSettingsOrgRouteImport.update({
   id: '/settings/org',
   path: '/settings/org',
-  getParentRoute: () => AppRoute,
+  getParentRoute: () => LocaleAppRoute,
 } as any)
-const AppSettingsNotificationsRoute =
-  AppSettingsNotificationsRouteImport.update({
+const LocaleAppSettingsNotificationsRoute =
+  LocaleAppSettingsNotificationsRouteImport.update({
     id: '/settings/notifications',
     path: '/settings/notifications',
-    getParentRoute: () => AppRoute,
+    getParentRoute: () => LocaleAppRoute,
   } as any)
-const AppSettingsMembersRoute = AppSettingsMembersRouteImport.update({
-  id: '/settings/members',
-  path: '/settings/members',
-  getParentRoute: () => AppRoute,
-} as any)
-const AppSettingsBillingRoute = AppSettingsBillingRouteImport.update({
-  id: '/settings/billing',
-  path: '/settings/billing',
-  getParentRoute: () => AppRoute,
-} as any)
+const LocaleAppSettingsMembersRoute =
+  LocaleAppSettingsMembersRouteImport.update({
+    id: '/settings/members',
+    path: '/settings/members',
+    getParentRoute: () => LocaleAppRoute,
+  } as any)
+const LocaleAppSettingsBillingRoute =
+  LocaleAppSettingsBillingRouteImport.update({
+    id: '/settings/billing',
+    path: '/settings/billing',
+    getParentRoute: () => LocaleAppRoute,
+  } as any)
 
 export interface FileRoutesByFullPath {
-  '/': typeof AppIndexRoute
-  '/admin': typeof AdminRouteWithChildren
-  '/cancel-email-change': typeof CancelEmailChangeRoute
-  '/confirm-email-change': typeof ConfirmEmailChangeRoute
-  '/forgot-password': typeof ForgotPasswordRoute
-  '/login': typeof LoginRoute
-  '/magic-link': typeof MagicLinkRoute
-  '/register': typeof RegisterRoute
-  '/reset-password': typeof ResetPasswordRoute
-  '/verify-email': typeof VerifyEmailRoute
-  '/files': typeof AppFilesRoute
-  '/reports': typeof AppReportsRoute
-  '/accept-invitation/$token': typeof AcceptInvitationTokenRoute
-  '/admin/audit': typeof AdminAuditRoute
-  '/admin/orgs': typeof AdminOrgsRoute
-  '/admin/users': typeof AdminUsersRoute
-  '/admin/': typeof AdminIndexRoute
-  '/settings/billing': typeof AppSettingsBillingRoute
-  '/settings/members': typeof AppSettingsMembersRoute
-  '/settings/notifications': typeof AppSettingsNotificationsRoute
-  '/settings/org': typeof AppSettingsOrgRoute
-  '/settings/profile': typeof AppSettingsProfileRoute
-  '/settings/security': typeof AppSettingsSecurityRoute
-  '/admin/orgs/$id': typeof AdminOrgsIdRoute
-  '/admin/users/$id': typeof AdminUsersIdRoute
+  '/': typeof IndexRoute
+  '/$': typeof SplatRoute
+  '/$locale': typeof LocaleRouteWithChildren
+  '/$locale/admin': typeof LocaleAdminRouteWithChildren
+  '/$locale/cancel-email-change': typeof LocaleCancelEmailChangeRoute
+  '/$locale/confirm-email-change': typeof LocaleConfirmEmailChangeRoute
+  '/$locale/forgot-password': typeof LocaleForgotPasswordRoute
+  '/$locale/login': typeof LocaleLoginRoute
+  '/$locale/magic-link': typeof LocaleMagicLinkRoute
+  '/$locale/register': typeof LocaleRegisterRoute
+  '/$locale/reset-password': typeof LocaleResetPasswordRoute
+  '/$locale/verify-email': typeof LocaleVerifyEmailRoute
+  '/$locale/files': typeof LocaleAppFilesRoute
+  '/$locale/reports': typeof LocaleAppReportsRoute
+  '/$locale/accept-invitation/$token': typeof LocaleAcceptInvitationTokenRoute
+  '/$locale/admin/audit': typeof LocaleAdminAuditRoute
+  '/$locale/admin/orgs': typeof LocaleAdminOrgsRoute
+  '/$locale/admin/users': typeof LocaleAdminUsersRoute
+  '/$locale/': typeof LocaleAppIndexRoute
+  '/$locale/admin/': typeof LocaleAdminIndexRoute
+  '/$locale/settings/billing': typeof LocaleAppSettingsBillingRoute
+  '/$locale/settings/members': typeof LocaleAppSettingsMembersRoute
+  '/$locale/settings/notifications': typeof LocaleAppSettingsNotificationsRoute
+  '/$locale/settings/org': typeof LocaleAppSettingsOrgRoute
+  '/$locale/settings/profile': typeof LocaleAppSettingsProfileRoute
+  '/$locale/settings/security': typeof LocaleAppSettingsSecurityRoute
+  '/$locale/admin/orgs/$id': typeof LocaleAdminOrgsIdRoute
+  '/$locale/admin/users/$id': typeof LocaleAdminUsersIdRoute
 }
 export interface FileRoutesByTo {
-  '/cancel-email-change': typeof CancelEmailChangeRoute
-  '/confirm-email-change': typeof ConfirmEmailChangeRoute
-  '/forgot-password': typeof ForgotPasswordRoute
-  '/login': typeof LoginRoute
-  '/magic-link': typeof MagicLinkRoute
-  '/register': typeof RegisterRoute
-  '/reset-password': typeof ResetPasswordRoute
-  '/verify-email': typeof VerifyEmailRoute
-  '/files': typeof AppFilesRoute
-  '/reports': typeof AppReportsRoute
-  '/accept-invitation/$token': typeof AcceptInvitationTokenRoute
-  '/admin/audit': typeof AdminAuditRoute
-  '/admin/orgs': typeof AdminOrgsRoute
-  '/admin/users': typeof AdminUsersRoute
-  '/': typeof AppIndexRoute
-  '/admin': typeof AdminIndexRoute
-  '/settings/billing': typeof AppSettingsBillingRoute
-  '/settings/members': typeof AppSettingsMembersRoute
-  '/settings/notifications': typeof AppSettingsNotificationsRoute
-  '/settings/org': typeof AppSettingsOrgRoute
-  '/settings/profile': typeof AppSettingsProfileRoute
-  '/settings/security': typeof AppSettingsSecurityRoute
-  '/admin/orgs/$id': typeof AdminOrgsIdRoute
-  '/admin/users/$id': typeof AdminUsersIdRoute
+  '/': typeof IndexRoute
+  '/$': typeof SplatRoute
+  '/$locale': typeof LocaleAppIndexRoute
+  '/$locale/cancel-email-change': typeof LocaleCancelEmailChangeRoute
+  '/$locale/confirm-email-change': typeof LocaleConfirmEmailChangeRoute
+  '/$locale/forgot-password': typeof LocaleForgotPasswordRoute
+  '/$locale/login': typeof LocaleLoginRoute
+  '/$locale/magic-link': typeof LocaleMagicLinkRoute
+  '/$locale/register': typeof LocaleRegisterRoute
+  '/$locale/reset-password': typeof LocaleResetPasswordRoute
+  '/$locale/verify-email': typeof LocaleVerifyEmailRoute
+  '/$locale/files': typeof LocaleAppFilesRoute
+  '/$locale/reports': typeof LocaleAppReportsRoute
+  '/$locale/accept-invitation/$token': typeof LocaleAcceptInvitationTokenRoute
+  '/$locale/admin/audit': typeof LocaleAdminAuditRoute
+  '/$locale/admin/orgs': typeof LocaleAdminOrgsRoute
+  '/$locale/admin/users': typeof LocaleAdminUsersRoute
+  '/$locale/admin': typeof LocaleAdminIndexRoute
+  '/$locale/settings/billing': typeof LocaleAppSettingsBillingRoute
+  '/$locale/settings/members': typeof LocaleAppSettingsMembersRoute
+  '/$locale/settings/notifications': typeof LocaleAppSettingsNotificationsRoute
+  '/$locale/settings/org': typeof LocaleAppSettingsOrgRoute
+  '/$locale/settings/profile': typeof LocaleAppSettingsProfileRoute
+  '/$locale/settings/security': typeof LocaleAppSettingsSecurityRoute
+  '/$locale/admin/orgs/$id': typeof LocaleAdminOrgsIdRoute
+  '/$locale/admin/users/$id': typeof LocaleAdminUsersIdRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
-  '/_app': typeof AppRouteWithChildren
-  '/admin': typeof AdminRouteWithChildren
-  '/cancel-email-change': typeof CancelEmailChangeRoute
-  '/confirm-email-change': typeof ConfirmEmailChangeRoute
-  '/forgot-password': typeof ForgotPasswordRoute
-  '/login': typeof LoginRoute
-  '/magic-link': typeof MagicLinkRoute
-  '/register': typeof RegisterRoute
-  '/reset-password': typeof ResetPasswordRoute
-  '/verify-email': typeof VerifyEmailRoute
-  '/_app/files': typeof AppFilesRoute
-  '/_app/reports': typeof AppReportsRoute
-  '/accept-invitation/$token': typeof AcceptInvitationTokenRoute
-  '/admin/audit': typeof AdminAuditRoute
-  '/admin/orgs': typeof AdminOrgsRoute
-  '/admin/users': typeof AdminUsersRoute
-  '/_app/': typeof AppIndexRoute
-  '/admin/': typeof AdminIndexRoute
-  '/_app/settings/billing': typeof AppSettingsBillingRoute
-  '/_app/settings/members': typeof AppSettingsMembersRoute
-  '/_app/settings/notifications': typeof AppSettingsNotificationsRoute
-  '/_app/settings/org': typeof AppSettingsOrgRoute
-  '/_app/settings/profile': typeof AppSettingsProfileRoute
-  '/_app/settings/security': typeof AppSettingsSecurityRoute
-  '/admin/orgs_/$id': typeof AdminOrgsIdRoute
-  '/admin/users_/$id': typeof AdminUsersIdRoute
+  '/': typeof IndexRoute
+  '/$': typeof SplatRoute
+  '/$locale': typeof LocaleRouteWithChildren
+  '/$locale/_app': typeof LocaleAppRouteWithChildren
+  '/$locale/admin': typeof LocaleAdminRouteWithChildren
+  '/$locale/cancel-email-change': typeof LocaleCancelEmailChangeRoute
+  '/$locale/confirm-email-change': typeof LocaleConfirmEmailChangeRoute
+  '/$locale/forgot-password': typeof LocaleForgotPasswordRoute
+  '/$locale/login': typeof LocaleLoginRoute
+  '/$locale/magic-link': typeof LocaleMagicLinkRoute
+  '/$locale/register': typeof LocaleRegisterRoute
+  '/$locale/reset-password': typeof LocaleResetPasswordRoute
+  '/$locale/verify-email': typeof LocaleVerifyEmailRoute
+  '/$locale/_app/files': typeof LocaleAppFilesRoute
+  '/$locale/_app/reports': typeof LocaleAppReportsRoute
+  '/$locale/accept-invitation/$token': typeof LocaleAcceptInvitationTokenRoute
+  '/$locale/admin/audit': typeof LocaleAdminAuditRoute
+  '/$locale/admin/orgs': typeof LocaleAdminOrgsRoute
+  '/$locale/admin/users': typeof LocaleAdminUsersRoute
+  '/$locale/_app/': typeof LocaleAppIndexRoute
+  '/$locale/admin/': typeof LocaleAdminIndexRoute
+  '/$locale/_app/settings/billing': typeof LocaleAppSettingsBillingRoute
+  '/$locale/_app/settings/members': typeof LocaleAppSettingsMembersRoute
+  '/$locale/_app/settings/notifications': typeof LocaleAppSettingsNotificationsRoute
+  '/$locale/_app/settings/org': typeof LocaleAppSettingsOrgRoute
+  '/$locale/_app/settings/profile': typeof LocaleAppSettingsProfileRoute
+  '/$locale/_app/settings/security': typeof LocaleAppSettingsSecurityRoute
+  '/$locale/admin/orgs_/$id': typeof LocaleAdminOrgsIdRoute
+  '/$locale/admin/users_/$id': typeof LocaleAdminUsersIdRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
-    | '/admin'
-    | '/cancel-email-change'
-    | '/confirm-email-change'
-    | '/forgot-password'
-    | '/login'
-    | '/magic-link'
-    | '/register'
-    | '/reset-password'
-    | '/verify-email'
-    | '/files'
-    | '/reports'
-    | '/accept-invitation/$token'
-    | '/admin/audit'
-    | '/admin/orgs'
-    | '/admin/users'
-    | '/admin/'
-    | '/settings/billing'
-    | '/settings/members'
-    | '/settings/notifications'
-    | '/settings/org'
-    | '/settings/profile'
-    | '/settings/security'
-    | '/admin/orgs/$id'
-    | '/admin/users/$id'
+    | '/$'
+    | '/$locale'
+    | '/$locale/admin'
+    | '/$locale/cancel-email-change'
+    | '/$locale/confirm-email-change'
+    | '/$locale/forgot-password'
+    | '/$locale/login'
+    | '/$locale/magic-link'
+    | '/$locale/register'
+    | '/$locale/reset-password'
+    | '/$locale/verify-email'
+    | '/$locale/files'
+    | '/$locale/reports'
+    | '/$locale/accept-invitation/$token'
+    | '/$locale/admin/audit'
+    | '/$locale/admin/orgs'
+    | '/$locale/admin/users'
+    | '/$locale/'
+    | '/$locale/admin/'
+    | '/$locale/settings/billing'
+    | '/$locale/settings/members'
+    | '/$locale/settings/notifications'
+    | '/$locale/settings/org'
+    | '/$locale/settings/profile'
+    | '/$locale/settings/security'
+    | '/$locale/admin/orgs/$id'
+    | '/$locale/admin/users/$id'
   fileRoutesByTo: FileRoutesByTo
   to:
-    | '/cancel-email-change'
-    | '/confirm-email-change'
-    | '/forgot-password'
-    | '/login'
-    | '/magic-link'
-    | '/register'
-    | '/reset-password'
-    | '/verify-email'
-    | '/files'
-    | '/reports'
-    | '/accept-invitation/$token'
-    | '/admin/audit'
-    | '/admin/orgs'
-    | '/admin/users'
     | '/'
-    | '/admin'
-    | '/settings/billing'
-    | '/settings/members'
-    | '/settings/notifications'
-    | '/settings/org'
-    | '/settings/profile'
-    | '/settings/security'
-    | '/admin/orgs/$id'
-    | '/admin/users/$id'
+    | '/$'
+    | '/$locale'
+    | '/$locale/cancel-email-change'
+    | '/$locale/confirm-email-change'
+    | '/$locale/forgot-password'
+    | '/$locale/login'
+    | '/$locale/magic-link'
+    | '/$locale/register'
+    | '/$locale/reset-password'
+    | '/$locale/verify-email'
+    | '/$locale/files'
+    | '/$locale/reports'
+    | '/$locale/accept-invitation/$token'
+    | '/$locale/admin/audit'
+    | '/$locale/admin/orgs'
+    | '/$locale/admin/users'
+    | '/$locale/admin'
+    | '/$locale/settings/billing'
+    | '/$locale/settings/members'
+    | '/$locale/settings/notifications'
+    | '/$locale/settings/org'
+    | '/$locale/settings/profile'
+    | '/$locale/settings/security'
+    | '/$locale/admin/orgs/$id'
+    | '/$locale/admin/users/$id'
   id:
     | '__root__'
-    | '/_app'
-    | '/admin'
-    | '/cancel-email-change'
-    | '/confirm-email-change'
-    | '/forgot-password'
-    | '/login'
-    | '/magic-link'
-    | '/register'
-    | '/reset-password'
-    | '/verify-email'
-    | '/_app/files'
-    | '/_app/reports'
-    | '/accept-invitation/$token'
-    | '/admin/audit'
-    | '/admin/orgs'
-    | '/admin/users'
-    | '/_app/'
-    | '/admin/'
-    | '/_app/settings/billing'
-    | '/_app/settings/members'
-    | '/_app/settings/notifications'
-    | '/_app/settings/org'
-    | '/_app/settings/profile'
-    | '/_app/settings/security'
-    | '/admin/orgs_/$id'
-    | '/admin/users_/$id'
+    | '/'
+    | '/$'
+    | '/$locale'
+    | '/$locale/_app'
+    | '/$locale/admin'
+    | '/$locale/cancel-email-change'
+    | '/$locale/confirm-email-change'
+    | '/$locale/forgot-password'
+    | '/$locale/login'
+    | '/$locale/magic-link'
+    | '/$locale/register'
+    | '/$locale/reset-password'
+    | '/$locale/verify-email'
+    | '/$locale/_app/files'
+    | '/$locale/_app/reports'
+    | '/$locale/accept-invitation/$token'
+    | '/$locale/admin/audit'
+    | '/$locale/admin/orgs'
+    | '/$locale/admin/users'
+    | '/$locale/_app/'
+    | '/$locale/admin/'
+    | '/$locale/_app/settings/billing'
+    | '/$locale/_app/settings/members'
+    | '/$locale/_app/settings/notifications'
+    | '/$locale/_app/settings/org'
+    | '/$locale/_app/settings/profile'
+    | '/$locale/_app/settings/security'
+    | '/$locale/admin/orgs_/$id'
+    | '/$locale/admin/users_/$id'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
-  AppRoute: typeof AppRouteWithChildren
-  AdminRoute: typeof AdminRouteWithChildren
-  CancelEmailChangeRoute: typeof CancelEmailChangeRoute
-  ConfirmEmailChangeRoute: typeof ConfirmEmailChangeRoute
-  ForgotPasswordRoute: typeof ForgotPasswordRoute
-  LoginRoute: typeof LoginRoute
-  MagicLinkRoute: typeof MagicLinkRoute
-  RegisterRoute: typeof RegisterRoute
-  ResetPasswordRoute: typeof ResetPasswordRoute
-  VerifyEmailRoute: typeof VerifyEmailRoute
-  AcceptInvitationTokenRoute: typeof AcceptInvitationTokenRoute
+  IndexRoute: typeof IndexRoute
+  SplatRoute: typeof SplatRoute
+  LocaleRoute: typeof LocaleRouteWithChildren
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
-    '/verify-email': {
-      id: '/verify-email'
+    '/$locale': {
+      id: '/$locale'
+      path: '/$locale'
+      fullPath: '/$locale'
+      preLoaderRoute: typeof LocaleRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/$': {
+      id: '/$'
+      path: '/$'
+      fullPath: '/$'
+      preLoaderRoute: typeof SplatRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/': {
+      id: '/'
+      path: '/'
+      fullPath: '/'
+      preLoaderRoute: typeof IndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/$locale/verify-email': {
+      id: '/$locale/verify-email'
       path: '/verify-email'
-      fullPath: '/verify-email'
-      preLoaderRoute: typeof VerifyEmailRouteImport
-      parentRoute: typeof rootRouteImport
+      fullPath: '/$locale/verify-email'
+      preLoaderRoute: typeof LocaleVerifyEmailRouteImport
+      parentRoute: typeof LocaleRoute
     }
-    '/reset-password': {
-      id: '/reset-password'
+    '/$locale/reset-password': {
+      id: '/$locale/reset-password'
       path: '/reset-password'
-      fullPath: '/reset-password'
-      preLoaderRoute: typeof ResetPasswordRouteImport
-      parentRoute: typeof rootRouteImport
+      fullPath: '/$locale/reset-password'
+      preLoaderRoute: typeof LocaleResetPasswordRouteImport
+      parentRoute: typeof LocaleRoute
     }
-    '/register': {
-      id: '/register'
+    '/$locale/register': {
+      id: '/$locale/register'
       path: '/register'
-      fullPath: '/register'
-      preLoaderRoute: typeof RegisterRouteImport
-      parentRoute: typeof rootRouteImport
+      fullPath: '/$locale/register'
+      preLoaderRoute: typeof LocaleRegisterRouteImport
+      parentRoute: typeof LocaleRoute
     }
-    '/magic-link': {
-      id: '/magic-link'
+    '/$locale/magic-link': {
+      id: '/$locale/magic-link'
       path: '/magic-link'
-      fullPath: '/magic-link'
-      preLoaderRoute: typeof MagicLinkRouteImport
-      parentRoute: typeof rootRouteImport
+      fullPath: '/$locale/magic-link'
+      preLoaderRoute: typeof LocaleMagicLinkRouteImport
+      parentRoute: typeof LocaleRoute
     }
-    '/login': {
-      id: '/login'
+    '/$locale/login': {
+      id: '/$locale/login'
       path: '/login'
-      fullPath: '/login'
-      preLoaderRoute: typeof LoginRouteImport
-      parentRoute: typeof rootRouteImport
+      fullPath: '/$locale/login'
+      preLoaderRoute: typeof LocaleLoginRouteImport
+      parentRoute: typeof LocaleRoute
     }
-    '/forgot-password': {
-      id: '/forgot-password'
+    '/$locale/forgot-password': {
+      id: '/$locale/forgot-password'
       path: '/forgot-password'
-      fullPath: '/forgot-password'
-      preLoaderRoute: typeof ForgotPasswordRouteImport
-      parentRoute: typeof rootRouteImport
+      fullPath: '/$locale/forgot-password'
+      preLoaderRoute: typeof LocaleForgotPasswordRouteImport
+      parentRoute: typeof LocaleRoute
     }
-    '/confirm-email-change': {
-      id: '/confirm-email-change'
+    '/$locale/confirm-email-change': {
+      id: '/$locale/confirm-email-change'
       path: '/confirm-email-change'
-      fullPath: '/confirm-email-change'
-      preLoaderRoute: typeof ConfirmEmailChangeRouteImport
-      parentRoute: typeof rootRouteImport
+      fullPath: '/$locale/confirm-email-change'
+      preLoaderRoute: typeof LocaleConfirmEmailChangeRouteImport
+      parentRoute: typeof LocaleRoute
     }
-    '/cancel-email-change': {
-      id: '/cancel-email-change'
+    '/$locale/cancel-email-change': {
+      id: '/$locale/cancel-email-change'
       path: '/cancel-email-change'
-      fullPath: '/cancel-email-change'
-      preLoaderRoute: typeof CancelEmailChangeRouteImport
-      parentRoute: typeof rootRouteImport
+      fullPath: '/$locale/cancel-email-change'
+      preLoaderRoute: typeof LocaleCancelEmailChangeRouteImport
+      parentRoute: typeof LocaleRoute
     }
-    '/admin': {
-      id: '/admin'
+    '/$locale/admin': {
+      id: '/$locale/admin'
       path: '/admin'
-      fullPath: '/admin'
-      preLoaderRoute: typeof AdminRouteImport
-      parentRoute: typeof rootRouteImport
+      fullPath: '/$locale/admin'
+      preLoaderRoute: typeof LocaleAdminRouteImport
+      parentRoute: typeof LocaleRoute
     }
-    '/_app': {
-      id: '/_app'
+    '/$locale/_app': {
+      id: '/$locale/_app'
       path: ''
-      fullPath: '/'
-      preLoaderRoute: typeof AppRouteImport
-      parentRoute: typeof rootRouteImport
+      fullPath: '/$locale'
+      preLoaderRoute: typeof LocaleAppRouteImport
+      parentRoute: typeof LocaleRoute
     }
-    '/admin/': {
-      id: '/admin/'
+    '/$locale/admin/': {
+      id: '/$locale/admin/'
       path: '/'
-      fullPath: '/admin/'
-      preLoaderRoute: typeof AdminIndexRouteImport
-      parentRoute: typeof AdminRoute
+      fullPath: '/$locale/admin/'
+      preLoaderRoute: typeof LocaleAdminIndexRouteImport
+      parentRoute: typeof LocaleAdminRoute
     }
-    '/_app/': {
-      id: '/_app/'
+    '/$locale/_app/': {
+      id: '/$locale/_app/'
       path: '/'
-      fullPath: '/'
-      preLoaderRoute: typeof AppIndexRouteImport
-      parentRoute: typeof AppRoute
+      fullPath: '/$locale/'
+      preLoaderRoute: typeof LocaleAppIndexRouteImport
+      parentRoute: typeof LocaleAppRoute
     }
-    '/admin/users': {
-      id: '/admin/users'
+    '/$locale/admin/users': {
+      id: '/$locale/admin/users'
       path: '/users'
-      fullPath: '/admin/users'
-      preLoaderRoute: typeof AdminUsersRouteImport
-      parentRoute: typeof AdminRoute
+      fullPath: '/$locale/admin/users'
+      preLoaderRoute: typeof LocaleAdminUsersRouteImport
+      parentRoute: typeof LocaleAdminRoute
     }
-    '/admin/orgs': {
-      id: '/admin/orgs'
+    '/$locale/admin/orgs': {
+      id: '/$locale/admin/orgs'
       path: '/orgs'
-      fullPath: '/admin/orgs'
-      preLoaderRoute: typeof AdminOrgsRouteImport
-      parentRoute: typeof AdminRoute
+      fullPath: '/$locale/admin/orgs'
+      preLoaderRoute: typeof LocaleAdminOrgsRouteImport
+      parentRoute: typeof LocaleAdminRoute
     }
-    '/admin/audit': {
-      id: '/admin/audit'
+    '/$locale/admin/audit': {
+      id: '/$locale/admin/audit'
       path: '/audit'
-      fullPath: '/admin/audit'
-      preLoaderRoute: typeof AdminAuditRouteImport
-      parentRoute: typeof AdminRoute
+      fullPath: '/$locale/admin/audit'
+      preLoaderRoute: typeof LocaleAdminAuditRouteImport
+      parentRoute: typeof LocaleAdminRoute
     }
-    '/accept-invitation/$token': {
-      id: '/accept-invitation/$token'
+    '/$locale/accept-invitation/$token': {
+      id: '/$locale/accept-invitation/$token'
       path: '/accept-invitation/$token'
-      fullPath: '/accept-invitation/$token'
-      preLoaderRoute: typeof AcceptInvitationTokenRouteImport
-      parentRoute: typeof rootRouteImport
+      fullPath: '/$locale/accept-invitation/$token'
+      preLoaderRoute: typeof LocaleAcceptInvitationTokenRouteImport
+      parentRoute: typeof LocaleRoute
     }
-    '/_app/reports': {
-      id: '/_app/reports'
+    '/$locale/_app/reports': {
+      id: '/$locale/_app/reports'
       path: '/reports'
-      fullPath: '/reports'
-      preLoaderRoute: typeof AppReportsRouteImport
-      parentRoute: typeof AppRoute
+      fullPath: '/$locale/reports'
+      preLoaderRoute: typeof LocaleAppReportsRouteImport
+      parentRoute: typeof LocaleAppRoute
     }
-    '/_app/files': {
-      id: '/_app/files'
+    '/$locale/_app/files': {
+      id: '/$locale/_app/files'
       path: '/files'
-      fullPath: '/files'
-      preLoaderRoute: typeof AppFilesRouteImport
-      parentRoute: typeof AppRoute
+      fullPath: '/$locale/files'
+      preLoaderRoute: typeof LocaleAppFilesRouteImport
+      parentRoute: typeof LocaleAppRoute
     }
-    '/admin/users_/$id': {
-      id: '/admin/users_/$id'
+    '/$locale/admin/users_/$id': {
+      id: '/$locale/admin/users_/$id'
       path: '/users/$id'
-      fullPath: '/admin/users/$id'
-      preLoaderRoute: typeof AdminUsersIdRouteImport
-      parentRoute: typeof AdminRoute
+      fullPath: '/$locale/admin/users/$id'
+      preLoaderRoute: typeof LocaleAdminUsersIdRouteImport
+      parentRoute: typeof LocaleAdminRoute
     }
-    '/admin/orgs_/$id': {
-      id: '/admin/orgs_/$id'
+    '/$locale/admin/orgs_/$id': {
+      id: '/$locale/admin/orgs_/$id'
       path: '/orgs/$id'
-      fullPath: '/admin/orgs/$id'
-      preLoaderRoute: typeof AdminOrgsIdRouteImport
-      parentRoute: typeof AdminRoute
+      fullPath: '/$locale/admin/orgs/$id'
+      preLoaderRoute: typeof LocaleAdminOrgsIdRouteImport
+      parentRoute: typeof LocaleAdminRoute
     }
-    '/_app/settings/security': {
-      id: '/_app/settings/security'
+    '/$locale/_app/settings/security': {
+      id: '/$locale/_app/settings/security'
       path: '/settings/security'
-      fullPath: '/settings/security'
-      preLoaderRoute: typeof AppSettingsSecurityRouteImport
-      parentRoute: typeof AppRoute
+      fullPath: '/$locale/settings/security'
+      preLoaderRoute: typeof LocaleAppSettingsSecurityRouteImport
+      parentRoute: typeof LocaleAppRoute
     }
-    '/_app/settings/profile': {
-      id: '/_app/settings/profile'
+    '/$locale/_app/settings/profile': {
+      id: '/$locale/_app/settings/profile'
       path: '/settings/profile'
-      fullPath: '/settings/profile'
-      preLoaderRoute: typeof AppSettingsProfileRouteImport
-      parentRoute: typeof AppRoute
+      fullPath: '/$locale/settings/profile'
+      preLoaderRoute: typeof LocaleAppSettingsProfileRouteImport
+      parentRoute: typeof LocaleAppRoute
     }
-    '/_app/settings/org': {
-      id: '/_app/settings/org'
+    '/$locale/_app/settings/org': {
+      id: '/$locale/_app/settings/org'
       path: '/settings/org'
-      fullPath: '/settings/org'
-      preLoaderRoute: typeof AppSettingsOrgRouteImport
-      parentRoute: typeof AppRoute
+      fullPath: '/$locale/settings/org'
+      preLoaderRoute: typeof LocaleAppSettingsOrgRouteImport
+      parentRoute: typeof LocaleAppRoute
     }
-    '/_app/settings/notifications': {
-      id: '/_app/settings/notifications'
+    '/$locale/_app/settings/notifications': {
+      id: '/$locale/_app/settings/notifications'
       path: '/settings/notifications'
-      fullPath: '/settings/notifications'
-      preLoaderRoute: typeof AppSettingsNotificationsRouteImport
-      parentRoute: typeof AppRoute
+      fullPath: '/$locale/settings/notifications'
+      preLoaderRoute: typeof LocaleAppSettingsNotificationsRouteImport
+      parentRoute: typeof LocaleAppRoute
     }
-    '/_app/settings/members': {
-      id: '/_app/settings/members'
+    '/$locale/_app/settings/members': {
+      id: '/$locale/_app/settings/members'
       path: '/settings/members'
-      fullPath: '/settings/members'
-      preLoaderRoute: typeof AppSettingsMembersRouteImport
-      parentRoute: typeof AppRoute
+      fullPath: '/$locale/settings/members'
+      preLoaderRoute: typeof LocaleAppSettingsMembersRouteImport
+      parentRoute: typeof LocaleAppRoute
     }
-    '/_app/settings/billing': {
-      id: '/_app/settings/billing'
+    '/$locale/_app/settings/billing': {
+      id: '/$locale/_app/settings/billing'
       path: '/settings/billing'
-      fullPath: '/settings/billing'
-      preLoaderRoute: typeof AppSettingsBillingRouteImport
-      parentRoute: typeof AppRoute
+      fullPath: '/$locale/settings/billing'
+      preLoaderRoute: typeof LocaleAppSettingsBillingRouteImport
+      parentRoute: typeof LocaleAppRoute
     }
   }
 }
 
-interface AppRouteChildren {
-  AppFilesRoute: typeof AppFilesRoute
-  AppReportsRoute: typeof AppReportsRoute
-  AppIndexRoute: typeof AppIndexRoute
-  AppSettingsBillingRoute: typeof AppSettingsBillingRoute
-  AppSettingsMembersRoute: typeof AppSettingsMembersRoute
-  AppSettingsNotificationsRoute: typeof AppSettingsNotificationsRoute
-  AppSettingsOrgRoute: typeof AppSettingsOrgRoute
-  AppSettingsProfileRoute: typeof AppSettingsProfileRoute
-  AppSettingsSecurityRoute: typeof AppSettingsSecurityRoute
+interface LocaleAppRouteChildren {
+  LocaleAppFilesRoute: typeof LocaleAppFilesRoute
+  LocaleAppReportsRoute: typeof LocaleAppReportsRoute
+  LocaleAppIndexRoute: typeof LocaleAppIndexRoute
+  LocaleAppSettingsBillingRoute: typeof LocaleAppSettingsBillingRoute
+  LocaleAppSettingsMembersRoute: typeof LocaleAppSettingsMembersRoute
+  LocaleAppSettingsNotificationsRoute: typeof LocaleAppSettingsNotificationsRoute
+  LocaleAppSettingsOrgRoute: typeof LocaleAppSettingsOrgRoute
+  LocaleAppSettingsProfileRoute: typeof LocaleAppSettingsProfileRoute
+  LocaleAppSettingsSecurityRoute: typeof LocaleAppSettingsSecurityRoute
 }
 
-const AppRouteChildren: AppRouteChildren = {
-  AppFilesRoute: AppFilesRoute,
-  AppReportsRoute: AppReportsRoute,
-  AppIndexRoute: AppIndexRoute,
-  AppSettingsBillingRoute: AppSettingsBillingRoute,
-  AppSettingsMembersRoute: AppSettingsMembersRoute,
-  AppSettingsNotificationsRoute: AppSettingsNotificationsRoute,
-  AppSettingsOrgRoute: AppSettingsOrgRoute,
-  AppSettingsProfileRoute: AppSettingsProfileRoute,
-  AppSettingsSecurityRoute: AppSettingsSecurityRoute,
+const LocaleAppRouteChildren: LocaleAppRouteChildren = {
+  LocaleAppFilesRoute: LocaleAppFilesRoute,
+  LocaleAppReportsRoute: LocaleAppReportsRoute,
+  LocaleAppIndexRoute: LocaleAppIndexRoute,
+  LocaleAppSettingsBillingRoute: LocaleAppSettingsBillingRoute,
+  LocaleAppSettingsMembersRoute: LocaleAppSettingsMembersRoute,
+  LocaleAppSettingsNotificationsRoute: LocaleAppSettingsNotificationsRoute,
+  LocaleAppSettingsOrgRoute: LocaleAppSettingsOrgRoute,
+  LocaleAppSettingsProfileRoute: LocaleAppSettingsProfileRoute,
+  LocaleAppSettingsSecurityRoute: LocaleAppSettingsSecurityRoute,
 }
 
-const AppRouteWithChildren = AppRoute._addFileChildren(AppRouteChildren)
+const LocaleAppRouteWithChildren = LocaleAppRoute._addFileChildren(
+  LocaleAppRouteChildren,
+)
 
-interface AdminRouteChildren {
-  AdminAuditRoute: typeof AdminAuditRoute
-  AdminOrgsRoute: typeof AdminOrgsRoute
-  AdminUsersRoute: typeof AdminUsersRoute
-  AdminIndexRoute: typeof AdminIndexRoute
-  AdminOrgsIdRoute: typeof AdminOrgsIdRoute
-  AdminUsersIdRoute: typeof AdminUsersIdRoute
+interface LocaleAdminRouteChildren {
+  LocaleAdminAuditRoute: typeof LocaleAdminAuditRoute
+  LocaleAdminOrgsRoute: typeof LocaleAdminOrgsRoute
+  LocaleAdminUsersRoute: typeof LocaleAdminUsersRoute
+  LocaleAdminIndexRoute: typeof LocaleAdminIndexRoute
+  LocaleAdminOrgsIdRoute: typeof LocaleAdminOrgsIdRoute
+  LocaleAdminUsersIdRoute: typeof LocaleAdminUsersIdRoute
 }
 
-const AdminRouteChildren: AdminRouteChildren = {
-  AdminAuditRoute: AdminAuditRoute,
-  AdminOrgsRoute: AdminOrgsRoute,
-  AdminUsersRoute: AdminUsersRoute,
-  AdminIndexRoute: AdminIndexRoute,
-  AdminOrgsIdRoute: AdminOrgsIdRoute,
-  AdminUsersIdRoute: AdminUsersIdRoute,
+const LocaleAdminRouteChildren: LocaleAdminRouteChildren = {
+  LocaleAdminAuditRoute: LocaleAdminAuditRoute,
+  LocaleAdminOrgsRoute: LocaleAdminOrgsRoute,
+  LocaleAdminUsersRoute: LocaleAdminUsersRoute,
+  LocaleAdminIndexRoute: LocaleAdminIndexRoute,
+  LocaleAdminOrgsIdRoute: LocaleAdminOrgsIdRoute,
+  LocaleAdminUsersIdRoute: LocaleAdminUsersIdRoute,
 }
 
-const AdminRouteWithChildren = AdminRoute._addFileChildren(AdminRouteChildren)
+const LocaleAdminRouteWithChildren = LocaleAdminRoute._addFileChildren(
+  LocaleAdminRouteChildren,
+)
+
+interface LocaleRouteChildren {
+  LocaleAppRoute: typeof LocaleAppRouteWithChildren
+  LocaleAdminRoute: typeof LocaleAdminRouteWithChildren
+  LocaleCancelEmailChangeRoute: typeof LocaleCancelEmailChangeRoute
+  LocaleConfirmEmailChangeRoute: typeof LocaleConfirmEmailChangeRoute
+  LocaleForgotPasswordRoute: typeof LocaleForgotPasswordRoute
+  LocaleLoginRoute: typeof LocaleLoginRoute
+  LocaleMagicLinkRoute: typeof LocaleMagicLinkRoute
+  LocaleRegisterRoute: typeof LocaleRegisterRoute
+  LocaleResetPasswordRoute: typeof LocaleResetPasswordRoute
+  LocaleVerifyEmailRoute: typeof LocaleVerifyEmailRoute
+  LocaleAcceptInvitationTokenRoute: typeof LocaleAcceptInvitationTokenRoute
+}
+
+const LocaleRouteChildren: LocaleRouteChildren = {
+  LocaleAppRoute: LocaleAppRouteWithChildren,
+  LocaleAdminRoute: LocaleAdminRouteWithChildren,
+  LocaleCancelEmailChangeRoute: LocaleCancelEmailChangeRoute,
+  LocaleConfirmEmailChangeRoute: LocaleConfirmEmailChangeRoute,
+  LocaleForgotPasswordRoute: LocaleForgotPasswordRoute,
+  LocaleLoginRoute: LocaleLoginRoute,
+  LocaleMagicLinkRoute: LocaleMagicLinkRoute,
+  LocaleRegisterRoute: LocaleRegisterRoute,
+  LocaleResetPasswordRoute: LocaleResetPasswordRoute,
+  LocaleVerifyEmailRoute: LocaleVerifyEmailRoute,
+  LocaleAcceptInvitationTokenRoute: LocaleAcceptInvitationTokenRoute,
+}
+
+const LocaleRouteWithChildren =
+  LocaleRoute._addFileChildren(LocaleRouteChildren)
 
 const rootRouteChildren: RootRouteChildren = {
-  AppRoute: AppRouteWithChildren,
-  AdminRoute: AdminRouteWithChildren,
-  CancelEmailChangeRoute: CancelEmailChangeRoute,
-  ConfirmEmailChangeRoute: ConfirmEmailChangeRoute,
-  ForgotPasswordRoute: ForgotPasswordRoute,
-  LoginRoute: LoginRoute,
-  MagicLinkRoute: MagicLinkRoute,
-  RegisterRoute: RegisterRoute,
-  ResetPasswordRoute: ResetPasswordRoute,
-  VerifyEmailRoute: VerifyEmailRoute,
-  AcceptInvitationTokenRoute: AcceptInvitationTokenRoute,
+  IndexRoute: IndexRoute,
+  SplatRoute: SplatRoute,
+  LocaleRoute: LocaleRouteWithChildren,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

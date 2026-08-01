@@ -246,6 +246,69 @@ async def test_invite_raises_not_found_for_soft_deleted_org(
         await service.invite(org.id, inviter, "nobody@example.com", MemberRole.MEMBER, redis)
 
 
+# --- invite email locale (T-233) ----------------------------------------------
+
+
+async def _invite_email(  # noqa: PLR0913 -- mirrors TenancyService.invite's own argument set
+    service: TenancyService,
+    org: Organization,
+    inviter: User,
+    invitee_email: str,
+    enqueued_jobs: list[tuple[str, dict[str, Any]]],
+    redis: Redis,
+) -> dict[str, Any]:
+    membership = Membership(user_id=inviter.id, org_id=org.id, role=MemberRole.OWNER)
+    await service.invite(org.id, membership, invitee_email, MemberRole.MEMBER, redis)
+    # Not enqueued_jobs[-1]: invite() also notifies the inviter (T-160), which
+    # enqueues its own send_email job after this one.
+    return next(
+        kwargs
+        for function, kwargs in enqueued_jobs
+        if function == "send_email" and kwargs["to"] == invitee_email
+    )
+
+
+async def test_invite_email_uses_an_existing_invitees_own_locale(  # noqa: PLR0913 -- redis on top of the usual service/org/user/session/enqueued_jobs set
+    service: TenancyService,
+    org: Organization,
+    user: User,
+    session: AsyncSession,
+    enqueued_jobs: list[tuple[str, dict[str, Any]]],
+    redis: Redis,
+) -> None:
+    """Per-recipient localisation (§0.11): someone who already has an account
+    gets invited in *their* language, not the inviter's."""
+    user.locale = "de"
+    invitee = User(email="existing-invitee@example.com", locale="fi")
+    session.add_all([user, invitee])
+    await session.flush()
+
+    kwargs = await _invite_email(service, org, user, invitee.email, enqueued_jobs, redis)
+
+    assert kwargs["locale"] == "fi"
+    assert "/fi/accept-invitation/" in kwargs["context"]["accept_url"]
+
+
+async def test_invite_email_falls_back_to_the_inviters_locale(  # noqa: PLR0913 -- redis on top of the usual service/org/user/session/enqueued_jobs set
+    service: TenancyService,
+    org: Organization,
+    user: User,
+    session: AsyncSession,
+    enqueued_jobs: list[tuple[str, dict[str, Any]]],
+    redis: Redis,
+) -> None:
+    """An invitee with no account has no preference to honour -- the inviter's
+    is the only signal, and a better guess than the product default."""
+    user.locale = "de"
+    session.add(user)
+    await session.flush()
+
+    kwargs = await _invite_email(service, org, user, "brand-new@example.com", enqueued_jobs, redis)
+
+    assert kwargs["locale"] == "de"
+    assert "/de/accept-invitation/" in kwargs["context"]["accept_url"]
+
+
 # --- invite + accept round-trip -----------------------------------------------
 
 

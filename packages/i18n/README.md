@@ -76,6 +76,48 @@ scripts/check-roundtrip.ts -- CI gate: en export -> import must be lossless
    convention in `packages/ui`) reads `dir` from this registry, not a
    separate list.
 
+Web's `/<locale>/…` URLs (T-233) and its `hreflang` alternates need no
+further change — both read `SUPPORTED_LOCALES`/`LOCALES` from this registry.
+
+## Locale in the URL (web, T-233)
+
+Every web URL carries the active locale as its first path segment —
+`/en/settings/profile`, `/fi/login`, `/de/accept-invitation/<token>`. That
+makes a page shareable, bookmarkable and indexable per language, and it is
+the convention T-305 (marketing SEO) builds on.
+
+- **Route tree**: `apps/web/src/routes/$locale.tsx` is the layout every other
+  route hangs off. It validates the segment against this package's registry
+  (`isSupportedLocale`) — an unknown-but-locale-shaped segment (`/xx/login`)
+  is a 404, not a redirect.
+- **Legacy URLs keep working**: a locale-less path (`/settings/org`, every
+  bookmark and every email mailed before T-233) is redirected to its
+  prefixed equivalent, query and hash intact — by `$locale.tsx` for one-
+  segment paths and by the root splat `routes/$.tsx` for deeper ones. There
+  is no HTTP-level 301: the web app is a static SPA behind Caddy's
+  `try_files … /index.html`, so there's no SSR/edge layer to issue one, and
+  the signed-in user's preference (an input to the resolution) isn't known
+  until the client boots. Put the same rule in front as a 301 if you deploy
+  this behind an SSR or edge runtime.
+- **Resolution order** for a locale-less URL, mirroring the backend's:
+  `User.locale` → an explicit in-session choice (`localStorage`, T-069) →
+  `navigator.languages` → `en`. See `apps/web/src/lib/locale-url.ts`.
+- **The URL wins for rendering, but is not a preference**: opening a shared
+  `/de/…` link shows German even to an `en` user, and does *not* write `de`
+  into `localStorage` or `User.locale`. Only an explicit switch does — and
+  the switcher rewrites the current path's locale segment in place rather
+  than sending the user back to the dashboard
+  (`apps/web/src/lib/RoutedLocaleSwitcher.tsx`).
+- **Links into the app from email** are built by
+  `backend/app/core/urls.py`'s `frontend_url(path, locale)`, per recipient.
+  Never interpolate `settings.FRONTEND_URL` by hand.
+- **`<link rel="canonical">` + `hreflang` alternates** are emitted per page
+  by `apps/web/src/lib/LocaleHead.tsx`. Pages behind auth get a canonical
+  URL and `noindex, nofollow`, with no alternates.
+
+Mobile is unaffected — it has no URL bar; `useLocale()` and the platform
+i18n bootstrap remain its source of truth.
+
 ## Coverage requirements (`check-locales`)
 
 `pnpm --filter @forge/i18n run check-locales` (wired into `pnpm lint`) enforces,

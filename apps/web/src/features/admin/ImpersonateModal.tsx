@@ -17,6 +17,7 @@ import {
   Label,
 } from "@forge/ui";
 
+import { useRouteLocale } from "../../lib/useRouteLocale";
 import { getErrorMessage } from "../auth/getErrorMessage";
 
 interface ImpersonateModalProps {
@@ -36,6 +37,7 @@ export function ImpersonateModal({
 }: ImpersonateModalProps) {
   const { t } = useTranslation();
   const navigate = useNavigate();
+  const locale = useRouteLocale();
   const { loadImpersonatedSession } = useAuth();
   const [reason, setReason] = useState("");
   const [duration, setDuration] = useState("30");
@@ -61,7 +63,7 @@ export function ImpersonateModal({
       }
       loadImpersonatedSession(result.access_token, result.user);
       onOpenChange(false);
-      await navigate({ to: "/" });
+      await navigate({ to: "/$locale", params: { locale } });
     } catch (err) {
       setError(getErrorMessage(err, "common.admin.impersonate_modal.error_default"));
     }

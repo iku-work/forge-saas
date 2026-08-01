@@ -9,6 +9,7 @@ test_auth_service_refresh.py.
 
 from collections.abc import AsyncGenerator
 from datetime import UTC, datetime, timedelta
+from typing import Any
 
 import pytest
 from sqlalchemy import func, select
@@ -378,3 +379,45 @@ async def test_consume_magic_link_for_soft_deleted_user_raises(
 
     with pytest.raises(AuthenticationError):
         await service.consume_magic_link(plain, _IP, _USER_AGENT)
+
+
+# --- locale-prefixed email deep links (T-233) ---------------------------------
+
+
+async def test_password_reset_link_carries_the_recipients_locale(
+    service: AuthService,
+    verified_user: User,
+    session: AsyncSession,
+    enqueued_jobs: list[tuple[str, Any]],
+) -> None:
+    verified_user.locale = "fi"
+    session.add(verified_user)
+    await session.flush()
+
+    await service.request_password_reset(verified_user.email)
+
+    kwargs = next(k for f, k in enqueued_jobs if f == "send_email")
+    assert kwargs["locale"] == "fi"
+    assert "/fi/reset-password?token=" in kwargs["context"]["reset_url"]
+
+
+async def test_magic_link_points_at_the_route_the_spa_actually_serves(
+    service: AuthService,
+    verified_user: User,
+    session: AsyncSession,
+    enqueued_jobs: list[tuple[str, Any]],
+) -> None:
+    """Pre-T-233 this link was "/magic-link/consume?token=" -- a path no
+    route in apps/web/src/routes ever defined, so every magic-link email
+    landed on a 404. The SPA route is "/magic-link" with the token in the
+    query string (see $locale.magic-link.tsx), now locale-prefixed."""
+    verified_user.locale = "de"
+    session.add(verified_user)
+    await session.flush()
+
+    await service.request_magic_link(verified_user.email)
+
+    kwargs = next(k for f, k in enqueued_jobs if f == "send_email")
+    login_url: str = kwargs["context"]["login_url"]
+    assert "/de/magic-link?token=" in login_url
+    assert "/magic-link/consume" not in login_url

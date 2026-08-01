@@ -7,7 +7,7 @@ const cancelEmailChangeSearchSchema = z.object({
   token: z.string().optional(),
 });
 
-export const Route = createFileRoute("/cancel-email-change")({
+export const Route = createFileRoute("/$locale/cancel-email-change")({
   validateSearch: (search) => cancelEmailChangeSearchSchema.parse(search),
   component: CancelEmailChangeRoute,
 });

@@ -5617,9 +5617,9 @@ For each of `packages/{ui,api-client,types,hooks,validation,utils}`:
 
 **Done when**
 
-- [ ] All routes locale-prefixed; redirects cover legacy links
-- [ ] hreflang/canonical component emits correct alternates
-- [ ] E2E (T-220) still green with prefixed URLs
+- [x] All routes locale-prefixed; redirects cover legacy links
+- [x] hreflang/canonical component emits correct alternates
+- [x] E2E (T-220) still green with prefixed URLs
 
 ---
 

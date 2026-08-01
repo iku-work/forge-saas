@@ -23,6 +23,8 @@ import {
 } from "@forge/ui";
 import { magicLinkSchema, type MagicLinkInput } from "@forge/validation";
 
+import { useRouteLocale } from "../../lib/useRouteLocale";
+
 import { AuthCard } from "./AuthCard";
 import { getErrorMessage } from "./getErrorMessage";
 
@@ -39,6 +41,7 @@ export function MagicLinkPage({ token }: MagicLinkPageProps) {
 
 function MagicLinkConsume({ token }: { token: string }) {
   const { t } = useTranslation();
+  const locale = useRouteLocale();
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   // Magic link tokens are single-use; guard against Strict Mode's
   // double-invoked effect consuming the token twice.
@@ -74,7 +77,11 @@ function MagicLinkConsume({ token }: { token: string }) {
           <AlertDescription>{errorMessage}</AlertDescription>
         </Alert>
         <p className="text-center text-sm text-muted-foreground">
-          <Link to="/magic-link" className="underline underline-offset-4">
+          <Link
+            to="/$locale/magic-link"
+            params={{ locale }}
+            className="underline underline-offset-4"
+          >
             {t("auth.magic_link.request_new")}
           </Link>
         </p>
@@ -92,6 +99,7 @@ function MagicLinkConsume({ token }: { token: string }) {
 
 function MagicLinkRequestForm() {
   const { t } = useTranslation();
+  const locale = useRouteLocale();
   const [formError, setFormError] = useState<string | null>(null);
   const [submitted, setSubmitted] = useState(false);
 
@@ -122,7 +130,11 @@ function MagicLinkRequestForm() {
           </AlertDescription>
         </Alert>
         <p className="text-center text-sm text-muted-foreground">
-          <Link to="/login" className="underline underline-offset-4">
+          <Link
+            to="/$locale/login"
+            params={{ locale }}
+            className="underline underline-offset-4"
+          >
             {t("auth.magic_link.back_to_login")}
           </Link>
         </p>
@@ -136,7 +148,11 @@ function MagicLinkRequestForm() {
       description={t("auth.magic_link.description")}
       footer={
         <p>
-          <Link to="/login" className="underline underline-offset-4">
+          <Link
+            to="/$locale/login"
+            params={{ locale }}
+            className="underline underline-offset-4"
+          >
             {t("auth.magic_link.back_to_login")}
           </Link>
         </p>

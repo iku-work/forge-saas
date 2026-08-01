@@ -4,7 +4,7 @@ import { bootstrapModules, getModulesSnapshot } from "@forge/hooks";
 
 import { FilesPage } from "../features/files/FilesPage";
 
-export const Route = createFileRoute("/_app/files")({
+export const Route = createFileRoute("/$locale/_app/files")({
   beforeLoad: async () => {
     await bootstrapModules();
     if (!getModulesSnapshot().fileStorage) {

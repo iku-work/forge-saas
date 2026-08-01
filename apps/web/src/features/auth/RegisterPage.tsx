@@ -21,11 +21,14 @@ import {
 } from "@forge/ui";
 import { registerSchema, type RegisterInput } from "@forge/validation";
 
+import { useRouteLocale } from "../../lib/useRouteLocale";
+
 import { AuthCard } from "./AuthCard";
 import { getErrorMessage } from "./getErrorMessage";
 
 export function RegisterPage() {
   const { t } = useTranslation();
+  const locale = useRouteLocale();
   const { register } = useAuth();
   const [formError, setFormError] = useState<string | null>(null);
   const [submitted, setSubmitted] = useState(false);
@@ -54,7 +57,11 @@ export function RegisterPage() {
           </AlertDescription>
         </Alert>
         <p className="text-center text-sm text-muted-foreground">
-          <Link to="/login" className="underline underline-offset-4">
+          <Link
+            to="/$locale/login"
+            params={{ locale }}
+            className="underline underline-offset-4"
+          >
             {t("auth.register.back_to_login")}
           </Link>
         </p>
@@ -69,7 +76,11 @@ export function RegisterPage() {
       footer={
         <p>
           {t("auth.register.have_account")}{" "}
-          <Link to="/login" className="underline underline-offset-4">
+          <Link
+            to="/$locale/login"
+            params={{ locale }}
+            className="underline underline-offset-4"
+          >
             {t("auth.register.login_link")}
           </Link>
         </p>
