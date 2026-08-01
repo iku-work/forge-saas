@@ -26,6 +26,20 @@ template keep their own changes in `CHANGELOG.product.md` (see
 - Invitation emails were the only transactional email never localised — they
   now use the invitee's own `User.locale` when they already have an account,
   and the inviter's otherwise.
+- `backend/tests/test_middleware.py` passed in CI but failed on any checkout
+  whose `backend/.env` wasn't a copy of `.env.test`: five tests drove
+  `/api/v1/*` routes through a bare `TestClient`, so slowapi's import-time
+  limiter reached for a Redis that only exists under the compose stack, and
+  the CORS test asserted a literal origin that only one env file configures.
+  They now use conftest's `client` fixture and read the origin off the
+  imported app.
+- `@forge/i18n`'s `check-roundtrip` gate (and therefore `pnpm lint`) failed on
+  every Windows checkout: it byte-compared CRLF working-tree files against the
+  LF the importer writes. It now compares content, not line endings.
+- `apps/mobile`'s `type-check` regenerates expo-router's typed-routes
+  declaration first (new `pnpm typegen`). That file lives under the gitignored
+  `.expo/`, so it was absent in CI (typed routes silently checked nothing) and
+  stale locally (valid routes reported as type errors).
 ### Conflict risk for products
 - **High for web route files.** `apps/web/src/routes/*` were renamed to
   `$locale.*` and every `<Link to>`/`navigate()`/`redirect()` target gained a

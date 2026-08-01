@@ -23,9 +23,7 @@ depends_on: str | Sequence[str] | None = None
 
 
 def upgrade() -> None:
-    op.add_column(
-        "email_change_token", sa.Column("cancel_token_hash", sa.String(), nullable=True)
-    )
+    op.add_column("email_change_token", sa.Column("cancel_token_hash", sa.String(), nullable=True))
     op.create_unique_constraint(
         "email_change_token_cancel_token_hash_key",
         "email_change_token",
@@ -43,9 +41,7 @@ def upgrade() -> None:
         "email_change_token", sa.Column("requested_user_agent", sa.String(), nullable=True)
     )
     op.execute(
-        sa.text(
-            "UPDATE email_change_token SET requested_ip = 'unknown' WHERE requested_ip IS NULL"
-        )
+        sa.text("UPDATE email_change_token SET requested_ip = 'unknown' WHERE requested_ip IS NULL")
     )
     op.execute(
         sa.text(

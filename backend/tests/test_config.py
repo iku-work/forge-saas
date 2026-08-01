@@ -76,9 +76,7 @@ def test_virus_scanner_noop_outside_dev_raises(monkeypatch: pytest.MonkeyPatch) 
     _clear_settings_env(monkeypatch)
 
     with pytest.raises(RuntimeError, match="VIRUS_SCANNER"):
-        Settings(
-            _env_file=FIXTURE_ENV_FILE, **{**_PROD_SAFE_OVERRIDES, "VIRUS_SCANNER": "noop"}
-        )
+        Settings(_env_file=FIXTURE_ENV_FILE, **{**_PROD_SAFE_OVERRIDES, "VIRUS_SCANNER": "noop"})
 
 
 def test_password_pepper_required_outside_dev(monkeypatch: pytest.MonkeyPatch) -> None:

@@ -159,9 +159,7 @@ def test_wrong_method_returns_405_and_logs_warning() -> None:
         target.disabled = previous_disabled
 
     assert response.status_code == 405
-    assert any(
-        "405" in message and "/raise-not-found" in message for message in handler.messages
-    )
+    assert any("405" in message and "/raise-not-found" in message for message in handler.messages)
 
 
 def test_404_does_not_log_a_405_warning() -> None:

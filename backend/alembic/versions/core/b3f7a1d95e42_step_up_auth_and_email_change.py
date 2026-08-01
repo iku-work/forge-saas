@@ -34,9 +34,7 @@ def upgrade() -> None:
     op.execute(sa.text("UPDATE session SET auth_time = created_at WHERE auth_time IS NULL"))
     op.alter_column("session", "auth_time", nullable=False)
 
-    op.add_column(
-        "totp_secret", sa.Column("last_consumed_step", sa.Integer(), nullable=True)
-    )
+    op.add_column("totp_secret", sa.Column("last_consumed_step", sa.Integer(), nullable=True))
 
     op.create_table(
         "email_change_token",

@@ -27,9 +27,7 @@ class User(RedactedReprMixin, UUIDPKMixin, TimestampMixin, SoftDeleteMixin, SQLM
     email: str = Field(unique=True, index=True)
     email_verified_at: datetime | None = Field(default=None, sa_type=_TZ_DATETIME)  # type: ignore[call-overload]
     hashed_password: str | None = Field(default=None)  # null for OAuth-only users
-    full_name: str | None = Field(
-        default=None, sa_column=Column(EncryptedString, nullable=True)
-    )
+    full_name: str | None = Field(default=None, sa_column=Column(EncryptedString, nullable=True))
     avatar_url: str | None = Field(default=None)
     is_active: bool = Field(default=True)
     is_superadmin: bool = Field(default=False)

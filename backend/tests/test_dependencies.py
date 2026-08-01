@@ -348,11 +348,7 @@ async def test_require_permission_denial_writes_audit_event(session: AsyncSessio
         await checker(**kwargs)
 
     events = (
-        (
-            await session.execute(
-                select(AuditEvent).where(AuditEvent.action == "permission.denied")
-            )
-        )
+        (await session.execute(select(AuditEvent).where(AuditEvent.action == "permission.denied")))
         .scalars()
         .all()
     )
