@@ -83,3 +83,7 @@ instead of per-PR.
 | 2026-07-31 | e9c19ad | browse | - | - | PASS |
 | 2026-07-31 | e9c19ad | presign | - | - | PASS |
 | 2026-07-31 | e9c19ad | mixed | - | - | FAIL |
+| 2026-08-01 | 835f3e3 | login-burst | - | - | FAIL |
+| 2026-08-01 | 835f3e3 | browse | - | - | PASS |
+| 2026-08-01 | 835f3e3 | presign | - | - | PASS |
+| 2026-08-01 | 835f3e3 | mixed | - | - | FAIL |
