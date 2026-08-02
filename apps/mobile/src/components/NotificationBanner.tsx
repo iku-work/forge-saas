@@ -28,7 +28,13 @@ export function NotificationBanner() {
     <Pressable
       accessibilityRole="alert"
       accessibilityLabel={banner.title || banner.body}
-      accessibilityHint={t("notifications.banner.dismiss_hint")}
+      // T-234: the banner's own chrome follows the language the push was
+      // written in (banner.locale), not whatever the device is set to --
+      // otherwise a Finnish push read by an English-locale device announces
+      // itself half in each.
+      accessibilityHint={t("notifications.banner.dismiss_hint", {
+        ...(banner.locale ? { lng: banner.locale } : {}),
+      })}
       onPress={dismissNotificationBanner}
       className="absolute left-4 right-4 top-12 z-50 rounded-lg bg-slate-900 p-4 shadow-lg"
     >

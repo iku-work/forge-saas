@@ -100,8 +100,7 @@ class TenancyService:
             user_id=inviter.user_id,
             org_id=org_id,
             type="member_invited",
-            title="Invitation sent",
-            body=f"You invited {email} to join {org.name}.",
+            params={"email": email, "org_name": org.name},
         )
 
     async def accept_invitation(self, token: str, user: User) -> Membership:

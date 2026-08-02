@@ -36,6 +36,35 @@
     "type_payment_failed": "Un paiement échoue",
     "type_subscription_expiring": "Votre abonnement expire",
     "type_weekly_summary": "Résumé hebdomadaire",
-    "type_file_uploaded": "Un fichier est importé"
+    "type_file_uploaded": "Un fichier est importé",
+    "type_file_infected": "Un fichier que vous avez importé est signalé comme infecté",
+    "channel_required": "obligatoire",
+    "required_note": "Nous vous informons toujours par e-mail des problèmes de paiement ; cela ne peut pas être désactivé, sinon vous perdriez l'accès sans avertissement."
+  },
+  "types": {
+    "member_invited": {
+      "title": "Invitation envoyée",
+      "body": "Vous avez invité {email} à rejoindre {org_name}."
+    },
+    "payment_failed": {
+      "title": "Échec du paiement",
+      "body": "Nous n'avons pas pu débiter votre carte pour l'abonnement de {org_name} ({amount}). Mettez à jour votre moyen de paiement pour ne pas perdre l'accès."
+    },
+    "subscription_expiring": {
+      "title": "Votre abonnement expire bientôt",
+      "body": "Le forfait {plan_name} de {org_name} expire le {expires_at}. Renouvelez-le maintenant pour conserver un accès ininterrompu."
+    },
+    "weekly_summary": {
+      "title": "Votre résumé hebdomadaire",
+      "body": "Voici ce qui s'est passé dans {org_name} cette semaine."
+    },
+    "file_uploaded": {
+      "title": "Fichier importé",
+      "body": "L'import de {filename} est terminé."
+    },
+    "file_infected": {
+      "title": "Un fichier que vous avez importé a été signalé comme infecté",
+      "body": "{filename} a été supprimé après avoir échoué à l'analyse antivirus."
+    }
   }
 }

@@ -14,7 +14,8 @@
     "trial_expired": "Kokeilujaksosi on päättynyt",
     "file_uploaded": "Uusi tiedosto ladattu",
     "security_notification": "Tietoturvahälytys tilillesi",
-    "change_email": "Vahvista uusi sähköpostiosoitteesi"
+    "change_email": "Vahvista uusi sähköpostiosoitteesi",
+    "notification": "Uusi ilmoitus"
   },
   "footer": {
     "ignore_notice": "Jos et pyytänyt tätä sähköpostia, voit jättää sen huomiotta."
@@ -137,5 +138,9 @@
     "cancel_button": "Peruuta tämä pyyntö",
     "button": "Tarkista tietoturva-asetukset",
     "footer": "Jos tämä et ollut sinä, vaihda salasanasi välittömästi ja tarkista aktiiviset istuntosi."
+  },
+  "notification": {
+    "greeting": "Hei",
+    "button": "Näytä tiedot"
   }
 }

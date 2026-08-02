@@ -6,6 +6,7 @@ import { fileUploadedExampleProps, FileUploaded } from "./FileUploaded.js";
 import { invitationExampleProps, Invitation } from "./Invitation.js";
 import { magicLinkExampleProps, MagicLink } from "./MagicLink.js";
 import { memberInvitedExampleProps, MemberInvited } from "./MemberInvited.js";
+import { NotificationEmail, notificationEmailExampleProps } from "./NotificationEmail.js";
 import { passwordResetExampleProps, PasswordReset } from "./PasswordReset.js";
 import { paymentFailedExampleProps, PaymentFailed } from "./PaymentFailed.js";
 import {
@@ -115,4 +116,9 @@ export const SecurityNotificationStory: Story = {
   render: () => (
     <EmailPreview element={<SecurityNotification {...securityNotificationExampleProps} />} />
   ),
+};
+
+export const NotificationStory: Story = {
+  name: "Notification (generic)",
+  render: () => <EmailPreview element={<NotificationEmail {...notificationEmailExampleProps} />} />,
 };

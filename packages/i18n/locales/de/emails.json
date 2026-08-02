@@ -14,7 +14,8 @@
     "trial_expired": "Ihre Testphase ist beendet",
     "file_uploaded": "Eine neue Datei wurde hochgeladen",
     "security_notification": "Sicherheitshinweis für Ihr Konto",
-    "change_email": "Bestätigen Sie Ihre neue E-Mail-Adresse"
+    "change_email": "Bestätigen Sie Ihre neue E-Mail-Adresse",
+    "notification": "Neue Benachrichtigung"
   },
   "footer": {
     "ignore_notice": "Wenn Sie diese E-Mail nicht angefordert haben, können Sie sie ignorieren."
@@ -137,5 +138,9 @@
     "cancel_button": "Diese Anfrage abbrechen",
     "button": "Sicherheitseinstellungen überprüfen",
     "footer": "Falls Sie das nicht waren, setzen Sie Ihr Passwort sofort zurück und überprüfen Sie Ihre aktiven Sitzungen."
+  },
+  "notification": {
+    "greeting": "Hallo",
+    "button": "Details ansehen"
   }
 }

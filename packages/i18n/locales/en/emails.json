@@ -14,7 +14,8 @@
     "trial_expired": "Your trial has ended",
     "file_uploaded": "A new file was uploaded",
     "security_notification": "Security alert for your account",
-    "change_email": "Confirm your new email address"
+    "change_email": "Confirm your new email address",
+    "notification": "New notification"
   },
   "footer": {
     "ignore_notice": "If you didn't request this email, you can safely ignore it."
@@ -137,5 +138,9 @@
     "cancel_button": "Cancel this request",
     "button": "Review security settings",
     "footer": "If this wasn't you, reset your password immediately and review your active sessions."
+  },
+  "notification": {
+    "greeting": "Hi",
+    "button": "View details"
   }
 }

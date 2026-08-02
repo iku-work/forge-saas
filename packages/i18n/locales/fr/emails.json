@@ -14,7 +14,8 @@
     "trial_expired": "Votre essai est terminé",
     "file_uploaded": "Un nouveau fichier a été importé",
     "security_notification": "Alerte de sécurité pour votre compte",
-    "change_email": "Confirmez votre nouvelle adresse e-mail"
+    "change_email": "Confirmez votre nouvelle adresse e-mail",
+    "notification": "Nouvelle notification"
   },
   "footer": {
     "ignore_notice": "Si vous n'êtes pas à l'origine de cette demande, vous pouvez ignorer cet e-mail en toute sécurité."
@@ -137,5 +138,9 @@
     "cancel_button": "Annuler cette demande",
     "button": "Vérifier les paramètres de sécurité",
     "footer": "Si ce n'était pas vous, réinitialisez immédiatement votre mot de passe et vérifiez vos sessions actives."
+  },
+  "notification": {
+    "greeting": "Bonjour",
+    "button": "Voir les détails"
   }
 }

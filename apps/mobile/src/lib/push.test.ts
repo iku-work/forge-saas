@@ -1,3 +1,4 @@
+import { renderHook } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 // react-native is aliased to react-native-web in vitest.config.ts, where
@@ -46,7 +47,12 @@ vi.mock("@forge/api-client", async (importOriginal) => {
 });
 vi.mock("expo-router", () => ({ router: mocks.router }));
 
-const { registerPushToken, setupNotificationHandlers } = await import("./push");
+const {
+  dismissNotificationBanner,
+  registerPushToken,
+  setupNotificationHandlers,
+  useNotificationBanner,
+} = await import("./push");
 
 const GRANTED = {
   granted: true,
@@ -216,6 +222,77 @@ describe("lib/push", () => {
       });
 
       expect(mocks.router.push).not.toHaveBeenCalled();
+    });
+
+    it("carries the payload's locale into the in-app banner", () => {
+      // T-234: the backend renders the push in the recipient's User.locale,
+      // which need not be the device's language -- data.locale is how the
+      // banner knows which one its own chrome should follow.
+      let receive!: (event: {
+        request: {
+          content: {
+            title: string | null;
+            body: string | null;
+            data: Record<string, unknown>;
+          };
+        };
+      }) => void;
+      notifications.addNotificationReceivedListener.mockImplementation(
+        (listener: typeof receive) => {
+          receive = listener;
+          return { remove: vi.fn() };
+        },
+      );
+      setupNotificationHandlers();
+
+      receive({
+        request: {
+          content: {
+            title: "Maksu epäonnistui",
+            body: "Päivitä maksutapasi.",
+            data: { action_url: "/settings/billing", locale: "fi" },
+          },
+        },
+      });
+
+      const { result } = renderHook(() => useNotificationBanner());
+      expect(result.current).toEqual({
+        title: "Maksu epäonnistui",
+        body: "Päivitä maksutapasi.",
+        locale: "fi",
+      });
+      dismissNotificationBanner();
+    });
+
+    it("leaves the banner locale null for a payload without one", () => {
+      let receive!: (event: {
+        request: {
+          content: {
+            title: string | null;
+            body: string | null;
+            data: Record<string, unknown>;
+          };
+        };
+      }) => void;
+      notifications.addNotificationReceivedListener.mockImplementation(
+        (listener: typeof receive) => {
+          receive = listener;
+          return { remove: vi.fn() };
+        },
+      );
+      setupNotificationHandlers();
+
+      receive({
+        request: { content: { title: "Hello", body: "Just FYI", data: {} } },
+      });
+
+      const { result } = renderHook(() => useNotificationBanner());
+      expect(result.current).toEqual({
+        title: "Hello",
+        body: "Just FYI",
+        locale: null,
+      });
+      dismissNotificationBanner();
     });
 
     it("re-registers with the refreshed token when Expo rolls it", async () => {

@@ -37,13 +37,27 @@ describe("NotificationsSettingsPage", () => {
 
     // payment_failed defaults to email=true; member_invited defaults to push=false.
     expect(
-      screen.getByRole("checkbox", { name: "A payment fails Email" }),
+      screen.getByRole("checkbox", { name: "A payment fails Email (required)" }),
     ).toBeChecked();
     expect(
       screen.getByRole("checkbox", {
         name: "Someone joins your organization Push",
       }),
     ).not.toBeChecked();
+  });
+
+  it("renders a row for file_infected", () => {
+    // The virus scanner has sent this type since T-102, but it was missing
+    // from NOTIFICATION_TYPES, so the page never offered a row for it.
+    hooks.useAuth.mockReturnValue({ user: fixtureUser, isLoading: false });
+
+    renderPage();
+
+    expect(
+      screen.getByRole("checkbox", {
+        name: "A file you uploaded is flagged as infected Push",
+      }),
+    ).toBeChecked();
   });
 
   it("merges a partially-saved row with defaults for the channels it never touched", () => {
@@ -85,7 +99,7 @@ describe("NotificationsSettingsPage", () => {
     renderPage();
 
     await userEvent.click(
-      screen.getByRole("checkbox", { name: "A payment fails Email" }),
+      screen.getByRole("checkbox", { name: "A payment fails Push" }),
     );
     await userEvent.click(screen.getByRole("button", { name: "Save preferences" }));
 
@@ -93,11 +107,90 @@ describe("NotificationsSettingsPage", () => {
     expect(savedBody).toEqual({
       preferences: {
         member_invited: { email: true, in_app: true, push: false },
-        payment_failed: { email: false, in_app: true, push: true },
+        payment_failed: { email: true, in_app: true, push: false },
         subscription_expiring: { email: true, in_app: true, push: false },
         weekly_summary: { email: true, in_app: false, push: false },
         file_uploaded: { email: false, in_app: true, push: false },
+        file_infected: { email: true, in_app: true, push: true },
       },
+    });
+  });
+
+  describe("channels the user can't switch off (T-234)", () => {
+    it("renders the billing email channels checked, disabled, and named as required", () => {
+      hooks.useAuth.mockReturnValue({ user: fixtureUser, isLoading: false });
+
+      renderPage();
+
+      for (const name of [
+        "A payment fails Email (required)",
+        "Your subscription is expiring Email (required)",
+      ]) {
+        const box = screen.getByRole("checkbox", { name });
+        expect(box).toBeChecked();
+        expect(box).toBeDisabled();
+      }
+    });
+
+    it("explains why, via a note the required checkboxes point at", () => {
+      hooks.useAuth.mockReturnValue({ user: fixtureUser, isLoading: false });
+
+      renderPage();
+
+      const note = screen.getByText(/always email you about billing problems/i);
+      expect(
+        screen.getByRole("checkbox", { name: "A payment fails Email (required)" }),
+      ).toHaveAttribute("aria-describedby", note.id);
+    });
+
+    it("renders a required channel as on even if the stored matrix says off", async () => {
+      // The backend's normalize() forces it back on when saved, so a stored
+      // `false` can only be a legacy row -- showing it unticked would claim
+      // the account behaves in a way it doesn't.
+      hooks.useAuth.mockReturnValue({
+        user: {
+          ...fixtureUser,
+          notification_preferences: {
+            payment_failed: { email: false, in_app: false, push: false },
+          },
+        },
+        isLoading: false,
+      });
+      let savedBody: unknown = null;
+      server.use(
+        http.patch(`${API}/api/v1/me/notification-preferences`, async ({ request }) => {
+          savedBody = await request.json();
+          return HttpResponse.json({
+            data: savedBody,
+            error: null,
+            meta: { request_id: "req-1" },
+          });
+        }),
+      );
+
+      renderPage();
+
+      expect(
+        screen.getByRole("checkbox", { name: "A payment fails Email (required)" }),
+      ).toBeChecked();
+      // ...and it's what gets submitted, so the stored row self-heals.
+      await userEvent.click(screen.getByRole("button", { name: "Save preferences" }));
+      await screen.findByText("Preferences saved.");
+      expect(savedBody).toMatchObject({
+        preferences: { payment_failed: { email: true, in_app: false, push: false } },
+      });
+    });
+
+    it("stays on when the disabled checkbox is activated anyway", async () => {
+      hooks.useAuth.mockReturnValue({ user: fixtureUser, isLoading: false });
+
+      renderPage();
+      const box = screen.getByRole("checkbox", {
+        name: "A payment fails Email (required)",
+      });
+      await userEvent.click(box, { pointerEventsCheck: 0 });
+
+      expect(box).toBeChecked();
     });
   });
 

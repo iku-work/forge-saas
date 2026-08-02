@@ -36,6 +36,35 @@
     "type_payment_failed": "عندما تفشل عملية دفع",
     "type_subscription_expiring": "عندما يكون اشتراكك على وشك الانتهاء",
     "type_weekly_summary": "ملخص أسبوعي",
-    "type_file_uploaded": "عند رفع ملف"
+    "type_file_uploaded": "عند رفع ملف",
+    "type_file_infected": "عندما يُوضع على ملف رفعته علامة بأنه مصاب",
+    "channel_required": "مطلوب",
+    "required_note": "نراسلك دائمًا بالبريد الإلكتروني بشأن مشكلات الدفع، ولا يمكن إيقاف ذلك — وإلا فقدت الوصول دون سابق إنذار."
+  },
+  "types": {
+    "member_invited": {
+      "title": "تم إرسال الدعوة",
+      "body": "لقد دعوت {email} للانضمام إلى {org_name}."
+    },
+    "payment_failed": {
+      "title": "فشلت عملية الدفع",
+      "body": "تعذّر خصم قيمة اشتراك {org_name} من بطاقتك ({amount}). حدّث طريقة الدفع لتجنّب فقدان الوصول."
+    },
+    "subscription_expiring": {
+      "title": "اشتراكك على وشك الانتهاء",
+      "body": "تنتهي خطة {plan_name} الخاصة بـ {org_name} في {expires_at}. جدّد الآن للحفاظ على وصول غير منقطع."
+    },
+    "weekly_summary": {
+      "title": "ملخّصك الأسبوعي",
+      "body": "إليك ما حدث في {org_name} هذا الأسبوع."
+    },
+    "file_uploaded": {
+      "title": "تم رفع الملف",
+      "body": "انتهى رفع {filename}."
+    },
+    "file_infected": {
+      "title": "تم وضع علامة على ملف رفعته بأنه مصاب",
+      "body": "تمت إزالة {filename} بعد فشله في فحص الفيروسات."
+    }
   }
 }

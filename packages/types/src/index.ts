@@ -61,6 +61,11 @@ export const NOTIFICATION_TYPES = [
   "subscription_expiring",
   "weekly_summary",
   "file_uploaded",
+  // Sent by the virus scanner (backend/app/workers/jobs/virus_scan.py) since
+  // T-102. It was missing from this list, so the settings page never offered
+  // a row for it and the one notification type most worth muting or routing
+  // to push had no controls at all.
+  "file_infected",
 ] as const;
 export type NotificationType = (typeof NOTIFICATION_TYPES)[number];
 
@@ -72,7 +77,33 @@ export const DEFAULT_NOTIFICATION_PREFERENCES: Readonly<
   subscription_expiring: { email: true, in_app: true, push: false },
   weekly_summary: { email: true, in_app: false, push: false },
   file_uploaded: { email: false, in_app: true, push: false },
+  file_infected: { email: true, in_app: true, push: true },
 };
+
+/**
+ * Channels the user cannot switch off, mirroring REQUIRED_CHANNELS in
+ * backend/app/modules/notifications/preferences.py (T-234). Both of these
+ * carry the dunning sequence — "we couldn't charge your card, you are about
+ * to lose access" — which is a service message, not something the product
+ * chose to send.
+ *
+ * The settings page renders these boxes checked and disabled rather than
+ * letting them look live: the backend forces them back on when the matrix is
+ * saved, so a checkbox that appeared to work would simply be lying.
+ */
+export const REQUIRED_NOTIFICATION_CHANNELS: Readonly<
+  Partial<Record<NotificationType, readonly NotificationChannel[]>>
+> = {
+  payment_failed: ["email"],
+  subscription_expiring: ["email"],
+};
+
+export function isNotificationChannelRequired(
+  type: NotificationType,
+  channel: NotificationChannel,
+): boolean {
+  return REQUIRED_NOTIFICATION_CHANNELS[type]?.includes(channel) ?? false;
+}
 
 // Mirrors backend/product.config.py's MODULES and branding constants — keep
 // both in sync. Module keys mirror ModuleName in backend/app/core/modules.py

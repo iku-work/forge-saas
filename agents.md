@@ -5645,9 +5645,9 @@ For each of `packages/{ui,api-client,types,hooks,validation,utils}`:
 
 **Done when**
 
-- [ ] Mixed-locale fan-out test passes
-- [ ] Fallback + late-change tests pass
-- [ ] Any bug found in the audit is fixed with its own regression test
+- [x] Mixed-locale fan-out test passes
+- [x] Fallback + late-change tests pass
+- [x] Any bug found in the audit is fixed with its own regression test
 
 ---
 

@@ -116,8 +116,7 @@ async def virus_scan(
             user_id=stored_file.uploaded_by,
             org_id=stored_file.org_id,
             type="file_infected",
-            title="A file you uploaded was flagged as infected",
-            body=f"{stored_file.filename} was removed after failing a virus scan.",
+            params={"filename": stored_file.filename},
         )
         await session.commit()
 

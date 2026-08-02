@@ -26,6 +26,13 @@ re-queue -- per T-206's own degraded-mode contract ("Expo push down -- push
 dropped after retries; in-app + email channels unaffected"), unlike Resend's
 or the virus scanner's re-queue-via-arq.worker.Retry behavior: a missed push
 has no user-facing recovery path worth delaying the rest of the queue for.
+
+T-234: the message text is re-rendered here (see _localise) from the
+notification's type + params in the recipient's locale *as of this job's
+execution*, rather than reusing the strings NotificationService.send() stored
+when the row was created. The two only differ when the user changed language
+in between, but "in between" can be a week for a deferred dunning step, and
+the language the push arrives in should be the one they have now.
 """
 
 import logging
@@ -39,11 +46,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.db import async_session_factory
 from app.core.exceptions import ExternalServiceUnavailableError
+from app.core.i18n import get_default_locale
 from app.core.metrics import FORGE_PUSH_SENT_TOTAL
 from app.core.resilience import resilient
 from app.core.tracing import trace_job
 from app.models._mixins import utcnow
 from app.modules.auth.models import User
+from app.modules.notifications import messages
 from app.modules.notifications.models import Notification
 from app.modules.notifications.preferences import DEFAULT_PREFERENCES
 from app.modules.notifications.repository import PushTokenRepository
@@ -74,12 +83,47 @@ async def backfill_notification_preferences(
     logger.info("backfill_notification_preferences: updated %d user(s)", updated)
 
 
-def _expo_message(token: str, notification: Notification) -> dict[str, Any]:
+def _localise(notification: Notification, user: User | None) -> tuple[str, str, str]:
+    """(title, body, locale) for this push, resolved at *job execution* time.
+
+    T-234: the row's stored title/body were rendered when the notification
+    was created, which can be minutes (a busy queue) or days (a deferred
+    dunning step) before this job runs -- long enough for the recipient to
+    have switched languages in between. Re-rendering from the type + params
+    means the push that actually lands is in the locale the user has now.
+
+    Falls back to the stored pair when the user row is gone (a GDPR purge
+    racing the queue) or the type has no catalog entry, which is what rows
+    written before T-234's migration look like: `params` is `{}` and their
+    title/body are the English literals their caller baked in. A missing
+    catalog entry is logged rather than raised -- a failed ARQ job would not
+    make the push any more localised.
+    """
+    if user is None:
+        return notification.title, notification.body, get_default_locale()
+    locale = user.locale
+    try:
+        title, body = messages.render(notification.type, locale, notification.params)
+    except KeyError:
+        logger.warning(
+            "send_push: no message catalog entry for type=%r, using the stored strings",
+            notification.type,
+        )
+        return notification.title, notification.body, locale
+    return title, body, locale
+
+
+def _expo_message(
+    token: str, *, title: str, body: str, action_url: str | None, locale: str
+) -> dict[str, Any]:
     return {
         "to": token,
-        "title": notification.title,
-        "body": notification.body,
-        "data": {"action_url": notification.action_url},
+        "title": title,
+        "body": body,
+        # `locale` (T-234) tells the mobile client which language the strings
+        # it just received are in, so anything it renders itself around them
+        # matches rather than following the device locale independently.
+        "data": {"action_url": action_url, "locale": locale},
     }
 
 
@@ -112,8 +156,21 @@ async def send_push(
             # do; email/in_app (if also enabled) already went out independently.
             return
 
+        title, body, locale = _localise(notification, await session.get(User, user_id))
+
         try:
-            receipts = await _post_to_expo([_expo_message(t.token, notification) for t in tokens])
+            receipts = await _post_to_expo(
+                [
+                    _expo_message(
+                        token.token,
+                        title=title,
+                        body=body,
+                        action_url=notification.action_url,
+                        locale=locale,
+                    )
+                    for token in tokens
+                ]
+            )
         except (httpx.HTTPError, ExternalServiceUnavailableError) as exc:
             # Dropped, not re-queued -- see module docstring.
             logger.warning("send_push: Expo push API request failed: %s", exc)

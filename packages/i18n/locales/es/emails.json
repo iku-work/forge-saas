@@ -14,7 +14,8 @@
     "trial_expired": "Tu prueba ha finalizado",
     "file_uploaded": "Se subió un nuevo archivo",
     "security_notification": "Alerta de seguridad para tu cuenta",
-    "change_email": "Confirma tu nueva dirección de correo electrónico"
+    "change_email": "Confirma tu nueva dirección de correo electrónico",
+    "notification": "Nueva notificación"
   },
   "footer": {
     "ignore_notice": "Si no solicitaste este correo electrónico, puedes ignorarlo sin problema."
@@ -137,5 +138,9 @@
     "cancel_button": "Cancelar esta solicitud",
     "button": "Revisar la configuración de seguridad",
     "footer": "Si no fuiste tú, restablece tu contraseña de inmediato y revisa tus sesiones activas."
+  },
+  "notification": {
+    "greeting": "Hola",
+    "button": "Ver detalles"
   }
 }

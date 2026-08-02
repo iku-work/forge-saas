@@ -214,8 +214,7 @@ class StorageService:
             user_id=user_id,
             org_id=self._org_id,
             type="file_uploaded",
-            title="File uploaded",
-            body=f"{updated.filename} finished uploading.",
+            params={"filename": updated.filename},
         )
         return updated
 

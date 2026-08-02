@@ -148,8 +148,13 @@ async def _make_notification(session: AsyncSession, user: User, org: Organizatio
         org_id=org.id,
         user_id=user.id,
         type="payment_failed",
+        # The send-time rendering NotificationService.send() would have
+        # written; the job re-renders it from type + params (T-234), so these
+        # two only survive into the payload when that re-render can't happen.
         title="Payment failed",
-        body="Update your card",
+        body="We couldn't charge your card for Acme's subscription ($49.00). "
+        "Update your payment method to avoid losing access.",
+        params={"org_name": "Acme", "amount": "$49.00"},
         action_url="/billing",
         channels=["push"],
     )
@@ -203,8 +208,9 @@ async def test_happy_path_posts_message_per_token_and_sets_push_sent_at(
         {
             "to": "ExponentPushToken[a]",
             "title": "Payment failed",
-            "body": "Update your card",
-            "data": {"action_url": "/billing"},
+            "body": "We couldn't charge your card for Acme's subscription ($49.00). "
+            "Update your payment method to avoid losing access.",
+            "data": {"action_url": "/billing", "locale": "en"},
         }
     ]
     async with session_factory() as verify_session:

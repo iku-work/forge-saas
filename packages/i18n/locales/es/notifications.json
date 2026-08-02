@@ -36,6 +36,35 @@
     "type_payment_failed": "Un pago falla",
     "type_subscription_expiring": "Tu suscripción está por vencer",
     "type_weekly_summary": "Resumen semanal",
-    "type_file_uploaded": "Se sube un archivo"
+    "type_file_uploaded": "Se sube un archivo",
+    "type_file_infected": "Un archivo que subiste se marca como infectado",
+    "channel_required": "obligatorio",
+    "required_note": "Siempre te avisamos por correo de los problemas de facturación, así que eso no se puede desactivar: perderías el acceso sin previo aviso."
+  },
+  "types": {
+    "member_invited": {
+      "title": "Invitación enviada",
+      "body": "Has invitado a {email} a unirse a {org_name}."
+    },
+    "payment_failed": {
+      "title": "Pago fallido",
+      "body": "No pudimos cobrar en tu tarjeta la suscripción de {org_name} ({amount}). Actualiza tu método de pago para no perder el acceso."
+    },
+    "subscription_expiring": {
+      "title": "Tu suscripción está por vencer",
+      "body": "El plan {plan_name} de {org_name} vence el {expires_at}. Renuévalo ahora para mantener el acceso sin interrupciones."
+    },
+    "weekly_summary": {
+      "title": "Tu resumen semanal",
+      "body": "Esto es lo que pasó en {org_name} esta semana."
+    },
+    "file_uploaded": {
+      "title": "Archivo subido",
+      "body": "{filename} terminó de subirse."
+    },
+    "file_infected": {
+      "title": "Un archivo que subiste fue marcado como infectado",
+      "body": "{filename} se eliminó tras no superar el análisis antivirus."
+    }
   }
 }

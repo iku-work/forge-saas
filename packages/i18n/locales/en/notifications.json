@@ -36,6 +36,35 @@
     "type_payment_failed": "A payment fails",
     "type_subscription_expiring": "Your subscription is expiring",
     "type_weekly_summary": "Weekly summary",
-    "type_file_uploaded": "A file is uploaded"
+    "type_file_uploaded": "A file is uploaded",
+    "type_file_infected": "A file you uploaded is flagged as infected",
+    "channel_required": "required",
+    "required_note": "We always email you about billing problems, so those can't be turned off — you'd lose access without warning."
+  },
+  "types": {
+    "member_invited": {
+      "title": "Invitation sent",
+      "body": "You invited {email} to join {org_name}."
+    },
+    "payment_failed": {
+      "title": "Payment failed",
+      "body": "We couldn't charge your card for {org_name}'s subscription ({amount}). Update your payment method to avoid losing access."
+    },
+    "subscription_expiring": {
+      "title": "Your subscription is expiring",
+      "body": "{org_name}'s {plan_name} plan expires on {expires_at}. Renew now to keep uninterrupted access."
+    },
+    "weekly_summary": {
+      "title": "Your weekly summary",
+      "body": "Here's what happened in {org_name} this week."
+    },
+    "file_uploaded": {
+      "title": "File uploaded",
+      "body": "{filename} finished uploading."
+    },
+    "file_infected": {
+      "title": "A file you uploaded was flagged as infected",
+      "body": "{filename} was removed after failing a virus scan."
+    }
   }
 }

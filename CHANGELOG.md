@@ -6,6 +6,27 @@ template keep their own changes in `CHANGELOG.product.md` (see
 
 ## [Unreleased]
 ### Changed
+- **Notifications are localised per recipient at send time (T-234).**
+  `NotificationService.send()` no longer accepts `title`/`body` strings —
+  callers pass the notification `type` and a `params` dict, and the strings
+  come from `notifications.types.<type>.title`/`.body` in the recipient's own
+  `User.locale`. New `send_many()` for multi-recipient events makes rendering
+  once above a fan-out loop impossible to write. The Expo push payload now
+  carries `data.locale`, and the day-1/day-3 dunning steps fan out through
+  `NotificationService` so an org's owners each get in-app and push in their
+  own language, not just email. New `Notification.params` column (migration
+  `7b41ad0c9e52`).
+- **The email channel for `payment_failed` and `subscription_expiring` can no
+  longer be switched off.** Those two carry the dunning sequence — "we
+  couldn't charge your card, you are about to lose access" — which is a
+  service message, not something the product chose to send. `channels_for()`
+  forces the channel on regardless of what's stored, the update endpoint
+  coerces the submitted matrix to match, and the settings page renders those
+  boxes checked-and-disabled with a note explaining why. In-app and push for
+  the same types stay freely toggleable. Products that want dunning fully
+  opt-out-able can empty `REQUIRED_CHANNELS` in
+  `backend/app/modules/notifications/preferences.py` and its
+  `REQUIRED_NOTIFICATION_CHANNELS` mirror in `packages/types`.
 - **Locale-aware URL routing on web (T-233).** Every web route is now under a
   `/$locale` prefix (`/en/settings/profile`, `/de/login`). Locale-less URLs —
   including every pre-existing bookmark and every previously-mailed deep link —
@@ -20,6 +41,29 @@ template keep their own changes in `CHANGELOG.product.md` (see
   `backend/app/core/urls.py` `frontend_url(path, locale)` helper instead of
   interpolating `FRONTEND_URL` by hand.
 ### Fixed
+- Every notification was written in English regardless of the recipient's
+  language: the three call sites (invite sent, file uploaded, file flagged as
+  infected) built their own English `title=`/`body=` f-strings, and `send_push`
+  posted those to Expo verbatim — so a locale change between an event and its
+  (possibly days-deferred) push job had no effect. Both ends are fixed; the
+  push job now re-renders at execution time.
+- The notification email channel enqueued `template=<notification type>` with a
+  `{title, body, action_url}` context no template of that name accepted:
+  `file_infected` had no template at all, so the render subprocess failed the
+  whole job, and `member_invited` silently sent a different email ("X has
+  joined …") with every interpolation `undefined`. Types with a purpose-built
+  template keep it; the rest use a new generic `notification` template.
+- The in-app notification feed served the strings rendered when each row was
+  written, so switching language left the whole history in the old one. It is
+  now re-rendered per read from the reader's current locale.
+- `file_infected` — sent by the virus scanner since T-102 — was missing from
+  `NOTIFICATION_TYPES` in `packages/types`, so the notification-preferences
+  page never rendered a row for it: the one type most worth muting or routing
+  to push had no controls at all. Added, along with a backend test that reads
+  the TypeScript source and fails on the next drift in either direction.
+- Dunning and trial emails built their billing CTA link once from
+  `settings.DOMAIN`, so it carried no locale segment (T-233) for any recipient.
+  It is now built per owner via `frontend_url(path, owner.locale)`.
 - Magic-link emails pointed at `/magic-link/consume?token=…`, a path no web
   route ever defined, so every magic-link email landed on a 404. They now point
   at the route the SPA actually serves (`/<locale>/magic-link?token=…`).
@@ -41,6 +85,15 @@ template keep their own changes in `CHANGELOG.product.md` (see
   `.expo/`, so it was absent in CI (typed routes silently checked nothing) and
   stale locally (valid routes reported as type errors).
 ### Conflict risk for products
+- **Medium for any product calling `NotificationService.send()`.** The
+  `title=`/`body=` parameters are gone. Each custom notification type needs
+  `notifications.types.<type>.title`/`.body` in `locales/en` (and its other
+  locales), and its call site changed to pass `params=` instead.
+- **Low–medium for products with custom notification types.** The new
+  `test_notification_preferences_mirror.py` now fails if `packages/types`'
+  `NOTIFICATION_TYPES` / `DEFAULT_NOTIFICATION_PREFERENCES` /
+  `REQUIRED_NOTIFICATION_CHANNELS` drift from the Python side — a product
+  that added a type on one side only will see it go red on first run.
 - **High for web route files.** `apps/web/src/routes/*` were renamed to
   `$locale.*` and every `<Link to>`/`navigate()`/`redirect()` target gained a
   `/$locale` prefix and a `params={{ locale }}`. Products with their own routes

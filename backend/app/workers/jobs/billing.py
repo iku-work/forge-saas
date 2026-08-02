@@ -24,6 +24,15 @@ Recipients are every OWNER member of the subscription's org (T-130 spec:
 rather than a new repository method, the same call app.workers.jobs.gdpr
 makes for its own cross-module reads.
 
+T-234: an org's owners do not all speak the same language, so nothing about
+a recipient's message may be computed above the loop over `owners`. The
+day-1/day-3 steps hand the whole fan-out to NotificationService.send_many,
+which resolves locale, preferences and name per recipient (and adds the
+in-app + push channels those preferences ask for); day-7 keeps its own loop,
+with the CTA link built per owner from `owner.locale` rather than once from
+settings.DOMAIN. Everything shared above the loop is now locale-independent
+data only -- the org name, the invoice amount, the plan name.
+
 The day-1 email needs the failed invoice's amount, which DunningCampaign
 doesn't store (only invoice_id) -- fetched from Stripe at send time instead
 of threaded through from the webhook payload, since a background job talking
@@ -62,15 +71,18 @@ from app.core import jobs
 from app.core.config import get_settings
 from app.core.db import async_session_factory
 from app.core.tracing import trace_job
+from app.core.urls import frontend_url
 from app.models._mixins import utcnow
 from app.modules.audit.service import AuditService
 from app.modules.auth.models import User
 from app.modules.auth.permissions import MemberRole
+from app.modules.billing.models import DunningCampaign, Plan, Subscription
 from app.modules.billing.repository import (
     DunningCampaignRepository,
     PlanRepository,
     SubscriptionRepository,
 )
+from app.modules.notifications.service import NotificationService
 from app.modules.tenancy.models import Membership, Organization
 
 logger = logging.getLogger(__name__)
@@ -80,6 +92,29 @@ _TEMPLATE_BY_STEP = {
     "day3": "subscription_expiring",
     "day7": "subscription_suspended",
 }
+
+# T-234: the two steps that map onto a notification type go through
+# NotificationService instead of enqueuing send_email directly, so the org's
+# owners also get the in-app + push channels their preferences ask for --
+# each rendered in that owner's own language. The email still goes out, from
+# the notification's own email channel and through the same rich template
+# _TEMPLATE_BY_STEP names, so a default-preferences owner sees no change.
+#
+# The one behaviour change: an owner who has turned the email channel *off*
+# for "A payment fails" on the notification-preferences page now stops
+# getting these two dunning emails, where before the page said one thing and
+# the job did another. If a product needs dunning to be unconditional
+# regardless of preference, drop the step from this map and give it its own
+# loop like day7's below -- don't leave the toggle showing.
+#
+# day7 has no matching type (there is no "subscription_suspended"
+# notification in T-101.5's DEFAULT_PREFERENCES) and stays email-only.
+_NOTIFICATION_TYPE_BY_STEP = {
+    "day1": "payment_failed",
+    "day3": "subscription_expiring",
+}
+
+_BILLING_PATH = "/settings/billing"
 
 _USD_SYMBOL_THRESHOLD_CURRENCY = "usd"
 
@@ -103,9 +138,31 @@ def _format_amount(amount_cents: int, currency: str) -> str:
     return f"{amount} {currency.upper()}"
 
 
+def _step_context(
+    step: str,
+    *,
+    campaign: DunningCampaign,
+    plan: Plan,
+    subscription: Subscription,
+) -> dict[str, Any]:
+    """The step-specific half of the message data -- locale-independent by
+    construction (an amount, a plan name, an ISO date), which is what makes
+    it safe to compute once above the per-recipient fan-out below."""
+    if step == "day1":
+        stripe.api_key = get_settings().STRIPE_SECRET_KEY
+        invoice = stripe.Invoice.retrieve(campaign.invoice_id)
+        return {"amount": _format_amount(invoice.amount_due, invoice.currency)}
+    if step == "day3":
+        return {
+            "plan_name": plan.name,
+            "expires_at": subscription.current_period_end.date().isoformat(),
+        }
+    return {"plan_name": plan.name}
+
+
 @trace_job
 async def send_dunning_email(
-    ctx: dict[str, Any],  # noqa: ARG001 -- ARQ calling convention; registered in app.workers.main
+    ctx: dict[str, Any],  # ARQ calling convention; registered in app.workers.main
     *,
     campaign_id: UUID,
     step: str,
@@ -142,33 +199,33 @@ async def send_dunning_email(
             return
 
         owners = await _owners_for_org(session, subscription.org_id)
-        billing_url = f"https://{get_settings().DOMAIN}/settings/billing"
+        context_extra = _step_context(step, campaign=campaign, plan=plan, subscription=subscription)
 
-        context_extra: dict[str, Any]
-        if step == "day1":
-            stripe.api_key = get_settings().STRIPE_SECRET_KEY
-            invoice = stripe.Invoice.retrieve(campaign.invoice_id)
-            context_extra = {"amount": _format_amount(invoice.amount_due, invoice.currency)}
-        elif step == "day3":
-            context_extra = {
-                "plan_name": plan.name,
-                "expires_at": subscription.current_period_end.date().isoformat(),
-            }
+        notification_type = _NOTIFICATION_TYPE_BY_STEP.get(step)
+        if notification_type is None:
+            # day7 (subscription_suspended) has no notification type of its
+            # own -- email only, addressed per owner, as before.
+            for owner in owners:
+                await jobs.enqueue_job(
+                    "send_email",
+                    to=owner.email,
+                    template=_TEMPLATE_BY_STEP[step],
+                    locale=owner.locale,
+                    context={
+                        "user_name": owner.full_name,
+                        "org_name": org.name,
+                        "billing_url": frontend_url(_BILLING_PATH, owner.locale),
+                        **context_extra,
+                    },
+                )
         else:
-            context_extra = {"plan_name": plan.name}
-
-        for owner in owners:
-            await jobs.enqueue_job(
-                "send_email",
-                to=owner.email,
-                template=_TEMPLATE_BY_STEP[step],
-                locale=owner.locale,
-                context={
-                    "user_name": owner.full_name,
-                    "org_name": org.name,
-                    "billing_url": billing_url,
-                    **context_extra,
-                },
+            await NotificationService(session, ctx["redis"]).send_many(
+                user_ids=[owner.id for owner in owners],
+                org_id=subscription.org_id,
+                type=notification_type,
+                params={"org_name": org.name, **context_extra},
+                action_url=_BILLING_PATH,
+                idempotency_key=f"dunning:{campaign_id}:{step}",
             )
 
         await audit.log(
@@ -202,7 +259,6 @@ async def _send_trial_email(
     context_extra: dict[str, Any],
 ) -> None:
     owners = await _owners_for_org(session, org.id)
-    billing_url = f"https://{get_settings().DOMAIN}/settings/billing"
     for owner in owners:
         await jobs.enqueue_job(
             "send_email",
@@ -212,7 +268,10 @@ async def _send_trial_email(
             context={
                 "user_name": owner.full_name,
                 "org_name": org.name,
-                "billing_url": billing_url,
+                # Inside the loop, not above it: the locale segment is the
+                # recipient's, exactly like the body this link sits in
+                # (T-233/T-234).
+                "billing_url": frontend_url(_BILLING_PATH, owner.locale),
                 **context_extra,
             },
         )

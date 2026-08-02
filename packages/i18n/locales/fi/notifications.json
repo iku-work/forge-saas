@@ -1,1 +1,33 @@
-{}
+{
+  "types": {
+    "member_invited": {
+      "title": "Kutsu lähetetty",
+      "body": "Kutsuit käyttäjän {email} liittymään organisaatioon {org_name}."
+    },
+    "payment_failed": {
+      "title": "Maksu epäonnistui",
+      "body": "Emme voineet veloittaa korttiasi organisaation {org_name} tilauksesta ({amount}). Päivitä maksutapasi, jotta et menetä käyttöoikeutta."
+    },
+    "subscription_expiring": {
+      "title": "Tilauksesi on päättymässä",
+      "body": "Organisaation {org_name} {plan_name}-tilaus päättyy {expires_at}. Uusi se nyt, niin käyttö jatkuu keskeytyksettä."
+    },
+    "weekly_summary": {
+      "title": "Viikkokoosteesi",
+      "body": "Näin organisaatiossa {org_name} tapahtui tällä viikolla."
+    },
+    "file_uploaded": {
+      "title": "Tiedosto ladattu",
+      "body": "Tiedoston {filename} lataus valmistui."
+    },
+    "file_infected": {
+      "title": "Lataamasi tiedosto merkittiin saastuneeksi",
+      "body": "Tiedosto {filename} poistettiin, koska se ei läpäissyt virustarkistusta."
+    }
+  },
+  "preferences": {
+    "type_file_infected": "Lataamasi tiedosto merkitään saastuneeksi",
+    "channel_required": "pakollinen",
+    "required_note": "Ilmoitamme laskutusongelmista aina sähköpostitse, eikä sitä voi poistaa käytöstä — muuten menettäisit käyttöoikeuden ilman varoitusta."
+  }
+}

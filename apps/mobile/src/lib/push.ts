@@ -81,6 +81,16 @@ export async function registerPushToken(): Promise<void> {
 interface BannerState {
   title: string;
   body: string;
+  /**
+   * The locale the backend rendered `title`/`body` in, taken from the
+   * payload's `data.locale` (T-234). The device's own language can differ --
+   * `User.locale` is what the push was written in, and it is deliberately
+   * not overwritten by the system locale -- so anything this app renders
+   * around those two strings follows this rather than i18next's current
+   * language, or the banner ends up half in each. Null when the payload
+   * predates T-234.
+   */
+  locale: string | null;
 }
 
 // Module-scoped store (not React Context), same pattern as lib/auth.ts's
@@ -115,14 +125,25 @@ export function dismissNotificationBanner(): void {
   setBannerState(null);
 }
 
+function getStringField(
+  data: Record<string, unknown>,
+  field: string,
+): string | null {
+  const value = data[field];
+  return typeof value === "string" && value.length > 0 ? value : null;
+}
+
 function showInAppBanner(event: Notifications.Notification): void {
-  const { title, body } = event.request.content;
-  setBannerState({ title: title ?? "", body: body ?? "" });
+  const { title, body, data } = event.request.content;
+  setBannerState({
+    title: title ?? "",
+    body: body ?? "",
+    locale: getStringField(data, "locale"),
+  });
 }
 
 function getActionUrl(data: Record<string, unknown>): string | null {
-  const value = data.action_url;
-  return typeof value === "string" && value.length > 0 ? value : null;
+  return getStringField(data, "action_url");
 }
 
 function handleNotificationResponse(

@@ -7,7 +7,7 @@ query would otherwise have to filter on.
 """
 
 from datetime import datetime
-from typing import ClassVar
+from typing import Any, ClassVar
 from uuid import UUID
 
 from sqlalchemy import Column, DateTime, Index
@@ -50,8 +50,18 @@ class Notification(UUIDPKMixin, TimestampMixin, OrgScopedMixin, SQLModel, table=
 
     user_id: UUID = Field(foreign_key="user.id", index=True)
     type: str = Field(index=True)  # "member_invited" | "payment_failed" | "weekly_summary" | ...
+    # T-234: title/body are the *send-time* rendering of this type's catalog
+    # entry (notifications.types.<type>.title/body) in the recipient's own
+    # locale -- never a caller-supplied English literal. `params` keeps the
+    # interpolation values that produced them so a channel running later than
+    # the row's creation (the send_push ARQ job, the in-app feed read after a
+    # language switch) can re-render the same message in whatever locale is
+    # current at *that* moment. See app.modules.notifications.messages.
     title: str
     body: str
+    params: dict[str, Any] = Field(
+        default_factory=dict, sa_column=Column(JSONB, nullable=False, server_default="{}")
+    )
     action_url: str | None = Field(default=None)
     # e.g. ["email", "in_app", "push"] -- resolved from user preferences by
     # NotificationService.send() (T-102), not chosen by the caller.

@@ -151,18 +151,24 @@ async def _send_via_resend(*, to: str, subject: str, html: str, text: str) -> No
 
 
 @trace_job
-async def send_email(
+async def send_email(  # noqa: PLR0913 -- ctx + the four wire params plus T-234's optional subject override
     ctx: dict[str, Any],  # noqa: ARG001 -- ARQ calling convention; registered in app.workers.main
     *,
     to: str,
     template: str,
     context: dict[str, Any],
     locale: str | None = None,
+    subject: str | None = None,
 ) -> None:
     settings = get_settings()
     effective_locale = locale or get_default_locale()
     html, text = await _render(template=template, context=context, locale=effective_locale)
-    subject = t(f"emails.subject.{template}", effective_locale)
+    # `subject` is only passed by the generic "notification" template (T-234),
+    # whose subject is the notification's own already-localised title rather
+    # than one fixed string per template -- every other caller leaves it None
+    # and gets the emails.subject.<template> catalog entry.
+    if subject is None:
+        subject = t(f"emails.subject.{template}", effective_locale)
 
     if settings.EMAIL_BACKEND == "smtp":
         await _send_via_smtp(to=to, subject=subject, html=html, text=text)

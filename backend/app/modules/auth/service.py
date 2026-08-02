@@ -64,6 +64,7 @@ from app.modules.auth.utils import (
     verify_password,
     verify_url_token,
 )
+from app.modules.notifications.preferences import normalize
 
 logger = logging.getLogger(__name__)
 
@@ -757,7 +758,12 @@ class AuthService:
         # (a different module) never reaches into UserRepository directly
         # per §0.1, so its read path (channels_for()) and this write each go
         # through their own module's service instead of sharing a repo.
-        return await self._users.update(user_id, notification_preferences=preferences)
+        #
+        # T-234: normalize() forces the channels a type can't opt out of back
+        # on, so the stored matrix is the one channels_for() will act on --
+        # and so the settings page, which renders straight from this column,
+        # can't show a required channel as off.
+        return await self._users.update(user_id, notification_preferences=normalize(preferences))
 
     async def revoke_session(self, user_id: UUID, session_id: UUID) -> None:
         session = await self._sessions.get_by_id(session_id)

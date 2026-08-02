@@ -117,8 +117,7 @@ async def test_send_persists_notification_with_default_channels(
         user_id=user.id,
         org_id=org.id,
         type="member_invited",
-        title="You were invited",
-        body="Join Acme",
+        params={"email": "new@example.com", "org_name": "Acme"},
     )
 
     assert notification.user_id == user.id
@@ -134,7 +133,7 @@ async def test_send_email_only_type_enqueues_only_email_job(
 ) -> None:
     # weekly_summary's DEFAULT_PREFERENCES is {email: True, in_app: False, push: False}.
     await service.send(
-        user_id=user.id, org_id=org.id, type="weekly_summary", title="Recap", body="..."
+        user_id=user.id, org_id=org.id, type="weekly_summary", params={"org_name": "Acme"}
     )
 
     functions = [function for function, _ in enqueued_jobs]
@@ -149,7 +148,10 @@ async def test_send_payment_failed_enqueues_both_email_and_push(
 ) -> None:
     # payment_failed's DEFAULT_PREFERENCES enables all three channels.
     notification = await service.send(
-        user_id=user.id, org_id=org.id, type="payment_failed", title="Payment failed", body="..."
+        user_id=user.id,
+        org_id=org.id,
+        type="payment_failed",
+        params={"org_name": "Acme", "amount": "$49.00"},
     )
 
     functions = {function for function, _ in enqueued_jobs}
@@ -167,7 +169,10 @@ async def test_send_in_app_channel_publishes_to_redis(
         await pubsub.get_message(timeout=1)  # subscribe confirmation
 
         await service.send(
-            user_id=user.id, org_id=org.id, type="member_invited", title="Invited", body="..."
+            user_id=user.id,
+            org_id=org.id,
+            type="member_invited",
+            params={"email": "new@example.com", "org_name": "Acme"},
         )
 
         message = await pubsub.get_message(timeout=2)
@@ -184,7 +189,10 @@ async def test_send_raises_not_found_for_unknown_user(
 ) -> None:
     with pytest.raises(NotFoundError):
         await service.send(
-            user_id=uuid4(), org_id=org.id, type="member_invited", title="x", body="y"
+            user_id=uuid4(),
+            org_id=org.id,
+            type="member_invited",
+            params={"email": "new@example.com", "org_name": "Acme"},
         )
 
 
@@ -202,16 +210,14 @@ async def test_send_with_same_idempotency_key_is_a_noop_second_time(
         user_id=user.id,
         org_id=org.id,
         type="payment_failed",
-        title="Payment failed",
-        body="Update your card",
+        params={"org_name": "Acme", "amount": "$49.00"},
         idempotency_key="evt_dedup_1",
     )
     second = await service.send(
         user_id=user.id,
         org_id=org.id,
         type="payment_failed",
-        title="Payment failed",
-        body="Update your card",
+        params={"org_name": "Acme", "amount": "$49.00"},
         idempotency_key="evt_dedup_1",
     )
 
@@ -237,7 +243,10 @@ async def test_send_writes_audit_event(
     service: NotificationService, user: User, org: Organization, session: AsyncSession
 ) -> None:
     notification = await service.send(
-        user_id=user.id, org_id=org.id, type="member_invited", title="Invited", body="..."
+        user_id=user.id,
+        org_id=org.id,
+        type="member_invited",
+        params={"email": "new@example.com", "org_name": "Acme"},
     )
 
     event = (
@@ -245,4 +254,8 @@ async def test_send_writes_audit_event(
     ).scalar_one()
     assert event.resource_id == str(notification.id)
     assert event.org_id == org.id
-    assert event.diff == {"type": "member_invited", "channels": notification.channels}
+    assert event.diff == {
+        "type": "member_invited",
+        "channels": notification.channels,
+        "locale": "en",
+    }

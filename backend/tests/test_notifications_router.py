@@ -202,8 +202,11 @@ async def _make_notification(
         org_id=org.id,
         user_id=user.id,
         type=notification_type,
-        title="Title",
-        body="Body",
+        # What NotificationService.send() writes: the send-time rendering of
+        # this type's catalog entry plus the params that produced it (T-234).
+        title="Invitation sent",
+        body="You invited new@example.com to join Acme.",
+        params={"email": "new@example.com", "org_name": "Acme"},
         channels=["in_app"],
     )
     session.add(notification)
@@ -254,7 +257,26 @@ async def test_list_notifications_returns_only_callers_own(
     assert response.status_code == 200
     data = response.json()["data"]
     assert len(data) == 1
-    assert data[0]["title"] == "Title"
+    assert data[0]["title"] == "Invitation sent"
+
+
+async def test_list_notifications_renders_in_the_readers_current_locale(
+    client: httpx.AsyncClient, session: AsyncSession, owner: User, org: Organization
+) -> None:
+    """T-234: the feed is re-rendered per read, not served as the strings
+    frozen at send time -- switching language switches the whole history,
+    rather than leaving it in whatever language was current back then."""
+    await _make_notification(session, org, owner)
+
+    owner.locale = "fi"
+    await session.commit()
+
+    response = await client.get("/api/v1/notifications", headers=_headers(owner, org))
+
+    assert response.status_code == 200
+    data = response.json()["data"]
+    assert data[0]["title"] == "Kutsu lähetetty"
+    assert "new@example.com" in data[0]["body"]
 
 
 async def test_list_notifications_unread_only_filters_read_ones(
@@ -405,6 +427,28 @@ async def test_update_notification_preferences_happy_path_persists(
 
     await session.refresh(owner)
     assert owner.notification_preferences == payload["preferences"]
+
+
+async def test_update_notification_preferences_forces_a_required_channel_back_on(
+    client: httpx.AsyncClient, owner: User, session: AsyncSession
+) -> None:
+    """T-234: the dunning email can't be switched off. Coerced rather than
+    rejected, and echoed back coerced, so the settings page immediately shows
+    the true state instead of a checkbox the send path ignores."""
+    token = create_access_token(owner.id, None, ())
+
+    response = await client.patch(
+        "/api/v1/me/notification-preferences",
+        json={"preferences": {"payment_failed": {"email": False, "in_app": False, "push": True}}},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert response.status_code == 200
+    expected = {"payment_failed": {"email": True, "in_app": False, "push": True}}
+    assert response.json()["data"]["preferences"] == expected
+
+    await session.refresh(owner)
+    assert owner.notification_preferences == expected
 
 
 # --- POST /notifications/push-tokens ---------------------------------------------------

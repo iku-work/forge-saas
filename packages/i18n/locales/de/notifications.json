@@ -36,6 +36,35 @@
     "type_payment_failed": "Eine Zahlung schlägt fehl",
     "type_subscription_expiring": "Ihr Abonnement läuft ab",
     "type_weekly_summary": "Wöchentliche Zusammenfassung",
-    "type_file_uploaded": "Eine Datei wird hochgeladen"
+    "type_file_uploaded": "Eine Datei wird hochgeladen",
+    "type_file_infected": "Eine von Ihnen hochgeladene Datei wird als infiziert eingestuft",
+    "channel_required": "erforderlich",
+    "required_note": "Über Zahlungsprobleme informieren wir Sie immer per E-Mail; das lässt sich nicht abschalten — sonst würden Sie den Zugang ohne Vorwarnung verlieren."
+  },
+  "types": {
+    "member_invited": {
+      "title": "Einladung gesendet",
+      "body": "Sie haben {email} eingeladen, {org_name} beizutreten."
+    },
+    "payment_failed": {
+      "title": "Zahlung fehlgeschlagen",
+      "body": "Wir konnten Ihre Karte für das Abonnement von {org_name} nicht belasten ({amount}). Aktualisieren Sie Ihre Zahlungsmethode, um den Zugang nicht zu verlieren."
+    },
+    "subscription_expiring": {
+      "title": "Ihr Abonnement läuft ab",
+      "body": "Der Tarif {plan_name} von {org_name} läuft am {expires_at} ab. Verlängern Sie jetzt, um den Zugang ohne Unterbrechung zu behalten."
+    },
+    "weekly_summary": {
+      "title": "Ihre wöchentliche Zusammenfassung",
+      "body": "Das ist diese Woche in {org_name} passiert."
+    },
+    "file_uploaded": {
+      "title": "Datei hochgeladen",
+      "body": "{filename} wurde vollständig hochgeladen."
+    },
+    "file_infected": {
+      "title": "Eine von Ihnen hochgeladene Datei wurde als infiziert eingestuft",
+      "body": "{filename} wurde nach einem fehlgeschlagenen Virenscan entfernt."
+    }
   }
 }

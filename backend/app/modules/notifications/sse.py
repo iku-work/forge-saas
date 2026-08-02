@@ -46,9 +46,12 @@ from app.core.dependencies import (
 )
 from app.core.envelope import Envelope, Meta
 from app.core.exceptions import RateLimitError
+from app.middleware.locale import get_locale
 from app.middleware.rate_limit import api_limit
 from app.modules.auth.models import User
 from app.modules.auth.service import AuthService
+from app.modules.notifications import messages
+from app.modules.notifications.models import Notification
 from app.modules.notifications.repository import NotificationRepository, PushTokenRepository
 from app.modules.notifications.schemas import (
     MarkAllReadResponse,
@@ -70,6 +73,25 @@ _TOTAL_CONNECTIONS_KEY = "notif:sse:conns:total"
 
 def _request_id(request: Request) -> str:
     return getattr(request.state, "request_id", None) or str(uuid4())
+
+
+def _public(notification: Notification, locale: str) -> NotificationPublic:
+    """T-234: re-renders the row's message in the *reader's* current locale.
+
+    The stored title/body are the send-time rendering (correct for the push
+    and email channels, which leave at that moment), but the feed is read
+    again and again afterwards -- a user who switches language would
+    otherwise scroll a history frozen in the language they used back then.
+    Rows the message catalog can't render -- a type with no entry, or one of
+    the pre-T-234 rows whose `params` is `{}` and whose title/body are the
+    English literals their caller baked in -- keep what they have.
+    """
+    public = NotificationPublic.model_validate(notification)
+    try:
+        title, body = messages.render(notification.type, locale, notification.params)
+    except KeyError:
+        return public
+    return public.model_copy(update={"title": title, "body": body})
 
 
 def _user_connections_key(user_id: UUID) -> str:
@@ -152,6 +174,7 @@ async def list_notifications(  # noqa: PLR0913 -- cursor pagination (§0.3) need
     org_and_membership: Annotated[tuple[Organization, Membership], Depends(get_current_org)],
     session: Annotated[AsyncSession, Depends(get_session)],
     redis: Annotated[Redis, Depends(get_redis)],
+    locale: Annotated[str, Depends(get_locale)],
     after: Annotated[UUID | None, Query()] = None,
     limit: Annotated[int, Query(ge=1, le=100)] = 20,
     unread_only: Annotated[bool, Query()] = False,
@@ -161,7 +184,7 @@ async def list_notifications(  # noqa: PLR0913 -- cursor pagination (§0.3) need
     notifications, next_cursor = await repo.list_for_user(
         membership.user_id, after, limit, unread_only=unread_only
     )
-    data = [NotificationPublic.model_validate(n) for n in notifications]
+    data = [_public(n, locale) for n in notifications]
     meta = Meta(
         request_id=_request_id(request),
         next_cursor=str(next_cursor) if next_cursor is not None else None,
@@ -171,19 +194,20 @@ async def list_notifications(  # noqa: PLR0913 -- cursor pagination (§0.3) need
 
 @router.patch("/notifications/{notification_id}/read")
 @api_limit
-async def mark_notification_read(
+async def mark_notification_read(  # noqa: PLR0913 -- the usual router param set plus the reader's locale (T-234)
     request: Request,
     notification_id: UUID,
     org_and_membership: Annotated[tuple[Organization, Membership], Depends(get_current_org)],
     session: Annotated[AsyncSession, Depends(get_session)],
     redis: Annotated[Redis, Depends(get_redis)],
+    locale: Annotated[str, Depends(get_locale)],
 ) -> Envelope[NotificationPublic]:
     org, membership = org_and_membership
     repo = NotificationRepository(session, org.id, redis)
     notification = await repo.mark_read(notification_id, membership.user_id)
     await session.commit()
     return Envelope(
-        data=NotificationPublic.model_validate(notification),
+        data=_public(notification, locale),
         meta=Meta(request_id=_request_id(request)),
     )
 
