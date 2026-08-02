@@ -87,3 +87,7 @@ instead of per-PR.
 | 2026-08-01 | 835f3e3 | browse | - | - | PASS |
 | 2026-08-01 | 835f3e3 | presign | - | - | PASS |
 | 2026-08-01 | 835f3e3 | mixed | - | - | FAIL |
+| 2026-08-02 | fcb83e8 | login-burst | - | - | FAIL |
+| 2026-08-02 | fcb83e8 | browse | - | - | PASS |
+| 2026-08-02 | fcb83e8 | presign | - | - | PASS |
+| 2026-08-02 | fcb83e8 | mixed | - | - | FAIL |
