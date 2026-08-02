@@ -1,7 +1,7 @@
 import { http, HttpResponse } from "msw";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { getApiBaseUrl } from "@forge/api-client";
 import { t } from "@forge/i18n";
@@ -14,6 +14,7 @@ import {
   makeUser,
 } from "../../test/appShellFixtures";
 import { server } from "../../test/server";
+import { installVirtualLayout } from "../../test/virtualLayout";
 
 // Mocking @forge/hooks directly (rather than the SDK calls underneath, as
 // the AppLayout integration tests do) sidesteps useOrg/useAuth's
@@ -47,7 +48,19 @@ function renderPage() {
 }
 
 describe("MembersSettingsPage", () => {
+  // T-241: the member list is virtualized, and a virtualizer that measures
+  // a zero-height viewport (jsdom's answer for every element) renders zero
+  // rows -- so even a one-member assertion needs a believable layout. The
+  // numbers only have to be non-zero here; the DOM-node budget and the
+  // scroll behaviour are asserted in MembersSettingsPageVirtual.test.tsx,
+  // which is where they have to match the page's real constants.
+  let restoreLayout: () => void;
+
   beforeEach(() => {
+    restoreLayout = installVirtualLayout({
+      rowHeight: 52,
+      viewportHeight: 420,
+    });
     vi.clearAllMocks();
     hooks.useAuth.mockReturnValue({
       user,
@@ -64,6 +77,10 @@ describe("MembersSettingsPage", () => {
       switchOrg: vi.fn(),
       refreshOrgs: vi.fn(),
     });
+  });
+
+  afterEach(() => {
+    restoreLayout();
   });
 
   it("shows the Invite button for an owner (has MEMBERS_MANAGE)", async () => {

@@ -1,14 +1,16 @@
-import { useEffect, useRef } from "react";
-import { useVirtualizer } from "@tanstack/react-virtual";
 import { useTranslation } from "react-i18next";
 
 import type { NotificationPublic } from "@forge/api-client";
 import { Alert, AlertDescription, Button, Skeleton } from "@forge/ui";
 import { formatRelativeTime } from "@forge/utils";
 
+import { VirtualList } from "../../components/VirtualList";
+
+// Notification rows are variable height (title wraps, body wraps, the
+// action link is optional), so this is only the pre-measurement estimate --
+// VirtualList measures each mounted row and corrects the offsets.
 const ESTIMATED_ROW_HEIGHT_PX = 76;
 const MAX_FEED_HEIGHT_PX = 384;
-const LOAD_MORE_OVERSCAN = 3;
 
 interface NotificationFeedProps {
   notifications: NotificationPublic[];
@@ -83,24 +85,6 @@ export function NotificationFeed({
   onMarkRead,
 }: NotificationFeedProps) {
   const { t } = useTranslation();
-  const scrollRef = useRef<HTMLDivElement>(null);
-
-  const virtualizer = useVirtualizer({
-    count: notifications.length,
-    getScrollElement: () => scrollRef.current,
-    estimateSize: () => ESTIMATED_ROW_HEIGHT_PX,
-    overscan: 5,
-  });
-
-  const virtualItems = virtualizer.getVirtualItems();
-  const lastVirtualItemIndex = virtualItems[virtualItems.length - 1]?.index ?? -1;
-  const isNearEnd = lastVirtualItemIndex >= notifications.length - 1 - LOAD_MORE_OVERSCAN;
-
-  useEffect(() => {
-    if (isNearEnd && hasMore && !isLoadingMore) {
-      onLoadMore();
-    }
-  }, [isNearEnd, hasMore, isLoadingMore, onLoadMore]);
 
   if (isLoading) {
     return (
@@ -131,26 +115,22 @@ export function NotificationFeed({
   }
 
   return (
-    <div ref={scrollRef} className="overflow-y-auto" style={{ maxHeight: MAX_FEED_HEIGHT_PX }}>
-      <div className="relative w-full" style={{ height: virtualizer.getTotalSize() }}>
-        {virtualItems.map((virtualItem) => {
-          const notification = notifications[virtualItem.index];
-          if (!notification) {
-            return null;
-          }
-          return (
-            <div
-              key={notification.id}
-              data-index={virtualItem.index}
-              ref={virtualizer.measureElement}
-              className="absolute start-0 top-0 w-full"
-              style={{ transform: `translateY(${String(virtualItem.start)}px)` }}
-            >
-              <NotificationRow notification={notification} onMarkRead={onMarkRead} />
-            </div>
-          );
-        })}
-      </div>
+    <div>
+      <VirtualList
+        items={notifications}
+        getItemKey={(notification) => notification.id}
+        label={t("notifications.feed.list_label")}
+        estimateSize={ESTIMATED_ROW_HEIGHT_PX}
+        dynamicRowHeight
+        maxHeight={MAX_FEED_HEIGHT_PX}
+        hasMore={hasMore}
+        isLoadingMore={isLoadingMore}
+        onLoadMore={onLoadMore}
+        itemTestId="notification-row"
+        renderItem={(notification) => (
+          <NotificationRow notification={notification} onMarkRead={onMarkRead} />
+        )}
+      />
       {isLoadingMore ? (
         <div className="p-3 text-center text-xs text-muted-foreground">
           {t("notifications.feed.loading")}

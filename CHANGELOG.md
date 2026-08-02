@@ -6,6 +6,19 @@ template keep their own changes in `CHANGELOG.product.md` (see
 
 ## [Unreleased]
 ### Changed
+- **The member list and the notification centre are virtualized (T-241).**
+  Both render a constant number of DOM nodes regardless of how many rows are
+  loaded, through a shared `VirtualList` (`apps/web/src/components`) built on
+  `@tanstack/react-virtual`. Scroll position is now the pagination driver:
+  reaching the end of the loaded rows fetches the next cursor page (the
+  "Load more" buttons stay as the non-scroll path). The member list is no
+  longer a `<table>` — virtualized rows are absolutely positioned, so it is
+  a `role="list"` / `role="listitem"` structure with the column labels
+  rendered above the scroll container; each row's controls carry their own
+  accessible names (`Remove {user_id}` is new). Rows take a roving tabindex
+  and arrow keys walk them, including across a virtualization boundary.
+  Back-navigation restores the member list's scroll offset (TanStack Router
+  `scrollRestoration` plus the virtualizer's `initialOffset`).
 - **Notifications are localised per recipient at send time (T-234).**
   `NotificationService.send()` no longer accepts `title`/`body` strings —
   callers pass the notification `type` and a `params` dict, and the strings

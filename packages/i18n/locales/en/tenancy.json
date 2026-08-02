@@ -21,6 +21,7 @@
   "members": {
     "title": "Members",
     "description": "People with access to this organization.",
+    "list_label": "Members list",
     "invite_button": "Invite",
     "no_members": "No members yet.",
     "member_col": "Member",
@@ -28,6 +29,7 @@
     "action_col": "Action",
     "you": "You",
     "remove": "Remove",
+    "remove_label": "Remove {user_id}",
     "load_more": "Load more",
     "change_role_label": "Change role for {user_id}",
     "role": {

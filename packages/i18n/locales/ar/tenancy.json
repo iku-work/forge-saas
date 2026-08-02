@@ -21,6 +21,7 @@
   "members": {
     "title": "الأعضاء",
     "description": "الأشخاص الذين لديهم إمكانية الوصول إلى هذه المؤسسة.",
+    "list_label": "قائمة الأعضاء",
     "invite_button": "دعوة",
     "no_members": "لا يوجد أعضاء بعد.",
     "member_col": "العضو",
@@ -28,6 +29,7 @@
     "action_col": "الإجراء",
     "you": "أنت",
     "remove": "إزالة",
+    "remove_label": "إزالة {user_id}",
     "load_more": "تحميل المزيد",
     "change_role_label": "تغيير دور {user_id}",
     "role": {

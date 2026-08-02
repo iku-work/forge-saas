@@ -21,6 +21,7 @@
   "members": {
     "title": "Membres",
     "description": "Personnes ayant accès à cette organisation.",
+    "list_label": "Liste des membres",
     "invite_button": "Inviter",
     "no_members": "Aucun membre pour le moment.",
     "member_col": "Membre",
@@ -28,6 +29,7 @@
     "action_col": "Action",
     "you": "Vous",
     "remove": "Supprimer",
+    "remove_label": "Retirer {user_id}",
     "load_more": "Charger plus",
     "change_role_label": "Changer le rôle de {user_id}",
     "role": {

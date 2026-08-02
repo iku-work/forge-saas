@@ -9,6 +9,7 @@
   },
   "feed": {
     "heading": "Notifications",
+    "list_label": "Notification list",
     "mark_all_read": "Mark all as read",
     "mark_all_read_hint": "Marks every notification as read",
     "mark_read": "Mark as read",

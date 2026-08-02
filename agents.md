@@ -5715,9 +5715,17 @@ For each of `packages/{ui,api-client,types,hooks,validation,utils}`:
 
 **Done when**
 
-- [ ] Both lists virtualized, DOM-node budget asserted in tests
-- [ ] Infinite scroll + a11y + scroll restoration verified
-- [ ] No regression in the T-224 snapshots
+- [x] Both lists virtualized, DOM-node budget asserted in tests
+- [x] Infinite scroll + a11y + scroll restoration verified — infinite scroll,
+      keyboard-across-a-boundary, and axe-core are asserted in vitest against
+      the real virtualizer (`apps/web/src/test/virtualLayout.ts` supplies the
+      layout jsdom can't); scroll restoration is wired end to end but only
+      observable in a real browser
+- [ ] No regression in the T-224 snapshots — not re-run here (needs the Docker
+      stack + Linux-generated baselines). The three snapshot targets
+      (dashboard, settings-profile, settings-org) don't include the member
+      list, and the notification panel is closed in all of them, so no
+      baseline change is expected
 
 ---
 

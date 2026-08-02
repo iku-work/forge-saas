@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import {
   useInfiniteQuery,
@@ -44,15 +44,18 @@ import {
   FormMessage,
   Input,
   Skeleton,
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
 } from "@forge/ui";
 
+import { VirtualList } from "../../components/VirtualList";
+import { MEMBERS_LIST_SCROLL_ID } from "../../lib/scrollRestorationIds";
 import { getErrorMessage } from "../auth/getErrorMessage";
+
+// The member row is a fixed-height flex row, so one estimate covers every
+// row and the virtualizer never has to re-measure after mount. MAX_HEIGHT
+// is what makes the container a scroll port at all -- without it the list
+// grows to its full height and there is nothing to virtualize against.
+const ESTIMATED_ROW_HEIGHT_PX = 52;
+const MAX_LIST_HEIGHT_PX = 420;
 
 const ROLE_OPTIONS: ApiMemberRole[] = [
   MemberRole.OWNER,
@@ -179,7 +182,16 @@ function InviteForm({
   );
 }
 
-export function MembersSettingsPage() {
+export interface MembersSettingsPageProps {
+  /** Scroll offset restored by TanStack Router for this org's member list
+   *  (T-241). Supplied by the route, which is the only place that can call
+   *  useElementScrollRestoration -- see routes/$locale._app.settings.members.tsx. */
+  initialScrollOffset?: number;
+}
+
+export function MembersSettingsPage({
+  initialScrollOffset,
+}: MembersSettingsPageProps = {}) {
   const { t } = useTranslation();
   const { org, isLoading: orgLoading } = useOrg();
   const { user } = useAuth();
@@ -271,6 +283,14 @@ export function MembersSettingsPage() {
   const members =
     membersQuery.data?.pages.flatMap((page) => page.data ?? []) ?? [];
 
+  // fetchNextPage is referentially stable in react-query v5, so pulling it
+  // out keeps this callback stable too -- VirtualList takes onLoadMore as
+  // an effect dependency.
+  const { fetchNextPage } = membersQuery;
+  const loadMoreMembers = useCallback(() => {
+    void fetchNextPage();
+  }, [fetchNextPage]);
+
   if (orgLoading || !org) {
     return (
       <div className="max-w-3xl space-y-6 p-6">
@@ -327,22 +347,41 @@ export function MembersSettingsPage() {
               {t("tenancy.members.no_members")}
             </p>
           ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>{t("tenancy.members.member_col")}</TableHead>
-                  <TableHead>{t("tenancy.members.role_col")}</TableHead>
-                  {canManage ? (
-                    <TableHead className="text-end">
-                      {t("tenancy.members.action_col")}
-                    </TableHead>
-                  ) : null}
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {members.map((member) => (
-                  <TableRow key={member.id} data-testid="member-row">
-                    <TableCell>
+            <div>
+              {/* The column labels live outside the scroll container: a
+                  virtualized list has no <thead> to pin, and putting them
+                  inside would scroll them away with the rows. */}
+              <div
+                aria-hidden="true"
+                className="flex items-center gap-4 border-b px-3 pb-2 text-xs font-medium text-muted-foreground"
+              >
+                <span className="flex-1">
+                  {t("tenancy.members.member_col")}
+                </span>
+                <span className="w-28">{t("tenancy.members.role_col")}</span>
+                {canManage ? (
+                  <span className="w-24 text-end">
+                    {t("tenancy.members.action_col")}
+                  </span>
+                ) : null}
+              </div>
+              <VirtualList
+                items={members}
+                getItemKey={(member) => member.id}
+                label={t("tenancy.members.list_label")}
+                estimateSize={ESTIMATED_ROW_HEIGHT_PX}
+                maxHeight={MAX_LIST_HEIGHT_PX}
+                hasMore={membersQuery.hasNextPage}
+                isLoadingMore={membersQuery.isFetchingNextPage}
+                onLoadMore={loadMoreMembers}
+                itemTestId="member-row"
+                scrollRestorationId={MEMBERS_LIST_SCROLL_ID}
+                {...(initialScrollOffset === undefined
+                  ? {}
+                  : { initialOffset: initialScrollOffset })}
+                renderItem={(member) => (
+                  <div className="flex items-center gap-4 border-b px-3 py-3 text-sm">
+                    <span className="flex-1">
                       {member.user_id === user?.id ? (
                         t("tenancy.members.you")
                       ) : (
@@ -350,8 +389,8 @@ export function MembersSettingsPage() {
                           {member.user_id.slice(0, 8)}
                         </span>
                       )}
-                    </TableCell>
-                    <TableCell>
+                    </span>
+                    <span className="w-28">
                       {canManage ? (
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
@@ -387,34 +426,40 @@ export function MembersSettingsPage() {
                           {t(roleLabelKey(member.role))}
                         </Badge>
                       )}
-                    </TableCell>
+                    </span>
                     {canManage ? (
-                      <TableCell className="text-end">
+                      <span className="w-24 text-end">
                         <Button
                           type="button"
                           variant="outline"
                           size="sm"
+                          aria-label={t("tenancy.members.remove_label", {
+                            user_id: member.user_id,
+                          })}
                           onClick={() => {
                             void handleRemove(member.id);
                           }}
                         >
                           {t("tenancy.members.remove")}
                         </Button>
-                      </TableCell>
+                      </span>
                     ) : null}
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+                  </div>
+                )}
+              />
+            </div>
           )}
 
+          {/* Scrolling is the pagination driver (VirtualList fetches the
+              next cursor page as the rendered range nears the loaded
+              count); this button is the non-scroll path -- keyboard users
+              tabbing past the list, and any environment where the scroll
+              container never reports a scroll event. */}
           {membersQuery.hasNextPage ? (
             <Button
               type="button"
               variant="outline"
-              onClick={() => {
-                void membersQuery.fetchNextPage();
-              }}
+              onClick={loadMoreMembers}
               disabled={membersQuery.isFetchingNextPage}
             >
               {t("tenancy.members.load_more")}

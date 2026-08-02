@@ -16,6 +16,11 @@ export function createAppRouter(
       queryClient,
     },
     defaultPreload: "intent",
+    // T-241: back-navigation returns to where the user was, both for the
+    // window and for any element carrying a data-scroll-restoration-id
+    // (see lib/scrollRestorationIds.ts). Router core snapshots those
+    // offsets per history key into sessionStorage on every navigation.
+    scrollRestoration: true,
     defaultNotFoundComponent: NotFoundPage,
     ...(history ? { history } : {}),
   });
