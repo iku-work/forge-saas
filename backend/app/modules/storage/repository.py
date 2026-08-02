@@ -21,6 +21,7 @@ from redis.asyncio import Redis
 from sqlalchemy import func, select, tuple_
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core import cache_keys
 from app.core.repository import DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE, BaseRepository
 from app.modules.storage.models import StoredFile
 
@@ -28,7 +29,9 @@ _TOTAL_BYTES_CACHE_TTL_SECONDS = 60
 
 
 def _total_bytes_cache_key(org_id: UUID) -> str:
-    return f"storage:total_bytes:{org_id}"
+    # T-240: see NotificationRepository's own key helper -- the key comes
+    # from app.core.cache_keys, the value stays a bare integer.
+    return cache_keys.storage_total_bytes_key(org_id)
 
 
 class StoredFileRepository(BaseRepository[StoredFile]):

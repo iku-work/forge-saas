@@ -23,7 +23,13 @@ from redis.asyncio import Redis
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.db import get_session
-from app.core.dependencies import get_current_user, get_redis, require_recent_auth
+from app.core.dependencies import (
+    get_current_user,
+    get_redis,
+    invalidate_org_cache,
+    invalidate_user_cache,
+    require_recent_auth,
+)
 from app.core.envelope import Envelope, Meta
 from app.core.exceptions import PermissionDeniedError
 from app.middleware.rate_limit import api_limit
@@ -113,7 +119,7 @@ async def get_org(
 
 @router.patch("/orgs/{org_id}")
 @api_limit
-async def update_org(
+async def update_org(  # noqa: PLR0913 — redis (cache invalidation, T-240) on top of the usual request+org_id+body+permission+session params
     request: Request,
     org_id: UUID,
     body: UpdateOrgRequest,
@@ -121,9 +127,11 @@ async def update_org(
         Membership, Depends(require_org_permission(Permission.SETTINGS_MANAGE))
     ],
     session: Annotated[AsyncSession, Depends(get_session)],
+    redis: Annotated[Redis, Depends(get_redis)],
 ) -> Envelope[OrganizationPublic]:
     org = await TenancyService(session).update_org(org_id, **body.model_dump(exclude_unset=True))
     await session.commit()
+    await invalidate_org_cache(redis, org_id)  # T-240: get_current_org caches this row
     return Envelope(
         data=OrganizationPublic.model_validate(org), meta=Meta(request_id=_request_id(request))
     )
@@ -152,15 +160,23 @@ async def list_members(  # noqa: PLR0913 — cursor pagination (§0.3) needs aft
 
 @router.patch("/orgs/{org_id}/members/{membership_id}")
 @api_limit
-async def update_member_role(
+async def update_member_role(  # noqa: PLR0913 — redis (cache invalidation, T-240) on top of the usual request+membership_id+body+actor+session params
     request: Request,
     membership_id: UUID,
     body: UpdateMembershipRequest,
     actor: Annotated[Membership, Depends(require_org_permission(Permission.MEMBERS_MANAGE))],
     session: Annotated[AsyncSession, Depends(get_session)],
+    redis: Annotated[Redis, Depends(get_redis)],
 ) -> Envelope[MembershipPublic]:
     updated = await TenancyService(session).change_role(actor, membership_id, body.role)
     await session.commit()
+    # T-240 matrix, "role/permission change". The cached User row does not
+    # itself carry a role -- get_current_org resolves the membership from the
+    # DB on every request, deliberately (see its comment) -- so today this
+    # only guarantees the target's cached row can't outlive a permission
+    # change. It is wired anyway because the day anything permission-derived
+    # is added to that payload, the invalidation has to already be here.
+    await invalidate_user_cache(redis, updated.user_id)
     return Envelope(
         data=MembershipPublic.model_validate(updated), meta=Meta(request_id=_request_id(request))
     )
@@ -174,9 +190,11 @@ async def remove_member(
     actor: Annotated[Membership, Depends(require_org_permission(Permission.MEMBERS_MANAGE))],
     _recent_auth: Annotated[None, Depends(require_recent_auth(max_age_minutes=5))],
     session: Annotated[AsyncSession, Depends(get_session)],
+    redis: Annotated[Redis, Depends(get_redis)],
 ) -> Envelope[None]:
-    await TenancyService(session).remove_member(actor, membership_id)
+    removed_user_id = await TenancyService(session).remove_member(actor, membership_id)
     await session.commit()
+    await invalidate_user_cache(redis, removed_user_id)  # see update_member_role above
     return Envelope(data=None, meta=Meta(request_id=_request_id(request)))
 
 

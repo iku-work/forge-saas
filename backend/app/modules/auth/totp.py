@@ -11,10 +11,11 @@ gets traded for one.
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Request, Response
+from redis.asyncio import Redis
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.db import get_session
-from app.core.dependencies import get_current_user
+from app.core.dependencies import get_current_user, get_redis, invalidate_user_cache
 from app.core.envelope import Envelope, Meta
 from app.middleware.rate_limit import api_limit, auth_limit, sensitive_limit
 from app.modules.auth.models import User
@@ -53,9 +54,13 @@ async def verify_2fa(
     body: Verify2FARequest,
     user: Annotated[User, Depends(get_current_user)],
     session: Annotated[AsyncSession, Depends(get_session)],
+    redis: Annotated[Redis, Depends(get_redis)],
 ) -> Envelope[Verify2FAResponse]:
     backup_codes = await AuthService(session).verify_2fa(user, body.code)
     await session.commit()
+    # T-240: flips User.totp_enabled, which require_superadmin reads off the
+    # cached row to decide whether a superadmin has a second factor at all.
+    await invalidate_user_cache(redis, user.id)
     return Envelope(
         data=Verify2FAResponse(backup_codes=backup_codes),
         meta=Meta(request_id=_request_id(request)),
@@ -69,9 +74,11 @@ async def disable_2fa(
     body: Disable2FARequest,
     user: Annotated[User, Depends(get_current_user)],
     session: Annotated[AsyncSession, Depends(get_session)],
+    redis: Annotated[Redis, Depends(get_redis)],
 ) -> Envelope[None]:
     await AuthService(session).disable_2fa(user, body.password, body.code)
     await session.commit()
+    await invalidate_user_cache(redis, user.id)  # see verify_2fa above
     return Envelope(data=None, meta=Meta(request_id=_request_id(request)))
 
 

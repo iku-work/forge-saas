@@ -23,29 +23,25 @@ decorated with `@resilient("stripe")` and using `stripe.Invoice.list_async`
 re-runs the one Stripe call, not the surrounding Redis cache read/write.
 """
 
-import json
 from datetime import UTC, datetime
+from typing import cast
 from uuid import UUID
 
 import stripe
 from redis.asyncio import Redis
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core import cache, cache_keys
 from app.core.config import get_settings
 from app.core.resilience import resilient
 from app.core.schemas import AppBaseModel
 from app.modules.tenancy.models import Organization
 
-_CACHE_PREFIX = "invoices"
 _CACHE_TTL_SECONDS = 300
 
 
 def _epoch_to_datetime(value: int) -> datetime:
     return datetime.fromtimestamp(value, tz=UTC)
-
-
-def _cache_key(org_id: UUID, cursor: str | None) -> str:
-    return f"{_CACHE_PREFIX}:{org_id}:{cursor or 'first'}"
 
 
 class InvoiceDTO(AppBaseModel):
@@ -96,12 +92,11 @@ class InvoiceService:
     async def list_for_org(
         self, org: Organization, *, after_cursor: str | None = None, limit: int = 20
     ) -> tuple[list[InvoiceDTO], str | None]:
-        cache_key = _cache_key(org.id, after_cursor)
-        cached = await self._redis.get(cache_key)
+        cache_key = cache_keys.invoices_key(org.id, after_cursor)
+        cached = await cache.read_json(self._redis, cache_key)
         if cached is not None:
-            payload = json.loads(cached)
-            items = [InvoiceDTO.model_validate(item) for item in payload["items"]]
-            return items, payload["next_cursor"]
+            items = [InvoiceDTO.model_validate(item) for item in cached["items"]]
+            return items, cast("str | None", cached["next_cursor"])
 
         if org.stripe_customer_id is None:
             return [], None
@@ -113,19 +108,16 @@ class InvoiceService:
         items = [_to_dto(invoice) for invoice in stripe_invoices.data]
         next_cursor = items[-1].id if stripe_invoices.has_more and items else None
 
-        await self._redis.set(
+        await cache.write_json(
+            self._redis,
             cache_key,
-            json.dumps(
-                {
-                    "items": [item.model_dump(mode="json") for item in items],
-                    "next_cursor": next_cursor,
-                }
-            ),
-            ex=_CACHE_TTL_SECONDS,
+            {
+                "items": [item.model_dump(mode="json") for item in items],
+                "next_cursor": next_cursor,
+            },
+            ttl=_CACHE_TTL_SECONDS,
         )
         return items, next_cursor
 
     async def invalidate(self, org_id: UUID) -> None:
-        keys = [key async for key in self._redis.scan_iter(match=f"{_CACHE_PREFIX}:{org_id}:*")]
-        if keys:
-            await self._redis.delete(*keys)
+        await cache.invalidate_pattern(self._redis, cache_keys.invoices_pattern(org_id))

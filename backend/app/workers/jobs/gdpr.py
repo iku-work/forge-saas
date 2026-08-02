@@ -39,12 +39,14 @@ from typing import Any, cast
 from uuid import UUID
 
 import boto3
+from redis.asyncio import Redis
 from sqlalchemy import delete, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import SQLModel
 
 from app.core.config import get_settings
 from app.core.db import async_session_factory
+from app.core.dependencies import invalidate_org_cache, invalidate_user_cache
 from app.core.tracing import trace_job
 from app.models._mixins import utcnow
 from app.modules.audit.models import AuditEvent
@@ -87,7 +89,7 @@ _DELETE_BY_USER: tuple[tuple[type[SQLModel], str], ...] = (
 
 @trace_job
 async def purge_user_data(
-    ctx: dict[str, Any],  # noqa: ARG001 -- ARQ calling convention; registered in app.workers.main
+    ctx: dict[str, Any],  # ARQ calling convention; registered in app.workers.main
     *,
     user_id: UUID,
 ) -> None:
@@ -121,11 +123,19 @@ async def purge_user_data(
         await session.execute(delete(User).where(cast("Any", User).id == user_id))
         await session.commit()
 
-    await _detach_orphaned_org_billing(org_ids)
+    # T-240: the row is gone from the DB but a copy of it may still be
+    # readable from the user cache -- and unlike the soft-delete in
+    # GDPRService.delete_me, there is no row left for a later read to
+    # correct itself against.
+    redis: Redis | None = ctx.get("redis")
+    if redis is not None:
+        await invalidate_user_cache(redis, user_id)
+
+    await _detach_orphaned_org_billing(org_ids, redis)
     logger.info("purge_user_data: purged all data for user_id=%s", user_id)
 
 
-async def _detach_orphaned_org_billing(org_ids: list[UUID]) -> None:
+async def _detach_orphaned_org_billing(org_ids: list[UUID], redis: Redis | None) -> None:
     unique_org_ids = set(org_ids)
     if not unique_org_ids:
         return
@@ -145,6 +155,10 @@ async def _detach_orphaned_org_billing(org_ids: list[UUID]) -> None:
                     .where(organization.id == org_id)
                     .values(stripe_customer_id=None)
                 )
+                if redis is not None:
+                    # An org write, so the cached Organization row behind
+                    # get_current_org has to go with it (T-240).
+                    await invalidate_org_cache(redis, org_id)
         await session.commit()
 
 

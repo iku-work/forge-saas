@@ -201,9 +201,14 @@ async def verify_email(
     request: Request,
     body: VerifyEmailRequest,
     session: Annotated[AsyncSession, Depends(get_session)],
+    redis: Annotated[Redis, Depends(get_redis)],
 ) -> Envelope[None]:
-    await AuthService(session).verify_email(body.token)
+    verified = await AuthService(session).verify_email(body.token)
     await session.commit()
+    # T-240: mark_email_verified flips is_active False -> True. A user who
+    # registered, got a token, and hit an authenticated route before
+    # verifying would otherwise stay locked out for the rest of the TTL.
+    await invalidate_user_cache(redis, verified.id)
     return Envelope(data=None, meta=Meta(request_id=_request_id(request)))
 
 
@@ -225,9 +230,11 @@ async def reset_password(
     request: Request,
     body: PasswordResetConfirmRequest,
     session: Annotated[AsyncSession, Depends(get_session)],
+    redis: Annotated[Redis, Depends(get_redis)],
 ) -> Envelope[None]:
-    await AuthService(session).confirm_password_reset(body.token, body.new_password)
+    reset_user = await AuthService(session).confirm_password_reset(body.token, body.new_password)
     await session.commit()
+    await invalidate_user_cache(redis, reset_user.id)  # see change_password below
     return Envelope(data=None, meta=Meta(request_id=_request_id(request)))
 
 
@@ -299,12 +306,18 @@ async def change_password(
     body: ChangePasswordRequest,
     user: Annotated[User, Depends(get_current_user)],
     session: Annotated[AsyncSession, Depends(get_session)],
+    redis: Annotated[Redis, Depends(get_redis)],
 ) -> Envelope[None]:
     refresh_token = _bearer_refresh_token(request, None)
     await AuthService(session).change_password(
         user, body.current_password, body.new_password, refresh_token
     )
     await session.commit()
+    # T-240: the cached row carries hashed_password, and this endpoint
+    # verifies `current_password` against whichever copy get_current_user
+    # resolved -- without this, the *old* password keeps working for a second
+    # change-password call for the rest of the TTL.
+    await invalidate_user_cache(redis, user.id)
     return Envelope(data=None, meta=Meta(request_id=_request_id(request)))
 
 

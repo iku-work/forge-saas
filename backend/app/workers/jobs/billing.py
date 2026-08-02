@@ -60,7 +60,7 @@ into app.workers.scheduler at 09:00 and 10:00 UTC respectively:
 
 import logging
 from datetime import timedelta
-from typing import Any, cast
+from typing import TYPE_CHECKING, Any, cast
 from uuid import UUID
 
 import stripe
@@ -82,8 +82,12 @@ from app.modules.billing.repository import (
     PlanRepository,
     SubscriptionRepository,
 )
+from app.modules.feature_flags.service import FeatureFlagService
 from app.modules.notifications.service import NotificationService
 from app.modules.tenancy.models import Membership, Organization
+
+if TYPE_CHECKING:
+    from redis.asyncio import Redis
 
 logger = logging.getLogger(__name__)
 
@@ -239,6 +243,10 @@ async def send_dunning_email(
         if step == "day7":
             if subscription.status == "past_due":
                 subscription.status = "canceled"
+                # T-240: the downgrade the whole dunning sequence exists to
+                # end in. Without this the org keeps its old entitlements
+                # (cached plan + feature flags) for the rest of the TTL.
+                await FeatureFlagService(session, ctx["redis"]).invalidate(subscription.org_id)
             await campaigns.close(campaign, status="completed")
 
         await session.commit()
@@ -330,9 +338,10 @@ def _has_payment_method(customer_id: str | None) -> bool:
 
 
 async def expire_trials_to_inactive(
-    ctx: dict[str, Any],  # noqa: ARG001 -- APScheduler calling convention; see app.workers.scheduler
+    ctx: dict[str, Any],  # APScheduler calling convention; see app.workers.scheduler
 ) -> None:
     now = utcnow()
+    redis: Redis | None = ctx.get("redis")
     async with async_session_factory() as session:
         subscriptions = SubscriptionRepository(session)
         audit = AuditService(session)
@@ -365,5 +374,9 @@ async def expire_trials_to_inactive(
                 )
 
             subscription.status = "canceled"
+            if redis is not None:
+                # Same downgrade, different trigger (T-240) -- see
+                # send_dunning_email's day7 branch.
+                await FeatureFlagService(session, redis).invalidate(subscription.org_id)
 
         await session.commit()

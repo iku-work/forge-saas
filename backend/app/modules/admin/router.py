@@ -352,15 +352,16 @@ async def end_impersonation(
 
 @router.post("/users/{user_id}/disable-totp")
 @api_limit
-async def disable_user_totp(
+async def disable_user_totp(  # noqa: PLR0913 -- request+path+body+auth+session+redis, all required
     request: Request,
     user_id: UUID,
     body: AdminDisableTotpRequest,
     superadmin: Annotated[User, Depends(require_superadmin)],
     session: Annotated[AsyncSession, Depends(get_session)],
+    redis: Annotated[Redis, Depends(get_redis)],
 ) -> Envelope[None]:
     target = await _get_user_or_404(user_id, session)
-    await AdminAccountRecoveryService(session).disable_totp_for_user(
+    await AdminAccountRecoveryService(session, redis).disable_totp_for_user(
         target=target,
         reason=body.reason,
         actor_id=superadmin.id,

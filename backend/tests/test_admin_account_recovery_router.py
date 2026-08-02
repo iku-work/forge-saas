@@ -13,6 +13,8 @@ from uuid import uuid4
 
 import httpx
 import pyotp
+import pytest
+from redis.asyncio import Redis
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -25,6 +27,11 @@ from app.modules.auth.service import AuthService
 from app.modules.auth.utils import create_access_token, hash_password
 
 _PASSWORD = "Correct-Horse9"
+
+
+@pytest.fixture
+def redis(_redis_client: Redis) -> Redis:
+    return _redis_client
 
 
 async def _make_user(
@@ -213,6 +220,7 @@ async def test_disable_totp_enqueues_security_notification_to_target(
 
 async def test_disable_totp_not_reachable_via_totp_secret_table_race(
     session: AsyncSession,
+    redis: Redis,
 ) -> None:
     """Direct-repository sanity check, independent of the router: a user
     with totp_enabled=True but no TOTPSecret row (shouldn't normally happen,
@@ -220,7 +228,7 @@ async def test_disable_totp_not_reachable_via_totp_secret_table_race(
     flag flip happens)."""
     user = await _make_user(session, totp_enabled=True)
 
-    await AdminAccountRecoveryService(session).disable_totp_for_user(
+    await AdminAccountRecoveryService(session, redis).disable_totp_for_user(
         target=user, reason=_VALID_REASON, actor_id=uuid4(), ip=None, ua=None
     )
 

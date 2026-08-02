@@ -19,6 +19,7 @@ from redis.asyncio import Redis
 from sqlalchemy import CursorResult, delete, func, select, tuple_, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core import cache_keys
 from app.core.exceptions import NotFoundError
 from app.core.repository import DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE
 from app.models._mixins import utcnow
@@ -29,7 +30,11 @@ _IDEMPOTENCY_WINDOW = timedelta(hours=24)
 
 
 def _unread_count_cache_key(user_id: UUID) -> str:
-    return f"notif:unread:{user_id}"
+    # T-240: key built in app.core.cache_keys like every other cache key.
+    # The value stays a bare integer rather than one of app.core.cache's
+    # versioned JSON envelopes -- there is no payload shape here that a
+    # future change could invalidate.
+    return cache_keys.notification_unread_count_key(user_id)
 
 
 class NotificationRepository:

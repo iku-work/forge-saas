@@ -14,10 +14,11 @@ from typing import Annotated
 from uuid import UUID, uuid4
 
 from fastapi import APIRouter, Depends, Request
+from redis.asyncio import Redis
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.db import get_session
-from app.core.dependencies import get_current_user
+from app.core.dependencies import get_current_user, get_redis, invalidate_user_cache
 from app.core.envelope import Envelope, Meta
 from app.middleware.rate_limit import api_limit
 from app.modules.auth.models import User
@@ -76,9 +77,15 @@ async def delete_me(
     body: DeleteMeRequest,  # noqa: ARG001 -- presence/value of "confirm" is the gate FastAPI enforces
     user: Annotated[User, Depends(get_current_user)],
     session: Annotated[AsyncSession, Depends(get_session)],
+    redis: Annotated[Redis, Depends(get_redis)],
 ) -> Envelope[None]:
     await GDPRService(session).delete_me(user)
     await session.commit()
+    # T-240, security-relevant: delete_me sets deleted_at, which
+    # get_current_user rejects on. Without this the account keeps working for
+    # the rest of the cache TTL -- deactivation has to take effect on the
+    # *next* request, not a minute later.
+    await invalidate_user_cache(redis, user.id)
     return Envelope(data=None, meta=Meta(request_id=_request_id(request)))
 
 

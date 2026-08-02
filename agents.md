@@ -5685,9 +5685,9 @@ For each of `packages/{ui,api-client,types,hooks,validation,utils}`:
 
 **Done when**
 
-- [ ] All three caches live with the invalidation matrix fully tested
-- [ ] Deactivation propagates immediately
-- [ ] No inline cache-key strings (grep check)
+- [x] All three caches live with the invalidation matrix fully tested
+- [x] Deactivation propagates immediately
+- [x] No inline cache-key strings (grep check)
 
 ---
 

@@ -25,6 +25,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core import jobs
 from app.core.config import get_settings
+from app.core.dependencies import invalidate_user_cache
 from app.core.exceptions import ConflictError, DomainError, NotFoundError, PermissionDeniedError
 from app.core.module_loader import is_enabled
 from app.core.repository import DEFAULT_PAGE_SIZE
@@ -492,6 +493,8 @@ class AdminBillingOverrideService:
 
         old_trial_end = subscription.trial_end
         new_trial_end = (subscription.trial_end or utcnow()) + timedelta(days=days)
+        # T-240: the subscription row is part of the org's cached entitlement
+        # payload, so a manual extension has to bust it like set_plan does.
 
         if not subscription.stripe_subscription_id.startswith(ADMIN_OVERRIDE_STRIPE_ID_PREFIX):
             # Real Stripe subscription: extend it there too, so a later
@@ -505,6 +508,7 @@ class AdminBillingOverrideService:
             )
         subscription.trial_end = new_trial_end
         await self._session.flush()
+        await self._flags.invalidate(org.id)
 
         await self._audit.log(
             action="admin.org.extend_trial",
@@ -667,7 +671,8 @@ class AdminAccountRecoveryService:
     auth module's own self-service surface should expose.
     """
 
-    def __init__(self, session: AsyncSession) -> None:
+    def __init__(self, session: AsyncSession, redis: Redis) -> None:
+        self._redis = redis
         self._users = UserRepository(session)
         self._totp_secrets = TOTPSecretRepository(session)
         self._audit = AuditService(session)
@@ -684,6 +689,9 @@ class AdminAccountRecoveryService:
         if record is not None:
             await self._totp_secrets.disable(target.id)
         await self._users.update(target.id, totp_enabled=False)
+        # T-240: totp_enabled lives on the cached User row, and
+        # require_superadmin gates on it.
+        await invalidate_user_cache(self._redis, target.id)
 
         await self._audit.log(
             action="admin.user.disable_totp",

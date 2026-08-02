@@ -196,6 +196,10 @@ def _add_locked_job(
     trigger: CronTrigger,
 ) -> None:
     async def run() -> None:
-        await with_distributed_lock(redis_client, job_id, lambda: job({}))
+        # ctx mirrors the one ARQ builds for the jobs in app.workers.main --
+        # `redis` is what a job needs to bust a cache after a write (T-240);
+        # expire_trials_to_inactive downgrades an org's plan and would
+        # otherwise leave the old entitlements cached.
+        await with_distributed_lock(redis_client, job_id, lambda: job({"redis": redis_client}))
 
     scheduler.add_job(run, trigger=trigger, id=job_id, replace_existing=True)

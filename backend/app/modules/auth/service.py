@@ -391,7 +391,7 @@ class AuthService:
         )
         await self._enqueue_password_reset_email(user, plain_token)
 
-    async def confirm_password_reset(self, token: str, new_password: str) -> None:
+    async def confirm_password_reset(self, token: str, new_password: str) -> User:
         record = await self._password_reset_tokens.get_by_hash(hash_token(token))
         if record is None:
             raise AuthenticationError(
@@ -413,6 +413,10 @@ class AuthService:
         # controls the account, so anyone already logged in elsewhere (e.g.
         # the actual attacker) gets signed out.
         await self._sessions.revoke_all_for_user(user.id)
+        # Returned so the router can bust the user cache (T-240): the cached
+        # row carries hashed_password, and change_password verifies the
+        # caller's current password against exactly that copy.
+        return user
 
     async def request_magic_link(self, email: str) -> None:
         user = await self._users.get_by_email(email)

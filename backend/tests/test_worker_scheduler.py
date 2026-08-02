@@ -525,7 +525,11 @@ async def test_create_scheduler_job_runs_the_underlying_function_under_the_lock(
 
     await registered_job.func()
 
-    assert calls == [{}]
+    # T-240: the ctx a scheduled job receives carries the same `redis` handle
+    # ARQ puts in its own (app.workers.main), so a job that writes to the DB
+    # can bust the caches that write invalidates -- expire_trials_to_inactive
+    # downgrades a plan and needs exactly that.
+    assert calls == [{"redis": redis_client}]
 
 
 async def test_refresh_active_sessions_gauge_job_runs_under_the_lock(

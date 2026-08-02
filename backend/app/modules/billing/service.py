@@ -56,6 +56,7 @@ from redis.asyncio import Redis
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
+from app.core.dependencies import invalidate_org_cache
 from app.core.exceptions import DomainError, NotFoundError
 from app.core.resilience import resilient
 from app.modules.audit.service import AuditService
@@ -67,6 +68,7 @@ from app.modules.billing.schemas import UsageSummary
 from app.modules.billing.usage_service import UsageService
 from app.modules.feature_flags.service import FeatureFlagService
 from app.modules.tenancy.models import Organization
+from app.modules.tenancy.repository import OrganizationRepository
 
 logger = logging.getLogger(__name__)
 
@@ -107,6 +109,7 @@ async def _create_portal_session_stripe(
 class BillingService:
     def __init__(self, session: AsyncSession, redis: Redis) -> None:
         self._session = session
+        self._redis = redis
         self._plans = PlanRepository(session)
         self._subscriptions = SubscriptionRepository(session)
         self._audit = AuditService(session)
@@ -206,8 +209,14 @@ class BillingService:
         customer = await stripe.Customer.create_async(
             name=org.name, metadata={"org_id": str(org.id)}
         )
+        # Written through the repository, not by mutating `org` and flushing:
+        # since T-240 this org may have been hydrated from the cache, and a
+        # detached instance's mutation is silently not persisted -- which
+        # would mean a brand-new Stripe customer created on every checkout.
+        # The local copy is updated too, for the rest of this request.
+        await OrganizationRepository(self._session).update(org.id, stripe_customer_id=customer.id)
         org.stripe_customer_id = customer.id
-        await self._session.flush()
+        await invalidate_org_cache(self._redis, org.id)
         return customer.id
 
     async def create_checkout_session(

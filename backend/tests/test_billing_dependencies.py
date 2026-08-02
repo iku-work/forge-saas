@@ -141,11 +141,11 @@ async def _make_subscription(
 # --- get_current_org_subscription ----------------------------------------------------
 
 
-async def test_no_subscription_resolves_to_free_plan(session: AsyncSession) -> None:
+async def test_no_subscription_resolves_to_free_plan(session: AsyncSession, redis: Redis) -> None:
     org = _org()
 
     org_sub = await get_current_org_subscription(
-        org_and_membership=(org, _membership(org.id)), session=session
+        org_and_membership=(org, _membership(org.id)), session=session, redis=redis
     )
 
     assert org_sub.subscription is None
@@ -153,7 +153,9 @@ async def test_no_subscription_resolves_to_free_plan(session: AsyncSession) -> N
     assert org_sub.plan.features == {}
 
 
-async def test_active_subscription_resolves_to_its_plan(session: AsyncSession) -> None:
+async def test_active_subscription_resolves_to_its_plan(
+    session: AsyncSession, redis: Redis
+) -> None:
     org = _org()
     plan = await _make_plan(session, features={"seats": 5})
     await _make_subscription(
@@ -165,13 +167,13 @@ async def test_active_subscription_resolves_to_its_plan(session: AsyncSession) -
     )
 
     org_sub = await get_current_org_subscription(
-        org_and_membership=(org, _membership(org.id)), session=session
+        org_and_membership=(org, _membership(org.id)), session=session, redis=redis
     )
 
     assert org_sub.plan.id == plan.id
 
 
-async def test_trialing_subscription_is_entitled(session: AsyncSession) -> None:
+async def test_trialing_subscription_is_entitled(session: AsyncSession, redis: Redis) -> None:
     org = _org()
     plan = await _make_plan(session, features={"seats": 5})
     await _make_subscription(
@@ -183,13 +185,15 @@ async def test_trialing_subscription_is_entitled(session: AsyncSession) -> None:
     )
 
     org_sub = await get_current_org_subscription(
-        org_and_membership=(org, _membership(org.id)), session=session
+        org_and_membership=(org, _membership(org.id)), session=session, redis=redis
     )
 
     assert org_sub.plan.id == plan.id
 
 
-async def test_past_due_within_grace_period_is_entitled(session: AsyncSession) -> None:
+async def test_past_due_within_grace_period_is_entitled(
+    session: AsyncSession, redis: Redis
+) -> None:
     org = _org()
     plan = await _make_plan(session, features={"seats": 5})
     await _make_subscription(
@@ -201,14 +205,14 @@ async def test_past_due_within_grace_period_is_entitled(session: AsyncSession) -
     )
 
     org_sub = await get_current_org_subscription(
-        org_and_membership=(org, _membership(org.id)), session=session
+        org_and_membership=(org, _membership(org.id)), session=session, redis=redis
     )
 
     assert org_sub.plan.id == plan.id
 
 
 async def test_past_due_beyond_grace_period_falls_back_to_free_plan(
-    session: AsyncSession,
+    session: AsyncSession, redis: Redis
 ) -> None:
     org = _org()
     plan = await _make_plan(session, features={"seats": 5})
@@ -221,13 +225,15 @@ async def test_past_due_beyond_grace_period_falls_back_to_free_plan(
     )
 
     org_sub = await get_current_org_subscription(
-        org_and_membership=(org, _membership(org.id)), session=session
+        org_and_membership=(org, _membership(org.id)), session=session, redis=redis
     )
 
     assert org_sub.plan.slug == "free"
 
 
-async def test_canceled_subscription_falls_back_to_free_plan(session: AsyncSession) -> None:
+async def test_canceled_subscription_falls_back_to_free_plan(
+    session: AsyncSession, redis: Redis
+) -> None:
     org = _org()
     plan = await _make_plan(session, features={"seats": 5})
     await _make_subscription(
@@ -239,7 +245,7 @@ async def test_canceled_subscription_falls_back_to_free_plan(session: AsyncSessi
     )
 
     org_sub = await get_current_org_subscription(
-        org_and_membership=(org, _membership(org.id)), session=session
+        org_and_membership=(org, _membership(org.id)), session=session, redis=redis
     )
 
     assert org_sub.plan.slug == "free"

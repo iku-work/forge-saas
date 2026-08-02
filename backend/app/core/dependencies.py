@@ -9,10 +9,9 @@ into routers, not service-layer code, so they go straight to the repository
 layer the same way app.modules.auth.service does.
 """
 
-import json
 from collections.abc import Awaitable, Callable
 from datetime import datetime, timedelta
-from typing import Annotated, Any
+from typing import Annotated
 from uuid import UUID
 
 from fastapi import Depends, Header, Request
@@ -22,6 +21,7 @@ from redis.asyncio import Redis
 from sentry_sdk import set_user as set_sentry_user
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core import cache, cache_keys
 from app.core.db import get_session
 from app.core.exceptions import (
     AuthenticationError,
@@ -39,15 +39,6 @@ from app.modules.auth.utils import verify_access_token
 from app.modules.tenancy.models import Membership, Organization
 from app.modules.tenancy.repository import MembershipRepository, OrganizationRepository
 
-_USER_CACHE_TTL_SECONDS = 60
-_USER_DATETIME_FIELDS = (
-    "created_at",
-    "updated_at",
-    "deleted_at",
-    "email_verified_at",
-    "locked_until",
-)
-
 # tokenUrl is only used to populate the Swagger "Authorize" dialog; the real
 # login endpoint (T-022) takes a JSON body, not an OAuth2 password form.
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login", auto_error=False)
@@ -58,32 +49,20 @@ async def get_redis(request: Request) -> Redis:
     return redis
 
 
-def _hydrate_cached_user(cached: str) -> User:
-    # SQLModel table=True classes skip their own pydantic coercion on
-    # model_validate_json — UUID/datetime fields come back as the raw JSON
-    # strings (e.g. user.id ends up a str, not a UUID), which silently
-    # breaks anything downstream that uses them as such (e.g. binding
-    # user.id into a UUID-typed query parameter). Construct from a plain
-    # dict instead, coercing the fields that matter ourselves.
-    raw: dict[str, Any] = json.loads(cached)  # arbitrary JSON; coerced field-by-field below
-    raw["id"] = UUID(raw["id"])
-    for field in _USER_DATETIME_FIELDS:
-        if raw.get(field) is not None:
-            raw[field] = datetime.fromisoformat(raw[field])
-    return User(**raw)
-
-
-def _user_cache_key(user_id: UUID) -> str:
-    return f"user:{user_id}"
-
-
 async def invalidate_user_cache(redis: Redis, user_id: UUID) -> None:
-    """Call after any write to a User row a request handler can reach
-    directly -- get_current_user() below caches the row for
-    _USER_CACHE_TTL_SECONDS, so a write that skips this leaves a stale copy
-    readable from /auth/me (and request.state.locale resolution) until the
-    TTL expires."""
-    await redis.delete(_user_cache_key(user_id))
+    """Call after any write to a User row -- get_current_user() below caches
+    the row for cache.DEFAULT_TTL_SECONDS, so a write that skips this leaves
+    a stale copy readable from /auth/me (and request.state.locale resolution)
+    until the TTL expires. The full list of writes that must call it is the
+    invalidation matrix in app.core.cache_keys' docstring; a deactivation or
+    delete that skipped it would keep a disabled account working for the rest
+    of the minute, which is why the matrix is tested rather than trusted."""
+    await cache.invalidate(redis, cache_keys.user_key(user_id))
+
+
+async def invalidate_org_cache(redis: Redis, org_id: UUID) -> None:
+    """Counterpart for the Organization row get_current_org() caches."""
+    await cache.invalidate(redis, cache_keys.org_settings_key(org_id))
 
 
 async def get_current_user(
@@ -105,16 +84,19 @@ async def get_current_user(
     # the token a second time -- FastAPI dedups get_current_user across
     # dependencies within one request, so this always runs first.
     request.state.auth_time = payload.auth_time
-    cache_key = _user_cache_key(payload.user_id)
+    cache_key = cache_keys.user_key(payload.user_id)
 
-    cached = await redis.get(cache_key)
+    cached = await cache.read_json(redis, cache_key)
     if cached is not None:
-        user = _hydrate_cached_user(cached)
+        user = cache.hydrate(User, cached)
     else:
+        # Deliberately not cache.cached_json(): on a miss this returns the
+        # session-attached row the repository loaded, not a hydrated copy of
+        # it, so a caller that mutates `user` and flushes still persists.
         fetched = await UserRepository(session).get_by_id(payload.user_id)
         if fetched is None:
             raise AuthenticationError("errors.user_not_found", fallback="User not found")
-        await redis.set(cache_key, fetched.model_dump_json(), ex=_USER_CACHE_TTL_SECONDS)
+        await cache.write_json(redis, cache_key, cache.dump(fetched))
         user = fetched
 
     # T-201: id only, never email or name -- Sentry events raised for the
@@ -137,12 +119,23 @@ async def get_current_user(
 async def get_current_org(
     user: Annotated[User, Depends(get_current_user)],
     session: Annotated[AsyncSession, Depends(get_session)],
+    redis: Annotated[Redis, Depends(get_redis)],
     x_org_id: Annotated[UUID | None, Header(alias="X-Org-ID")] = None,
 ) -> tuple[Organization, Membership]:
     if x_org_id is None:
         raise DomainError("errors.org_header_required", fallback="X-Org-ID header is required")
 
-    org = await OrganizationRepository(session).get_by_id(x_org_id)
+    # T-240: the org row (name, logo, settings JSONB) is read on every
+    # org-scoped request and written about as often as a company renames
+    # itself. The membership below is *not* cached with it -- it is the
+    # tenant-isolation check (§0.2), and a revoked membership must stop
+    # working on the next request, not at the end of a TTL.
+    async def _load_org() -> cache.JsonDict | None:
+        row = await OrganizationRepository(session).get_by_id(x_org_id)
+        return cache.dump(row) if row is not None else None
+
+    cached_org = await cache.cached_json(redis, cache_keys.org_settings_key(x_org_id), _load_org)
+    org = cache.hydrate(Organization, cached_org) if cached_org is not None else None
     membership = await MembershipRepository(session).get_by_user_and_org(user.id, x_org_id)
     if org is None or membership is None:
         raise PermissionDeniedError(

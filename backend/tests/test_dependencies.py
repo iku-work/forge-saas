@@ -26,6 +26,7 @@ from starlette.requests import Request
 from testcontainers.postgres import PostgresContainer
 from testcontainers.redis import RedisContainer
 
+from app.core import cache, cache_keys
 from app.core.config import get_settings
 from app.core.dependencies import (
     get_current_org,
@@ -170,7 +171,7 @@ async def test_get_current_user_returns_user_on_cache_miss_and_warms_cache(
     )
 
     assert user.id == active_user.id
-    assert await redis_client.ttl(f"user:{active_user.id}") > 0
+    assert await redis_client.ttl(cache_keys.user_key(active_user.id)) > 0
 
 
 async def test_get_current_user_sets_request_state_locale_from_user(
@@ -224,7 +225,7 @@ async def test_get_current_user_raises_for_inactive_user_on_cache_hit(
     user = User(email=f"stale-{uuid4()}@example.com", is_active=False)
     session.add(user)
     await session.flush()
-    await redis_client.set(f"user:{user.id}", user.model_dump_json())
+    await cache.write_json(redis_client, cache_keys.user_key(user.id), cache.dump(user))
 
     with pytest.raises(AuthenticationError):
         await get_current_user(
@@ -236,36 +237,40 @@ async def test_get_current_user_raises_for_inactive_user_on_cache_hit(
 
 
 async def test_get_current_org_raises_400_when_header_missing(
-    active_user: User, session: AsyncSession
+    active_user: User, session: AsyncSession, redis_client: Redis
 ) -> None:
     with pytest.raises(DomainError) as exc_info:
-        await get_current_org(user=active_user, session=session, x_org_id=None)
+        await get_current_org(user=active_user, session=session, redis=redis_client, x_org_id=None)
 
     assert exc_info.value.status_code == 400
 
 
 async def test_get_current_org_raises_403_for_nonexistent_org(
-    active_user: User, session: AsyncSession
+    active_user: User, session: AsyncSession, redis_client: Redis
 ) -> None:
     with pytest.raises(PermissionDeniedError) as exc_info:
-        await get_current_org(user=active_user, session=session, x_org_id=uuid4())
+        await get_current_org(
+            user=active_user, session=session, redis=redis_client, x_org_id=uuid4()
+        )
 
     assert exc_info.value.status_code == 403
 
 
 async def test_get_current_org_raises_403_when_org_exists_but_not_a_member(
-    active_user: User, session: AsyncSession
+    active_user: User, session: AsyncSession, redis_client: Redis
 ) -> None:
     org = _unique_org()
     session.add(org)
     await session.flush()
 
     with pytest.raises(PermissionDeniedError):
-        await get_current_org(user=active_user, session=session, x_org_id=org.id)
+        await get_current_org(
+            user=active_user, session=session, redis=redis_client, x_org_id=org.id
+        )
 
 
 async def test_get_current_org_returns_org_and_membership_for_member(
-    active_user: User, session: AsyncSession
+    active_user: User, session: AsyncSession, redis_client: Redis
 ) -> None:
     org = _unique_org()
     session.add(org)
@@ -275,7 +280,7 @@ async def test_get_current_org_returns_org_and_membership_for_member(
     await session.flush()
 
     returned_org, returned_membership = await get_current_org(
-        user=active_user, session=session, x_org_id=org.id
+        user=active_user, session=session, redis=redis_client, x_org_id=org.id
     )
 
     assert returned_org.id == org.id

@@ -164,7 +164,7 @@ class TenancyService:
         )
         return updated
 
-    async def remove_member(self, actor_membership: Membership, target_membership_id: UUID) -> None:
+    async def remove_member(self, actor_membership: Membership, target_membership_id: UUID) -> UUID:
         if Permission.MEMBERS_MANAGE not in ROLE_PERMISSIONS[actor_membership.role]:
             raise PermissionDeniedError(
                 "errors.missing_permission",
@@ -187,6 +187,9 @@ class TenancyService:
                 )
 
         await self._memberships.remove(target.id)
+        # The removed member's user id, so the router can bust that user's
+        # cache (T-240) -- the membership row is gone by the time it returns.
+        return target.user_id
 
     async def get_membership_or_raise(
         self, org_id: UUID, user_id: UUID

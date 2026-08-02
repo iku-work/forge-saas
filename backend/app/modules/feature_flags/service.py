@@ -30,20 +30,12 @@ from uuid import UUID
 from redis.asyncio import Redis
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core import cache, cache_keys
 from app.core.module_loader import is_enabled as is_module_enabled
 from app.modules.feature_flags.repository import OrgFeatureFlagRepository
 from app.modules.tenancy.models import Organization
 
-_CACHE_PREFIX = "feature_flags"
-_CACHE_TTL_SECONDS = 60
-
-
-def _flag_cache_key(org_id: UUID, flag: str) -> str:
-    return f"{_CACHE_PREFIX}:{org_id}:{flag}"
-
-
-def _all_cache_key(org_id: UUID) -> str:
-    return f"{_CACHE_PREFIX}:{org_id}:all"
+_CACHE_TTL_SECONDS = cache.DEFAULT_TTL_SECONDS
 
 
 class FeatureFlagService:
@@ -52,7 +44,7 @@ class FeatureFlagService:
         self._redis = redis
 
     async def is_enabled(self, org: Organization, flag: str) -> bool:
-        cache_key = _flag_cache_key(org.id, flag)
+        cache_key = cache_keys.feature_flag_key(org.id, flag)
         cached = await self._redis.get(cache_key)
         if cached is not None:
             return bool(int(cached))
@@ -66,7 +58,7 @@ class FeatureFlagService:
         return result
 
     async def all_enabled(self, org: Organization) -> dict[str, bool]:
-        cache_key = _all_cache_key(org.id)
+        cache_key = cache_keys.feature_flags_all_key(org.id)
         cached = await self._redis.get(cache_key)
         if cached is not None:
             return cast("dict[str, bool]", json.loads(cached))
@@ -95,9 +87,13 @@ class FeatureFlagService:
         return result
 
     async def invalidate(self, org_id: UUID) -> None:
-        keys = [key async for key in self._redis.scan_iter(match=f"{_CACHE_PREFIX}:{org_id}:*")]
-        if keys:
-            await self._redis.delete(*keys)
+        # T-240: also busts the org's cached Subscription+Plan, since every
+        # flag answer here is derived from it -- see
+        # app.core.cache.invalidate_org_entitlements. Every caller that
+        # changes an org's plan already calls this, so coupling the two here
+        # (rather than asking each of those call sites to remember a second
+        # call) is what keeps the plan cache from ever outliving its flags.
+        await cache.invalidate_org_entitlements(self._redis, org_id)
 
     async def set_override(self, org_id: UUID, flag_name: str, enabled: bool) -> None:
         await OrgFeatureFlagRepository(self._session, org_id).set_override(
@@ -122,5 +118,5 @@ class FeatureFlagService:
         # with billing.dependencies.
         from app.modules.billing.dependencies import resolve_org_subscription  # noqa: PLC0415
 
-        org_sub = await resolve_org_subscription(org, self._session)
+        org_sub = await resolve_org_subscription(org, self._session, self._redis)
         return org_sub.plan.features
