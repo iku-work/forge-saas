@@ -3,6 +3,7 @@ import type {
   ConsentRecordPublic,
   DataExportJobPublic,
   InvitationPreview,
+  InvitationPublic,
   MembershipPublic,
   NotificationPublic,
   OrganizationPublic,
@@ -124,6 +125,24 @@ export const fixtureInvitationPreview: InvitationPreview = {
   role: "member",
   expires_at: "2026-12-31T00:00:00Z",
 };
+
+export function makeInvitation(
+  suffix: number,
+  overrides: Partial<InvitationPublic> = {},
+): InvitationPublic {
+  return {
+    id: `99999999-9999-9999-9999-${String(suffix).padStart(12, "0")}`,
+    org_id: fixtureOrg.id,
+    email: `invitee-${String(suffix)}@example.com`,
+    role: "member",
+    invited_by: fixtureUser.id,
+    // Far enough out that "is this expired?" never depends on when the
+    // suite runs -- the expired case passes an explicit past date instead.
+    expires_at: "2099-01-01T00:00:00Z",
+    created_at: "2026-01-01T00:00:00Z",
+    ...overrides,
+  };
+}
 
 export const fixtureExportJob: DataExportJobPublic = {
   id: "88888888-8888-8888-8888-888888888888",

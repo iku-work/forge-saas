@@ -10,3 +10,4 @@
 // on either side silently degrades to "no restoration" -- hence one
 // constant rather than two literals.
 export const MEMBERS_LIST_SCROLL_ID = "members-list";
+export const INVITATIONS_LIST_SCROLL_ID = "invitations-list";

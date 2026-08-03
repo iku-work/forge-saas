@@ -199,6 +199,9 @@ export const handlers = [
   http.delete(`${API}/api/v1/orgs/:orgId/members/:membershipId`, () =>
     HttpResponse.json(envelope(null)),
   ),
+  http.get(`${API}/api/v1/orgs/:orgId/invitations`, () =>
+    HttpResponse.json(envelope([])),
+  ),
   http.post(`${API}/api/v1/orgs/:orgId/invitations`, () =>
     HttpResponse.json(envelope(null)),
   ),

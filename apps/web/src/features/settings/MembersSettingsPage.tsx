@@ -11,6 +11,7 @@ import { z } from "zod";
 
 import {
   createInvitationApiV1OrgsOrgIdInvitationsPost,
+  listInvitationsApiV1OrgsOrgIdInvitationsGetInfiniteQueryKey,
   listMembersApiV1OrgsOrgIdMembersGet,
   listMembersApiV1OrgsOrgIdMembersGetInfiniteQueryKey,
   removeMemberApiV1OrgsOrgIdMembersMembershipIdDelete,
@@ -49,6 +50,7 @@ import {
 import { VirtualList } from "../../components/VirtualList";
 import { MEMBERS_LIST_SCROLL_ID } from "../../lib/scrollRestorationIds";
 import { getErrorMessage } from "../auth/getErrorMessage";
+import { PendingInvitationsCard } from "./PendingInvitationsCard";
 
 // The member row is a fixed-height flex row, so one estimate covers every
 // row and the virtualizer never has to re-measure after mount. MAX_HEIGHT
@@ -187,10 +189,13 @@ export interface MembersSettingsPageProps {
    *  (T-241). Supplied by the route, which is the only place that can call
    *  useElementScrollRestoration -- see routes/$locale._app.settings.members.tsx. */
   initialScrollOffset?: number;
+  /** The same, for the pending-invitations list below it. */
+  initialInvitationsScrollOffset?: number;
 }
 
 export function MembersSettingsPage({
   initialScrollOffset,
+  initialInvitationsScrollOffset,
 }: MembersSettingsPageProps = {}) {
   const { t } = useTranslation();
   const { org, isLoading: orgLoading } = useOrg();
@@ -248,6 +253,18 @@ export function MembersSettingsPage({
     if (!org) return;
     await queryClient.invalidateQueries({
       queryKey: listMembersApiV1OrgsOrgIdMembersGetInfiniteQueryKey({
+        path: { org_id: org.id },
+      }),
+    });
+  };
+
+  // A sent invitation is a new row in the pending list below, so the invite
+  // dialog closing has to bust that query too -- otherwise the teammate you
+  // just invited doesn't appear until the next navigation.
+  const invalidateInvitations = async (): Promise<void> => {
+    if (!org) return;
+    await queryClient.invalidateQueries({
+      queryKey: listInvitationsApiV1OrgsOrgIdInvitationsGetInfiniteQueryKey({
         path: { org_id: org.id },
       }),
     });
@@ -468,6 +485,18 @@ export function MembersSettingsPage({
         </CardContent>
       </Card>
 
+      {/* MEMBERS_MANAGE only: GET /orgs/{id}/invitations is gated on it (the
+          response is a list of invitee email addresses), so rendering this
+          for a plain member would produce a 403 error box, not a feature. */}
+      {canManage ? (
+        <PendingInvitationsCard
+          orgId={org.id}
+          {...(initialInvitationsScrollOffset === undefined
+            ? {}
+            : { initialScrollOffset: initialInvitationsScrollOffset })}
+        />
+      ) : null}
+
       <Dialog open={inviteOpen} onOpenChange={setInviteOpen}>
         <DialogContent>
           <DialogHeader>
@@ -477,6 +506,7 @@ export function MembersSettingsPage({
             orgId={org.id}
             onInvited={() => {
               setInviteOpen(false);
+              void invalidateInvitations();
             }}
           />
         </DialogContent>

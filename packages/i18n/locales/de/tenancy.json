@@ -41,6 +41,19 @@
     "error_role_change": "Die Rolle dieses Mitglieds konnte nicht aktualisiert werden.",
     "error_remove": "Dieses Mitglied konnte nicht entfernt werden."
   },
+  "invitations": {
+    "title": "Ausstehende Einladungen",
+    "description": "Einladungen, die noch nicht angenommen wurden.",
+    "list_label": "Liste ausstehender Einladungen",
+    "none": "Keine ausstehenden Einladungen.",
+    "email_col": "E-Mail",
+    "role_col": "Rolle",
+    "expires_col": "Läuft ab",
+    "expires": "Läuft ab am {date}",
+    "expired": "Abgelaufen",
+    "load_more": "Mehr laden",
+    "error_load": "Ausstehende Einladungen konnten nicht geladen werden."
+  },
   "invite": {
     "title": "Teammitglied einladen",
     "email_label": "E-Mail",

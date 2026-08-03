@@ -41,6 +41,19 @@
     "error_role_change": "Impossible de mettre à jour le rôle de ce membre.",
     "error_remove": "Impossible de supprimer ce membre."
   },
+  "invitations": {
+    "title": "Invitations en attente",
+    "description": "Invitations qui n'ont pas encore été acceptées.",
+    "list_label": "Liste des invitations en attente",
+    "none": "Aucune invitation en attente.",
+    "email_col": "E-mail",
+    "role_col": "Rôle",
+    "expires_col": "Expire",
+    "expires": "Expire le {date}",
+    "expired": "Expirée",
+    "load_more": "Charger plus",
+    "error_load": "Impossible de charger les invitations en attente."
+  },
   "invite": {
     "title": "Inviter un collègue",
     "email_label": "E-mail",

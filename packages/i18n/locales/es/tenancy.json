@@ -41,6 +41,19 @@
     "error_role_change": "No se pudo actualizar el rol de este miembro.",
     "error_remove": "No se pudo eliminar a este miembro."
   },
+  "invitations": {
+    "title": "Invitaciones pendientes",
+    "description": "Invitaciones que aún no se han aceptado.",
+    "list_label": "Lista de invitaciones pendientes",
+    "none": "No hay invitaciones pendientes.",
+    "email_col": "Correo electrónico",
+    "role_col": "Rol",
+    "expires_col": "Caduca",
+    "expires": "Caduca el {date}",
+    "expired": "Caducada",
+    "load_more": "Cargar más",
+    "error_load": "No se pudieron cargar las invitaciones pendientes."
+  },
   "invite": {
     "title": "Invitar a un compañero de equipo",
     "email_label": "Correo electrónico",

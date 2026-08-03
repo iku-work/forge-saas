@@ -10,6 +10,7 @@ import {
   envelope,
   errorEnvelope,
   fixtureOrg,
+  makeInvitation,
   makeMembership,
   makeUser,
 } from "../../test/appShellFixtures";
@@ -125,6 +126,48 @@ describe("MembersSettingsPage", () => {
     renderPage();
 
     expect(await screen.findByText("No members yet.")).toBeInTheDocument();
+  });
+
+  it("shows the pending-invitations card to an owner", async () => {
+    hooks.usePermission.mockReturnValue(true);
+    server.use(
+      http.get(`${API}/api/v1/orgs/:orgId/members`, () =>
+        HttpResponse.json(envelope([makeMembership(user, "owner")])),
+      ),
+      http.get(`${API}/api/v1/orgs/:orgId/invitations`, () =>
+        HttpResponse.json(
+          envelope([makeInvitation(1, { email: "pending@example.com" })]),
+        ),
+      ),
+    );
+
+    renderPage();
+
+    expect(await screen.findByText("pending@example.com")).toBeInTheDocument();
+  });
+
+  it("hides the pending-invitations card from a plain member", async () => {
+    // Not cosmetic: GET /orgs/{id}/invitations is gated on MEMBERS_MANAGE
+    // (it lists invitee email addresses), so rendering the card here would
+    // put a 403 error box on the page.
+    hooks.usePermission.mockReturnValue(false);
+    const requestedPaths: string[] = [];
+    server.events.on("request:start", ({ request }) => {
+      requestedPaths.push(new URL(request.url).pathname);
+    });
+    server.use(
+      http.get(`${API}/api/v1/orgs/:orgId/members`, () =>
+        HttpResponse.json(envelope([makeMembership(user, "member")])),
+      ),
+    );
+
+    renderPage();
+
+    expect(await screen.findByText("You")).toBeInTheDocument();
+    expect(screen.queryByText("Pending invitations")).not.toBeInTheDocument();
+    expect(
+      requestedPaths.some((path) => path.endsWith("/invitations")),
+    ).toBe(false);
   });
 
   it("shows an error state when the members request fails", async () => {

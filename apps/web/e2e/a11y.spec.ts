@@ -99,6 +99,14 @@ test("key pages have no serious/critical WCAG A/AA violations", async ({ page, b
     await page.getByTestId("invite-submit").click();
     await expect(page.getByTestId("invite-email-input")).toBeHidden();
 
+    // The invite is now pending, so the card below the member list has a row
+    // -- and this is the populated form of it that axe should see (T-221's
+    // "realistic, not empty-state" rule). It also proves the send closes the
+    // loop: the row only appears here if the dialog's success path busts the
+    // invitations query.
+    await expect(page.getByTestId("invitation-row")).toHaveCount(1);
+    await checkA11y(page, testInfo, "members-list-pending-invitation");
+
     const inviteLink = await waitForLink(
       teammateEmail,
       /https:\/\/localhost\/[a-z]{2}\/accept-invitation\/[\w.-]+/,
@@ -135,6 +143,9 @@ test("key pages have no serious/critical WCAG A/AA violations", async ({ page, b
 
     await page.reload();
     await expect(page.getByTestId("member-row")).toHaveCount(2);
+    // ...and the invitation they accepted has left the pending list, which
+    // is the backend's accepted_at filter proving itself end to end.
+    await expect(page.getByTestId("no-pending-invitations")).toBeVisible();
     await checkA11y(page, testInfo, "members-list");
   });
 
