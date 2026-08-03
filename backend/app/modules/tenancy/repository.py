@@ -11,6 +11,7 @@ public token before any org context exists -- none of the three satisfy
 BaseRepository's `_OrgScopedRecord` protocol.
 """
 
+from collections.abc import Collection
 from datetime import datetime
 from typing import Any, cast
 from uuid import UUID
@@ -63,6 +64,20 @@ class OrganizationRepository:
             .where(mem.user_id == user_id, m.deleted_at.is_(None))
             .order_by(m.created_at.desc())
         )
+        result = await self.session.execute(stmt)
+        return list(result.scalars().all())
+
+    async def list_by_ids(self, org_ids: Collection[UUID]) -> list[Organization]:
+        # T-243: the batch counterpart to get_by_id, for callers holding a
+        # page of rows that each name an org (the admin audit feed, the admin
+        # user detail's membership list). Those org ids aren't ORM
+        # relationships -- Membership/AuditEvent carry a bare UUID column, no
+        # `Relationship` to eager-load -- so §0.3's selectinload isn't
+        # available here; one `IN` query per page is the same shape of fix.
+        if not org_ids:
+            return []
+        m = cast("Any", Organization)
+        stmt = select(Organization).where(m.id.in_(set(org_ids)), m.deleted_at.is_(None))
         result = await self.session.execute(stmt)
         return list(result.scalars().all())
 

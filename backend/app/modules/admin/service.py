@@ -146,6 +146,7 @@ class AdminDirectoryService:
         self._session = session
         self._redis = redis
         self._org_directory = AdminOrgRepository(session)
+        self._orgs = OrganizationRepository(session)
         self._memberships = MembershipRepository(session)
         self._plans = PlanRepository(session)
         self._subscriptions = SubscriptionRepository(session)
@@ -239,9 +240,16 @@ class AdminDirectoryService:
 
     async def get_user_detail(self, user: User) -> AdminUserDetail:
         memberships = await self._memberships.list_for_user(user.id)
+        # T-243: one `IN` query for the whole membership list, not one
+        # get_by_id per row -- a support-ops user on twenty orgs used to cost
+        # twenty round trips here. Soft-deleted orgs are still dropped
+        # (list_by_ids filters deleted_at exactly as get_by_id did).
+        orgs = {
+            org.id: org for org in await self._orgs.list_by_ids([m.org_id for m in memberships])
+        }
         membership_summaries = []
         for membership in memberships:
-            org = await OrganizationRepository(self._session).get_by_id(membership.org_id)
+            org = orgs.get(membership.org_id)
             if org is None:
                 continue
             membership_summaries.append(
@@ -303,28 +311,27 @@ class AdminDirectoryService:
         events, next_cursor = await self._audit.list_global_cursor(
             after, limit, actor_id=actor_id, action=action, org_id=org_id, since=since, until=until
         )
-        # Small per-page caches rather than a batch query: the page is capped
-        # at MAX_PAGE_SIZE (100) and actors/orgs repeat heavily within a
-        # page, so this stays cheap while reusing UserRepository/
-        # OrganizationRepository's existing get_by_id instead of adding a
-        # bespoke batch-lookup method to either.
-        user_emails: dict[UUID, str | None] = {}
-        org_names: dict[UUID, str | None] = {}
+        # T-243: two batch lookups for the whole page, not one get_by_id per
+        # distinct actor/org. The previous per-page memo dict only helped when
+        # a page repeated the same actor -- an admin feed of 100 events from
+        # 100 different people cost 200 extra round trips, and the cost grew
+        # with the page size, which is the definition of the N+1 this task's
+        # constant-query test exists to catch (tests/test_query_budgets.py).
+        user_emails = {
+            u.id: u.email
+            for u in await self._users.list_by_ids([e.actor_id for e in events if e.actor_id])
+        }
+        org_names = {
+            o.id: o.name
+            for o in await self._orgs.list_by_ids([e.org_id for e in events if e.org_id])
+        }
         entries: list[AdminAuditFeedEntry] = []
         for event in events:
-            actor_email: str | None = None
-            if event.actor_id is not None:
-                if event.actor_id not in user_emails:
-                    actor = await self._users.get_by_id(event.actor_id)
-                    user_emails[event.actor_id] = actor.email if actor is not None else None
-                actor_email = user_emails[event.actor_id]
-
-            org_name: str | None = None
-            if event.org_id is not None:
-                if event.org_id not in org_names:
-                    org = await OrganizationRepository(self._session).get_by_id(event.org_id)
-                    org_names[event.org_id] = org.name if org is not None else None
-                org_name = org_names[event.org_id]
+            # A missing id (soft-deleted user/org, both filtered out by
+            # list_by_ids) reads as None, exactly as the get_by_id-returns-
+            # None branch did before.
+            actor_email = user_emails.get(event.actor_id) if event.actor_id else None
+            org_name = org_names.get(event.org_id) if event.org_id else None
 
             entries.append(
                 AdminAuditFeedEntry(
@@ -373,10 +380,17 @@ class AdminDashboardService:
         recent_payment_failures: list[AdminPaymentFailureEntry] = []
         if is_enabled("billing"):
             events = await self._audit.list_recent_by_action("billing.payment_failed", limit=5)
+            # T-243: one batch lookup, same as the audit feed's. The limit=5
+            # cap kept the old per-event get_by_id cheap, but it was still a
+            # query per row -- and a cap is not a fix, it is a smaller N.
+            orgs = {
+                org.id: org
+                for org in await self._orgs.list_by_ids([e.org_id for e in events if e.org_id])
+            }
             for event in events:
                 if event.org_id is None:
                     continue
-                org = await self._orgs.get_by_id(event.org_id)
+                org = orgs.get(event.org_id)
                 if org is None:
                     continue
                 recent_payment_failures.append(

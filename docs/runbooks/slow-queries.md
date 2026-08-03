@@ -83,6 +83,13 @@ instead — this alert is a leading indicator, not the SLO measurement itself.
    - Re-run `EXPLAIN ANALYZE` (or wait for the next `pg_stat_statements`
      window) after any fix to confirm `mean_exec_time` actually dropped —
      don't close the alert on a plausible-sounding fix alone.
+   - **If the fix was an N+1**, add the endpoint to
+     `backend/tests/test_query_budgets.py` (T-243) so it can't come back:
+     that suite hits every list endpoint with 3 rows and again with 30 and
+     fails if the statement count differs, printing every statement it
+     captured. A new `list_`-style route with no budget entry there already
+     fails its meta-check, so most N+1s should be caught in CI rather than
+     from a `pg_stat_statements` alert.
 
 4. **Reset the counters** after a fix ships, so the dashboard reflects new
    behavior instead of being dominated by pre-fix history:

@@ -7,6 +7,7 @@ assumes an org-scoped model (it requires org_id in its constructor), so it
 doesn't fit here — each repository below is a small bespoke class instead.
 """
 
+from collections.abc import Collection
 from datetime import datetime
 from typing import Any, ClassVar, Protocol, cast
 from uuid import UUID
@@ -41,6 +42,19 @@ class UserRepository:
         stmt = select(User).where(m.id == user_id, m.deleted_at.is_(None))
         result = await self.session.execute(stmt)
         return result.scalar_one_or_none()
+
+    async def list_by_ids(self, user_ids: Collection[UUID]) -> list[User]:
+        # T-243: batch counterpart to get_by_id, for a caller holding a page
+        # of rows that each name an actor (the admin audit feed). AuditEvent
+        # carries a bare actor_id UUID, not a `Relationship`, so §0.3's
+        # selectinload has nothing to hang off -- one `IN` query per page is
+        # the same fix in the shape this schema allows.
+        if not user_ids:
+            return []
+        m = cast("Any", User)
+        stmt = select(User).where(m.id.in_(set(user_ids)), m.deleted_at.is_(None))
+        result = await self.session.execute(stmt)
+        return list(result.scalars().all())
 
     async def get_by_email(self, email: str) -> User | None:
         m = cast("Any", User)

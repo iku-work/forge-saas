@@ -5787,9 +5787,13 @@ For each of `packages/{ui,api-client,types,hooks,validation,utils}`:
 
 **Done when**
 
-- [ ] Constant-query property holds on every list endpoint
-- [ ] Every N+1 found is fixed with `selectinload` and stays covered
-- [ ] Meta-check guards future endpoints
+- [x] Constant-query property holds on every list endpoint — 14 endpoints,
+      each measured at 3 rows and again at 30
+- [x] Every N+1 found is fixed and stays covered — three in the admin module
+      (audit feed, user detail, dashboard payment failures); all three were
+      bare-UUID lookups with no ORM relationship to `selectinload`, so each is
+      a batched `IN` via the new `list_by_ids` repository methods
+- [x] Meta-check guards future endpoints
 
 ---
 
