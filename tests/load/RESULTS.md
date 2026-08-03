@@ -91,3 +91,7 @@ instead of per-PR.
 | 2026-08-02 | fcb83e8 | browse | - | - | PASS |
 | 2026-08-02 | fcb83e8 | presign | - | - | PASS |
 | 2026-08-02 | fcb83e8 | mixed | - | - | FAIL |
+| 2026-08-03 | 2357219 | login-burst | - | - | FAIL |
+| 2026-08-03 | 2357219 | browse | - | - | PASS |
+| 2026-08-03 | 2357219 | presign | - | - | PASS |
+| 2026-08-03 | 2357219 | mixed | - | - | FAIL |
