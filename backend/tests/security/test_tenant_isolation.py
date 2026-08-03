@@ -112,6 +112,12 @@ async def _remove_member(ctx: TenantIsolationContext) -> httpx.Response:
     )
 
 
+async def _list_invitations(ctx: TenantIsolationContext) -> httpx.Response:
+    return await ctx.client.get(
+        f"/api/v1/orgs/{ctx.org_b.id}/invitations", headers=ctx.user_a_headers
+    )
+
+
 async def _create_invitation(ctx: TenantIsolationContext) -> httpx.Response:
     return await ctx.client.post(
         f"/api/v1/orgs/{ctx.org_b.id}/invitations",
@@ -175,6 +181,7 @@ _CASES: list[tuple[str, RequestFn, tuple[int, ...]]] = [
     ("GET /orgs/{org_id}/members", _list_members, (403,)),
     ("PATCH /orgs/{org_id}/members/{membership_id}", _update_member_role, (404,)),
     ("DELETE /orgs/{org_id}/members/{membership_id}", _remove_member, (404,)),
+    ("GET /orgs/{org_id}/invitations", _list_invitations, (403,)),
     ("POST /orgs/{org_id}/invitations", _create_invitation, (403,)),
     ("POST /billing/checkout-session", _checkout_session, (403,)),
     ("POST /billing/portal-session", _portal_session, (403,)),

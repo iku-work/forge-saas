@@ -58,3 +58,23 @@ class InvitationPreview(AppBaseModel):
     email: str
     role: MemberRole
     expires_at: datetime
+
+
+class InvitationPublic(AppBaseModel):
+    """One pending invitation, as the org's own admins see it.
+
+    Field-by-field rather than from_attributes over the whole Invitation row
+    on purpose: that row carries `token_hash`, and the accept URL's security
+    rests on the token being unguessable. An explicit allowlist means a
+    future column added to the model can't ride out to the client the way
+    `model_config = ConfigDict(from_attributes=True)` plus a wildcard would
+    (§0.4). `expires_at` is here so the caller can render an unaccepted-but-
+    expired invite as expired rather than as still-live."""
+
+    id: UUID
+    org_id: UUID
+    email: str
+    role: MemberRole
+    invited_by: UUID
+    expires_at: datetime
+    created_at: datetime

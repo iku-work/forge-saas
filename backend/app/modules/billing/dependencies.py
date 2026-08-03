@@ -100,9 +100,7 @@ async def resolve_org_subscription(
         # non-entitled subscription: it costs one query on a cache miss and
         # keeps the cached payload independent of the (time-dependent)
         # entitlement decision above.
-        plan_row = (
-            await PlanRepository(session).get_by_id(row.plan_id) if row is not None else None
-        )
+        plan_row = await PlanRepository(session).get_by_id(row.plan_id) if row is not None else None
         return {
             "subscription": cache.dump(row) if row is not None else None,
             "plan": cache.dump(plan_row) if plan_row is not None else None,

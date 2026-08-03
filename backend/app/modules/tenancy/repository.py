@@ -222,6 +222,42 @@ class InvitationRepository:
         await self.session.flush()
         return invitation
 
+    async def list_pending_for_org(
+        self, org_id: UUID, after: UUID | None = None, limit: int = DEFAULT_PAGE_SIZE
+    ) -> tuple[list[Invitation], UUID | None]:
+        # "Pending" is accepted_at IS NULL only -- expired-but-unaccepted rows
+        # stay in the list deliberately. The caller is the org's admin screen,
+        # and an expired invite is exactly the row someone needs to see in
+        # order to re-send it; hiding it would make an unanswered invitation
+        # silently vanish. InvitationPublic carries expires_at so the UI can
+        # mark it expired.
+        #
+        # Cursor pagination per §0.3, same hand-rolled shape as
+        # MembershipRepository.list_for_org above (Invitation isn't a
+        # BaseRepository subclass either -- see the module docstring).
+        capped_limit = min(limit, MAX_PAGE_SIZE)
+        m = cast("Any", Invitation)
+        stmt = (
+            select(Invitation)
+            .where(m.org_id == org_id, m.accepted_at.is_(None))
+            .order_by(m.created_at.desc(), m.id.desc())
+            .limit(capped_limit + 1)
+        )
+        if after is not None:
+            # Scoped to this org, so a cursor naming another org's invitation
+            # is treated as "no cursor" rather than leaking its position
+            # (mirrors NotificationRepository.list_for_user's anchor lookup).
+            anchor_stmt = select(Invitation).where(m.id == after, m.org_id == org_id)
+            anchor = (await self.session.execute(anchor_stmt)).scalar_one_or_none()
+            if anchor is not None:
+                stmt = stmt.where(tuple_(m.created_at, m.id) < (anchor.created_at, anchor.id))
+        result = await self.session.execute(stmt)
+        items = list(result.scalars().all())
+        page = items[:capped_limit]
+        # `page` guards a non-positive capped_limit -- see list_for_org.
+        next_cursor = page[-1].id if page and len(items) > capped_limit else None
+        return page, next_cursor
+
     async def get_by_token_hash(self, token_hash: str) -> Invitation | None:
         m = cast("Any", Invitation)
         stmt = select(Invitation).where(

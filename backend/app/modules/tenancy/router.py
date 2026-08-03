@@ -39,6 +39,7 @@ from app.modules.tenancy.models import Membership, Organization
 from app.modules.tenancy.schemas import (
     CreateOrgRequest,
     InvitationPreview,
+    InvitationPublic,
     InviteRequest,
     MembershipPublic,
     OrganizationPublic,
@@ -211,6 +212,44 @@ async def create_invitation(  # noqa: PLR0913 — redis (for the inviter notific
     await TenancyService(session).invite(org_id, actor, body.email, body.role, redis)
     await session.commit()
     return Envelope(data=None, meta=Meta(request_id=_request_id(request)))
+
+
+@router.get("/orgs/{org_id}/invitations")
+@api_limit
+async def list_invitations(  # noqa: PLR0913 — cursor pagination (§0.3) needs after+limit on top of the usual params
+    request: Request,
+    org_id: UUID,
+    membership: Annotated[  # noqa: ARG001 — required to gate on MEMBERS_MANAGE; org comes from path
+        Membership, Depends(require_org_permission(Permission.MEMBERS_MANAGE))
+    ],
+    session: Annotated[AsyncSession, Depends(get_session)],
+    after: Annotated[UUID | None, Query()] = None,
+    limit: Annotated[int, Query(ge=1, le=100)] = 20,
+) -> Envelope[list[InvitationPublic]]:
+    # MEMBERS_MANAGE, not the MEMBERS_READ that gates the member list: this
+    # response is keyed on the invitee's *email address*, which MembershipPublic
+    # deliberately never exposes, and it is the management view of a flow only
+    # MEMBERS_MANAGE can start (see create_invitation above).
+    invitations, next_cursor = await TenancyService(session).list_pending_invitations(
+        org_id, after, limit
+    )
+    data = [
+        InvitationPublic(
+            id=invitation.id,
+            org_id=invitation.org_id,
+            email=invitation.email,
+            role=invitation.role,
+            invited_by=invitation.invited_by,
+            expires_at=invitation.expires_at,
+            created_at=invitation.created_at,
+        )
+        for invitation in invitations
+    ]
+    meta = Meta(
+        request_id=_request_id(request),
+        next_cursor=str(next_cursor) if next_cursor is not None else None,
+    )
+    return Envelope(data=data, meta=meta)
 
 
 @router.get("/invitations/{token}")

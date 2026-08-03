@@ -52,7 +52,11 @@ from app.modules.gdpr.models import ConsentRecord
 from app.modules.notifications.models import Notification
 from app.modules.storage.models import StoredFile
 from app.modules.tenancy.models import Organization, OrgFeatureFlag
-from app.modules.tenancy.repository import MembershipRepository, OrganizationRepository
+from app.modules.tenancy.repository import (
+    InvitationRepository,
+    MembershipRepository,
+    OrganizationRepository,
+)
 from tests.fixtures.query_counter import QueryLog, count_queries
 
 _PASSWORD = "Correct-Horse9"
@@ -73,6 +77,7 @@ BUDGETS: dict[str, int] = {
     # Org-scoped: + the org row and the membership (the tenant-isolation
     # check, deliberately never cached -- see get_current_org).
     "list_members": 4,
+    "list_invitations": 4,
     "list_notifications": 4,
     # + the org's subscription/plan behind the feature-flag map.
     "list_feature_flags": 5,
@@ -267,6 +272,21 @@ async def _seed_members(world: World, n: int) -> None:
     await world.session.commit()
 
 
+async def _seed_invitations(world: World, n: int) -> None:
+    invitations = InvitationRepository(world.session)
+    for _ in range(n):
+        await invitations.create(
+            invitation_id=uuid4(),
+            org_id=world.org.id,
+            email=f"invitee-{uuid4().hex[:8]}@example.com",
+            role=MemberRole.MEMBER,
+            token_hash=uuid4().hex,
+            invited_by=world.owner.id,
+            expires_at=utcnow() + timedelta(days=7),
+        )
+    await world.session.commit()
+
+
 async def _seed_notifications(world: World, n: int) -> None:
     for _ in range(n):
         world.session.add(
@@ -396,10 +416,7 @@ class ListEndpoint:
 
 
 # Every `list_`-style GET route in the app, which
-# test_every_list_route_has_a_budget keeps true. (T-243's brief also names
-# "invitations" -- the tenancy module creates, previews and accepts them, but
-# has no route that *lists* them; the meta-check picks one up the day it is
-# added.)
+# test_every_list_route_has_a_budget keeps true.
 ENDPOINTS: list[ListEndpoint] = [
     ListEndpoint("list_sessions", "/api/v1/auth/sessions", _seed_sessions, page_cap=None),
     ListEndpoint(
@@ -420,6 +437,11 @@ ENDPOINTS: list[ListEndpoint] = [
         "list_members",
         lambda w: f"/api/v1/orgs/{w.org.id}/members",
         _seed_members,
+    ),
+    ListEndpoint(
+        "list_invitations",
+        lambda w: f"/api/v1/orgs/{w.org.id}/invitations",
+        _seed_invitations,
     ),
     ListEndpoint("list_notifications", "/api/v1/notifications", _seed_notifications),
     ListEndpoint(

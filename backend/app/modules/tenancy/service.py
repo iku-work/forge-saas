@@ -216,6 +216,11 @@ class TenancyService:
     ) -> tuple[list[Membership], UUID | None]:
         return await self._memberships.list_for_org(org_id, after=after, limit=limit)
 
+    async def list_pending_invitations(
+        self, org_id: UUID, after: UUID | None, limit: int
+    ) -> tuple[list[Invitation], UUID | None]:
+        return await self._invitations.list_pending_for_org(org_id, after=after, limit=limit)
+
     async def preview_invitation(self, token: str) -> tuple[Invitation, Organization]:
         # Read-only counterpart to accept_invitation: verifies the same two
         # checks (signature+TTL, then the DB row) but never marks the

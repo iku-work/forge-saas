@@ -5787,8 +5787,11 @@ For each of `packages/{ui,api-client,types,hooks,validation,utils}`:
 
 **Done when**
 
-- [x] Constant-query property holds on every list endpoint — 14 endpoints,
-      each measured at 3 rows and again at 30
+- [x] Constant-query property holds on every list endpoint — 15 endpoints,
+      each measured at 3 rows and again at 30. `GET /orgs/{org_id}/invitations`
+      (MEMBERS_MANAGE, cursor-paginated) was built here: the brief named an
+      invitations list, but the tenancy module only created, previewed and
+      accepted them
 - [x] Every N+1 found is fixed and stays covered — three in the admin module
       (audit feed, user detail, dashboard payment failures); all three were
       bare-UUID lookups with no ORM relationship to `selectinload`, so each is

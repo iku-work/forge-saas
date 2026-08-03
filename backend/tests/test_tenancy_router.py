@@ -496,6 +496,177 @@ async def test_create_invitation_member_without_permission_returns_403(
     assert response.status_code == 403
 
 
+# --- GET /orgs/{org_id}/invitations -------------------------------------------------
+
+
+async def _add_invitation(  # noqa: PLR0913 — the three keyword knobs (email, accepted, expiry) are what the cases below vary
+    session: AsyncSession,
+    org: Organization,
+    inviter: User,
+    *,
+    email: str | None = None,
+    accepted: bool = False,
+    expires_in: timedelta = timedelta(days=7),
+) -> Invitation:
+    invitation = Invitation(
+        org_id=org.id,
+        email=email or f"invitee-{uuid4().hex[:8]}@example.com",
+        role=MemberRole.MEMBER,
+        token_hash=uuid4().hex,
+        invited_by=inviter.id,
+        expires_at=datetime.now(UTC) + expires_in,
+        accepted_at=datetime.now(UTC) if accepted else None,
+    )
+    session.add(invitation)
+    await session.commit()
+    return invitation
+
+
+async def test_list_invitations_owner_sees_pending_invitations(
+    client: httpx.AsyncClient, session: AsyncSession, user_a: User, org_a: Organization
+) -> None:
+    await _add_invitation(session, org_a, user_a, email="pending@example.com")
+
+    response = await client.get(
+        f"/api/v1/orgs/{org_a.id}/invitations", headers=_auth_header(user_a)
+    )
+
+    assert response.status_code == 200
+    data = response.json()["data"]
+    assert [i["email"] for i in data] == ["pending@example.com"]
+    assert data[0]["role"] == "member"
+    assert data[0]["invited_by"] == str(user_a.id)
+
+
+async def test_list_invitations_never_exposes_the_token_hash(
+    client: httpx.AsyncClient, session: AsyncSession, user_a: User, org_a: Organization
+) -> None:
+    """The accept URL's whole security rests on the token being unguessable
+    -- InvitationPublic allowlists its fields for this reason (§0.4)."""
+    invitation = await _add_invitation(session, org_a, user_a)
+
+    response = await client.get(
+        f"/api/v1/orgs/{org_a.id}/invitations", headers=_auth_header(user_a)
+    )
+
+    assert response.status_code == 200
+    assert "token_hash" not in response.json()["data"][0]
+    assert invitation.token_hash not in response.text
+
+
+async def test_list_invitations_excludes_accepted_ones(
+    client: httpx.AsyncClient, session: AsyncSession, user_a: User, org_a: Organization
+) -> None:
+    await _add_invitation(session, org_a, user_a, email="joined@example.com", accepted=True)
+    await _add_invitation(session, org_a, user_a, email="waiting@example.com")
+
+    response = await client.get(
+        f"/api/v1/orgs/{org_a.id}/invitations", headers=_auth_header(user_a)
+    )
+
+    assert [i["email"] for i in response.json()["data"]] == ["waiting@example.com"]
+
+
+async def test_list_invitations_still_shows_an_expired_invitation(
+    client: httpx.AsyncClient, session: AsyncSession, user_a: User, org_a: Organization
+) -> None:
+    """Deliberate: an expired-but-unaccepted invite is exactly the row an
+    admin needs to see in order to re-send it, so it stays in the list with
+    its expires_at in the past rather than silently vanishing."""
+    await _add_invitation(
+        session, org_a, user_a, email="lapsed@example.com", expires_in=timedelta(days=-1)
+    )
+
+    response = await client.get(
+        f"/api/v1/orgs/{org_a.id}/invitations", headers=_auth_header(user_a)
+    )
+
+    data = response.json()["data"]
+    assert [i["email"] for i in data] == ["lapsed@example.com"]
+    assert datetime.fromisoformat(data[0]["expires_at"]) < datetime.now(UTC)
+
+
+async def test_list_invitations_member_without_manage_permission_returns_403(
+    client: httpx.AsyncClient, session: AsyncSession, org_a: Organization
+) -> None:
+    # MEMBERS_READ (which a plain member has, and which gates the member
+    # list) is deliberately not enough: this response is keyed on invitee
+    # email addresses.
+    member, _ = await _add_member(session, org_a)
+
+    response = await client.get(
+        f"/api/v1/orgs/{org_a.id}/invitations", headers=_auth_header(member)
+    )
+
+    assert response.status_code == 403
+
+
+async def test_list_invitations_cross_tenant_returns_403(
+    client: httpx.AsyncClient, user_a: User, org_b: Organization
+) -> None:
+    response = await client.get(
+        f"/api/v1/orgs/{org_b.id}/invitations", headers=_auth_header(user_a)
+    )
+
+    assert response.status_code == 403
+
+
+async def test_list_invitations_requires_auth(
+    client: httpx.AsyncClient, org_a: Organization
+) -> None:
+    response = await client.get(f"/api/v1/orgs/{org_a.id}/invitations")
+
+    assert response.status_code == 401
+
+
+async def test_list_invitations_paginates_by_cursor(
+    client: httpx.AsyncClient, session: AsyncSession, user_a: User, org_a: Organization
+) -> None:
+    for _ in range(3):
+        await _add_invitation(session, org_a, user_a)
+
+    first = await client.get(
+        f"/api/v1/orgs/{org_a.id}/invitations?limit=2", headers=_auth_header(user_a)
+    )
+    assert first.status_code == 200
+    first_page = first.json()
+    assert len(first_page["data"]) == 2
+    cursor = first_page["meta"]["next_cursor"]
+    assert cursor is not None
+
+    second = await client.get(
+        f"/api/v1/orgs/{org_a.id}/invitations?limit=2&after={cursor}",
+        headers=_auth_header(user_a),
+    )
+    assert second.status_code == 200
+    second_page = second.json()
+    assert len(second_page["data"]) == 1
+    assert second_page["meta"]["next_cursor"] is None
+    # No overlap between the pages -- the cursor really advanced.
+    assert {i["id"] for i in first_page["data"]}.isdisjoint({i["id"] for i in second_page["data"]})
+
+
+async def test_list_invitations_ignores_a_cursor_from_another_org(  # noqa: PLR0913 — needs both orgs' users
+    client: httpx.AsyncClient,
+    session: AsyncSession,
+    user_a: User,
+    user_b: User,
+    org_a: Organization,
+    org_b: Organization,
+) -> None:
+    """A cursor naming another org's invitation reads as 'no cursor' rather
+    than leaking where that row sits in the ordering."""
+    await _add_invitation(session, org_a, user_a, email="ours@example.com")
+    theirs = await _add_invitation(session, org_b, user_b)
+
+    response = await client.get(
+        f"/api/v1/orgs/{org_a.id}/invitations?after={theirs.id}", headers=_auth_header(user_a)
+    )
+
+    assert response.status_code == 200
+    assert [i["email"] for i in response.json()["data"]] == ["ours@example.com"]
+
+
 # --- GET /invitations/{token} -------------------------------------------------------
 
 
