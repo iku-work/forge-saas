@@ -5752,9 +5752,9 @@ For each of `packages/{ui,api-client,types,hooks,validation,utils}`:
 
 **Done when**
 
-- [ ] Budgets committed for entry + every lazy chunk
-- [ ] `stats.html` artifact on every CI build
-- [ ] Gate failure verified once, runbook written
+- [x] Budgets committed for entry + every lazy chunk
+- [x] `stats.html` artifact on every CI build
+- [x] Gate failure verified once, runbook written
 
 ---
 

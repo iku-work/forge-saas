@@ -2,7 +2,14 @@ import { sentryVitePlugin } from "@sentry/vite-plugin";
 import tailwindcss from "@tailwindcss/vite";
 import { tanstackRouter } from "@tanstack/router-plugin/vite";
 import react from "@vitejs/plugin-react";
+import { visualizer } from "rollup-plugin-visualizer";
 import { defineConfig } from "vite";
+
+// ANALYZE=true (the `build:analyze` script, T-242) emits dist/stats.html so a
+// bundle-budget failure is diagnosable straight from the CI artifact without
+// reproducing locally. An env flag rather than a CLI flag because vite's cac
+// parser hard-errors on unknown options like `--analyze`.
+const analyze = process.env.ANALYZE === "true";
 
 export default defineConfig({
   // tanstackRouter must run before react() — it generates routeTree.gen.ts
@@ -25,6 +32,16 @@ export default defineConfig({
           }),
         ]
       : []),
+    ...(analyze
+      ? [
+          visualizer({
+            filename: "dist/stats.html",
+            gzipSize: true,
+            brotliSize: true,
+            template: "treemap",
+          }),
+        ]
+      : []),
   ],
   // @forge/api-client's getApiBaseUrl() reads this instead of
   // import.meta.env.VITE_API_URL -- see that file's comment for why
@@ -40,6 +57,17 @@ export default defineConfig({
   build: {
     sourcemap: true,
     target: "es2022",
+    rollupOptions: {
+      output: {
+        // Stable, distinctive name for the always-loaded entry chunk so the
+        // T-242 size-limit budget can target `entry-*.js` unambiguously.
+        // rollup's default fallback name for this chunk is "index", which it
+        // also hands to the anonymous shared vendor chunks; renaming only the
+        // entry leaves those as `index-*.js` (budgeted as a group) and, unlike
+        // a manualChunks split, doesn't perturb the actual chunk graph.
+        entryFileNames: "assets/entry-[hash].js",
+      },
+    },
   },
   server: {
     proxy: {

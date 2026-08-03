@@ -5,6 +5,20 @@ template keep their own changes in `CHANGELOG.product.md` (see
 [TEMPLATE.md](TEMPLATE.md)).
 
 ## [Unreleased]
+### Added
+- **Per-route bundle budgets gate CI (T-242).** A new `bundle-budget` job
+  builds `apps/web` and runs [`size-limit`](https://github.com/ai/size-limit)
+  against explicit gzipped budgets committed in `apps/web/package.json` — the
+  entry chunk (held near ~150 KB), the shared vendor chunk, every lazy route
+  chunk, each i18n namespace, and total CSS. Raising a budget is a reviewed
+  edit to that file in the same PR. A meta-check fails the build if any built
+  chunk has no budget (new routes auto-split into new chunks), and every run
+  uploads a `rollup-plugin-visualizer` treemap (`dist/stats.html`, via
+  `ANALYZE=true pnpm build`) as a CI artifact so regressions are diagnosable
+  without reproducing locally. The Vite entry chunk is renamed `entry-*` so
+  its budget targets it unambiguously. Runbook:
+  [`docs/runbooks/bundle-budget.md`](docs/runbooks/bundle-budget.md).
+
 ### Changed
 - **The member list and the notification centre are virtualized (T-241).**
   Both render a constant number of DOM nodes regardless of how many rows are

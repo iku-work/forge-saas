@@ -284,6 +284,103 @@ jobs:
           buildScriptName: storybook:build
           exitZeroOnChanges: true
 
+  # T-242: per-route bundle budgets. Builds the SPA exactly as the `build`
+  # job does (same backend-boot -> client-gen -> vite build), then fails the
+  # PR if any chunk outgrew its committed size-limit budget. Raising a budget
+  # is a deliberate edit to apps/web/package.json in the same PR -- that
+  # reviewed edit is the whole point (docs/runbooks/bundle-budget.md).
+  bundle-budget:
+    needs: lint
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: backend/pyproject.toml
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: pnpm
+
+      - name: Install frontend dependencies
+        run: pnpm install --frozen-lockfile
+
+      # Client generation only needs /openapi.json -- same host-side boot as
+      # the storybook/build jobs; .env.test's dummy credentials are enough to
+      # serve the schema without touching Postgres/Redis.
+      - name: Start backend for OpenAPI schema
+        working-directory: backend
+        run: |
+          pip install -e .
+          cp .env.test .env
+          nohup uvicorn app.main:app --host 0.0.0.0 --port 8000 > uvicorn.log 2>&1 &
+          for i in $(seq 1 30); do
+            curl -sf http://localhost:8000/health && exit 0
+            sleep 1
+          done
+          echo "backend did not become ready" >&2
+          cat uvicorn.log
+          exit 1
+
+      - name: Generate API client from live OpenAPI schema
+        run: pnpm --filter @forge/api-client generate
+
+      # ANALYZE=true also emits dist/stats.html (rollup-plugin-visualizer) so a
+      # budget failure is diagnosable straight from the uploaded artifact.
+      # VITE_API_URL="" matches the build job (relative same-origin API base).
+      - name: Build SPA + bundle stats
+        run: pnpm build
+        env:
+          VITE_API_URL: ""
+          ANALYZE: "true"
+
+      # Every built chunk must be claimed by a budget: a new route/namespace
+      # chunk with no size-limit entry fails here, so growth can't slip in
+      # under an unmeasured filename. Mirrors the T-049/T-231 meta-check style.
+      - name: Enforce every chunk has a budget
+        run: |
+          python3 - <<'PY'
+          import json, sys, fnmatch, pathlib
+          root = pathlib.Path("apps/web")
+          cfg = json.loads((root / "package.json").read_text())["size-limit"]
+          globs = []
+          for entry in cfg:
+              p = entry["path"]
+              globs.extend(p if isinstance(p, list) else [p])
+          assets = root / "dist" / "assets"
+          orphans = []
+          for f in sorted(assets.glob("*.js")) + sorted(assets.glob("*.css")):
+              rel = f.relative_to(root).as_posix()
+              if not any(fnmatch.fnmatch(rel, g) for g in globs):
+                  orphans.append(rel)
+          if orphans:
+              print("Built chunks with no size-limit budget (add one to "
+                    "apps/web/package.json's \"size-limit\"):", file=sys.stderr)
+              for o in orphans:
+                  print(f"  - {o}", file=sys.stderr)
+              sys.exit(1)
+          print(f"All {len(list(assets.glob('*.js'))) + len(list(assets.glob('*.css')))} chunks are budgeted.")
+          PY
+
+      # Prints the per-chunk size-vs-budget table and fails on any overage.
+      - name: size-limit — per-route bundle budgets
+        run: pnpm --filter web size
+
+      - name: Upload bundle stats (treemap)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: bundle-stats
+          path: apps/web/dist/stats.html
+          retention-days: 30
+
   security:
     needs: lint
     runs-on: ubuntu-latest

@@ -7,7 +7,8 @@
     },
     "build": {
       "dependsOn": ["gen-client", "^build"],
-      "outputs": ["dist/**"]
+      "outputs": ["dist/**"],
+      "env": ["SENTRY_AUTH_TOKEN", "SENTRY_ORG", "SENTRY_PROJECT", "VITE_SENTRY_RELEASE", "VITE_API_URL", "ANALYZE"]
     },
     "test": {
       "dependsOn": ["^build"],
