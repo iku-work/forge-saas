@@ -95,3 +95,7 @@ instead of per-PR.
 | 2026-08-03 | 2357219 | browse | - | - | PASS |
 | 2026-08-03 | 2357219 | presign | - | - | PASS |
 | 2026-08-03 | 2357219 | mixed | - | - | FAIL |
+| 2026-08-04 | b62ee0f | login-burst | - | - | FAIL |
+| 2026-08-04 | b62ee0f | browse | - | - | PASS |
+| 2026-08-04 | b62ee0f | presign | - | - | PASS |
+| 2026-08-04 | b62ee0f | mixed | - | - | FAIL |
