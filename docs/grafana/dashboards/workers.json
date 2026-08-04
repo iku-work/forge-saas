@@ -82,6 +82,46 @@
         "mode": "markdown",
         "content": "ARQ has no official Prometheus instrumentation (see T-203). Per-job duration and failure-rate panels are deferred until a future task adds `forge_arq_job_duration_seconds` / `forge_arq_job_failures_total` collectors — job-level detail is currently only available as OpenTelemetry spans (`arq.<job_name>`, T-203), not Prometheus metrics."
       }
+    },
+    {
+      "id": 5,
+      "type": "timeseries",
+      "title": "Key rotation — rows remaining",
+      "description": "T-245. Published to Redis by the rotation job's own process and served by the backend, so this has data wherever the job runs. Flat at 0 when no rotation is in flight; stuck above 0 means an interrupted run — see docs/runbooks/encryption-key-rotation.md.",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 16 },
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": { "defaults": { "unit": "short" }, "overrides": [] },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "expr": "forge_reencrypt_remaining",
+          "legendFormat": "rows left to scan",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "type": "timeseries",
+      "title": "Key rotation — throughput and batch latency",
+      "description": "T-245. Unlike the gauge, these live in the registry of whichever process runs the job — they only have data if that process is itself scraped.",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 16 },
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": { "defaults": { "unit": "short" }, "overrides": [] },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "expr": "rate(forge_reencrypt_rows_total[5m])",
+          "legendFormat": "{{table}}.{{column}} rows/s",
+          "refId": "A"
+        },
+        {
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "expr": "histogram_quantile(0.95, sum(rate(forge_reencrypt_batch_seconds_bucket[5m])) by (le))",
+          "legendFormat": "p95 batch seconds",
+          "refId": "B"
+        }
+      ]
     }
   ]
 }

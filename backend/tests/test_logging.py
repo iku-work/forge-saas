@@ -247,3 +247,26 @@ def test_stdlib_custom_level_without_loguru_match_falls_back_to_levelno(
 
     record = _last_json_line(capsys.readouterr().err)
     assert record["message"] == "custom level message"
+
+
+@pytest.mark.usefixtures("engine")
+def test_nothing_earlier_in_the_suite_left_app_loggers_disabled() -> None:
+    """Canary for `logging.config` calls that take disable_existing_loggers=True.
+
+    That default sets `disabled = True` on every logger already created in the
+    process — every `app.*` logger — permanently and silently, so no
+    application log record is emitted for the rest of the session and pytest's
+    `caplog` comes back empty. It has bitten this suite twice:
+
+    - `alembic/env.py`'s `fileConfig()` (fixed there with
+      `disable_existing_loggers=False`; the `engine` fixture this test
+      requests is what runs migrations here), and
+    - `importlinter.cli.lint_imports()`'s `dictConfig()`, a third-party call
+      restored around in `tests/test_import_linter.py`.
+
+    This file sorts after both, so a third occurrence fails here rather than
+    turning some later caplog assertion into a mystery. `app.core.encrypted_type`
+    is a real witness: its logger exists from the moment conftest imports the app.
+    """
+    assert logging.getLogger("app.core.encrypted_type").disabled is False
+    assert logging.getLogger("app.workers.jobs.encryption").disabled is False

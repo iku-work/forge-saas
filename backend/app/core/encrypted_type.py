@@ -18,11 +18,13 @@ ENCRYPTION_KEY / ENCRYPTION_KEY_OLD are read through app.core.config.get_setting
 Generate a key:
     python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
 
-Key rotation workflow:
+Key rotation workflow (the full operational procedure, including crash
+recovery and rollback at each step, is docs/runbooks/encryption-key-rotation.md):
     1. Generate a new key.
     2. Set ENCRYPTION_KEY=<new_key>, ENCRYPTION_KEY_OLD=<current_key>. Deploy.
     3. New writes use the new key; old rows still decrypt via the old key.
-    4. Run reencrypt_column_job (app.workers.jobs.encryption) per encrypted column.
+    4. Run rotate_encryption_keys_job (app.workers.jobs.encryption), which
+       discovers and walks every EncryptedString column on its own.
     5. Once every row is migrated, remove ENCRYPTION_KEY_OLD.
 """
 

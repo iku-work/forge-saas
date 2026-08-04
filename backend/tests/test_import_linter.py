@@ -15,7 +15,9 @@ real app/ tree. sys.path / sys.modules are restored after every test since
 `lint_imports()` mutates sys.path as a side effect.
 """
 
+import logging
 import sys
+from collections.abc import Generator
 from pathlib import Path
 
 import pytest
@@ -24,6 +26,29 @@ from importlinter.cli import lint_imports
 BACKEND_DIR = Path(__file__).parent.parent
 EXIT_STATUS_SUCCESS = 0
 EXIT_STATUS_ERROR = 1
+
+
+@pytest.fixture(autouse=True)
+def _restore_logger_disabled_flags() -> Generator[None]:
+    # lint_imports() configures its own logging via logging.config.dictConfig()
+    # (importlinter/cli.py::_configure_logging), which takes the stdlib default
+    # disable_existing_loggers=True and so sets `disabled = True` on every
+    # logger already created in this process -- every app.* logger included --
+    # for the rest of the session. Left unrestored, no application log record
+    # is emitted in any test that runs after this file, pytest's `caplog`
+    # included, and the failure is silent. Snapshot/restore, like conftest's
+    # _reset_breakers and _reset_fernet_cache do for their own global state.
+    manager = logging.getLogger().manager
+    was_disabled = {
+        name: existing.disabled
+        for name, existing in manager.loggerDict.items()
+        if isinstance(existing, logging.Logger)
+    }
+    yield
+    for name, disabled in was_disabled.items():
+        existing = manager.loggerDict.get(name)
+        if isinstance(existing, logging.Logger):
+            existing.disabled = disabled
 
 
 @pytest.fixture

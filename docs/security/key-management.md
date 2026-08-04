@@ -64,12 +64,19 @@ any of several keys while only ever encrypting with the first
 2. Set `ENCRYPTION_KEY=<new>`, `ENCRYPTION_KEY_OLD=<current>`. Deploy.
    New writes use the new key; existing rows still decrypt via the old
    one — no read/write interruption.
-3. Run the re-encryption job per encrypted column
-   (`app.workers.jobs.encryption`, `reencrypt_column_job`) to migrate
-   existing rows onto the new key.
+3. Run the re-encryption job (`app.workers.jobs.encryption`,
+   `rotate_encryption_keys_job`) to migrate existing rows onto the new
+   key. It discovers every `EncryptedString` column itself, checkpoints
+   into a `JobRecord` so a killed worker resumes where it stopped, and
+   supports a dry run that only counts the work.
 4. Once every row is confirmed migrated, remove `ENCRYPTION_KEY_OLD` and
    deploy again. Skipping this step leaves the old key valid indefinitely
    as a decryption fallback, which defeats the point of rotating.
+
+The step-by-step operational procedure — commands, what each step should
+print, how to recover from a mid-run crash, and the rollback at every
+step — lives in
+[`docs/runbooks/encryption-key-rotation.md`](../runbooks/encryption-key-rotation.md).
 
 `ENCRYPTION_KEY_OLD` accepts a comma-separated list, so more than one
 prior key can be in flight during a multi-step migration if needed

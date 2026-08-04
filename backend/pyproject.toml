@@ -112,3 +112,11 @@ markers = [
 
 [tool.coverage.run]
 core = "sysmon"
+
+[tool.coverage.report]
+# Keeps coverage.py's own defaults (`pragma: no cover`) and adds the CLI
+# guard: `python -m app.core.seed` / `.migrations` / `.workers.jobs.encryption`
+# each end in a two-line entrypoint that only delegates to a function the
+# suite calls directly. Counting those lines as missed would mean a module
+# can never be fully covered just for having a CLI.
+exclude_also = ['if __name__ == "__main__":']

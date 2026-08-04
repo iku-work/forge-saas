@@ -2,7 +2,7 @@
 JobRecord (T-034): a queryable trail of ARQ job executions, separate from
 ARQ's own Redis-only result storage (which expires and isn't queryable by
 org or job_type). Not org-scoped via OrgScopedMixin: org_id is nullable
-because system jobs (e.g. reencrypt_column_job) have no org, mirroring
+because system jobs (e.g. rotate_encryption_keys_job) have no org, mirroring
 AuditEvent's org_id (app.modules.audit.models) — present for filtering,
 but not a FK so a row survives org deletion.
 """

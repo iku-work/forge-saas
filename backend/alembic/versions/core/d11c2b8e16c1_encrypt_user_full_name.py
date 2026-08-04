@@ -29,10 +29,10 @@ def upgrade() -> None:
     # exactly as they are and keep reading back correctly, since
     # EncryptedString.process_result_value passes through legacy plaintext
     # unchanged (see app/core/encrypted_type.py). New writes are encrypted
-    # from here on; run reencrypt_column_job(table="user", column="full_name")
+    # from here on; run rotate_encryption_keys_job(only=["user.full_name"])
     # (app/workers/jobs/encryption.py) once, out-of-band, to migrate the
-    # pre-existing plaintext rows to ciphertext -- see the rotation workflow
-    # in encrypted_type.py's module docstring, step 4.
+    # pre-existing plaintext rows to ciphertext -- see
+    # docs/runbooks/encryption-key-rotation.md.
     op.alter_column(
         "user",
         "full_name",

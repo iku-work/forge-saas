@@ -6,6 +6,30 @@ template keep their own changes in `CHANGELOG.product.md` (see
 
 ## [Unreleased]
 ### Added
+- **Encryption key rotation is a real, resumable operation (T-245).** The
+  stub `reencrypt_column_job` is replaced by `rotate_encryption_keys_job`
+  (`backend/app/workers/jobs/encryption.py`), which discovers every
+  `EncryptedString` column from `SQLModel.metadata` rather than being told
+  which ones exist, walks each with keyset pagination on its primary key, and
+  commits each batch together with a `JobRecord` (T-034) checkpoint — so a
+  worker killed mid-run resumes from the last committed batch instead of
+  starting over.
+  - `--dry-run` counts what would move without writing anything at all (no
+    row updates, no `JobRecord`); `--only table.column` restricts a run;
+    `--throttle` / `--batch-size` bound the load a multi-hour scan puts on
+    the pool, defaulting to the new `ENCRYPTION_ROTATION_THROTTLE_SECONDS`
+    and `ENCRYPTION_ROTATION_BATCH_SIZE` settings. Driven as a one-off
+    process (`python -m app.workers.jobs.encryption`) because
+    `WorkerSettings.job_timeout` is 300s.
+  - New metrics: `forge_reencrypt_rows_total{table,column}`,
+    `forge_reencrypt_batch_seconds{table,column}`, and a
+    `forge_reencrypt_remaining` gauge the job publishes through Redis so the
+    backend's `/metrics` can serve it — the same split `forge_active_sessions`
+    already uses for worker-side numbers.
+  - `docs/runbooks/encryption-key-rotation.md` walks the whole operation:
+    key swap, dry run, rotation, mid-run crash recovery, the verification
+    scan that must show zero rows before `ENCRYPTION_KEY_OLD` is dropped, and
+    the rollback at every step.
 - **PgBouncer in transaction mode fronts Postgres in the production stack
   (T-244).** `docker-compose.prod.yml` gains a pinned
   `edoburu/pgbouncer:v1.25.2-p0` service; backend and worker connect through
@@ -36,6 +60,17 @@ template keep their own changes in `CHANGELOG.product.md` (see
     boots the actual production compose stack end to end.
 
 ### Fixed
+- **Application log records went silent after any in-process `logging.config`
+  call (found while building T-245).** `alembic/env.py` called `fileConfig()`
+  and `importlinter.cli.lint_imports()` calls `dictConfig()`, both with the
+  stdlib default `disable_existing_loggers=True` — which sets
+  `disabled = True` on every logger already created in the process, including
+  every `app.*` one, permanently and without a word. `env.py` now passes
+  `disable_existing_loggers=False`; the import-linter tests snapshot and
+  restore the flags around the third-party call. In the test suite this had
+  been swallowing every application log line (and every `caplog` assertion)
+  from the first DB-backed test onward; a canary test in `test_logging.py`
+  now fails if a third occurrence appears.
 - **`docker-compose.prod.yml` could not previously boot (T-244).** Its
   postgres service took credentials from `backend/.env`, which holds no
   `POSTGRES_*` keys, so the image refused to initialise its data directory —

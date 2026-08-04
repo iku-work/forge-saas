@@ -5880,9 +5880,28 @@ For each of `packages/{ui,api-client,types,hooks,validation,utils}`:
 
 **Done when**
 
-- [ ] Stub replaced; discovery, checkpointing, dry-run, metrics all tested
-- [ ] Runbook walks the full rotation including crash recovery
-- [ ] 100% coverage on the job module
+- [x] Stub replaced; discovery, checkpointing, dry-run, metrics all tested —
+      `reencrypt_column_job(table=, column=)` is gone, replaced by
+      `rotate_encryption_keys_job` (+ a `python -m app.workers.jobs.encryption`
+      CLI, since `WorkerSettings.job_timeout` is 300s and a real rotation
+      isn't a five-minute job). Discovery walks `SQLModel.metadata` and
+      refuses, with a named error, a composite PK or an encrypted PK — neither
+      can be keyset-paged. The scan goes through a Text-typed mirror `Table`
+      rather than `text()` with interpolated identifiers, so the job moves raw
+      tokens with SQLAlchemy still doing the quoting
+- [x] Runbook walks the full rotation including crash recovery —
+      `docs/runbooks/encryption-key-rotation.md`, five steps with expected
+      output and a rollback each. The step that mattered most to write down:
+      the verification scan *before* dropping `ENCRYPTION_KEY_OLD` must report
+      `rotated_total: 0`, because a row still on the old key when that key
+      goes away gets its ciphertext re-encrypted as if it were plaintext
+- [x] 100% coverage on the job module — 248 statements, 44 branches, 18 tests
+      against a real Postgres + Redis. Two things the spec didn't call out but
+      the build needed: the `forge_reencrypt_remaining` gauge is published
+      through Redis (T-202's `forge_active_sessions` split — the job's process
+      doesn't serve `/metrics`), and `[tool.coverage.report] exclude_also`
+      now drops `if __name__ == "__main__":`, which otherwise makes a module
+      with a CLI uncoverable by construction
 
 ---
 

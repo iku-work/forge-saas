@@ -24,7 +24,7 @@ from testcontainers.redis import RedisContainer
 from app.core.config import get_settings
 from app.workers.jobs.billing import send_dunning_email
 from app.workers.jobs.email import send_email
-from app.workers.jobs.encryption import reencrypt_column_job
+from app.workers.jobs.encryption import rotate_encryption_keys_job
 from app.workers.jobs.gdpr import export_user_data, purge_user_data
 from app.workers.main import WorkerSettings, worker_shutdown, worker_startup
 
@@ -77,7 +77,7 @@ async def test_enqueue_noop_job_executes_via_burst_worker(
 
 
 def test_worker_settings_has_agreed_shape() -> None:
-    assert reencrypt_column_job in WorkerSettings.functions
+    assert rotate_encryption_keys_job in WorkerSettings.functions
     assert send_email in WorkerSettings.functions
     assert purge_user_data in WorkerSettings.functions
     assert export_user_data in WorkerSettings.functions

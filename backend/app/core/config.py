@@ -124,6 +124,15 @@ class Settings(BaseSettings):
     ENCRYPTION_KEY: str
     ENCRYPTION_KEY_OLD: str = ""
 
+    # Key-rotation job (T-245, app.workers.jobs.encryption) — defaults for a
+    # run that isn't given explicit overrides. The throttle is an inter-batch
+    # sleep: at the default batch size it costs 0.1s per 500 rows scanned, and
+    # buys back the pool headroom (§0.9: max=20 connections) that an
+    # unthrottled multi-hour scan would otherwise hold against production
+    # traffic. See docs/runbooks/encryption-key-rotation.md.
+    ENCRYPTION_ROTATION_BATCH_SIZE: int = 500
+    ENCRYPTION_ROTATION_THROTTLE_SECONDS: float = 0.1
+
     # TLS enforcement — must be true in staging/prod (§0.6)
     FORCE_HTTPS: bool = False
 

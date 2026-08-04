@@ -17,7 +17,16 @@ from app.core.module_loader import get_modules
 config = context.config
 
 if config.config_file_name is not None:
-    fileConfig(config.config_file_name)
+    # disable_existing_loggers=False, against fileConfig's default: alembic.ini
+    # only declares root/sqlalchemy/alembic, and the default would set
+    # `disabled = True` on every *other* logger already created in this
+    # process -- i.e. every app.* logger. That is silent and permanent for the
+    # process's lifetime. It costs nothing in the migration CLI (a process
+    # that does nothing else), but the test suite runs migrations in-process
+    # from the `engine` fixture, so every app log line after that vanished --
+    # including from pytest's caplog, which made a caplog assertion pass on
+    # its own and fail in the full suite.
+    fileConfig(config.config_file_name, disable_existing_loggers=False)
 
 target_metadata = SQLModel.metadata
 

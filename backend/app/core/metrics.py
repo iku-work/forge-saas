@@ -31,6 +31,11 @@ if TYPE_CHECKING:
     from sqlalchemy.pool import QueuePool
 
 ACTIVE_SESSIONS_REDIS_KEY = "metrics:active_sessions"
+# T-245: same split as ACTIVE_SESSIONS_REDIS_KEY, for the same reason -- the
+# key-rotation job runs in a worker (or a one-off ops process), and neither
+# serves /metrics. The job publishes its countdown here; the gauge below
+# reads it back at scrape time.
+REENCRYPT_REMAINING_REDIS_KEY = "metrics:reencrypt_remaining"
 
 # arq.constants.default_queue_name -- the ZSET arq.connections.ArqRedis.enqueue_job
 # writes pending jobs into (score = when the job should run). Not a Redis
@@ -71,6 +76,24 @@ FORGE_EXTERNAL_CALL_SECONDS = Histogram(
     "Time spent in a resilience.resilient()-wrapped outbound call, including its own retries",
     ["integration"],
 )
+# T-245's key-rotation job (app.workers.jobs.encryption). Label cardinality is
+# bounded by the schema itself -- one series per EncryptedString column, of
+# which there are two today -- so table/column labels are safe here in a way
+# they would not be for, say, a per-row identifier.
+FORGE_REENCRYPT_ROWS_TOTAL = Counter(
+    "forge_reencrypt_rows_total",
+    "Rows rewritten onto the current primary ENCRYPTION_KEY",
+    ["table", "column"],
+)
+FORGE_REENCRYPT_REMAINING = Gauge(
+    "forge_reencrypt_remaining",
+    "Rows the running key-rotation job has not scanned yet (0 when no rotation is in flight)",
+)
+FORGE_REENCRYPT_BATCH_SECONDS = Histogram(
+    "forge_reencrypt_batch_seconds",
+    "Time to scan, re-encrypt and commit one batch of a key rotation",
+    ["table", "column"],
+)
 
 _sync_redis: redis.Redis | None = None
 
@@ -94,12 +117,21 @@ def _read_arq_queue_depth() -> float:
     return float(depth)
 
 
-def _read_active_sessions() -> float:
+def _read_published_gauge(key: str) -> float:
+    """Reads back a value another process published to Redis. Fails closed to 0.0."""
     try:
-        value = cast("bytes | None", _get_sync_redis().get(ACTIVE_SESSIONS_REDIS_KEY))
+        value = cast("bytes | None", _get_sync_redis().get(key))
     except redis.RedisError:
         return 0.0
     return float(value) if value is not None else 0.0
+
+
+def _read_active_sessions() -> float:
+    return _read_published_gauge(ACTIVE_SESSIONS_REDIS_KEY)
+
+
+def _read_reencrypt_remaining() -> float:
+    return _read_published_gauge(REENCRYPT_REMAINING_REDIS_KEY)
 
 
 def _read_db_pool_used() -> int:
@@ -114,6 +146,7 @@ FORGE_DB_POOL_USED.set_function(_read_db_pool_used)
 FORGE_DB_POOL_SIZE.set_function(_read_db_pool_size)
 FORGE_ARQ_QUEUE_DEPTH.set_function(_read_arq_queue_depth)
 FORGE_ACTIVE_SESSIONS.set_function(_read_active_sessions)
+FORGE_REENCRYPT_REMAINING.set_function(_read_reencrypt_remaining)
 
 
 def init_metrics(app: FastAPI) -> None:

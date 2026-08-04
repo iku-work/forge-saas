@@ -32,6 +32,9 @@ def test_metrics_endpoint_returns_prometheus_text_format() -> None:
     assert "forge_db_pool_used" in response.text
     assert "forge_arq_queue_depth" in response.text
     assert "forge_active_sessions" in response.text
+    # Published to Redis by the key-rotation job's own process (T-245), read
+    # back here -- same split as forge_active_sessions.
+    assert "forge_reencrypt_remaining" in response.text
     assert "forge_stripe_webhook_seconds" in response.text
     assert "forge_emails_sent_total" in response.text
     assert "forge_push_sent_total" in response.text
@@ -72,6 +75,7 @@ def test_gauges_fail_closed_to_zero_when_redis_unreachable(monkeypatch: pytest.M
 
     assert metrics_module._read_arq_queue_depth() == 0.0
     assert metrics_module._read_active_sessions() == 0.0
+    assert metrics_module._read_reencrypt_remaining() == 0.0
 
 
 def test_route_templates_used_not_raw_paths_for_high_cardinality_labels() -> None:

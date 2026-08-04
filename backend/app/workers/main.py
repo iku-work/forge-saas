@@ -16,7 +16,7 @@ from app.core.config import get_settings
 from app.core.db import dispose_engine
 from app.workers.jobs.billing import send_dunning_email
 from app.workers.jobs.email import send_email
-from app.workers.jobs.encryption import reencrypt_column_job
+from app.workers.jobs.encryption import rotate_encryption_keys_job
 from app.workers.jobs.gdpr import export_user_data, purge_user_data
 from app.workers.jobs.notifications import backfill_notification_preferences, send_push
 from app.workers.jobs.virus_scan import virus_scan
@@ -43,7 +43,7 @@ async def worker_shutdown(ctx: dict[str, Any]) -> None:
 
 class WorkerSettings:
     functions: ClassVar[list[WorkerCoroutine]] = [
-        reencrypt_column_job,
+        rotate_encryption_keys_job,
         send_email,
         purge_user_data,
         export_user_data,
