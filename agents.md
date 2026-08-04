@@ -5825,9 +5825,26 @@ For each of `packages/{ui,api-client,types,hooks,validation,utils}`:
 
 **Done when**
 
-- [ ] Prod stack runs all traffic through pgbouncer, migrations direct
-- [ ] Prepared-statement regression test passes
-- [ ] ADR documents the tradeoff with numbers
+- [x] Prod stack runs all traffic through pgbouncer, migrations direct —
+      `edoburu/pgbouncer:v1.25.2-p0`, `pool_mode=transaction`, and the new
+      `pgbouncer-prod-compose` CI job boots the real prod compose stack and
+      migrates over `MIGRATIONS_DATABASE_URL` while pooled traffic flows.
+      Two pre-existing defects had to be fixed for that stack to boot at all:
+      its postgres service had no `POSTGRES_PASSWORD` (now `.env.postgres`),
+      and both Python services' build context couldn't satisfy
+      `backend/Dockerfile`'s `COPY`s (now the repo root, as in CI)
+- [x] Prepared-statement regression test passes — `tests/test_pgbouncer.py`
+      runs a real pgbouncer in front of a real Postgres and asserts *both*
+      directions: the unconfigured engine deterministically fails with
+      `InvalidSQLStatementNameError`, the configured one doesn't. Three knobs
+      were needed, not the one the brief named: `statement_cache_size=0` plus
+      `prepared_statement_cache_size=0` (SQLAlchemy's own per-connection LRU,
+      which is the layer that actually fires) plus UUID statement names
+- [x] ADR documents the tradeoff with numbers — `docs/adr/0002-pgbouncer.md`:
+      +0.89ms median for the proxy hop, +0.65ms median for the disabled
+      statement cache, 20 app connections resolving to 4 Postgres backends,
+      and ~115 leaked prepared statements per server connection without
+      `server_reset_query_always`
 
 ---
 

@@ -1,4 +1,4 @@
-.PHONY: dev test lint migrate migrate-plan gen-client seed pentest-accounts seed-load load-test new-module install-hooks down update-from-template check-template-drift observe
+.PHONY: dev test lint migrate migrate-plan gen-client seed pentest-accounts seed-load load-test prod-compose-check new-module install-hooks down update-from-template check-template-drift observe
 
 TEMPLATE_VERSION ?= main
 
@@ -75,6 +75,30 @@ load-test: seed-load
 		echo "=== k6: $$script ==="; \
 		docker compose run --rm -T k6 run --summary-export=/results/$$script.json /scripts/$$script.js || exit 1; \
 	done
+
+# T-244: boots docker-compose.prod.yml -- the only stack that routes traffic
+# through pgbouncer -- and runs the same checks CI's pgbouncer-prod-compose
+# job does. Overwrites backend/.env, same as `cp .env.e2e .env` does for the
+# E2E stack; restore your own afterwards. The driver-level coverage lives in
+# backend/tests/test_pgbouncer.py and needs none of this.
+prod-compose-check:
+	cp backend/.env.prod-compose backend/.env
+	sed 's/change-me/postgres/' .env.postgres.example > .env.postgres
+	sed 's/change-me/postgres/' .env.pgbouncer.example > .env.pgbouncer
+	cp .env.postgres-exporter.example .env.postgres-exporter
+	docker compose -f docker-compose.prod.yml up -d --build postgres pgbouncer redis backend
+	@for i in $$(seq 1 30); do \
+		docker compose -f docker-compose.prod.yml exec -T backend \
+			python -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')" \
+			>/dev/null 2>&1 && break; \
+		sleep 2; \
+	done
+	docker compose -f docker-compose.prod.yml exec -T backend python -m app.core.migrations
+	docker compose -f docker-compose.prod.yml exec -T backend python -c \
+		"import urllib.request; r=urllib.request.urlopen('http://localhost:8000/health/ready'); print(r.status, r.read().decode())"
+	docker compose -f docker-compose.prod.yml exec -T pgbouncer sh -c \
+		'psql -h 127.0.0.1 -p 6432 -U "$$DB_USER" -d pgbouncer -c "SHOW POOLS"'
+	docker compose -f docker-compose.prod.yml down -v
 
 new-module:
 	@test -n "$(NAME)" || (echo "Usage: make new-module NAME=foo" && exit 1)

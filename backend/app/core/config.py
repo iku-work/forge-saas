@@ -2,7 +2,7 @@ from functools import lru_cache
 from typing import Literal, Self
 
 from cryptography.fernet import Fernet
-from pydantic import PostgresDsn, RedisDsn, model_validator
+from pydantic import PostgresDsn, RedisDsn, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from app.core.module_loader import is_enabled
@@ -13,6 +13,22 @@ class Settings(BaseSettings):
 
     # Database
     DATABASE_URL: PostgresDsn
+    # T-244: where `alembic upgrade` connects, when that must not be the same
+    # place the app connects. A transaction-mode pooler hands out a different
+    # server connection per transaction, which is incompatible with the
+    # session-scoped state migrations rely on -- Alembic takes a session-level
+    # advisory lock around the version table, and a multi-statement DDL
+    # migration expects its statements to land on one backend. None (the
+    # default) means "same as DATABASE_URL", which is exactly right in dev and
+    # on Render, where nothing sits between the app and Postgres. See
+    # docs/adr/0002-pgbouncer.md.
+    MIGRATIONS_DATABASE_URL: PostgresDsn | None = None
+    # T-244: true when DATABASE_URL points at pgbouncer in transaction mode.
+    # Turns off every layer of prepared-statement reuse in app.core.db (see
+    # build_connect_args there) -- server-side prepared statements can't
+    # survive a connection that gets re-assigned at every transaction
+    # boundary.
+    PGBOUNCER_ENABLED: bool = False
     REDIS_URL: RedisDsn
 
     # Auth
@@ -142,8 +158,49 @@ class Settings(BaseSettings):
     # see docs/adr/0001-security-baseline.md's V2.4.5 row.
     PASSWORD_PEPPER: str = ""
 
+    @field_validator("MIGRATIONS_DATABASE_URL", mode="before")
+    @classmethod
+    def _blank_migrations_url_means_unset(cls, value: object) -> object:
+        # `MIGRATIONS_DATABASE_URL=` is how every other optional key in
+        # .env.example spells "not set" (SENTRY_DSN, ENCRYPTION_KEY_OLD, the
+        # OAuth pairs), and those all happen to be `str`-typed so pydantic
+        # takes the empty string as-is. PostgresDsn doesn't -- without this,
+        # copying .env.example verbatim fails startup with a URL parse error
+        # on a key the copier never meant to set.
+        return None if value == "" else value
+
+    @property
+    def migrations_database_url(self) -> str:
+        """The DSN `alembic upgrade` connects with — never the pooler.
+
+        Falls back to DATABASE_URL so every existing env file (dev, .env.test,
+        Render) keeps its current single-DSN behaviour untouched; only a
+        deployment that actually puts a transaction-mode pooler in front of
+        Postgres has to set MIGRATIONS_DATABASE_URL, and _enforce_startup_
+        invariants below makes that non-optional once PGBOUNCER_ENABLED is on.
+        """
+        return str(self.MIGRATIONS_DATABASE_URL or self.DATABASE_URL)
+
     @model_validator(mode="after")
     def _enforce_startup_invariants(self) -> Self:
+        # T-244: not gated on ENVIRONMENT — running migrations through a
+        # transaction-mode pooler is broken everywhere, not just in prod, and
+        # the failure mode (an advisory lock silently taken on a connection
+        # the next statement no longer holds) is far cheaper to catch at
+        # startup than halfway through a DDL migration.
+        if self.PGBOUNCER_ENABLED:
+            if self.MIGRATIONS_DATABASE_URL is None:
+                raise RuntimeError(
+                    "MIGRATIONS_DATABASE_URL must be set when PGBOUNCER_ENABLED is true — "
+                    "migrations must connect directly to Postgres, not through the pooler "
+                    "(see docs/adr/0002-pgbouncer.md)"
+                )
+            if self.MIGRATIONS_DATABASE_URL == self.DATABASE_URL:
+                raise RuntimeError(
+                    "MIGRATIONS_DATABASE_URL is identical to DATABASE_URL while "
+                    "PGBOUNCER_ENABLED is true — it must point directly at Postgres, "
+                    "bypassing pgbouncer (see docs/adr/0002-pgbouncer.md)"
+                )
         if self.ENVIRONMENT != "dev":
             if "*" in self.ALLOWED_ORIGINS:
                 raise RuntimeError("ALLOWED_ORIGINS must not contain '*' outside dev")
@@ -170,6 +227,18 @@ class Settings(BaseSettings):
         database_query = self.DATABASE_URL.query or ""
         if "sslmode=require" not in database_query and "sslmode=verify" not in database_query:
             raise RuntimeError("DATABASE_URL must set sslmode=require (or stricter) outside dev")
+        # T-244: the migration DSN is a second, independent hop to Postgres —
+        # it bypasses the pooler entirely, so DATABASE_URL's own sslmode says
+        # nothing about it.
+        if self.MIGRATIONS_DATABASE_URL is not None:
+            migrations_query = self.MIGRATIONS_DATABASE_URL.query or ""
+            if (
+                "sslmode=require" not in migrations_query
+                and "sslmode=verify" not in migrations_query
+            ):
+                raise RuntimeError(
+                    "MIGRATIONS_DATABASE_URL must set sslmode=require (or stricter) outside dev"
+                )
         if self.REDIS_URL.scheme != "rediss":
             raise RuntimeError("REDIS_URL must use the rediss:// scheme outside dev")
 

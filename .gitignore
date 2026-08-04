@@ -38,6 +38,14 @@ web-build/
 .env.local
 .env.*.local
 
+# Per-service env files for docker-compose.prod.yml -- each is copied from
+# its committed *.example sibling and filled in with real credentials
+# (T-205's exporter, T-244's postgres/pgbouncer). `make prod-compose-check`
+# writes all three.
+.env.postgres
+.env.pgbouncer
+.env.postgres-exporter
+
 # OS
 .DS_Store
 Thumbs.db

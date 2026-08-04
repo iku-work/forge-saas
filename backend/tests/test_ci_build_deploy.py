@@ -22,7 +22,11 @@ def test_dockerfile_runs_as_non_root_user() -> None:
 def test_docker_compose_prod_uses_hardened_dockerfile() -> None:
     content = (REPO_ROOT / "docker-compose.prod.yml").read_text()
     assert "dockerfile: Dockerfile.dev" not in content
-    assert content.count("dockerfile: Dockerfile") == 2
+    # T-244: `backend/Dockerfile` with a repo-root build context, not
+    # `Dockerfile` with `context: ./backend` -- that Dockerfile COPYs
+    # packages/i18n/locales, which ./backend can't reach, so the previous
+    # spelling could never build. Same invocation the CI build job uses.
+    assert content.count("dockerfile: backend/Dockerfile") == 2
 
 
 def _ci_workflow() -> dict:

@@ -20,8 +20,16 @@ services:
       - shared_preload_libraries=pg_stat_statements
       - -c
       - pg_stat_statements.track=all
+    # T-244: its own env file (copied from .env.postgres.example), not
+    # ./backend/.env. POSTGRES_USER/POSTGRES_PASSWORD/POSTGRES_DB are
+    # postgres-image variables, not Settings fields -- putting them in
+    # backend/.env would make that file unloadable as a dotenv (Settings sets
+    # extra="forbid"), which is the same reasoning the postgres-exporter
+    # service below already documents. Leaving them out entirely, as this
+    # service did before, means the image refuses to initialise a fresh data
+    # directory at all ("superuser password is not specified").
     env_file:
-      - ./backend/.env
+      - ./.env.postgres
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -29,6 +37,44 @@ services:
       interval: 5s
       timeout: 5s
       retries: 10
+    networks:
+      - forge-net
+
+  # T-244: every backend/worker connection goes through here, never straight
+  # to postgres -- that's what keeps the Postgres backend count flat as
+  # backend replicas scale (each replica opens DB_POOL_SIZE + DB_MAX_OVERFLOW
+  # *client* connections; pgbouncer multiplexes the lot onto at most
+  # DEFAULT_POOL_SIZE + RESERVE_POOL_SIZE server connections). Alembic is the
+  # one deliberate exception: MIGRATIONS_DATABASE_URL points at postgres
+  # directly. See docs/adr/0002-pgbouncer.md.
+  #
+  # Pinned to a specific pgbouncer release, not :latest -- pool_mode and
+  # prepared-statement handling are exactly the semantics that change between
+  # minor versions (1.21 added server-side prepared statement support).
+  pgbouncer:
+    image: edoburu/pgbouncer:v1.25.2-p0
+    restart: unless-stopped
+    # Its own env file (copied from .env.pgbouncer.example) for the same
+    # reason as postgres above: none of pgbouncer's settings are Settings
+    # fields. The entrypoint parses its DATABASE_URL into the [databases]
+    # entry *and* into the auth_file userlist -- that's the "userlist from
+    # env" wiring; no credentials are baked into the image or this file.
+    env_file:
+      - ./.env.pgbouncer
+    # Deliberately stronger than a TCP probe or `SHOW POOLS`: this opens a
+    # real pooled connection to the real database, so `depends_on:
+    # service_healthy` below means "pgbouncer can actually reach Postgres",
+    # not just "pgbouncer's listener is up". PGPASSWORD/DB_USER/DB_NAME come
+    # from the env file; $$ escapes compose's own interpolation.
+    healthcheck:
+      test: ["CMD-SHELL", "psql -h 127.0.0.1 -p 6432 -U $$DB_USER -d $$DB_NAME -tAc 'SELECT 1' >/dev/null"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 5s
+    depends_on:
+      postgres:
+        condition: service_healthy
     networks:
       - forge-net
 
@@ -45,17 +91,27 @@ services:
     networks:
       - forge-net
 
+  # backend/.env must point DATABASE_URL at the pgbouncer service
+  # (postgresql+asyncpg://<user>:<pass>@pgbouncer:6432/<db>), set
+  # PGBOUNCER_ENABLED=true, and set MIGRATIONS_DATABASE_URL at postgres:5432 --
+  # see backend/.env.example's "Connection pooling" block. Settings refuses to
+  # boot if PGBOUNCER_ENABLED is on without a distinct migration DSN.
   backend:
     build:
-      context: ./backend
-      dockerfile: Dockerfile
+      # Repo root, not ./backend: backend/Dockerfile COPYs both
+      # backend/pyproject.toml and packages/i18n/locales (see its own header
+      # comment), and CI builds it the same way (`docker build -f
+      # backend/Dockerfile .`). With context: ./backend this service could
+      # never actually build.
+      context: .
+      dockerfile: backend/Dockerfile
     image: forge-saas-backend
     restart: unless-stopped
     env_file:
       - ./backend/.env
     command: uvicorn app.main:app --host 0.0.0.0
     depends_on:
-      postgres:
+      pgbouncer:
         condition: service_healthy
       redis:
         condition: service_healthy
@@ -70,15 +126,15 @@ services:
 
   worker:
     build:
-      context: ./backend
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: backend/Dockerfile
     image: forge-saas-backend
     restart: unless-stopped
     env_file:
       - ./backend/.env
     command: arq app.workers.main.WorkerSettings
     depends_on:
-      postgres:
+      pgbouncer:
         condition: service_healthy
       redis:
         condition: service_healthy

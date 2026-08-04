@@ -23,7 +23,14 @@ target_metadata = SQLModel.metadata
 
 # §0.6 / law: the DB URL comes from Settings (pydantic-settings), never from
 # alembic.ini or os.environ directly.
-config.set_main_option("sqlalchemy.url", str(get_settings().DATABASE_URL))
+#
+# T-244: migrations_database_url, not DATABASE_URL -- identical to it unless
+# MIGRATIONS_DATABASE_URL is set, which a deployment fronted by a
+# transaction-mode pgbouncer must do. Alembic guards the version table with a
+# session-level advisory lock and runs multi-statement DDL; transaction
+# pooling can hand each of those a different Postgres backend. See that
+# property's docstring and docs/adr/0002-pgbouncer.md.
+config.set_main_option("sqlalchemy.url", get_settings().migrations_database_url)
 
 # T-062: tables owned by an optional module. Used by include_object below so
 # autogenerate never proposes a CREATE for a disabled module's table (model

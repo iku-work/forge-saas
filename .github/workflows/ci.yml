@@ -284,6 +284,120 @@ jobs:
           buildScriptName: storybook:build
           exitZeroOnChanges: true
 
+  # T-244: docker-compose.prod.yml is the only stack where application traffic
+  # actually goes through pgbouncer -- the dev stack and the testcontainers
+  # fixtures in backend/tests both talk to Postgres directly. The driver-level
+  # half of this (asyncpg's prepared statements vs. transaction pooling) is
+  # covered by backend/tests/test_pgbouncer.py against a real pgbouncer; what
+  # this job adds is the deployment wiring around it: the compose file's own
+  # service graph, the healthcheck the backend's `depends_on` gates on, and
+  # the two-DSN split between application traffic and migrations.
+  pgbouncer-prod-compose:
+    needs: lint
+    runs-on: ubuntu-latest
+
+    env:
+      COMPOSE_PROJECT_NAME: forge-pgbouncer
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # The only edit made to the committed examples is the placeholder
+      # password -- pool_mode, the reset query, auth type and pool sizing are
+      # all exercised exactly as an operator would deploy them.
+      - name: Materialise env files for the prod stack
+        run: |
+          cp backend/.env.prod-compose backend/.env
+          sed 's/change-me/postgres/' .env.postgres.example > .env.postgres
+          sed 's/change-me/postgres/' .env.pgbouncer.example > .env.pgbouncer
+          cp .env.postgres-exporter.example .env.postgres-exporter
+
+      # `up` blocks on the depends_on conditions, so reaching the next step at
+      # all already proves pgbouncer passed a healthcheck that opens a real
+      # pooled connection to Postgres. Caddy/worker/exporter are left out:
+      # none of them are what this job is about.
+      - name: Boot postgres + pgbouncer + redis + backend
+        run: |
+          docker compose -f docker-compose.prod.yml up -d --build \
+            postgres pgbouncer redis backend
+
+      - name: Wait for the backend (every query it makes goes through pgbouncer)
+        run: |
+          for i in $(seq 1 30); do
+            docker compose -f docker-compose.prod.yml exec -T backend \
+              python -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')" \
+              && exit 0
+            sleep 2
+          done
+          echo "backend did not become ready" >&2
+          docker compose -f docker-compose.prod.yml logs backend pgbouncer
+          exit 1
+
+      # Runs while the app above is up and serving through the pooler --
+      # that's the production upgrade path, not a convenience ordering.
+      # Succeeding here means alembic reached Postgres over
+      # MIGRATIONS_DATABASE_URL: session-level advisory locks and
+      # multi-statement DDL do not survive transaction pooling.
+      - name: Migrate over the direct DSN while pooled traffic flows
+        run: docker compose -f docker-compose.prod.yml exec -T backend python -m app.core.migrations
+
+      - name: pgbouncer is actually pooling, in transaction mode
+        run: |
+          docker compose -f docker-compose.prod.yml exec -T pgbouncer sh -c \
+            'psql -h 127.0.0.1 -p 6432 -U "$DB_USER" -d pgbouncer -tAc "SHOW POOLS"' \
+            | tee pools.txt
+          grep -q "^forge|" pools.txt || { echo "app never opened a pooled connection" >&2; exit 1; }
+          grep -q "|transaction|" pools.txt || { echo "pool_mode is not transaction" >&2; exit 1; }
+
+      - name: /health/ready 200, repeated queries, two sequential transactions
+        run: |
+          docker compose -f docker-compose.prod.yml exec -T backend python - <<'PY'
+          import json, urllib.request, urllib.error, uuid
+
+          BASE = "http://localhost:8000"
+
+          def post(path, payload):
+              request = urllib.request.Request(
+                  BASE + path, data=json.dumps(payload).encode(),
+                  headers={"Content-Type": "application/json"}, method="POST")
+              try:
+                  with urllib.request.urlopen(request) as response:
+                      return response.status
+              except urllib.error.HTTPError as exc:
+                  return exc.code
+
+          # Repeated identical queries across the whole client pool: with
+          # asyncpg's default statement handling this is where transaction
+          # pooling raises InvalidSQLStatementNameError /
+          # DuplicatePreparedStatementError.
+          statuses = set()
+          for _ in range(60):
+              with urllib.request.urlopen(BASE + "/health/ready") as response:
+                  statuses.add(response.status)
+          assert statuses == {200}, f"/health/ready returned {statuses}"
+
+          # A request that opens two sequential transactions (user insert +
+          # commit, then the follow-up writes), then a second request reusing
+          # the pool. 401 on login is the app's own unverified-email path --
+          # it still proves the pooled read/write round trip worked.
+          email = f"pgbouncer-{uuid.uuid4().hex[:8]}@example.com"
+          assert post("/api/v1/auth/register", {"email": email, "password": "Correct-Horse9x"}) == 200
+          assert post("/api/v1/auth/login", {"email": email, "password": "Correct-Horse9x"}) in (200, 401)
+          print("pooled traffic OK")
+          PY
+
+      - name: No prepared-statement errors reached the application
+        run: |
+          if docker compose -f docker-compose.prod.yml logs backend \
+            | grep -iE "InvalidSQLStatementName|DuplicatePreparedStatement|prepared statement"; then
+            echo "prepared-statement error through pgbouncer -- see app/core/db.py build_connect_args" >&2
+            exit 1
+          fi
+
+      - name: Tear down stack
+        if: always()
+        run: docker compose -f docker-compose.prod.yml down -v
+
   security:
     needs: lint
     runs-on: ubuntu-latest

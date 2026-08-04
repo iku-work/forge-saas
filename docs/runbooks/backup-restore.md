@@ -65,7 +65,10 @@ above before resuming traffic.
 
 `app.core.config.Settings._enforce_startup_invariants` (T-225) now requires
 `sslmode=require` (or stricter) on `DATABASE_URL` and a `rediss://` scheme
-on `REDIS_URL` outside `dev` — the app refuses to boot otherwise. Render's
+on `REDIS_URL` outside `dev` — the app refuses to boot otherwise. Since
+T-244 the same requirement covers `MIGRATIONS_DATABASE_URL` when it is set:
+that is a second, independent hop to Postgres (it bypasses pgbouncer), so
+`DATABASE_URL`'s own TLS setting says nothing about it. Render's
 managed Postgres/Redis already satisfy this on their external connection
 strings, so this is a no-op for the Render path. For the self-hosted
 `docker-compose.prod.yml` path, an operator must additionally:
@@ -82,7 +85,17 @@ strings, so this is a no-op for the Render path. For the self-hosted
    `redis-server` with `--tls-port 6379 --port 0` plus cert/key/CA file
    arguments, mounted the same way as Postgres's above. Change
    `REDIS_URL`'s scheme to `rediss://`.
-3. Rotate these certs the same way you'd rotate any other cert in your
+3. **PgBouncer** (T-244): the app's `DATABASE_URL` now terminates at the
+   pooler, not at Postgres, so that hop needs its own cert — set
+   `CLIENT_TLS_SSLMODE=require` plus `CLIENT_TLS_KEY_FILE`/
+   `CLIENT_TLS_CERT_FILE` in `.env.pgbouncer`, and mount the material into
+   the `pgbouncer` service. The pooler's *upstream* hop to Postgres is a
+   separate setting: `SERVER_TLS_SSLMODE=require` (plus
+   `SERVER_TLS_CA_FILE`). Configuring only the client side leaves
+   pgbouncer→Postgres in cleartext while `DATABASE_URL` still reads
+   `sslmode=require`, which is the trap worth being explicit about. The
+   direct `MIGRATIONS_DATABASE_URL` hop is covered by step 1 above.
+4. Rotate these certs the same way you'd rotate any other cert in your
    environment — they aren't ACME-managed the way Caddy's public-facing
    cert is, so there's no automatic renewal here.
 

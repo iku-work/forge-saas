@@ -5,6 +5,47 @@ template keep their own changes in `CHANGELOG.product.md` (see
 [TEMPLATE.md](TEMPLATE.md)).
 
 ## [Unreleased]
+### Added
+- **PgBouncer in transaction mode fronts Postgres in the production stack
+  (T-244).** `docker-compose.prod.yml` gains a pinned
+  `edoburu/pgbouncer:v1.25.2-p0` service; backend and worker connect through
+  it, so the number of Postgres backends is now capped by `default_pool_size`
+  (75 + 5 reserve, 80% of a default `max_connections=100`) instead of growing
+  with the replica count. Configured from `.env.pgbouncer.example`; the dev
+  stack stays direct-to-Postgres.
+  - New `PGBOUNCER_ENABLED` setting switches `app/core/db.py` to a connection
+    setup that survives having its server connection re-assigned at every
+    transaction boundary — no prepared-statement reuse at any layer
+    (`prepared_statement_cache_size=0`, UUID statement names,
+    `statement_cache_size=0`). Left off, nothing changes for a deployment
+    that talks straight to Postgres.
+  - New `MIGRATIONS_DATABASE_URL` setting is what `alembic upgrade` connects
+    with: migrations must bypass the pooler, because Alembic's version-table
+    guard is a *session*-level advisory lock and migration scripts issue
+    multi-statement DDL. Unset means "same as `DATABASE_URL`" (dev, tests,
+    Render — unchanged); startup now fails fast if `PGBOUNCER_ENABLED` is on
+    without a distinct migration DSN, and outside dev that DSN carries the
+    same `sslmode=require` requirement as `DATABASE_URL`.
+  - `docs/adr/0002-pgbouncer.md` records the decision, the
+    prepared-statement tradeoff with measured overhead, and what to change if
+    the re-parse cost ever matters.
+  - `backend/tests/test_pgbouncer.py` runs a real pgbouncer container in
+    front of a real Postgres and asserts both directions of the tradeoff (the
+    unconfigured engine fails with `InvalidSQLStatementNameError`, the
+    configured one doesn't), plus a new `pgbouncer-prod-compose` CI job that
+    boots the actual production compose stack end to end.
+
+### Fixed
+- **`docker-compose.prod.yml` could not previously boot (T-244).** Its
+  postgres service took credentials from `backend/.env`, which holds no
+  `POSTGRES_*` keys, so the image refused to initialise its data directory —
+  it now has its own `.env.postgres` (same reasoning as the existing
+  `.env.postgres-exporter`). The backend and worker services also built with
+  `context: ./backend`, which cannot satisfy `backend/Dockerfile`'s `COPY`s
+  of `backend/pyproject.toml` and `packages/i18n/locales`; both now build
+  from the repo root, matching how CI builds the image. Both surfaced the
+  moment CI started actually booting this stack.
+
 ### Changed
 - **The member list and the notification centre are virtualized (T-241).**
   Both render a constant number of DOM nodes regardless of how many rows are
