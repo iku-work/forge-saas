@@ -99,3 +99,7 @@ instead of per-PR.
 | 2026-08-04 | b62ee0f | browse | - | - | PASS |
 | 2026-08-04 | b62ee0f | presign | - | - | PASS |
 | 2026-08-04 | b62ee0f | mixed | - | - | FAIL |
+| 2026-08-05 | d304a67 | login-burst | - | - | FAIL |
+| 2026-08-05 | d304a67 | browse | - | - | PASS |
+| 2026-08-05 | d304a67 | presign | - | - | PASS |
+| 2026-08-05 | d304a67 | mixed | - | - | FAIL |
