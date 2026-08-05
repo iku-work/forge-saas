@@ -114,6 +114,24 @@ def create_access_token(  # noqa: PLR0913 -- T-218 adds auth_time on top of T-14
     return jwt.encode(claims, settings.JWT_PRIVATE_KEY, algorithm=_JWT_ALGORITHM)
 
 
+_BEARER_PREFIX = "Bearer "
+
+
+def bearer_token(authorization: str | None) -> str | None:
+    """The token out of an `Authorization: Bearer <token>` header value.
+
+    Exists so the two places that need the raw token *outside* FastAPI's
+    dependency system -- app.middleware.impersonation (which runs before
+    routing) and app.core.dependencies.reject_during_impersonation (which
+    must not advertise a security scheme on the public endpoints it guards,
+    or every generated client would think /auth/forgot-password needs a
+    token) -- don't each reimplement the prefix check.
+    """
+    if authorization is None or not authorization.startswith(_BEARER_PREFIX):
+        return None
+    return authorization[len(_BEARER_PREFIX) :]
+
+
 def verify_access_token(token: str) -> AccessTokenPayload:
     settings = get_settings()
     try:

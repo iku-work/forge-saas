@@ -28,6 +28,7 @@ from app.core.dependencies import (
     get_redis,
     invalidate_org_cache,
     invalidate_user_cache,
+    reject_during_impersonation,
     require_recent_auth,
 )
 from app.core.envelope import Envelope, Meta
@@ -79,7 +80,7 @@ def require_org_permission(permission: Permission) -> Callable[..., Awaitable[Me
     return checker
 
 
-@router.post("/orgs")
+@router.post("/orgs", dependencies=[Depends(reject_during_impersonation("data_mutation"))])
 @api_limit
 async def create_org(
     request: Request,
@@ -118,7 +119,9 @@ async def get_org(
     )
 
 
-@router.patch("/orgs/{org_id}")
+@router.patch(
+    "/orgs/{org_id}", dependencies=[Depends(reject_during_impersonation("data_mutation"))]
+)
 @api_limit
 async def update_org(  # noqa: PLR0913 — redis (cache invalidation, T-240) on top of the usual request+org_id+body+permission+session params
     request: Request,
@@ -159,7 +162,10 @@ async def list_members(  # noqa: PLR0913 — cursor pagination (§0.3) needs aft
     return Envelope(data=data, meta=meta)
 
 
-@router.patch("/orgs/{org_id}/members/{membership_id}")
+@router.patch(
+    "/orgs/{org_id}/members/{membership_id}",
+    dependencies=[Depends(reject_during_impersonation("data_mutation"))],
+)
 @api_limit
 async def update_member_role(  # noqa: PLR0913 — redis (cache invalidation, T-240) on top of the usual request+membership_id+body+actor+session params
     request: Request,
@@ -183,7 +189,10 @@ async def update_member_role(  # noqa: PLR0913 — redis (cache invalidation, T-
     )
 
 
-@router.delete("/orgs/{org_id}/members/{membership_id}")
+@router.delete(
+    "/orgs/{org_id}/members/{membership_id}",
+    dependencies=[Depends(reject_during_impersonation("data_mutation"))],
+)
 @api_limit
 async def remove_member(
     request: Request,
@@ -199,7 +208,9 @@ async def remove_member(
     return Envelope(data=None, meta=Meta(request_id=_request_id(request)))
 
 
-@router.post("/orgs/{org_id}/invitations")
+@router.post(
+    "/orgs/{org_id}/invitations", dependencies=[Depends(reject_during_impersonation("notifying"))]
+)
 @api_limit
 async def create_invitation(  # noqa: PLR0913 — redis (for the inviter notification) on top of the usual request+org_id+body+actor+session params
     request: Request,
@@ -270,7 +281,10 @@ async def preview_invitation(
     return Envelope(data=data, meta=Meta(request_id=_request_id(request)))
 
 
-@router.post("/invitations/{token}/accept")
+@router.post(
+    "/invitations/{token}/accept",
+    dependencies=[Depends(reject_during_impersonation("data_mutation"))],
+)
 @api_limit
 async def accept_invitation(
     request: Request,

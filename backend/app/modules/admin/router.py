@@ -22,7 +22,13 @@ from redis.asyncio import Redis
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.db import get_session
-from app.core.dependencies import get_current_user, get_redis, oauth2_scheme, require_superadmin
+from app.core.dependencies import (
+    get_current_user,
+    get_redis,
+    oauth2_scheme,
+    reject_during_impersonation,
+    require_superadmin,
+)
 from app.core.envelope import Envelope, Meta
 from app.core.exceptions import AuthenticationError, NotFoundError
 from app.middleware.rate_limit import api_limit
@@ -97,7 +103,10 @@ async def get_org_feature_flags(
     )
 
 
-@router.put("/orgs/{org_id}/feature-flags/{flag}")
+@router.put(
+    "/orgs/{org_id}/feature-flags/{flag}",
+    dependencies=[Depends(reject_during_impersonation("data_mutation"))],
+)
 @api_limit
 async def set_org_feature_flag(  # noqa: PLR0913 -- request+path+body+auth+session+redis, all required
     request: Request,
@@ -121,7 +130,10 @@ async def set_org_feature_flag(  # noqa: PLR0913 -- request+path+body+auth+sessi
     return Envelope(data=None, meta=Meta(request_id=_request_id(request)))
 
 
-@router.delete("/orgs/{org_id}/feature-flags/{flag}")
+@router.delete(
+    "/orgs/{org_id}/feature-flags/{flag}",
+    dependencies=[Depends(reject_during_impersonation("data_mutation"))],
+)
 @api_limit
 async def delete_org_feature_flag(  # noqa: PLR0913 -- request+path+auth+session+redis, all required
     request: Request,
@@ -222,7 +234,7 @@ async def get_user_detail(
 # ---- T-141: plan override / trial / comp-credit -----------------------------
 
 
-@router.put("/orgs/{org_id}/plan")
+@router.put("/orgs/{org_id}/plan", dependencies=[Depends(reject_during_impersonation("billing"))])
 @api_limit
 async def set_org_plan(  # noqa: PLR0913 -- request+path+body+auth+session+redis, all required
     request: Request,
@@ -247,7 +259,9 @@ async def set_org_plan(  # noqa: PLR0913 -- request+path+body+auth+session+redis
     return Envelope(data=None, meta=Meta(request_id=_request_id(request)))
 
 
-@router.post("/orgs/{org_id}/extend-trial")
+@router.post(
+    "/orgs/{org_id}/extend-trial", dependencies=[Depends(reject_during_impersonation("billing"))]
+)
 @api_limit
 async def extend_org_trial(  # noqa: PLR0913 -- request+path+body+auth+session+redis, all required
     request: Request,
@@ -269,7 +283,9 @@ async def extend_org_trial(  # noqa: PLR0913 -- request+path+body+auth+session+r
     return Envelope(data=None, meta=Meta(request_id=_request_id(request)))
 
 
-@router.post("/orgs/{org_id}/comp-credit")
+@router.post(
+    "/orgs/{org_id}/comp-credit", dependencies=[Depends(reject_during_impersonation("billing"))]
+)
 @api_limit
 async def issue_org_comp_credit(  # noqa: PLR0913 -- request+path+body+auth+session+redis, all required
     request: Request,
@@ -295,7 +311,10 @@ async def issue_org_comp_credit(  # noqa: PLR0913 -- request+path+body+auth+sess
 # ---- T-142: user impersonation -----------------------------------------------
 
 
-@router.post("/users/{user_id}/impersonate")
+@router.post(
+    "/users/{user_id}/impersonate",
+    dependencies=[Depends(reject_during_impersonation("data_mutation"))],
+)
 @api_limit
 async def impersonate_user(  # noqa: PLR0913 -- request+path+body+auth+session+redis, all required
     request: Request,
@@ -334,6 +353,9 @@ async def end_impersonation(
     session: Annotated[AsyncSession, Depends(get_session)],
     redis: Annotated[Redis, Depends(get_redis)],
 ) -> Envelope[None]:
+    # impersonation-ok: the way *out* of an impersonation session. Blocking
+    # this one would trap a support agent in the identity they are trying to
+    # leave, which is the opposite of what T-260 is for.
     if token is None:
         # Unreachable in practice -- get_current_user above shares this same
         # oauth2_scheme dependency and already raises if it's None -- but
@@ -350,7 +372,10 @@ async def end_impersonation(
 # ---- T-218: admin-assisted lost-2FA recovery ---------------------------------
 
 
-@router.post("/users/{user_id}/disable-totp")
+@router.post(
+    "/users/{user_id}/disable-totp",
+    dependencies=[Depends(reject_during_impersonation("data_mutation"))],
+)
 @api_limit
 async def disable_user_totp(  # noqa: PLR0913 -- request+path+body+auth+session+redis, all required
     request: Request,

@@ -65,6 +65,7 @@
   "superadmin_required": "Pääkäyttäjän oikeudet vaaditaan.",
   "token_revoked": "Tunnus on mitätöity.",
   "cannot_impersonate_superadmin": "Toista pääkäyttäjää ei voi esiintyä.",
+  "impersonation_blocked": "Tämä toiminto on estetty, kun esiinnyt toisena käyttäjänä. Lopeta esiintyminen suorittaaksesi sen omana itsenäsi.",
   "not_impersonating": "Tämä tunnus ei ole esiintymisistunto.",
   "service_unavailable": "{feature} ei ole tilapäisesti käytettävissä. Yritä hetken kuluttua uudelleen.",
   "step_up_auth_required": "Tämä toiminto edellyttää, että olet kirjautunut sisään äskettäin. Kirjaudu sisään uudelleen jatkaaksesi.",

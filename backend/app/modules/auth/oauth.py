@@ -27,7 +27,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
 from app.core.db import get_session
-from app.core.dependencies import get_current_user
+from app.core.dependencies import get_current_user, reject_during_impersonation
 from app.core.envelope import Envelope, Meta
 from app.core.exceptions import AuthenticationError, DomainError, NotFoundError
 from app.middleware.rate_limit import api_limit, auth_limit, sensitive_limit
@@ -276,7 +276,9 @@ async def oauth_callback(  # noqa: PLR0913 -- state/code/provider/session are ea
     return Envelope(data=data, meta=Meta(request_id=_request_id(request)))
 
 
-@router.post("/{provider}/unlink")
+@router.post(
+    "/{provider}/unlink", dependencies=[Depends(reject_during_impersonation("data_mutation"))]
+)
 @sensitive_limit
 async def oauth_unlink(
     request: Request,

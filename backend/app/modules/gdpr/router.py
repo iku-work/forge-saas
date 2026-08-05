@@ -18,7 +18,12 @@ from redis.asyncio import Redis
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.db import get_session
-from app.core.dependencies import get_current_user, get_redis, invalidate_user_cache
+from app.core.dependencies import (
+    get_current_user,
+    get_redis,
+    invalidate_user_cache,
+    reject_during_impersonation,
+)
 from app.core.envelope import Envelope, Meta
 from app.middleware.rate_limit import api_limit
 from app.modules.auth.models import User
@@ -42,7 +47,9 @@ def _client_ip(request: Request) -> str:
     return request.client.host if request.client else "unknown"
 
 
-@router.get("/export", status_code=202)
+@router.get(
+    "/export", status_code=202, dependencies=[Depends(reject_during_impersonation("notifying"))]
+)
 @api_limit
 async def request_export(
     request: Request,
@@ -70,7 +77,9 @@ async def get_export_job(
     )
 
 
-@router.delete("", status_code=202)
+@router.delete(
+    "", status_code=202, dependencies=[Depends(reject_during_impersonation("data_mutation"))]
+)
 @api_limit
 async def delete_me(
     request: Request,
@@ -101,7 +110,7 @@ async def list_consents(
     return Envelope(data=data, meta=Meta(request_id=_request_id(request)))
 
 
-@router.post("/consents")
+@router.post("/consents", dependencies=[Depends(reject_during_impersonation("data_mutation"))])
 @api_limit
 async def record_consent(
     request: Request,

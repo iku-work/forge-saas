@@ -2,7 +2,7 @@
 HTTP layer for the __MODULE_NAME__ module (T-250 scaffold): CRUD under
 /api/v1/__MODULE_NAME__/.
 
-Five things every route in this codebase does, all visible below:
+Six things every route in this codebase does, all visible below:
 
   - `Envelope`/`Meta` on every response (§0.5). Errors get the same envelope
     without any work here -- app.core.handlers renders every DomainError the
@@ -16,6 +16,11 @@ Five things every route in this codebase does, all visible below:
   - `@api_limit` on every route (§0.9).
   - `await session.commit()` after a write, and only here: the router owns
     the transaction boundary, the service never commits.
+  - `reject_during_impersonation(...)` on every write route (§T-260). A
+    support agent inside an impersonation session must not create, change or
+    delete this module's rows as the user; tests/security/
+    test_impersonation_blocklist.py fails the build on a write route that has
+    neither the dependency nor an `# impersonation-ok: <reason>` comment.
 """
 
 from typing import Annotated
@@ -25,7 +30,7 @@ from fastapi import APIRouter, Depends, Query, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.db import get_session
-from app.core.dependencies import require_permission
+from app.core.dependencies import reject_during_impersonation, require_permission
 from app.core.envelope import Envelope, Meta
 from app.middleware.rate_limit import api_limit
 from app.modules.auth.permissions import Permission
@@ -50,7 +55,7 @@ def _request_id(request: Request) -> str:
     return getattr(request.state, "request_id", None) or str(uuid4())
 
 
-@router.post("")
+@router.post("", dependencies=[Depends(reject_during_impersonation("data_mutation"))])
 @api_limit
 async def create_item(
     request: Request,
@@ -100,7 +105,7 @@ async def get_item(
     )
 
 
-@router.patch("/{item_id}")
+@router.patch("/{item_id}", dependencies=[Depends(reject_during_impersonation("data_mutation"))])
 @api_limit
 async def update_item(
     request: Request,
@@ -119,7 +124,7 @@ async def update_item(
     )
 
 
-@router.delete("/{item_id}")
+@router.delete("/{item_id}", dependencies=[Depends(reject_during_impersonation("data_mutation"))])
 @api_limit
 async def delete_item(
     request: Request,

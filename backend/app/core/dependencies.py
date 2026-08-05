@@ -7,11 +7,16 @@ Permission via the role -> permission map in app.modules.auth.permissions.
 Four-layer rule (§0.1) note: these are FastAPI dependencies wired directly
 into routers, not service-layer code, so they go straight to the repository
 layer the same way app.modules.auth.service does.
+
+T-260 adds `reject_during_impersonation` at the bottom: an authorization gate
+that keys off *who is really acting* rather than what they may do, and so sits
+next to the rest of them rather than in the admin module that mints the
+impersonation token.
 """
 
 from collections.abc import Awaitable, Callable
 from datetime import datetime, timedelta
-from typing import Annotated
+from typing import Annotated, Literal
 from uuid import UUID
 
 from fastapi import Depends, Header, Request
@@ -35,7 +40,7 @@ from app.modules.audit.service import AuditService
 from app.modules.auth.models import User
 from app.modules.auth.permissions import ROLE_PERMISSIONS, Permission
 from app.modules.auth.repository import UserRepository, WebAuthnCredentialRepository
-from app.modules.auth.utils import verify_access_token
+from app.modules.auth.utils import AccessTokenPayload, bearer_token, verify_access_token
 from app.modules.tenancy.models import Membership, Organization
 from app.modules.tenancy.repository import MembershipRepository, OrganizationRepository
 
@@ -240,6 +245,10 @@ def require_permission(permission: Permission) -> Callable[..., Awaitable[Member
                 ua=request.headers.get("user-agent"),
                 severity="elevated",
             )
+            # Same reason as reject_during_impersonation below: without this
+            # the raise unwinds get_session's rollback and the denial event
+            # never reaches the table it was written for.
+            await session.commit()
             raise PermissionDeniedError(
                 "errors.missing_permission",
                 fallback=f"Missing permission: {permission.value}",
@@ -247,4 +256,128 @@ def require_permission(permission: Permission) -> Callable[..., Awaitable[Member
             )
         return membership
 
+    return checker
+
+
+# T-260: the four categories of side effect a support agent must not produce
+# while wearing someone else's identity. They are labels for *why* a route is
+# blocked, not a hierarchy -- nothing branches on the value except the audit
+# diff and the error's `details`, which is what makes "which category tripped"
+# answerable from the audit feed alone.
+#
+#   notifying              -- anything that sends mail or a push
+#   billing                -- anything that can produce a charge
+#   data_mutation          -- credentials, identity, membership, stored data
+#   notification_read_state -- marking notifications read (silent state
+#                              pollution: the user loses their own unread badge
+#                              and never learns why)
+BlockedActionKind = Literal["notifying", "billing", "data_mutation", "notification_read_state"]
+
+_BLOCKED_KIND_ATTR = "__impersonation_blocked_kind__"
+
+
+def blocked_action_kind(call: object) -> str | None:
+    """The category `call` blocks, or None if it isn't a T-260 guard at all.
+
+    The one supported way to ask "is this dependency the impersonation
+    blocklist?" -- tests/security/test_impersonation_blocklist.py walks every
+    route's dependency tree through this, so the marker attribute below stays
+    an implementation detail.
+    """
+    kind = getattr(call, _BLOCKED_KIND_ATTR, None)
+    return kind if isinstance(kind, str) else None
+
+
+def _impersonation_payload(request: Request) -> AccessTokenPayload | None:
+    """The bearer token's claims, but only when it is an impersonation token.
+
+    Deliberately decodes the token itself rather than reading what
+    app.middleware.impersonation stashed: this guard is the only thing standing
+    between a support agent and a charge on someone else's card, and it must
+    not fail open if that middleware is ever reordered, removed, or bypassed
+    (e.g. a route mounted on a sub-app). The extra decode is an HMAC over a
+    short string, on ~40 routes, none of them hot.
+
+    Reads the header directly instead of depending on `oauth2_scheme`, which
+    would add a `security` requirement to every guarded route's OpenAPI
+    operation -- including the public ones (/auth/forgot-password,
+    /auth/magic-link), whose generated clients would then look like they need
+    a token.
+
+    An undecodable or expired token is *not* an impersonation session: it is a
+    401 waiting to happen in get_current_user, or -- on those public endpoints
+    -- simply irrelevant.
+    """
+    token = bearer_token(request.headers.get("authorization"))
+    if token is None:
+        return None
+    try:
+        payload = verify_access_token(token)
+    except AuthenticationError:
+        return None
+    return payload if payload.impersonator_id is not None else None
+
+
+def reject_during_impersonation(kind: BlockedActionKind) -> Callable[..., Awaitable[None]]:
+    """T-260: refuses an action that would produce a user-visible side effect
+    the impersonated user never asked for -- an email they didn't request, a
+    charge they didn't authorise, a password they didn't change.
+
+    Wired as a route-decorator dependency (`dependencies=[Depends(...)]`)
+    rather than a signature parameter, unlike require_recent_auth next door:
+    it returns nothing an endpoint could use, ~40 routes carry it, and several
+    of them already sit at the PLR0913 parameter limit. The trade-off is that
+    it can't be read off the signature -- which is exactly why
+    `blocked_action_kind` above exists and why the coverage sweep walks the
+    dependency tree instead of the source.
+
+    Deliberately NOT dependent on get_current_user: /auth/forgot-password and
+    /auth/magic-link are unauthenticated, and requiring a user there would turn
+    a public endpoint into a 401 for everyone. The token is optional here; only
+    its `impersonator_id` claim matters.
+    """
+
+    async def checker(
+        request: Request,
+        session: Annotated[AsyncSession, Depends(get_session)],
+    ) -> None:
+        payload = _impersonation_payload(request)
+        if payload is None:
+            return
+
+        await AuditService(session).log(
+            action="impersonation.blocked",
+            resource_type="user",
+            resource_id=str(payload.user_id),
+            org_id=None,
+            # The impersonated user is the principal the request was made as;
+            # the superadmin behind it lands in impersonator_id automatically
+            # (app.core.audit_context), the same shape as every other event
+            # written during an impersonated request.
+            actor_id=payload.user_id,
+            diff={"kind": kind, "method": request.method, "path": request.url.path},
+            ip=request.client.host if request.client else None,
+            ua=request.headers.get("user-agent"),
+            severity="elevated",
+        )
+        # Committed here, not left to the router: raising below unwinds
+        # get_session's `except: rollback()`, which would take the audit row
+        # with it -- and an unrecorded block is the one outcome this event
+        # exists to prevent. Safe to commit the caller's session because no
+        # endpoint body has run yet; the only other dependencies that can have
+        # touched it are reads.
+        await session.commit()
+        raise PermissionDeniedError(
+            "errors.impersonation_blocked",
+            fallback=(
+                f"Action '{kind}' is blocked during impersonation. "
+                "End impersonation to perform this action as yourself."
+            ),
+            details={"kind": kind},
+        )
+
+    # setattr, not `checker.__impersonation_blocked_kind__ = kind`: the name is
+    # a private constant shared with blocked_action_kind above, and a function
+    # object has no declared attribute for mypy to accept the direct form.
+    setattr(checker, _BLOCKED_KIND_ATTR, kind)
     return checker

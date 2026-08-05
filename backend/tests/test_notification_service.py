@@ -26,6 +26,7 @@ from sqlmodel import SQLModel
 from testcontainers.postgres import PostgresContainer
 from testcontainers.redis import RedisContainer
 
+from app.core.audit_context import reset_impersonator_id, set_impersonator_id
 from app.core.exceptions import NotFoundError
 from app.modules.audit.models import AuditEvent
 from app.modules.auth.models import User
@@ -158,6 +159,71 @@ async def test_send_payment_failed_enqueues_both_email_and_push(
     assert functions == {"send_email", "send_push"}
     push_kwargs = next(kwargs for function, kwargs in enqueued_jobs if function == "send_push")
     assert push_kwargs == {"user_id": user.id, "notification_id": notification.id}
+
+
+async def test_send_drops_only_the_push_channel_while_impersonating(
+    service: NotificationService,
+    user: User,
+    org: Organization,
+    session: AsyncSession,
+    enqueued_jobs: list[tuple[str, dict[str, Any]]],
+) -> None:
+    """T-260: the ContextVar app.middleware.impersonation sets for the whole
+    request. Email still goes (it is a record the user can read at their own
+    pace); the push, which lights up a device in their hand because a support
+    agent clicked something, does not."""
+    token = set_impersonator_id(uuid4())
+    try:
+        notification = await service.send(
+            user_id=user.id,
+            org_id=org.id,
+            type="payment_failed",
+            params={"org_name": "Acme", "amount": "$49.00"},
+        )
+    finally:
+        reset_impersonator_id(token)
+
+    assert [function for function, _ in enqueued_jobs] == ["send_email"]
+    # The row itself is untouched: the user's own history stays complete, and
+    # the in-app feed still shows what happened.
+    assert "push" in notification.channels
+    event = (
+        (
+            await session.execute(
+                select(AuditEvent).where(AuditEvent.resource_id == str(notification.id))
+            )
+        )
+        .scalars()
+        .one()
+    )
+    assert event.diff is not None
+    assert event.diff["push_suppressed"] is True
+
+
+async def test_send_outside_impersonation_records_no_suppression(
+    service: NotificationService,
+    user: User,
+    org: Organization,
+    session: AsyncSession,
+) -> None:
+    notification = await service.send(
+        user_id=user.id,
+        org_id=org.id,
+        type="payment_failed",
+        params={"org_name": "Acme", "amount": "$49.00"},
+    )
+
+    event = (
+        (
+            await session.execute(
+                select(AuditEvent).where(AuditEvent.resource_id == str(notification.id))
+            )
+        )
+        .scalars()
+        .one()
+    )
+    assert event.diff is not None
+    assert "push_suppressed" not in event.diff
 
 
 async def test_send_in_app_channel_publishes_to_redis(

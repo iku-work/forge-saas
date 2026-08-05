@@ -15,7 +15,12 @@ from redis.asyncio import Redis
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.db import get_session
-from app.core.dependencies import get_current_user, get_redis, invalidate_user_cache
+from app.core.dependencies import (
+    get_current_user,
+    get_redis,
+    invalidate_user_cache,
+    reject_during_impersonation,
+)
 from app.core.envelope import Envelope, Meta
 from app.middleware.rate_limit import api_limit, auth_limit, sensitive_limit
 from app.modules.auth.models import User
@@ -34,7 +39,7 @@ from app.modules.auth.service import AuthService
 router = APIRouter(prefix="/auth/2fa", tags=["auth"])
 
 
-@router.post("/enable")
+@router.post("/enable", dependencies=[Depends(reject_during_impersonation("data_mutation"))])
 @api_limit
 async def enable_2fa(
     request: Request,
@@ -47,7 +52,7 @@ async def enable_2fa(
     return Envelope(data=data, meta=Meta(request_id=_request_id(request)))
 
 
-@router.post("/verify")
+@router.post("/verify", dependencies=[Depends(reject_during_impersonation("data_mutation"))])
 @auth_limit
 async def verify_2fa(
     request: Request,
@@ -67,7 +72,7 @@ async def verify_2fa(
     )
 
 
-@router.post("/disable")
+@router.post("/disable", dependencies=[Depends(reject_during_impersonation("data_mutation"))])
 @sensitive_limit
 async def disable_2fa(
     request: Request,
@@ -90,6 +95,8 @@ async def login_2fa(
     body: TwoFactorLoginRequest,
     session: Annotated[AsyncSession, Depends(get_session)],
 ) -> Envelope[LoginResponse]:
+    # impersonation-ok: the second leg of a login, gated on the temp_token
+    # AuthService.login() issued moments earlier -- no bearer token involved.
     access_token, refresh_plain, user = await AuthService(session).confirm_login_2fa(
         body.temp_token, body.code, _client_ip(request), request.headers.get("user-agent", "")
     )

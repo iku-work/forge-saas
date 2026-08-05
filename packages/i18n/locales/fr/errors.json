@@ -65,6 +65,7 @@
   "superadmin_required": "Accès super-administrateur requis.",
   "token_revoked": "Le jeton a été révoqué.",
   "cannot_impersonate_superadmin": "Impossible d'emprunter l'identité d'un autre super-administrateur.",
+  "impersonation_blocked": "Cette action est bloquée pendant que vous empruntez l'identité d'un autre utilisateur. Mettez fin à l'emprunt d'identité pour l'effectuer vous-même.",
   "not_impersonating": "Ce jeton ne correspond pas à une session d'emprunt d'identité.",
   "service_unavailable": "{feature} est temporairement indisponible. Veuillez réessayer dans un instant.",
   "step_up_auth_required": "Cette action nécessite que vous vous soyez connecté récemment. Veuillez vous reconnecter pour continuer.",

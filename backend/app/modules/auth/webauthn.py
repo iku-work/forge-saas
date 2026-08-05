@@ -18,7 +18,7 @@ from fastapi import APIRouter, Depends, Request, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.db import get_session
-from app.core.dependencies import get_current_user
+from app.core.dependencies import get_current_user, reject_during_impersonation
 from app.core.envelope import Envelope, Meta
 from app.middleware.rate_limit import api_limit, auth_limit, sensitive_limit
 from app.modules.auth.models import User
@@ -43,7 +43,9 @@ from app.modules.auth.service import AuthService
 router = APIRouter(prefix="/auth/webauthn", tags=["auth"])
 
 
-@router.post("/register/options")
+@router.post(
+    "/register/options", dependencies=[Depends(reject_during_impersonation("data_mutation"))]
+)
 @api_limit
 async def register_options(
     request: Request,
@@ -57,7 +59,7 @@ async def register_options(
     )
 
 
-@router.post("/register")
+@router.post("/register", dependencies=[Depends(reject_during_impersonation("data_mutation"))])
 @sensitive_limit
 async def register(
     request: Request,
@@ -87,7 +89,10 @@ async def list_credentials(
     return Envelope(data=data, meta=Meta(request_id=_request_id(request)))
 
 
-@router.delete("/credentials/{credential_id}")
+@router.delete(
+    "/credentials/{credential_id}",
+    dependencies=[Depends(reject_during_impersonation("data_mutation"))],
+)
 @api_limit
 async def revoke_credential(
     request: Request,
@@ -107,6 +112,8 @@ async def login_options(
     body: WebAuthnLoginOptionsRequest,
     session: Annotated[AsyncSession, Depends(get_session)],
 ) -> Envelope[WebAuthnLoginOptionsResponse]:
+    # impersonation-ok: login ceremony, gated on the temp_token from a
+    # password check -- same as /auth/2fa/login. Nothing is written.
     options, challenge_token = await AuthService(session).begin_webauthn_login(body.temp_token)
     return Envelope(
         data=WebAuthnLoginOptionsResponse(options=options, challenge_token=challenge_token),
@@ -122,6 +129,8 @@ async def login(
     body: WebAuthnLoginRequest,
     session: Annotated[AsyncSession, Depends(get_session)],
 ) -> Envelope[LoginResponse]:
+    # impersonation-ok: the second leg of that same login ceremony; it can
+    # only ever mint a session for whoever holds the security key.
     access_token, refresh_plain, user = await AuthService(session).complete_webauthn_login(
         body.challenge_token,
         body.credential,

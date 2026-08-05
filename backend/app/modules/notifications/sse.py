@@ -43,6 +43,7 @@ from app.core.dependencies import (
     get_current_user,
     get_redis,
     invalidate_user_cache,
+    reject_during_impersonation,
 )
 from app.core.envelope import Envelope, Meta
 from app.core.exceptions import RateLimitError
@@ -192,7 +193,10 @@ async def list_notifications(  # noqa: PLR0913 -- cursor pagination (§0.3) need
     return Envelope(data=data, meta=meta)
 
 
-@router.patch("/notifications/{notification_id}/read")
+@router.patch(
+    "/notifications/{notification_id}/read",
+    dependencies=[Depends(reject_during_impersonation("notification_read_state"))],
+)
 @api_limit
 async def mark_notification_read(  # noqa: PLR0913 -- the usual router param set plus the reader's locale (T-234)
     request: Request,
@@ -212,7 +216,10 @@ async def mark_notification_read(  # noqa: PLR0913 -- the usual router param set
     )
 
 
-@router.post("/notifications/read-all")
+@router.post(
+    "/notifications/read-all",
+    dependencies=[Depends(reject_during_impersonation("notification_read_state"))],
+)
 @api_limit
 async def mark_all_notifications_read(
     request: Request,
@@ -245,7 +252,10 @@ async def get_unread_count(
     )
 
 
-@router.patch("/me/notification-preferences")
+@router.patch(
+    "/me/notification-preferences",
+    dependencies=[Depends(reject_during_impersonation("data_mutation"))],
+)
 @api_limit
 async def update_notification_preferences(
     request: Request,
@@ -263,7 +273,9 @@ async def update_notification_preferences(
     )
 
 
-@router.post("/notifications/push-tokens")
+@router.post(
+    "/notifications/push-tokens", dependencies=[Depends(reject_during_impersonation("notifying"))]
+)
 @api_limit
 async def register_push_token(
     request: Request,

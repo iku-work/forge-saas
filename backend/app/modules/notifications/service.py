@@ -15,6 +15,9 @@ from the sender's locale, not from request.state.locale, and not before a
 fan-out loop. send_many() exists so a multi-recipient event physically cannot
 be rendered once and reused: it is a loop over send(), and each iteration
 re-resolves locale, preferences and name from its own recipient's row.
+
+T-260: the push channel (and only the push channel) is dropped for anything
+sent while a support agent is impersonating the recipient -- see send().
 """
 
 from collections.abc import Sequence
@@ -25,6 +28,7 @@ from redis.asyncio import Redis
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core import jobs
+from app.core.audit_context import get_impersonator_id
 from app.core.exceptions import NotFoundError
 from app.core.urls import frontend_url
 from app.modules.audit.service import AuditService
@@ -87,21 +91,36 @@ class NotificationService:
             idempotency_key=idempotency_key,
         )
 
+        # T-260: a push is the one channel that lights up hardware the real
+        # user is holding *right now*, so it is the one suppressed when the
+        # action behind this notification was taken by a support agent inside
+        # an impersonation session. The Notification row is still written and
+        # still streams to any open tab -- the user's own history stays
+        # complete, they just don't get buzzed by someone else's typing. Reads
+        # the same request-scoped ContextVar every audit event does, so a
+        # worker sending on its own schedule is untouched.
+        push_suppressed = "push" in channels and get_impersonator_id() is not None
+
         if "email" in channels:
             await self._enqueue_email(user, notification)
-        if "push" in channels:
+        if "push" in channels and not push_suppressed:
             await jobs.enqueue_job("send_push", user_id=user_id, notification_id=notification.id)
         if "in_app" in channels:
             await self._redis.publish(
                 f"{IN_APP_CHANNEL_PREFIX}{user_id}", notification.model_dump_json()
             )
 
+        diff: dict[str, Any] = {"type": type, "channels": channels, "locale": locale}
+        if push_suppressed:
+            # Only present when it happened: this is the evidence that a push
+            # the preferences asked for was deliberately not sent.
+            diff["push_suppressed"] = True
         await self._audit.log(
             action="notification.sent",
             resource_type="notification",
             resource_id=str(notification.id),
             org_id=org_id,
-            diff={"type": type, "channels": channels, "locale": locale},
+            diff=diff,
         )
         return notification
 

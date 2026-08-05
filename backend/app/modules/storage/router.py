@@ -15,7 +15,12 @@ from redis.asyncio import Redis
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.db import get_session
-from app.core.dependencies import get_current_org, get_redis, require_permission
+from app.core.dependencies import (
+    get_current_org,
+    get_redis,
+    reject_during_impersonation,
+    require_permission,
+)
 from app.core.envelope import Envelope, Meta
 from app.middleware.rate_limit import api_limit
 from app.modules.auth.permissions import Permission
@@ -36,7 +41,7 @@ def _request_id(request: Request) -> str:
     return getattr(request.state, "request_id", None) or str(uuid4())
 
 
-@router.post("/presign")
+@router.post("/presign", dependencies=[Depends(reject_during_impersonation("data_mutation"))])
 @api_limit
 async def presign_upload(  # noqa: PLR0913 — org_sub on top of the usual permission + session + redis params
     request: Request,
@@ -64,7 +69,9 @@ async def presign_upload(  # noqa: PLR0913 — org_sub on top of the usual permi
     )
 
 
-@router.post("/{file_id}/confirm")
+@router.post(
+    "/{file_id}/confirm", dependencies=[Depends(reject_during_impersonation("data_mutation"))]
+)
 @api_limit
 async def confirm_upload(  # noqa: PLR0913 — org_sub on top of the usual permission + session + redis params
     request: Request,
@@ -142,7 +149,7 @@ async def download_file(  # noqa: PLR0913 — org_sub on top of the usual permis
     )
 
 
-@router.delete("/{file_id}")
+@router.delete("/{file_id}", dependencies=[Depends(reject_during_impersonation("data_mutation"))])
 @api_limit
 async def delete_file(  # noqa: PLR0913 — org_sub on top of the usual permission + session + redis params
     request: Request,

@@ -22,6 +22,7 @@ from app.core.dependencies import (
     get_current_user,
     get_redis,
     invalidate_user_cache,
+    reject_during_impersonation,
     require_recent_auth,
 )
 from app.core.envelope import Envelope, Meta
@@ -103,6 +104,8 @@ async def register(
     body: RegisterRequest,
     session: Annotated[AsyncSession, Depends(get_session)],
 ) -> Envelope[None]:
+    # impersonation-ok: public sign-up. Creates a *new* account from the
+    # posted email; it is not an action taken on the impersonated user.
     await AuthService(session).register(body)
     await session.commit()
     return Envelope(data=None, meta=Meta(request_id=_request_id(request)))
@@ -116,6 +119,9 @@ async def login(
     body: LoginRequest,
     session: Annotated[AsyncSession, Depends(get_session)],
 ) -> Envelope[LoginResponse] | Envelope[TwoFactorRequiredResponse]:
+    # impersonation-ok: a credential exchange, not an action as anyone. It
+    # mints a session for whoever passes the password check, and ignores the
+    # bearer token entirely.
     result = await AuthService(session).login(
         body, _client_ip(request), request.headers.get("user-agent", "")
     )
@@ -144,6 +150,9 @@ async def refresh(
     session: Annotated[AsyncSession, Depends(get_session)],
     body: RefreshRequest | None = None,
 ) -> Envelope[RefreshResponse]:
+    # impersonation-ok: reads only the refresh cookie/body field. T-142 never
+    # issues a refresh token for an impersonation session, so there is nothing
+    # here for one to rotate (see test_impersonation_token_cannot_be_refreshed).
     refresh_token = _bearer_refresh_token(request, body)
     if refresh_token is None:
         raise AuthenticationError(
@@ -173,6 +182,8 @@ async def logout(
     session: Annotated[AsyncSession, Depends(get_session)],
     body: RefreshRequest | None = None,
 ) -> Envelope[None]:
+    # impersonation-ok: ends the one session named by the presented refresh
+    # token -- again never the impersonation token, which has none.
     refresh_token = _bearer_refresh_token(request, body)
     if refresh_token is not None:
         await AuthService(session).logout(refresh_token)
@@ -181,7 +192,7 @@ async def logout(
     return Envelope(data=None, meta=Meta(request_id=_request_id(request)))
 
 
-@router.post("/logout-all")
+@router.post("/logout-all", dependencies=[Depends(reject_during_impersonation("data_mutation"))])
 @api_limit
 async def logout_all(
     request: Request,
@@ -203,6 +214,8 @@ async def verify_email(
     session: Annotated[AsyncSession, Depends(get_session)],
     redis: Annotated[Redis, Depends(get_redis)],
 ) -> Envelope[None]:
+    # impersonation-ok: consumes a single-use token that only ever existed in
+    # the real user's own inbox; a support agent has no way to produce one.
     verified = await AuthService(session).verify_email(body.token)
     await session.commit()
     # T-240: mark_email_verified flips is_active False -> True. A user who
@@ -212,7 +225,7 @@ async def verify_email(
     return Envelope(data=None, meta=Meta(request_id=_request_id(request)))
 
 
-@router.post("/forgot-password")
+@router.post("/forgot-password", dependencies=[Depends(reject_during_impersonation("notifying"))])
 @sensitive_limit
 async def forgot_password(
     request: Request,
@@ -224,7 +237,9 @@ async def forgot_password(
     return Envelope(data=None, meta=Meta(request_id=_request_id(request)))
 
 
-@router.post("/reset-password")
+@router.post(
+    "/reset-password", dependencies=[Depends(reject_during_impersonation("data_mutation"))]
+)
 @sensitive_limit
 async def reset_password(
     request: Request,
@@ -238,7 +253,7 @@ async def reset_password(
     return Envelope(data=None, meta=Meta(request_id=_request_id(request)))
 
 
-@router.post("/magic-link")
+@router.post("/magic-link", dependencies=[Depends(reject_during_impersonation("notifying"))])
 @sensitive_limit
 async def request_magic_link(
     request: Request,
@@ -258,6 +273,9 @@ async def consume_magic_link(
     body: MagicLinkConsumeRequest,
     session: Annotated[AsyncSession, Depends(get_session)],
 ) -> Envelope[LoginResponse]:
+    # impersonation-ok: the second leg of a login, gated on a token from the
+    # user's inbox -- /auth/magic-link, the leg that *sends* that mail, is the
+    # one that carries the block.
     access_token, refresh_plain, user = await AuthService(session).consume_magic_link(
         body.token, _client_ip(request), request.headers.get("user-agent", "")
     )
@@ -282,7 +300,7 @@ async def me(
     )
 
 
-@router.patch("/me")
+@router.patch("/me", dependencies=[Depends(reject_during_impersonation("data_mutation"))])
 @api_limit
 async def update_me(
     request: Request,
@@ -299,7 +317,9 @@ async def update_me(
     )
 
 
-@router.post("/change-password")
+@router.post(
+    "/change-password", dependencies=[Depends(reject_during_impersonation("data_mutation"))]
+)
 @sensitive_limit
 async def change_password(
     request: Request,
@@ -321,7 +341,7 @@ async def change_password(
     return Envelope(data=None, meta=Meta(request_id=_request_id(request)))
 
 
-@router.post("/change-email")
+@router.post("/change-email", dependencies=[Depends(reject_during_impersonation("data_mutation"))])
 @sensitive_limit
 async def request_email_change(
     request: Request,
@@ -343,7 +363,9 @@ async def request_email_change(
     return Envelope(data=None, meta=Meta(request_id=_request_id(request)))
 
 
-@router.post("/change-email/confirm")
+@router.post(
+    "/change-email/confirm", dependencies=[Depends(reject_during_impersonation("data_mutation"))]
+)
 @auth_limit
 async def confirm_email_change(
     request: Request,
@@ -359,7 +381,9 @@ async def confirm_email_change(
     )
 
 
-@router.post("/change-email/cancel")
+@router.post(
+    "/change-email/cancel", dependencies=[Depends(reject_during_impersonation("data_mutation"))]
+)
 @auth_limit
 async def cancel_email_change(
     request: Request,
@@ -386,7 +410,9 @@ async def list_sessions(
     return Envelope(data=data, meta=Meta(request_id=_request_id(request)))
 
 
-@router.delete("/sessions/{session_id}")
+@router.delete(
+    "/sessions/{session_id}", dependencies=[Depends(reject_during_impersonation("data_mutation"))]
+)
 @api_limit
 async def revoke_session(
     request: Request,

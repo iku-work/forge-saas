@@ -41,6 +41,9 @@ async def stripe_webhook(
     session: Annotated[AsyncSession, Depends(get_session)],
     redis: Annotated[Redis, Depends(get_redis)],
 ) -> Response:
+    # impersonation-ok: a server-to-server callback from Stripe, authenticated
+    # by the signature check below and never by a user bearer token -- there is
+    # no impersonation session for this route to be inside of.
     settings = get_settings()
     raw_body = await request.body()
     sig_header = request.headers.get("stripe-signature", "")

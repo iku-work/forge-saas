@@ -352,8 +352,18 @@ async def test_require_permission_denial_writes_audit_event(session: AsyncSessio
     with pytest.raises(PermissionDeniedError):
         await checker(**kwargs)
 
+    # Scoped to this test's own org: the denial is now committed by the
+    # dependency itself (otherwise the raise would unwind get_session's
+    # rollback and lose it in production), and this module's session fixture
+    # keeps whatever earlier tests committed.
     events = (
-        (await session.execute(select(AuditEvent).where(AuditEvent.action == "permission.denied")))
+        (
+            await session.execute(
+                select(AuditEvent).where(
+                    AuditEvent.action == "permission.denied", AuditEvent.org_id == org.id
+                )
+            )
+        )
         .scalars()
         .all()
     )

@@ -23,6 +23,7 @@ from app.core.db import get_session
 from app.core.dependencies import (
     get_current_org,
     get_redis,
+    reject_during_impersonation,
     require_permission,
     require_recent_auth,
 )
@@ -48,7 +49,7 @@ def _request_id(request: Request) -> str:
     return getattr(request.state, "request_id", None) or str(uuid4())
 
 
-@router.post("/checkout-session")
+@router.post("/checkout-session", dependencies=[Depends(reject_during_impersonation("billing"))])
 @api_limit
 async def create_checkout_session(  # noqa: PLR0913 — T-120/T-218 add redis+step-up on top of the existing 5
     request: Request,
@@ -71,7 +72,7 @@ async def create_checkout_session(  # noqa: PLR0913 — T-120/T-218 add redis+st
     )
 
 
-@router.post("/portal-session")
+@router.post("/portal-session", dependencies=[Depends(reject_during_impersonation("billing"))])
 @api_limit
 async def create_portal_session(
     request: Request,

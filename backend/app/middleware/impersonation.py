@@ -17,9 +17,7 @@ from starlette.responses import Response
 
 from app.core.audit_context import reset_impersonator_id, set_impersonator_id
 from app.core.exceptions import AuthenticationError
-from app.modules.auth.utils import verify_access_token
-
-_BEARER_PREFIX = "Bearer "
+from app.modules.auth.utils import bearer_token, verify_access_token
 
 
 class ImpersonationContextMiddleware(BaseHTTPMiddleware):
@@ -29,20 +27,20 @@ class ImpersonationContextMiddleware(BaseHTTPMiddleware):
         call_next: Callable[[Request], Awaitable[Response]],
     ) -> Response:
         impersonator_id = None
-        auth_header = request.headers.get("authorization", "")
-        if auth_header.startswith(_BEARER_PREFIX):
+        access_token = bearer_token(request.headers.get("authorization"))
+        if access_token is not None:
             try:
-                payload = verify_access_token(auth_header[len(_BEARER_PREFIX) :])
+                payload = verify_access_token(access_token)
             except AuthenticationError:
                 payload = None
             if payload is not None:
                 impersonator_id = payload.impersonator_id
 
-        token = set_impersonator_id(impersonator_id)
+        context_token = set_impersonator_id(impersonator_id)
         try:
             if impersonator_id is not None:
                 with logger.contextualize(impersonator_id=str(impersonator_id)):
                     return await call_next(request)
             return await call_next(request)
         finally:
-            reset_impersonator_id(token)
+            reset_impersonator_id(context_token)
