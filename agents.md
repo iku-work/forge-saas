@@ -5993,9 +5993,63 @@ For each of `packages/{ui,api-client,types,hooks,validation,utils}`:
 
 **Done when**
 
-- [ ] All five files + README + test template exist and are lint/type-clean
-- [ ] Exclusion from registry, routing, and migrations proven by tests
-- [ ] Example demonstrates envelope, RBAC, cursor pagination, org-scoping, and typed errors
+- [x] All five files + README + test template exist and are lint/type-clean —
+      `models.py` / `schemas.py` / `repository.py` / `service.py` /
+      `router.py` + `README.md` around one org-scoped `Item`, plus
+      `tests/modules/_template_test.py.tmpl`. `ruff check`, `ruff format
+      --check` and `mypy --strict` all pass on `_template/` exactly as it
+      sits, which is only possible because the module imports itself
+      *relatively* (`from .models import Item`): an absolute
+      `app.modules.__MODULE_NAME__.models` is unresolvable until the module
+      is generated, so mypy could never check the template itself — and the
+      relative form survives the rename for free. `.gitkeep` is gone; the
+      directory has real contents now
+- [x] Exclusion from registry, routing, and migrations proven by tests —
+      `tests/test_module_template.py`, plus
+      `test_autogenerate_never_proposes_the_template_scaffolds_table` in
+      `test_conditional_migrations.py`. Registry and routing turned out to
+      exclude the scaffold *by construction* rather than by the underscore
+      convention (`ModuleName` is a closed `Literal`; `build_router()` and
+      `app/models/__init__.py` are hand-written lists), so those tests assert
+      the property and nothing had to change. Alembic was the one place
+      relying on nothing at all: `target_metadata` **is** the process-wide
+      `SQLModel.metadata`, so a single import of the scaffold anywhere in the
+      process registers `Item` in front of autogenerate — and
+      `tests/test_read_replica.py` already does exactly that, sweeping every
+      `app.modules.*.repository` through `pkgutil`. `alembic/env.py` now
+      drops any object whose (parent) table name still carries the
+      `__MODULE_NAME__` placeholder: exact, not heuristic, because generation
+      substitutes every occurrence away (T-251). Verified by deleting the
+      guard and watching the test fail
+- [x] Example demonstrates envelope, RBAC, cursor pagination, org-scoping, and typed errors —
+      five CRUD routes, each with `@api_limit`, `require_permission(...)` and
+      an `Envelope`/`Meta` response; `list_items` pages by cursor with the
+      next one in `meta.next_cursor`; `ItemRepository.count_active` is the
+      worked example of the org-scope + soft-delete pattern a hand-written
+      query has to repeat; `NotFoundError` / `UnprocessableEntityError` /
+      `PlanLimitError` all leave the service typed
+- Four decisions the brief's shape didn't settle. (1) `require_permission`
+      alone gates every route and yields the `Membership`, so `org_id` and
+      the actor's `user_id` come from the gate rather than from the client —
+      but a `<module>:read` / `<module>:manage` pair cannot exist before the
+      module does, so `router.py` starts from two named constants pointing at
+      existing permissions, and repointing them is step 2 of the README's
+      checklist. (2) The plan-limit example is a module constant, not a
+      `require_feature` entitlement: a gate that denies would make a
+      brand-new module 402 until someone configured a plan, and coupling the
+      scaffold to billing would break it for products that disable billing
+      (T-065) — the README points at `storage.service._check_quota` for the
+      real thing. (3) The table is `__MODULE_NAME___item`, not `item`, so two
+      modules generated before either entity is renamed don't collide on
+      `SQLModel.metadata` at import time. (4) The test template drives the
+      module through a small FastAPI app it assembles itself, overriding only
+      `get_current_org` — that is what lets the generated tests be green
+      *before* the router is registered and before the migration exists
+      (README steps 3 and 4), and it is what lets one test choose the calling
+      org and another the calling role. `[tool.coverage.run] omit` now
+      excludes `_template` — it ships uncalled by design, and measuring it
+      would charge every future template line against CI's
+      `--cov-fail-under=85`
 
 ---
 

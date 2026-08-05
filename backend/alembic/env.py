@@ -83,6 +83,25 @@ def load_models_for_migration() -> None:
 load_models_for_migration()
 
 
+# T-250: app/modules/_template is a scaffold, not a module. Nothing here
+# imports it -- load_models_for_migration() above is an explicit list -- but
+# `Item` still lands on the shared SQLModel.metadata as soon as *anything* in
+# the process imports it (tests/test_read_replica.py, for one, sweeps every
+# app.modules.*.repository through pkgutil), and target_metadata is that same
+# global object. Autogenerate would then propose creating the template's
+# table. Excluding by the generator's placeholder is exact rather than
+# heuristic: a real table name cannot contain it, because `make new-module`
+# substitutes every occurrence away (T-251).
+TEMPLATE_PLACEHOLDER = "__MODULE_NAME__"
+
+
+def _is_template_object(object_: SchemaItem, name: str | None, type_: str) -> bool:
+    if type_ == "table":
+        return name is not None and TEMPLATE_PLACEHOLDER in name
+    parent_table = getattr(object_, "table", None)
+    return TEMPLATE_PLACEHOLDER in getattr(parent_table, "name", "")
+
+
 def _enabled_for_table(table_name: str | None) -> bool | None:
     """None if table_name doesn't belong to any optional module."""
     modules = get_modules()
@@ -110,7 +129,12 @@ def include_object(
     "plan.id")`-style reference (e.g. Organization.plan_id -> Plan), which
     needs its own exclusion or autogenerate proposes an FK to a table that
     was never created.
+
+    The _template scaffold is excluded first and unconditionally -- see
+    TEMPLATE_PLACEHOLDER above.
     """
+    if _is_template_object(object_, name, type_):
+        return False
     if type_ == "table":
         enabled = _enabled_for_table(name)
         return True if enabled is None else enabled

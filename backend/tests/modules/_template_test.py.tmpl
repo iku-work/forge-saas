@@ -1,0 +1,217 @@
+"""
+Tests for the __MODULE_NAME__ module, generated from
+backend/tests/modules/_template_test.py.tmpl by `make new-module`.
+
+The three tests at the bottom are the §0.8 non-negotiables, pre-written so
+that no module can be built without them: cross-tenant isolation, the RBAC
+gate, and cursor pagination. Keep all three green as the module grows and add
+your own cases below them; a module whose isolation test was quietly deleted
+is indistinguishable from one that never had it.
+
+The module under test is exercised through a small FastAPI app assembled here
+rather than through app.main, for two reasons. It runs green the moment the
+module is generated -- before the router is registered in
+app/api/v1/__init__.py and before `alembic revision --autogenerate` has
+created the table (steps 3 and 4 of the module README's checklist) -- and it
+lets each test choose which organization and which role is calling, which is
+the whole point of the first two tests. `get_current_org` is the one
+dependency overridden: everything downstream of it, including
+`require_permission`'s real RBAC matrix, runs for real.
+"""
+
+from collections.abc import AsyncIterator, Callable
+from datetime import UTC, datetime
+from uuid import uuid4
+
+import httpx
+import pytest
+from fastapi import FastAPI
+from httpx import ASGITransport
+from limits.storage import RedisStorage
+from redis.asyncio import Redis
+from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
+from sqlmodel import SQLModel
+
+from app.core.db import get_session
+from app.core.dependencies import get_current_org, get_redis
+from app.core.handlers import register_exception_handlers
+from app.middleware.rate_limit import register_rate_limiting
+from app.modules.auth.permissions import MemberRole
+from app.modules.auth.repository import UserRepository
+from app.modules.auth.utils import hash_password
+from app.modules.tenancy.models import Membership, Organization
+from app.modules.tenancy.repository import MembershipRepository, OrganizationRepository
+
+# The module under test, deliberately in its own import block: where
+# `app.modules.<name>` sorts against `app.modules.auth` above depends on the
+# name it was generated with, so without this split ruff's I001 would flag
+# the generated file for roughly half of all module names.
+# isort: split
+from app.modules.__MODULE_NAME__.models import Item
+from app.modules.__MODULE_NAME__.repository import ItemRepository
+from app.modules.__MODULE_NAME__.router import router
+
+_PREFIX = "/api/v1/__MODULE_NAME__"
+
+
+@pytest.fixture(autouse=True)
+async def _item_table(engine: AsyncEngine) -> None:
+    # create_all is checkfirst by default, so this is a no-op once step 4 of
+    # the README checklist (the real migration) has landed. No matching
+    # drop_all: from that point on the table belongs to the migration, and
+    # dropping it here would pull it out from under every later test in the
+    # session-scoped engine.
+    async with engine.begin() as conn:
+        await conn.run_sync(SQLModel.metadata.create_all, tables=[Item.__table__])
+
+
+async def _make_org(session: AsyncSession, role: MemberRole) -> tuple[Organization, Membership]:
+    user = await UserRepository(session).create(
+        email=f"{uuid4()}@example.com",
+        hashed_password=hash_password("Correct-Horse9"),
+        email_verified_at=datetime.now(UTC),
+    )
+    org = await OrganizationRepository(session).create(name="Acme", slug=f"acme-{uuid4()}")
+    membership = await MembershipRepository(session).create(
+        user_id=user.id, org_id=org.id, role=role
+    )
+    await session.flush()
+    return org, membership
+
+
+ClientFactory = Callable[[tuple[Organization, Membership]], httpx.AsyncClient]
+
+
+@pytest.fixture
+async def api_client(
+    session: AsyncSession,
+    _redis_client: Redis,
+    _rate_limit_storage: RedisStorage,
+) -> AsyncIterator[ClientFactory]:
+    """Builds a client that calls this module's routes as a given org+member."""
+    _rate_limit_storage.reset()
+    clients: list[httpx.AsyncClient] = []
+
+    def _make(caller: tuple[Organization, Membership]) -> httpx.AsyncClient:
+        api = FastAPI()
+        register_exception_handlers(api)  # DomainError -> status code + envelope
+        register_rate_limiting(api)  # @api_limit needs app.state.limiter
+        api.include_router(router, prefix="/api/v1")
+        api.dependency_overrides[get_session] = lambda: session
+        api.dependency_overrides[get_redis] = lambda: _redis_client
+        api.dependency_overrides[get_current_org] = lambda: caller
+        client = httpx.AsyncClient(transport=ASGITransport(app=api), base_url="https://testserver")
+        clients.append(client)
+        return client
+
+    yield _make
+
+    for client in clients:
+        await client.aclose()
+
+
+async def _seed_item(session: AsyncSession, caller: tuple[Organization, Membership], name: str):
+    org, membership = caller
+    item = await ItemRepository(session, org.id).create(name=name, created_by=membership.user_id)
+    await session.flush()
+    return item
+
+
+# --- §0.8 non-negotiable 1: cross-tenant isolation ---------------------------
+
+
+async def test_one_org_cannot_see_or_fetch_another_orgs_items(
+    session: AsyncSession, api_client: ClientFactory
+) -> None:
+    owner_a = await _make_org(session, MemberRole.OWNER)
+    owner_b = await _make_org(session, MemberRole.OWNER)
+    item = await _seed_item(session, owner_a, "org a's item")
+
+    client_b = api_client(owner_b)
+
+    listed = await client_b.get(_PREFIX)
+    assert listed.status_code == 200
+    assert listed.json()["data"] == []
+
+    # 404, not 403: a cross-tenant probe must not be able to tell the
+    # difference between "not yours" and "does not exist".
+    fetched = await client_b.get(f"{_PREFIX}/{item.id}")
+    assert fetched.status_code == 404
+    assert fetched.json()["error"]["code"] == "not_found"
+
+    # ...and the same for every mutating route.
+    patched = await client_b.patch(f"{_PREFIX}/{item.id}", json={"name": "stolen"})
+    assert patched.status_code == 404
+    deleted = await client_b.delete(f"{_PREFIX}/{item.id}")
+    assert deleted.status_code == 404
+
+
+# --- §0.8 non-negotiable 2: the RBAC gate ------------------------------------
+
+
+async def test_a_plain_member_can_read_but_not_write(
+    session: AsyncSession, api_client: ClientFactory
+) -> None:
+    member = await _make_org(session, MemberRole.MEMBER)
+    client = api_client(member)
+
+    assert (await client.get(_PREFIX)).status_code == 200
+
+    created = await client.post(_PREFIX, json={"name": "nope"})
+    assert created.status_code == 403
+    assert created.json()["error"]["code"] == "permission_denied"
+
+
+async def test_an_owner_can_write(session: AsyncSession, api_client: ClientFactory) -> None:
+    owner = await _make_org(session, MemberRole.OWNER)
+    client = api_client(owner)
+
+    created = await client.post(_PREFIX, json={"name": "first"})
+
+    assert created.status_code == 200
+    body = created.json()
+    assert body["data"]["name"] == "first"
+    assert body["data"]["status"] == "active"
+    assert body["error"] is None
+    assert body["meta"]["request_id"]  # every response carries the envelope (§0.5)
+
+
+# --- §0.8 non-negotiable 3: cursor pagination --------------------------------
+
+
+async def test_list_pages_by_cursor_without_repeating_or_dropping_rows(
+    session: AsyncSession, api_client: ClientFactory
+) -> None:
+    owner = await _make_org(session, MemberRole.OWNER)
+    for index in range(3):
+        await _seed_item(session, owner, f"item {index}")
+    client = api_client(owner)
+
+    first = (await client.get(_PREFIX, params={"limit": 2})).json()
+    assert len(first["data"]) == 2
+    assert first["meta"]["next_cursor"] is not None
+
+    second = (
+        await client.get(_PREFIX, params={"limit": 2, "after": first["meta"]["next_cursor"]})
+    ).json()
+    assert len(second["data"]) == 1
+    assert second["meta"]["next_cursor"] is None
+
+    seen = [row["id"] for row in first["data"] + second["data"]]
+    assert len(set(seen)) == 3
+
+
+# --- module-specific tests go below ------------------------------------------
+
+
+async def test_soft_deleted_items_disappear_from_the_list(
+    session: AsyncSession, api_client: ClientFactory
+) -> None:
+    owner = await _make_org(session, MemberRole.OWNER)
+    item = await _seed_item(session, owner, "doomed")
+    client = api_client(owner)
+
+    assert (await client.delete(f"{_PREFIX}/{item.id}")).status_code == 200
+
+    assert (await client.get(_PREFIX)).json()["data"] == []
+    assert (await client.get(f"{_PREFIX}/{item.id}")).status_code == 404

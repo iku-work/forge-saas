@@ -35,12 +35,20 @@ import asyncpg
 import pytest
 from alembic import command
 from alembic.config import Config
+from sqlmodel import SQLModel
 from testcontainers.postgres import PostgresContainer
 
 from app.core import migrations as migration_runner
 from app.core import module_loader
 from app.core.config import get_settings
 from app.core.modules import EnabledModules, ModuleConfig
+
+# Imported at module scope on purpose (T-250): it registers the _template
+# scaffold's table on the shared SQLModel.metadata for every autogenerate
+# test in this file, not just the one that asserts on it -- which is the
+# state a full-suite run is actually in, since anything that sweeps
+# app.modules.* imports the scaffold too.
+from app.modules._template.models import Item as TemplateItem
 from product import config as product_config
 
 _REAL_ALEMBIC_DIR = Path(__file__).parent.parent / "alembic"
@@ -280,3 +288,24 @@ def test_autogenerate_does_not_drop_billing_tables_once_disabled(
     assert not _creates_table(script, "plan")
     assert not _creates_table(script, "subscription")
     assert not _creates_table(script, "webhook_event")
+
+
+def test_autogenerate_never_proposes_the_template_scaffolds_table(
+    blank_alembic_config: Config,
+) -> None:
+    # T-250. The import at the top of this file is what makes this real:
+    # app/modules/_template is never imported by the application, but
+    # importing it anywhere in the process is enough to register `Item` on the
+    # SQLModel.metadata that alembic/env.py hands autogenerate as
+    # target_metadata -- and something does exactly that (test_read_replica.py
+    # sweeps every app.modules.*.repository through pkgutil). The scaffold is
+    # not a module: its table must never be proposed, whatever else is
+    # enabled.
+    assert TemplateItem.__tablename__ in SQLModel.metadata.tables
+
+    command.revision(blank_alembic_config, message="initial", autogenerate=True)
+
+    script = _latest_script(blank_alembic_config)
+    assert not _creates_table(script, TemplateItem.__tablename__)
+    assert "__MODULE_NAME__" not in script
+    assert _creates_table(script, "organization")  # ...and everything real still is
