@@ -6077,9 +6077,57 @@ For each of `packages/{ui,api-client,types,hooks,validation,utils}`:
 
 **Done when**
 
-- [ ] Generated module is green (lint + types + tests) with zero manual edits
-- [ ] Follow-up checklist printed with accurate pointers
-- [ ] CI smoke test guards the generator itself
+- [x] Generated module is green (lint + types + tests) with zero manual edits —
+      `make new-module NAME=zztest` → `ruff check`, `ruff format --check`,
+      `mypy --strict` and its own 5 tests all pass untouched, verified end to
+      end here. The generated tests are green *before* the router is
+      registered and before the migration exists (T-250's test template
+      assembles its own FastAPI app), so "green with zero edits" is a real
+      starting point rather than a definition. `ruff format` runs over the
+      output as a guard: the placeholder is 15 characters wide, so
+      substitution moves every line carrying it, and
+      `test_generation_changes_nothing_that_ruff_would_change` pins the fact
+      that today the formatter never actually has to rewrite anything — the
+      day a template edit makes it a repair, that test says so
+- [x] Follow-up checklist printed with accurate pointers — eight steps
+      mirroring the module README's, each `file:line` resolved against the
+      real tree at generation time by searching for an anchor rather than
+      being typed, so they cannot rot;
+      `test_every_shared_pointer_resolves_in_the_real_tree` fails if an
+      anchor is ever renamed away. Writing the pointers turned up one the
+      README was missing: `alembic/env.py`'s `load_models_for_migration()` is
+      a hand-written import list, so `alembic revision --autogenerate`
+      proposes **nothing at all** for a new module until it is listed there —
+      silent, and indistinguishable from "no schema changes". The template
+      README's step 4 now says so too
+- [x] CI smoke test guards the generator itself — two steps in the `test`
+      job: a real `make new-module NAME=zztest` in the real checkout
+      (placeholder grep, ruff, `mypy --strict`, its own pytest run, then
+      deleted in a trap), plus the three refusal cases. The smoke has to run
+      in the real tree rather than a temp workspace because mypy and pytest
+      both need `app.modules.zztest` genuinely importable; it deletes the
+      module in the same step because while it exists its `Item` is on the
+      process-wide `SQLModel.metadata` for anything that sweeps
+      `app.modules.*` — the alembic placeholder guard covers the
+      *un*generated scaffold only, by design. `backend/tests/test_new_module_script.py`
+      (59 tests) covers everything that doesn't need a real checkout, against
+      a scratch backend root in `tmp_path`
+- Three decisions the brief didn't settle. (1) `NAME` is capped at 27
+      characters, which is not arbitrary: the scaffold's composite index is
+      `ix_<name>_item_org_id_status_created_at_id`, 36 characters of fixed
+      text, and Postgres truncates identifiers to 63 bytes *silently* — a
+      longer name would not fail, it would collide with the next long name
+      months later. The test re-derives the limit from the rendered template
+      rather than trusting the arithmetic. (2) Reserved names are read out of
+      the tree (module directories, `ModuleName`'s `Literal` members parsed
+      with `ast`, Python keywords) instead of being listed in the script, so
+      `NAME=file_storage` is refused even though no such directory exists.
+      The parse rather than an import keeps the generator runnable from a
+      bare checkout with no installed `app` and no `.env`. (3)
+      `docs/runbooks/new-module.md` follows T-252's not-yet-written runbook
+      template structure (trigger · pre-checks · steps with expected output ·
+      verification · rollback · escalation) rather than inventing a shape
+      T-252 will then have to retrofit
 
 ---
 

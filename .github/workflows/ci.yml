@@ -26,9 +26,12 @@ jobs:
           ruff check .
           ruff format --check .
 
+      # scripts/ too: backend/scripts/new_module.py (T-251) is a developer CLI
+      # rather than app code, but it is the one thing that writes new app code,
+      # so it gets the same bar.
       - name: Mypy --strict
         working-directory: backend
-        run: mypy --strict app/
+        run: mypy --strict app/ scripts/
 
       - uses: pnpm/action-setup@v4
 
@@ -141,6 +144,54 @@ jobs:
       - name: Backend tests (real Postgres + Redis via testcontainers)
         working-directory: backend
         run: pytest --cov=app --cov-fail-under=85 tests/ -x
+
+      # T-251: tests/test_new_module_script.py checks the generator against a
+      # scratch tree; this checks the claim that actually matters -- that a
+      # module generated into the *real* checkout is lint-, type- and
+      # test-clean with zero manual edits. mypy and pytest both need
+      # `app.modules.zztest` to be genuinely importable, which is why this
+      # can't be done in tmp_path.
+      #
+      # Runs after the suite above and deletes the module immediately, in the
+      # same step: while zztest exists, `Item` is on the process-wide
+      # SQLModel.metadata for anything that sweeps app.modules.* (the alembic
+      # placeholder guard only covers the *un*generated scaffold, by design),
+      # so leaving it in place would change what later steps see.
+      - name: Module generator smoke (make new-module NAME=zztest)
+        run: |
+          set -e
+          # Absolute, because the trap fires after the `cd backend` below.
+          root="$(pwd)"
+          cleanup() {
+            rm -rf "$root/backend/app/modules/zztest" "$root/backend/tests/modules/test_zztest.py"
+          }
+          trap cleanup EXIT
+          make new-module NAME=zztest
+          if grep -rn "__MODULE_NAME__\|__ModelName__" \
+               backend/app/modules/zztest backend/tests/modules/test_zztest.py; then
+            echo "generated module still carries a placeholder" >&2
+            exit 1
+          fi
+          cd backend
+          ruff check app/modules/zztest tests/modules/test_zztest.py
+          ruff format --check app/modules/zztest tests/modules/test_zztest.py
+          mypy --strict app/modules/zztest
+          pytest tests/modules/test_zztest.py --no-cov -q
+
+      - name: Module generator rejects bad names
+        working-directory: backend
+        run: |
+          set -e
+          for name in "" "Foo-Bar" "auth"; do
+            # stderr captured, stdout discarded: a refusal that exits non-zero
+            # but says nothing is as unhelpful as one that silently succeeds.
+            if message=$(python scripts/new_module.py "$name" 2>&1 >/dev/null); then
+              echo "NAME='$name' should have been refused" >&2
+              exit 1
+            fi
+            test -n "$message" || { echo "NAME='$name' failed silently" >&2; exit 1; }
+            echo "NAME='$name' -> $(printf '%s' "$message" | head -1)"
+          done
 
       - uses: pnpm/action-setup@v4
 

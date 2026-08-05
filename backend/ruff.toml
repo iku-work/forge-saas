@@ -37,6 +37,10 @@ ignore = [
 [lint.per-file-ignores]
 # tests favor asserts, magic values, and untyped fixtures over production-grade typing
 "tests/**" = ["S101", "ANN001", "ANN201", "ANN202", "S105", "S106", "PLR2004", "SLF001"]
+# backend/scripts/* are developer CLIs, not importable app code: INP001 (no
+# __init__.py -- they are run as `python scripts/x.py`) and T201 (printing to
+# the terminal is the entire point of a CLI).
+"scripts/**" = ["INP001", "T201"]
 # alembic migrations are generated/templated, not hand-styled application code.
 # F401: script.py.mako always imports sqlmodel for AutoString columns, even in
 # migrations that end up with none.

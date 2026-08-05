@@ -81,8 +81,11 @@ Nothing else depends on `gdpr`, so it can be toggled alone.
 
 ## Adding a new product-specific module
 
-1. `make new-module NAME=invoices` — copies
-   `backend/app/modules/_template/` to `backend/app/modules/invoices/`.
+1. `make new-module NAME=invoices` — generates
+   `backend/app/modules/invoices/` and `backend/tests/modules/test_invoices.py`
+   from `backend/app/modules/_template/`, and prints the manual follow-ups
+   with `file:line` pointers. [new-module.md](new-module.md) walks the whole
+   loop; the steps below are only the toggle-specific ones.
 2. Add `invoices=ModuleConfig(enabled=True)` to `EnabledModules`
    (`backend/app/core/modules.py`) and to `backend/product/config.py`.
 3. Register its router conditionally in `build_router()`

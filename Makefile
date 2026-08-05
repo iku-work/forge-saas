@@ -100,9 +100,12 @@ prod-compose-check:
 		'psql -h 127.0.0.1 -p 6432 -U "$$DB_USER" -d pgbouncer -c "SHOW POOLS"'
 	docker compose -f docker-compose.prod.yml down -v
 
+# T-251: all of the logic lives in Python -- validation, substitution, and the
+# follow-up checklist's file:line pointers are all things shell would do badly.
+# NAME is quoted rather than guarded with `test -n` so an empty one reaches the
+# validator and gets the same message as a malformed one.
 new-module:
-	@test -n "$(NAME)" || (echo "Usage: make new-module NAME=foo" && exit 1)
-	cp -r backend/app/modules/_template backend/app/modules/$(NAME)
+	cd backend && python scripts/new_module.py "$(NAME)"
 
 install-hooks:
 	pre-commit install

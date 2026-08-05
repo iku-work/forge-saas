@@ -59,10 +59,13 @@ deliberately leaves to you, in the order they hurt least.
    (`app/core/modules.py`) and in `backend/product/config.py` (T-059/T-060).
 4. **Create the migration**: `alembic revision --autogenerate -m
    "__MODULE_NAME___tables"`, then read the generated script before applying
-   it. If the module is optional, the new table also belongs in
-   `MODULE_TABLES` in `alembic/env.py` and in `MODULE_BRANCHES` in
-   `app/core/migrations.py`, or disabling the module will not remove its
-   tables.
+   it. Autogenerate diffs against the models Alembic imports *by hand* in
+   `load_models_for_migration()` (`alembic/env.py`) — until this module's
+   `models.py` is listed there it proposes nothing at all, silently. The
+   running app needs the same import added to `app/models/__init__.py`. If
+   the module is optional, the new table also belongs in `MODULE_TABLES` in
+   `alembic/env.py` and in `MODULE_BRANCHES` in `app/core/migrations.py`, or
+   disabling the module will not remove its tables.
 5. **Fill in the query budget.** Every `list_*` route needs a row in
    `BUDGETS` in `backend/tests/test_query_budgets.py` — the suite fails the
    build on a list route without one, which is how N+1s stay caught (T-243).
