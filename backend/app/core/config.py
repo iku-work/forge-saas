@@ -29,6 +29,14 @@ class Settings(BaseSettings):
     # survive a connection that gets re-assigned at every transaction
     # boundary.
     PGBOUNCER_ENABLED: bool = False
+    # T-246: a read-only replica of DATABASE_URL's database, for the query
+    # classes that tolerate replication lag. None (the default) means "no
+    # replica" -- app.core.db then binds read_engine to write_engine, so every
+    # `use_read_replica=True` read stays on the primary and behaviour is
+    # identical to a deployment that has never heard of this setting. Nothing
+    # routes here by HTTP verb or by default: see docs/adr/0003-read-replica.md
+    # for which reads are eligible and what must never leave the primary.
+    READ_REPLICA_URL: PostgresDsn | None = None
     REDIS_URL: RedisDsn
 
     # Auth
@@ -167,15 +175,16 @@ class Settings(BaseSettings):
     # see docs/adr/0001-security-baseline.md's V2.4.5 row.
     PASSWORD_PEPPER: str = ""
 
-    @field_validator("MIGRATIONS_DATABASE_URL", mode="before")
+    @field_validator("MIGRATIONS_DATABASE_URL", "READ_REPLICA_URL", mode="before")
     @classmethod
-    def _blank_migrations_url_means_unset(cls, value: object) -> object:
-        # `MIGRATIONS_DATABASE_URL=` is how every other optional key in
-        # .env.example spells "not set" (SENTRY_DSN, ENCRYPTION_KEY_OLD, the
-        # OAuth pairs), and those all happen to be `str`-typed so pydantic
-        # takes the empty string as-is. PostgresDsn doesn't -- without this,
-        # copying .env.example verbatim fails startup with a URL parse error
-        # on a key the copier never meant to set.
+    def _blank_optional_dsn_means_unset(cls, value: object) -> object:
+        # `MIGRATIONS_DATABASE_URL=` (and, since T-246, `READ_REPLICA_URL=`) is
+        # how every other optional key in .env.example spells "not set"
+        # (SENTRY_DSN, ENCRYPTION_KEY_OLD, the OAuth pairs), and those all
+        # happen to be `str`-typed so pydantic takes the empty string as-is.
+        # PostgresDsn doesn't -- without this, copying .env.example verbatim
+        # fails startup with a URL parse error on a key the copier never meant
+        # to set.
         return None if value == "" else value
 
     @property
@@ -247,6 +256,14 @@ class Settings(BaseSettings):
             ):
                 raise RuntimeError(
                     "MIGRATIONS_DATABASE_URL must set sslmode=require (or stricter) outside dev"
+                )
+        # T-246: and so is the replica -- a third independent hop, carrying
+        # exactly the same rows as the primary.
+        if self.READ_REPLICA_URL is not None:
+            replica_query = self.READ_REPLICA_URL.query or ""
+            if "sslmode=require" not in replica_query and "sslmode=verify" not in replica_query:
+                raise RuntimeError(
+                    "READ_REPLICA_URL must set sslmode=require (or stricter) outside dev"
                 )
         if self.REDIS_URL.scheme != "rediss":
             raise RuntimeError("REDIS_URL must use the rediss:// scheme outside dev")

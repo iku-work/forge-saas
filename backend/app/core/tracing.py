@@ -33,7 +33,7 @@ from opentelemetry.sdk.trace.export import BatchSpanProcessor
 from opentelemetry.sdk.trace.sampling import ParentBased, TraceIdRatioBased
 
 from app.core.config import Settings
-from app.core.db import engine
+from app.core.db import read_engine, read_replica_configured, write_engine
 from app.core.sentry import _app_release  # reuse T-201's package-version lookup
 
 _OTEL_EXPORTER_OTLP_ENDPOINT_ENV = "OTEL_EXPORTER_OTLP_ENDPOINT"
@@ -112,7 +112,16 @@ def configure_tracing(app: FastAPI, settings: Settings) -> TracerProvider:
     # before/after_cursor_execute, which fire on the sync Engine/Connection
     # machinery asyncpg still drives under the hood -- engine.sync_engine,
     # not the AsyncEngine wrapper, is what actually carries those events.
-    SQLAlchemyInstrumentor().instrument(engine=engine.sync_engine, tracer_provider=provider)
+    SQLAlchemyInstrumentor().instrument(engine=write_engine.sync_engine, tracer_provider=provider)
+    # T-246: the replica is a second engine with its own connection pool, and
+    # an untraced one would make replica-routed reads simply vanish from a
+    # trace. Guarded because read_engine *is* write_engine unless a replica is
+    # configured -- instrumenting the same sync engine twice double-reports
+    # every query.
+    if read_replica_configured():
+        SQLAlchemyInstrumentor().instrument(
+            engine=read_engine.sync_engine, tracer_provider=provider
+        )
     RedisInstrumentor().instrument(tracer_provider=provider)
     return provider
 

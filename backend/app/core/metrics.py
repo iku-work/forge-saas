@@ -25,7 +25,7 @@ from prometheus_client import Counter, Gauge, Histogram
 from prometheus_fastapi_instrumentator import Instrumentator
 
 from app.core.config import get_settings
-from app.core.db import engine
+from app.core.db import write_engine
 
 if TYPE_CHECKING:
     from sqlalchemy.pool import QueuePool
@@ -135,11 +135,11 @@ def _read_reencrypt_remaining() -> float:
 
 
 def _read_db_pool_used() -> int:
-    return cast("QueuePool", engine.pool).checkedout()
+    return cast("QueuePool", write_engine.pool).checkedout()
 
 
 def _read_db_pool_size() -> int:
-    return cast("QueuePool", engine.pool).size()
+    return cast("QueuePool", write_engine.pool).size()
 
 
 FORGE_DB_POOL_USED.set_function(_read_db_pool_used)

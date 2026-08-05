@@ -48,8 +48,13 @@ async def test_engine(postgres_container: "PostgresContainer") -> AsyncGenerator
 @pytest.fixture(autouse=True)
 def _use_test_engine(monkeypatch: pytest.MonkeyPatch, test_engine: AsyncEngine) -> None:
     factory = async_sessionmaker(test_engine, expire_on_commit=False, class_=AsyncSession)
-    monkeypatch.setattr(db_module, "engine", test_engine)
+    monkeypatch.setattr(db_module, "write_engine", test_engine)
     monkeypatch.setattr(db_module, "async_session_factory", factory)
+    # T-246: both halves, and to the *same* objects -- that is what "no replica
+    # configured" means (read_replica_configured() stays False), so nothing
+    # here accidentally reaches the real DATABASE_URL through the read side.
+    monkeypatch.setattr(db_module, "read_engine", test_engine)
+    monkeypatch.setattr(db_module, "read_session_factory", factory)
 
 
 async def test_get_session_commits_a_row() -> None:

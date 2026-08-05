@@ -5928,9 +5928,35 @@ For each of `packages/{ui,api-client,types,hooks,validation,utils}`:
 
 **Done when**
 
-- [ ] Plumbing merged, default-off, zero behaviour change (full suite green with flag unset)
-- [ ] Routing + auth-pinning tests pass
-- [ ] ADR captures when to actually enable this
+- [x] Plumbing merged, default-off, zero behaviour change (full suite green with flag unset)
+      — `READ_REPLICA_URL` unset makes `read_engine` *the same object* as
+      `write_engine` (and `read_session_factory` the same as
+      `async_session_factory`), so a flagged read resolves to the caller's own
+      session: no second pool, no branch. Full backend suite green (1735
+      passed, 6 skipped)
+- [x] Routing + auth-pinning tests pass — `tests/test_read_replica.py` runs a
+      second testcontainers Postgres as a stand-in replica (deliberately *not*
+      replicating: rows seeded on one side only make "which database answered"
+      decidable) and asserts routing at the connection level via
+      `before_cursor_execute`. Auth pinning is enforced twice: auth
+      repositories expose no `use_read_replica` at all, and
+      `db.PRIMARY_ONLY_TABLES` pins per *statement*, so a join or subquery
+      that reaches auth state is pinned too
+- [x] ADR captures when to actually enable this — `docs/adr/0003-read-replica.md`:
+      both triggers point at named panels (`forge-database`'s "Pool
+      utilization" and "hall of shame", `api-overview`'s in-flight requests),
+      the cheaper fixes to rule out first, a per-query-class eligibility
+      table, and a 7-step activation checklist (replica pool gauge +
+      replication-lag alert land *before* the second call site)
+- Two things the brief's shape had to change to survive contact: `get_session`'s
+      `read_only` is annotated as a FastAPI dependency rather than a bare
+      `bool = False`, because a bare default publishes `?read_only=` as a query
+      parameter on all ~250 routes that depend on it — i.e. it would make read
+      routing client-settable, the one thing this design forbids (asserted
+      against the real OpenAPI schema). And the misuse guard rejects the flag on
+      any method not *named* like a read (`create`, `get_or_create` and an
+      ambiguous `sync_everything` all raise `TypeError` at class-definition
+      time), rather than trying to detect mutation itself
 
 ---
 

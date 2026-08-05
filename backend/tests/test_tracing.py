@@ -43,7 +43,7 @@ from testcontainers.postgres import PostgresContainer
 
 from app.core import tracing as tracing_module
 from app.core.config import Settings
-from app.core.db import engine as app_engine
+from app.core.db import write_engine as app_engine
 from app.core.tracing import _build_tracer_provider, trace_job
 from app.main import app as real_app
 
@@ -118,7 +118,7 @@ def _isolated_sqlalchemy_instrumentor() -> Generator[None, None, None]:
     # SQLAlchemyInstrumentor is a singleton (BaseInstrumentor's
     # _is_instrumented_by_opentelemetry guard lives on the one shared
     # instance, not per engine=... kwarg) -- app.main's own configure_tracing
-    # already instrumented app.core.db.engine.sync_engine with it at import
+    # already instrumented app.core.db.write_engine.sync_engine with it at import
     # time, so a second .instrument() call for this test's own engine would
     # silently no-op without first undoing that. Restored afterwards so later
     # test modules see app.main's original wiring again.

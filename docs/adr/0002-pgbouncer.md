@@ -161,7 +161,9 @@ in order of preference:
    first.
 2. **A read replica for the lag-tolerant read traffic** (T-246), which reduces
    the statement volume hitting this path at all rather than making each
-   statement cheaper.
+   statement cheaper. The routing for it exists and is tested
+   (`docs/adr/0003-read-replica.md`); no replica is provisioned, and that ADR
+   holds the trigger for changing that.
 
 ## Consequences
 

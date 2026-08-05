@@ -14,7 +14,7 @@ from sqlalchemy.ext.asyncio import (
 
 from app.api.v1 import build_router
 from app.core.config import get_settings, validate_stripe_keys
-from app.core.db import dispose_engine, engine
+from app.core.db import dispose_engine, write_engine
 from app.core.encrypted_type import get_shared_fernet
 from app.core.handlers import register_exception_handlers
 from app.core.i18n import load_translations
@@ -35,7 +35,7 @@ from app.middleware.security_headers import SecurityHeadersMiddleware
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     settings = get_settings()
     get_shared_fernet()  # validates ENCRYPTION_KEY at boot — fails loudly, not on first DB write
-    app.state.engine = engine
+    app.state.engine = write_engine
     app.state.redis = Redis.from_url(str(settings.REDIS_URL))
     try:
         yield

@@ -55,7 +55,7 @@ def test_db_pool_gauges_reflect_engine_pool_without_connecting() -> None:
 
     lines = response.text.splitlines()
     size_line = next(line for line in lines if line.startswith("forge_db_pool_size"))
-    assert float(size_line.split()[-1]) == metrics_module.engine.pool.size()
+    assert float(size_line.split()[-1]) == metrics_module.write_engine.pool.size()
 
 
 def test_arq_queue_depth_key_matches_arq_default_queue_name() -> None:

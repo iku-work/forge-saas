@@ -101,6 +101,49 @@ def test_database_url_missing_sslmode_outside_dev_raises(monkeypatch: pytest.Mon
 
 
 @pytest.mark.owasp("A02")
+def test_read_replica_url_missing_sslmode_outside_dev_raises(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # T-246: a third hop to the same rows, so it carries the same requirement
+    # as DATABASE_URL and MIGRATIONS_DATABASE_URL -- neither of which says
+    # anything about this one.
+    _clear_settings_env(monkeypatch)
+
+    with pytest.raises(RuntimeError, match="READ_REPLICA_URL"):
+        Settings(
+            _env_file=FIXTURE_ENV_FILE,
+            **{
+                **_PROD_SAFE_OVERRIDES,
+                "READ_REPLICA_URL": "postgresql+asyncpg://u:p@replica:5432/db",
+            },
+        )
+
+
+def test_blank_read_replica_url_means_unset(monkeypatch: pytest.MonkeyPatch) -> None:
+    # `READ_REPLICA_URL=` is how .env.example ships it, and it must parse as
+    # "no replica" rather than as an invalid DSN.
+    _clear_settings_env(monkeypatch)
+
+    settings = Settings(_env_file=FIXTURE_ENV_FILE, READ_REPLICA_URL="")
+
+    assert settings.READ_REPLICA_URL is None
+
+
+def test_read_replica_url_with_tls_is_accepted_in_prod(monkeypatch: pytest.MonkeyPatch) -> None:
+    _clear_settings_env(monkeypatch)
+
+    settings = Settings(
+        _env_file=FIXTURE_ENV_FILE,
+        **{
+            **_PROD_SAFE_OVERRIDES,
+            "READ_REPLICA_URL": "postgresql+asyncpg://u:p@replica:5432/db?sslmode=require",
+        },
+    )
+
+    assert settings.READ_REPLICA_URL is not None
+
+
+@pytest.mark.owasp("A02")
 def test_redis_url_wrong_scheme_outside_dev_raises(monkeypatch: pytest.MonkeyPatch) -> None:
     _clear_settings_env(monkeypatch)
 
