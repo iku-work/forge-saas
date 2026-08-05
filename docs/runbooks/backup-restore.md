@@ -9,7 +9,41 @@ Covers the two deployment paths this repo supports: Render (managed
 Postgres/Redis, `docs/runbooks/deploy-render.md`) and self-hosted
 (`docker-compose.prod.yml`, Postgres/Redis as containers on `forge-net`).
 
-## Render (managed Postgres)
+## Trigger
+
+- Data loss or corruption: a bad migration, a `DELETE` without a `WHERE`, an
+  application bug that wrote wrong rows for a known window.
+- A destroyed or unbootable database instance.
+- A restore **drill** — the reason the "Verification status" section at the
+  bottom exists. Running this on purpose, on a schedule, is the only thing
+  that makes it trustworthy in an emergency.
+
+Not this runbook: Redis loss (see the note at the end of the Render section —
+it holds no system of record), a single accidentally-deleted row where the
+application has its own undo (a soft-deleted org, a GDPR export), or key
+rotation, which is `encryption-key-rotation.md`.
+
+## Pre-checks
+
+- **Know which deployment path you are on.** Render-managed and self-hosted
+  share nothing below except the verification step.
+- **Know the target time**, and how much data loss it implies. Daily snapshot
+  or PITR timestamp — write the number down before you start, because it is
+  the number you will be asked for afterwards.
+- **Credentials**: the Render dashboard (or `psql` plus the backup archive on
+  the self-hosted path), and access to update `PROD_ENV_FILE` in GitHub
+  Actions secrets for the cutover.
+- **Confirm the backup exists and covers the target time** before touching the
+  live instance. A restore procedure started against a backup that turns out
+  not to be there is how a recoverable incident becomes an unrecoverable one.
+- **Ciphertext needs its key.** Encrypted columns restore as ciphertext; if
+  `ENCRYPTION_KEY` has rotated since the backup was taken, the key that was
+  current *then* must still be available (`ENCRYPTION_KEY_OLD`), or those
+  columns come back unreadable. See `encryption-key-rotation.md`.
+
+## Steps
+
+### Render (managed Postgres)
 
 Render's managed PostgreSQL takes automatic daily backups and retains them
 for a period set by the instance's plan (7 days on the cheapest paid tier at
@@ -42,7 +76,7 @@ counters, cached counts, SSE fan-out). Losing it is a availability blip
 (users get logged out, rate limits reset), not a data-loss event, so it's
 intentionally not covered by a restore procedure here.
 
-## Self-hosted (`docker-compose.prod.yml`)
+### Self-hosted (`docker-compose.prod.yml`)
 
 The `postgres`/`redis` services use named Docker volumes (`postgres_data`,
 `redis_data`). Back these up the same way you'd back up any Docker volume —
@@ -60,6 +94,61 @@ services, restore the volume contents from the backup archive, then bring
 the stack back up (`docker compose -f docker-compose.prod.yml up -d`).
 Verify with the same `psql`/`alembic current` spot-check as the Render path
 above before resuming traffic.
+
+## Verification
+
+Both paths converge here, and none of it should be done against the live
+instance's connection string — verify the *restored* database directly, before
+any traffic points at it:
+
+- `alembic current` returns the revision expected for that point in time. A
+  restored database one migration behind the running code is a broken app, not
+  a restored one; run `alembic upgrade head` deliberately if so, rather than
+  discovering it from the first 500.
+- Spot-check the tables that change most (`session`, `audit_log`,
+  `notification`): recent rows exist, and the newest timestamp matches the
+  restore target rather than being days older than expected.
+- Read one encrypted column end-to-end through the app (a profile name, a
+  2FA-enabled login) — the check that catches the key mismatch from Pre-checks,
+  which nothing else surfaces until a user hits it.
+- After cutover: `/health/ready` returns 200, then a real login and one write.
+  `/health` alone proves the process is up, not that it can reach the database.
+
+## Rollback
+
+The Render path is built to be rolled back: the restore lands in a **new**
+instance and the old one keeps running, so "rollback" is pointing
+`DATABASE_URL` back at the original and redeploying. That property is the
+whole reason step 5 says not to decommission immediately — the soak period is
+the rollback window, and deleting the old instance is the point of no return.
+
+The self-hosted path has no such window by default: restoring a volume in
+place overwrites it. **Copy the current volume aside before restoring over
+it** (the same `tar` command above, into a differently-named archive), even
+when the data in it is believed to be corrupt — it is the only copy of
+whatever was written since the last backup.
+
+Either way, a cutover that has been serving writes for a while is no longer
+cleanly reversible: rolling back to the pre-restore database now loses those
+writes. Decide how long the soak is before starting, not while deciding.
+
+## Escalation
+
+- **No backup covers the target time**, or the archive is corrupt: stop and
+  escalate before improvising. Partial recovery from WAL, a logical export of
+  what survives, or accepting a longer data-loss window are decisions for
+  whoever owns the data, not for the operator running the restore.
+- **The restored instance fails `alembic current`** or the schema doesn't
+  match any known revision — likely a backup from a different environment.
+  Verify before letting the application touch it; an `alembic upgrade` against
+  the wrong database compounds the incident.
+- **Encrypted columns won't decrypt after restore.** Do not run the rotation
+  job to "fix" it — see `encryption-key-rotation.md`'s step 5 warning; the job
+  would re-encrypt ciphertext it can't read. Find the old key first.
+- **Any restore that was executed for real** — drill or incident — updates the
+  "Verification status" checklist below with the date and who ran it. That is
+  how the "written, not yet executed" caveat at the top of this file
+  eventually goes away.
 
 ## Docker-network TLS (self-hosted path only)
 

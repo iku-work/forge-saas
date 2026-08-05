@@ -6,6 +6,8 @@ Accepted — plumbing only. **No replica is provisioned**, and none should be
 until the trigger below actually fires. `READ_REPLICA_URL` is unset in every
 environment, which makes every routing decision in this document a no-op.
 
+**Date:** 2026-08-05
+
 ## Context
 
 Reads dominate this application's database traffic, and they are not all
@@ -209,3 +211,36 @@ down, lagging, failed-over, or out of disk.
   named entirely in read verbs) and a false-positive class (a genuine read
   named `get_or_refresh_something`). Both resolve by renaming the method,
   which is the cheaper fix in either direction.
+
+## Alternatives considered
+
+- **Wait until a replica is actually needed, then wire the routing.** The
+  option this ADR exists to reject. "Which queries may go to the standby" is a
+  decision spread across every repository method; answering it retroactively,
+  under the load that made a replica necessary, during an incident, is how a
+  replica becomes an outage. The routing is cheap to write now and expensive
+  to write then, and default-off means writing it early costs nothing.
+- **Route by HTTP verb — GETs to the replica.** The design that looks obvious
+  and fails on the first `GET /billing/portal` that reads a subscription it
+  just created. §2 covers this: the repository method knows what its data is
+  worth, the router does not.
+- **Route by session, with a `read_only=True` flag the caller passes in.**
+  Rejected for the reason in §2: FastAPI would publish it as a query parameter
+  on ~250 routes, making read routing something a client can ask for over
+  HTTP. A test now pins the OpenAPI schema against exactly that regression.
+- **Enforce the auth rule with the parameter's absence alone.** One layer
+  would be enough for the repositories that exist today, and would miss the
+  otherwise-eligible read that joins its way into `session` or `membership`.
+  `PRIMARY_ONLY_TABLES` checks per statement at execution time, which is the
+  layer that survives someone adding a flag to a repository the first layer
+  never anticipated. §3 keeps both on purpose.
+- **A runtime check on the misuse guard instead of `__init_subclass__`.** A
+  `use_read_replica=True` on a writing method is a silent data-loss bug, and a
+  check that fires when the method is *called* fires in production. Class
+  definition time means it fires at import, in CI, on the commit that
+  introduced it.
+- **Scale the primary vertically, or raise `DB_POOL_SIZE`.** Both are cheaper
+  than a replica and both are named ahead of it in "When to actually enable
+  this" — a replica doubles the number of databases that can be down, lagging,
+  or failed over, and that is not a cost to pay before the cheap fixes are
+  exhausted.

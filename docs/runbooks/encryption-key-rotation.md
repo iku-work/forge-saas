@@ -36,7 +36,9 @@ This document is the operation.
    step, but "the ciphertext is fine and the key is gone" is not a recoverable
    state, so the backup matters more than usual here.
 
-## Step 1 — Add the new key, demote the current one
+## Steps
+
+### Step 1 — Add the new key, demote the current one
 
 ```bash
 python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
@@ -67,7 +69,7 @@ decrypt…` in the logs at this point means the wrong key went into
 instead: `ENCRYPTION_KEY=<old>`, `ENCRYPTION_KEY_OLD=<new>` — both keys stay
 present, so both the rotated and unrotated rows keep reading.
 
-## Step 2 — Dry run
+### Step 2 — Dry run
 
 ```bash
 docker compose exec worker python -m app.workers.jobs.encryption --dry-run
@@ -104,7 +106,7 @@ means most rows are already on the new key (a rotation someone already ran).
 
 **Rollback:** none needed — a dry run changes nothing.
 
-## Step 3 — Run the rotation
+### Step 3 — Run the rotation
 
 ```bash
 docker compose exec worker python -m app.workers.jobs.encryption \
@@ -128,7 +130,7 @@ For the first rotation on a large database, do one column at a time:
 `rotate_encryption_keys_job` works and resumes correctly if it is killed at
 the timeout, but a foreground process is what you can watch.
 
-### Watching it
+#### Watching it
 
 - **Prometheus:** `forge_reencrypt_remaining` — rows not yet scanned in the
   current run, counting down to 0. The job publishes it to Redis and the
@@ -152,7 +154,7 @@ the timeout, but a foreground process is what you can watch.
 **Expected on completion:** `status = 'done'`, `cursor` null, `completed_at`
 set, and the same report on stdout with `"dry_run": false`.
 
-### If it dies mid-run (crash, redeploy, timeout, lost shell)
+#### If it dies mid-run (crash, redeploy, timeout, lost shell)
 
 Nothing is lost and nothing is half-written: each batch commits its rows and
 its checkpoint in one transaction, so the last completed batch is exactly what
@@ -167,7 +169,7 @@ To deliberately start over instead of continuing (e.g. the interrupted run
 used the wrong `--only`), pass `--no-resume`. Re-scanning already-rotated rows
 is safe — they're recognised as current and skipped — it just costs a scan.
 
-### Rollback during the run
+#### Rollback during the run
 
 Stop the process. The database is in a mixed state — some rows on the new key,
 some on the old — and **that state is fine**: both keys are configured, so
@@ -179,7 +181,7 @@ If you need to abandon the rotation entirely, apply the step 1 swap rollback
 one of the two keys while rows exist under it — that is the one genuinely
 destructive move available here (see step 4).
 
-## Step 4 — Verify no row is left on the old key
+### Step 4 — Verify no row is left on the old key
 
 Run the job once more, with both keys still configured:
 
@@ -199,7 +201,7 @@ dry run's, modulo rows created since.
 > repaired from the old key. The verification scan is what makes step 5 a
 > non-event.
 
-## Step 5 — Remove the old key
+### Step 5 — Remove the old key
 
 Delete `ENCRYPTION_KEY_OLD` from the secret store (or remove just the rotated
 key from the comma-separated list) and deploy.
@@ -212,6 +214,36 @@ no `failed to decrypt` in the logs over the following minutes.
 **Rollback:** put `ENCRYPTION_KEY_OLD` back and deploy. Keep the old key value
 until you have seen a clean read after this deploy — this is the one step
 where the old key is genuinely needed if something was missed.
+
+## Verification
+
+The rotation verifies itself in two places, and neither is optional:
+
+- **Step 4's second full scan** with both keys still configured. A
+  `"rotated_total": 0` over a `scanned_total` matching the dry run's is the
+  only evidence that no row was left behind — a run that reports success can
+  still have skipped rows created while it was scanning.
+- **After step 5**, the same read path as step 1 (a profile name, a
+  2FA-enabled login) plus no `failed to decrypt` in the logs over the
+  following minutes. This is the check that catches a missed row, because
+  until the old key is gone a missed row reads fine.
+
+The negative check worth naming: `rotated_total: 0` on the *first* run means
+the job found nothing to do, not that it succeeded. Compare it against the dry
+run's estimate before believing it.
+
+## Rollback
+
+Every step before step 5 is reversible, because both keys are configured
+throughout: a mixed database — some rows on the new key, some on the old — is
+a correct database, not a half-finished one. The per-step rollbacks are inline
+above (step 1's swap, "Rollback during the run" under step 3, step 5's).
+
+**The point of no return is step 5.** Once `ENCRYPTION_KEY_OLD` is removed, a
+row still on the old key can no longer be decrypted — and worse, the next run
+of the job treats its ciphertext as legacy plaintext and encrypts it again.
+Do not cross step 5 without step 4's clean scan, and keep the old key value
+somewhere retrievable until you have seen a clean read after that deploy.
 
 ## Adding a new encrypted column later
 

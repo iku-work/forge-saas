@@ -4,6 +4,8 @@
 
 Accepted
 
+**Date:** 2026-08-04
+
 ## Context
 
 A Postgres backend costs roughly 5–10 MB of server memory and a scheduler
@@ -187,3 +189,33 @@ in order of preference:
   about pgbouncer — both were pre-existing defects (no `POSTGRES_PASSWORD`,
   and a build context that couldn't satisfy `backend/Dockerfile`'s `COPY`s)
   that surfaced the moment CI started actually booting this stack.
+
+## Alternatives considered
+
+- **No pooler; raise `max_connections` instead.** Each Postgres backend costs
+  5–10 MB and a scheduler slot whether it is working or idle, so this trades a
+  connection ceiling for a memory ceiling and degrades the whole server's
+  scheduling rather than one client's throughput. It also has to be re-raised
+  every time the replica count changes.
+- **`pool_mode = session` or `statement`.** Covered by the table in §1: session
+  mode keeps the connection count 1:1 and achieves nothing here; statement mode
+  would break every multi-statement transaction in the application.
+- **pgbouncer's own prepared-statement tracking** (`max_prepared_statements`,
+  1.21+) instead of disabling the caches app-side. This is the better answer
+  and is written up as escape hatch 1 under "Revisiting this" — it was not
+  taken now because it must be adopted together with reverting all three
+  driver arguments (UUID statement names would fill pgbouncer's cache with
+  entries nothing ever asks for again), and that is a change worth making
+  against a measured p99 rather than pre-emptively.
+- **pgcat / Odyssey.** Both are credible transaction poolers with better
+  sharding and load-balancing stories. pgbouncer wins on the only axis that
+  matters for a template: it is the one every managed provider, every runbook,
+  and every operator already knows, and its failure modes are documented in
+  places we did not have to write.
+- **`NullPool` on the SQLAlchemy side**, as SQLAlchemy's own pgbouncer notes
+  suggest. Rejected in §3: its purpose there is to bound the
+  prepared-statement buildup that `server_reset_query` already handles, and it
+  would pay a TCP + SCRAM handshake on every checkout.
+- **A read replica instead** (ADR-0003). Solves a different problem — read
+  volume, not connection count — and does nothing about the per-replica
+  connection multiplication that is this ADR's subject.

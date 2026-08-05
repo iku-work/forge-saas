@@ -33,6 +33,15 @@ jobs:
         working-directory: backend
         run: mypy --strict app/ scripts/
 
+      # T-252: every ADR carries a parseable status + date, docs/adr/README.md's
+      # index still matches the files on disk, and every runbook has the
+      # template's six headings. Pure Python over docs/ -- no services, nothing
+      # to install beyond what this job already has -- so it rides along here
+      # rather than earning a job of its own.
+      - name: Docs shape check (ADRs + runbooks)
+        working-directory: backend
+        run: python scripts/check_docs.py
+
       - uses: pnpm/action-setup@v4
 
       - uses: actions/setup-node@v4

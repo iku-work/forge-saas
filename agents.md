@@ -6151,9 +6151,66 @@ For each of `packages/{ui,api-client,types,hooks,validation,utils}`:
 
 **Done when**
 
-- [ ] Both templates committed; ADR index live
-- [ ] Owed ADRs exist (0001–0004, placeholders allowed where the decision is pending)
-- [ ] Existing runbooks follow the template's heading structure
+- [x] Both templates committed; ADR index live — `docs/adr/_template.md`
+      (status · date · context · decision · consequences · alternatives, one
+      page, with the "if it takes >30 min it doesn't get written" rule stated
+      in the template itself) and `docs/runbooks/_template.md`. `docs/adr/README.md`
+      carries the what-deserves-one rule (expensive to reverse, **or** a future
+      maintainer asks "why on earth"), what explicitly doesn't, the
+      `Proposed → Accepted → Superseded by ADR-NNNN` lifecycle, and an index
+      generated between markers rather than hand-maintained
+- [x] Owed ADRs exist (0001–0004) — 0001–0003 were already written, and each
+      gained the `**Date:**` line the index reads plus the
+      `## Alternatives considered` the template requires. That last section was
+      not filler: the material was already inline in both 0002 (the pooling-mode
+      table, `NullPool`, pgcat/Odyssey) and 0003 (the "not by HTTP verb"
+      argument) — it just wasn't findable by anyone asking "was X considered".
+      0004 is the placeholder T-300 replaces: no framework picked, but the four
+      constraints that decide it recorded while they are still visible, of which
+      one is the real asymmetry — `packages/ui` ships **zero** `"use client"`
+      directives (verified, not assumed), so an RSC-first framework cannot
+      consume the shared component package as it stands and Astro's islands can
+- [x] Existing runbooks follow the template's heading structure — ten
+      retrofitted to `Trigger · Pre-checks · Steps · Verification · Rollback ·
+      Escalation`, keeping their own extra sections (a runbook that needs a
+      per-integration behaviour table between Trigger and Steps should have
+      one, so extras are allowed anywhere and only the six are ordered). Four
+      documents in `docs/runbooks/` are not procedures and carry
+      `<!-- runbook-template-exempt: <reason> -->` instead: `log-shipping.md`
+      (reference), `pentest-prep.md` (engagement inventory), and the two
+      `phase*-verification.md` files (records of passes that already ran).
+      Writing the missing sections was where this stopped being clerical —
+      "what is the point of no return" has a real answer in five of the ten
+      (key rotation's step 5, a restore's cutover soak, a finalized Stripe
+      invoice, the deleted `TOTPSecret`, the migration that runs before the
+      deploy it can't be rolled back with) and none of them were written down
+- [x] CI check green, and a statusless ADR fails it —
+      `backend/scripts/check_docs.py`, wired into the `lint` job and
+      `make lint`; `make check-docs ARGS=--write` regenerates the index.
+      `backend/tests/test_check_docs.py` (39 tests) pins each rule against a
+      scratch `docs/` tree in `tmp_path`, plus two that guard the real thing:
+      one runs the checker over this repo's actual `docs/`, and one asserts
+      each `_template.md` would itself pass the rules it documents — a template
+      that drifts from its own checker is worse than no template
+- Four decisions the brief didn't settle. (1) The date lives as a `**Date:**`
+      line *inside* `## Status`, not as its own section or a `Accepted — date`
+      suffix: ADR-0003's status is a qualifying paragraph ("Accepted — plumbing
+      only. **No replica is provisioned**…"), and that prose is worth more than
+      a parseable one-liner, so the parser takes the first non-empty line for
+      the status word and finds the date on its own line. (2) The script checks
+      ADR *section presence and order* as well as the status line the brief
+      named — free once the sections exist, and it is what stops the template
+      from being advisory. It deliberately stops there: it cannot check whether
+      the prose is true, which is why README states the "ADR ships in the same
+      PR as the change" rule as the thing no script enforces. (3) The runbook
+      exemption is an in-file marker with a mandatory reason (same shape as the
+      existing `rtl-ok:` / `impersonation-ok:` comments) rather than a list
+      inside the script, so the reason sits where the reader is. (4) The six
+      runbook headings are all `##`, following `encryption-key-rotation.md`'s
+      existing `## Trigger` rather than `new-module.md`'s bold `**Trigger**`
+      lead — a heading is checkable and a bold line is not, so T-251's runbook
+      got the one-line retrofit instead of the other nine getting the loose
+      shape
 
 ---
 

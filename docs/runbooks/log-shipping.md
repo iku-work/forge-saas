@@ -1,5 +1,9 @@
 # Log shipping
 
+<!-- runbook-template-exempt: reference, not a procedure: what logs and traces
+     do today, what they don't, and the reasoned non-plan for the gap. There
+     is nothing to run. -->
+
 T-215. Where logs and traces actually go today, and the explicit,
 reasoned non-plan for centralizing them further. Closes ADR-0001's
 V1.7.2 gap (V7.2.1 in `docs/security/owasp-top10.md`'s A09 row).

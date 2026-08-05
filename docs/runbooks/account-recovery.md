@@ -4,7 +4,7 @@ What to do when a user has lost their TOTP device *and* every backup code,
 and can no longer complete login. Closes [ADR-0001](../adr/0001-security-baseline.md)
 row V2.5.7 ("Lost-MFA recovery re-verifies identity at enrollment level").
 
-## When this applies
+## Trigger
 
 - The user has `totp_enabled` and no registered WebAuthn/security-key
   credential — if they have a security key, they don't need this: WebAuthn is
@@ -18,7 +18,10 @@ If the user still has backup codes or a working authenticator, direct them to
 self-service `disable_2fa` instead — this runbook is a last resort, not the
 default path.
 
-## Identity verification (do this before touching the account)
+## Pre-checks
+
+**Identity verification — all of this happens before a superadmin touches the
+account, and none of it is enforced by code.**
 
 This step happens **outside the product** — there is no automated identity
 check for "is the person emailing support actually the account owner."
@@ -40,7 +43,7 @@ action, at minimum:
    the requester was who they claimed to be, so this step has to be captured
    separately or that context is lost.
 
-## The action
+## Steps
 
 A superadmin calls:
 
@@ -75,12 +78,65 @@ step-up the way email-change/billing/member-removal do, since impersonation
 (a comparably sensitive admin action) doesn't either; support workflows are
 assumed to already sit behind their own session-length policy.
 
+## Verification
+
+Three things, and the third is the one that matters:
+
+1. The endpoint returned `200` with an empty-data envelope. It returns nothing
+   about the user (`Envelope[None]`), and `GET /api/v1/admin/users/{id}`
+   doesn't expose `totp_enabled` either — so there is no admin-side read that
+   confirms the flag flipped. The audit event below is the confirmation.
+2. The `admin.user.disable_totp` event is in the admin audit feed
+   (`GET /api/v1/admin/audit`) with the reason text you supplied. A missing
+   event means the action didn't happen, whatever the response said.
+3. **The user received the `security_notification` email.** This is the safety
+   net against a social-engineered recovery, so a delivery failure is not a
+   cosmetic problem — if the send failed (check the worker logs / Resend
+   dashboard), the recovery is un-notified and should be treated as the
+   escalation case below until the real owner has been reached some other way.
+
 ## After recovery
 
 Tell the user to re-enable 2FA (`POST /auth/2fa/enable` +
 `POST /auth/2fa/verify`, or register a WebAuthn key) as soon as they're back
 in — an account that just went through a lost-2FA recovery is, until then,
 back to password-only.
+
+## Rollback
+
+**There isn't one, and the point of no return is the request itself.** The
+`TOTPSecret` row is deleted, not disabled — the shared secret is gone, so
+"turn 2FA back on" is not an operation anyone can perform on the user's
+behalf. Only the user can re-enrol, from a device they still have.
+
+What that means in practice: the reversible part of this procedure is
+everything *before* the call, which is why the identity verification is in
+Pre-checks and not a footnote. Once the endpoint returns, the account is
+password-only until the user acts.
+
+If the recovery turns out to have been fraudulent, the response is
+containment, not rollback — see below.
+
+## Escalation
+
+- **The real owner says they didn't request this** (or the notification email
+  bounces and support can't reach them): treat it as an account compromise.
+  Get a password reset onto the account and have the user complete it —
+  `confirm_password_reset` revokes every session, which is the only lever that
+  ends an attacker's access. Note that there is **no admin endpoint that
+  revokes another user's sessions**; if the user cannot complete a reset,
+  session revocation is a direct database action, and that is the point to
+  involve whoever owns production data access.
+- **The account is an org owner, a billing contact, or holds elevated org
+  roles.** Don't run this on the strength of one support conversation — the
+  second-engineer confirmation in Pre-checks is a process control with nothing
+  enforcing it, so it is only real if someone insists on it.
+- **The user has only a WebAuthn credential and no TOTP.** This endpoint does
+  not help and there is no `disable-webauthn` equivalent; see Limitations.
+  File a task rather than improvising a database edit.
+- **Repeat recovery requests for the same account.** Two lost-2FA recoveries
+  in a short window is a pattern, not a coincidence. Review the audit feed for
+  that user before acting a second time.
 
 ## Limitations / what this runbook does *not* give you
 

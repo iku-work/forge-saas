@@ -4,6 +4,8 @@
 
 Accepted
 
+**Date:** 2026-07-08
+
 ## Context
 
 [T-212](../../agents.md) made "every OWASP Top 10 risk has a test proving its
@@ -647,6 +649,27 @@ questionnaire) — evidence links point at real files, not at task IDs.
   restore, a completed `testssl.sh` run against a live staging deployment)
   rather than more application code — deferred with a named reason each,
   not silently left as before.
+
+## Alternatives considered
+
+- **ASVS Level 1.** The bar for applications with no sensitive data. This one
+  holds multi-tenant customer records, credentials, and payment references —
+  L1 would let a real gap pass as compliant, which is worse than no baseline.
+- **ASVS Level 3.** Written for high-assurance and life-critical systems. Its
+  additional requirements are largely HSM-backed key storage, full transaction
+  logging, and segregation controls that a template cannot make true for every
+  deployer; claiming L3 and sitting `partial` on half of it says less than
+  claiming L2 and meeting it.
+- **SOC 2 / ISO 27001 as the framework instead.** Both are organizational
+  audits — they certify that a company has processes, not that a codebase has
+  controls. Neither maps to a file path, which is what makes the evidence
+  column of this document checkable at all. They are complementary to this,
+  not a substitute for it, and a deployer pursuing either will find this
+  document is the technical half of the evidence they need.
+- **The OWASP Top 10 alone** (`docs/security/owasp-top10.md`, T-212). Already
+  in place, and deliberately kept — but ten risk categories can't answer an
+  enterprise security questionnaire line by line, which is the gap this
+  document exists to close. See the Context section.
 
 ## Follow-up tasks filed by this document
 

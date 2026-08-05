@@ -1,5 +1,9 @@
 # Phase 2 verification (T-160)
 
+<!-- runbook-template-exempt: record of the Phase 2 acceptance pass run on
+     2026-07-05, including what it found. Re-running it means a new document,
+     not following this one. -->
+
 This is the runbook for the Phase 2 acceptance flow: every module shipped in
 Phase 2 (notifications, file storage, feature flags, dunning, trial expiry,
 invoice history, superadmin impersonation, Storybook) working end to end

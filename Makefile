@@ -1,4 +1,4 @@
-.PHONY: dev test lint migrate migrate-plan gen-client seed pentest-accounts seed-load load-test prod-compose-check new-module install-hooks down update-from-template check-template-drift observe
+.PHONY: dev test lint migrate migrate-plan gen-client seed pentest-accounts seed-load load-test prod-compose-check new-module check-docs install-hooks down update-from-template check-template-drift observe
 
 TEMPLATE_VERSION ?= main
 
@@ -38,6 +38,13 @@ test:
 lint:
 	cd backend && ruff check . && ruff format --check .
 	pnpm lint
+	$(MAKE) check-docs
+
+# T-252: ADR status lines, the generated ADR index, and the runbook heading
+# structure. `make check-docs ARGS=--write` regenerates docs/adr/README.md's
+# index instead of failing on a mismatch -- run it after adding an ADR.
+check-docs:
+	cd backend && python scripts/check_docs.py $(ARGS)
 
 migrate:
 	cd backend && python -m app.core.migrations

@@ -1,5 +1,9 @@
 # Phase 1 verification (T-057)
 
+<!-- runbook-template-exempt: record of the Phase 1 acceptance pass run on
+     2026-07-02, including what it found. Re-running it means a new document,
+     not following this one. -->
+
 This is the runbook for the Phase 1 acceptance flow: *a new user can sign up
 → verify email → invite a teammate → upgrade to a paid plan, end to end.*
 Run it after any change that touches auth, tenancy, billing, or GDPR before

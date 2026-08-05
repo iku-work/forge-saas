@@ -5,6 +5,26 @@ Resend, S3/R2/MinIO, the virus scanner, Expo push): `backend/app/core/resilience
 A slow or dead vendor degrades one feature — it never cascades into
 request-path timeouts or a worker pile-up.
 
+## Trigger
+
+Any one of:
+
+- users report one feature failing while the rest of the app is fine, with a
+  503 envelope (`code: "service_unavailable"`) naming the feature — "Billing",
+  "Email delivery" — rather than the vendor;
+- `forge_breaker_state{integration="…"}` reads `1` (half-open) or `2` (open)
+  in Prometheus;
+- `resilience.breaker_open: integration=<name>` in the backend or worker logs.
+
+Nothing pages on this today: the three metrics below are exported, but
+`docs/grafana/alerts.yml` has no rule watching them, so in practice this
+runbook starts from a user report or a 503 in the logs.
+
+Not this runbook: a 503 with no breaker open (that is the app itself, or the
+`/health/ready` dependency check), or a slow-but-succeeding integration —
+`docs/runbooks/slow-queries.md` for the database, the vendor's own status page
+for the rest.
+
 ## How it works
 
 - One named `pybreaker.CircuitBreaker` per integration
@@ -43,7 +63,19 @@ Three metrics, labeled by `integration`:
 - `forge_external_call_seconds{integration}` — histogram of the whole
   `resilient()`-wrapped call (including its own inline retries).
 
-## Investigation workflow
+## Pre-checks
+
+- Access to `/metrics` (or the Prometheus/Grafana it feeds) and to
+  backend + worker logs. `/metrics` is blocked externally by Caddy in
+  production (`Caddyfile.prod`), so this means the internal network or the
+  hosting platform's own log/metrics view.
+- The vendor status pages open in a tab: Stripe, Resend, AWS/Cloudflare, Expo.
+  Step 2 is checking them, and finding the URL under pressure is wasted time.
+- **Nothing to change yet.** The first two steps are read-only on purpose; a
+  breaker is a symptom and the reflex to restart something is the main way
+  this gets worse.
+
+## Steps
 
 1. **Confirm which integration tripped.** Check `forge_breaker_state` in
    Prometheus/Grafana, or grep worker/backend logs for
@@ -64,7 +96,19 @@ Three metrics, labeled by `integration`:
    `forge_arq_queue_depth` (T-202) if you want to confirm they're piling up
    rather than draining.
 
-## Local verification
+## Verification
+
+The breaker is closed again when `forge_breaker_state{integration="…"}` reads
+`0` and a real request through the affected feature succeeds — check both. The
+gauge alone can read `0` on a breaker that has simply not been called since it
+reset, which looks identical to recovery and is not.
+
+For the queue-backed integrations (Resend, virus scanner), recovery also means
+the backlog drained: `forge_arq_queue_depth` (T-202) trending down rather than
+flat. A closed breaker with a queue that never drains means the jobs are
+failing for a second reason.
+
+### Local verification
 
 There's no dedicated `make` target for this — it's exercised directly in the
 test suite (`backend/tests/test_resilience.py` for the breaker/retry
@@ -76,3 +120,34 @@ endpoint (e.g. `AWS_ENDPOINT_URL=http://127.0.0.1:1` for S3) and make 5
 requests through the affected feature — the 6th should come back as a 503
 naming the feature, and `forge_breaker_state{integration="s3"}` should read
 `2` on `/metrics`.
+
+## Rollback
+
+Nothing to roll back — this runbook changes nothing by design. The breaker
+closes itself on the first successful call after `reset_timeout`, and every
+step above is either a read or a fix to the underlying config/outage. Roll
+*that* back the way you would any other config change.
+
+The one thing that needs undoing is a change made *to* the breaker: if you
+raised `fail_max` or `reset_timeout` to ride out an incident
+(`backend/app/core/resilience.py`), put them back once the vendor recovers. A
+breaker tuned for an outage is a breaker that won't trip during the next one.
+
+## Escalation
+
+- **Breaker still open after ~15 minutes with the vendor's status page
+  green.** It is our configuration, not their outage: a revoked API key, a
+  rotated webhook secret, a wrong bucket region, an expired token. Check the
+  full exception in Sentry — the breaker's own log line records that it
+  tripped, not why the underlying calls failed.
+- **Two or more breakers open at once.** Almost never two simultaneous vendor
+  outages; look for the shared cause underneath — egress/DNS from the
+  container, a proxy, an expired CA bundle, the host being out of sockets.
+- **The queue is growing faster than it drains** after the breaker closes
+  (`forge_arq_queue_depth` flat or rising). The retry backlog is now its own
+  problem: scale the worker or pause the producing path, and treat it as a
+  capacity incident rather than a vendor one.
+- **Emails or pushes were dropped, not delayed.** Only the Expo push path
+  drops (see the table above) — if user-visible messages were lost, that is a
+  communication decision, not an operational one; escalate to whoever owns the
+  product, with the time window from the logs.

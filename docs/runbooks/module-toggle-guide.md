@@ -22,7 +22,43 @@ Phase 2+ modules have a config slot to land in, but nothing reads them yet —
 toggling them today has no observable effect. Treat the steps below as the
 worked example; the mechanism is identical for every module added later.
 
-## Disabling billing (example: internal tool, no Stripe)
+## Trigger
+
+- A product doesn't need one of the optional modules — an internal tool with
+  no Stripe account, a deployment where GDPR endpoints are handled elsewhere.
+- A module that was switched off is needed after all, on a database that has
+  already been running without it (that is Rollback, below).
+- A new product-specific module needs a config slot.
+
+Do this **before first deploy** wherever possible. Everything here works on a
+running system, but disabling a module whose tables already hold rows leaves
+those rows in place and unreachable — the toggle skips the migration, it does
+not drop anything.
+
+Not this runbook: writing the module itself ([new-module.md](new-module.md)),
+or turning a *feature* on and off for one org, which is feature flags
+(`app/modules/feature_flags`), not module toggles.
+
+## Pre-checks
+
+- A clean working tree. Every change here is to committed config
+  (`backend/product/config.py`, `product.config.ts`), and the diff is the
+  record of what a deployment actually runs.
+- Know the dependency edges before flipping anything: `notifications` and
+  `file_storage` both `requires=["billing"]`. `validate_modules` turns a
+  violation into a `RuntimeError` at startup rather than a silent
+  inconsistency, so getting this wrong costs a failed boot, not corrupt data.
+- Know whether the module's tables already hold rows. `make migrate-plan`
+  prints what would be skipped; the rows themselves need a `psql` count.
+- Both files change together. `backend/product/config.py` and
+  `product.config.ts` are mirrored by hand — the backend 404s and the frontend
+  hides, and a half-applied toggle gives you one without the other.
+
+## Steps
+
+Each subsection below is a complete, independent scenario.
+
+### Disabling billing (example: internal tool, no Stripe)
 
 1. In `backend/product/config.py`:
    ```python
@@ -58,28 +94,14 @@ worked example; the mechanism is identical for every module added later.
    `apps/web/src/routes/_app.settings.billing.tsx` calls
    `bootstrapModules()` then checks `getModulesSnapshot().billing`).
 
-## Re-enabling a disabled module on an existing product
-
-1. Set `enabled=True` back in `backend/product/config.py` and
-   `product.config.ts`.
-2. `make migrate` — `migration_targets()` (`backend/app/core/migrations.py`)
-   now includes `billing@head` again; Alembic applies it from scratch even
-   though the DB has already moved past the core trunk's tip, because that
-   branch was never recorded in `alembic_version` while billing was off.
-3. `make seed` — the Free/Pro plan rows are created again (`backend/app/core/seed.py`'s
-   `seed()` only skips that block while `is_enabled("billing")` is `False`);
-   idempotent either way.
-4. Redeploy / restart the backend so `get_modules()`'s `lru_cache` picks up
-   the new `product/config.py` (it's cached per-process, not per-request).
-
-## Disabling GDPR
+### Disabling GDPR
 
 Same mechanism, no cascade: `gdpr=ModuleConfig(enabled=False)` in both
 config files removes `/api/v1/me/export`, `/api/v1/me/consents`, and
 `DELETE /api/v1/me`, and skips creating `consent_record`/`data_export_job`.
 Nothing else depends on `gdpr`, so it can be toggled alone.
 
-## Adding a new product-specific module
+### Adding a new product-specific module
 
 1. `make new-module NAME=invoices` — generates
    `backend/app/modules/invoices/` and `backend/tests/modules/test_invoices.py`
@@ -100,8 +122,15 @@ Nothing else depends on `gdpr`, so it can be toggled alone.
    `ActiveModules` (`backend/app/api/v1/config.py`,
    `packages/hooks/src/useModules.ts`) so the frontend can read it.
 
-## Verifying the whole matrix at once
+## Verification
 
+Each scenario above ends in its own checks — steps 4–9 of "Disabling billing"
+are exactly that: the `migrate-plan` summary, `/api/v1/config`, a real 404 on
+the removed route (not an empty 200), and an absent tab in the UI. Run all
+four; the route check and the UI check fail independently, which is precisely
+what a half-mirrored toggle looks like.
+
+The whole matrix is verified at once by the suite:
 `backend/tests/modules/test_module_toggles.py` runs three representative
 configs end-to-end (its own Postgres container per scenario, since each
 drives a distinct `alembic upgrade`):
@@ -119,3 +148,46 @@ optional module toggle. Run it directly with:
 ```sh
 cd backend && pytest tests/modules/test_module_toggles.py -v
 ```
+
+## Rollback
+
+Re-enabling is the rollback, and it is the reason the toggle skips migrations
+rather than dropping tables: nothing was destroyed on the way out.
+
+1. Set `enabled=True` back in `backend/product/config.py` and
+   `product.config.ts`.
+2. `make migrate` — `migration_targets()` (`backend/app/core/migrations.py`)
+   now includes `billing@head` again; Alembic applies it from scratch even
+   though the DB has already moved past the core trunk's tip, because that
+   branch was never recorded in `alembic_version` while billing was off.
+3. `make seed` — the Free/Pro plan rows are created again (`backend/app/core/seed.py`'s
+   `seed()` only skips that block while `is_enabled("billing")` is `False`);
+   idempotent either way.
+4. Redeploy / restart the backend so `get_modules()`'s `lru_cache` picks up
+   the new `product/config.py` (it's cached per-process, not per-request).
+
+The one thing that does not come back on its own is data written *by* the
+module before it was disabled — it was never deleted, so it is still there and
+correct. But anything the rest of the app would have written to those tables
+while the module was off simply never happened, and re-enabling does not
+backfill it.
+
+## Escalation
+
+- **`RuntimeError: Module 'X' requires 'Y' which is disabled` at startup.** The
+  dependency edge in Pre-checks. Fix the config; do not work around it by
+  weakening `validate_modules` — that error is the only thing standing between
+  a partial toggle and a half-working product.
+- **A route still answers after disabling its module**, or a table is still
+  created: the two config files have drifted apart, or the process is serving
+  a cached `get_modules()` from before the change (its `lru_cache` is
+  per-process — restart, don't reload).
+- **Alembic refuses the branch on re-enable.** The module's branch was never
+  recorded in `alembic_version` while it was off, so it applies from scratch.
+  If it instead reports the branch as already applied but the tables are
+  missing, stop — that is a database that was restored or migrated by hand,
+  and guessing at `alembic stamp` makes it worse. `backup-restore.md`.
+- **A module needs to come off in production with live rows in its tables.**
+  That is a data decision (export? retain? drop?), not a config one. The
+  toggle will happily leave orphaned rows behind; decide deliberately what
+  happens to them.

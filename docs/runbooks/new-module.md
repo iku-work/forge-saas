@@ -1,19 +1,20 @@
 # Adding a backend module (T-251)
 
-**Trigger** — a new idea needs its first endpoint: a bounded piece of the
-product with its own tables, its own service, and its own routes. Reach for
-this when you would otherwise start a new directory under
-`backend/app/modules/` by hand.
-
-Not this runbook: adding a route to a module that already exists (just add
-it), or a UI-only feature with no new tables (start at step 8).
-
 The generator is `backend/scripts/new_module.py`, driven by `make new-module`.
 It copies `backend/app/modules/_template/` — a complete, compilable reference
 module built around one org-scoped entity called `Item` (T-250) — substituting
 the module name everywhere and rendering the matching test file. Everything it
 does is mechanical; everything it refuses to do is in the checklist it prints,
 because each of those is a decision.
+
+## Trigger
+
+A new idea needs its first endpoint: a bounded piece of the product with its
+own tables, its own service, and its own routes. Reach for this when you would
+otherwise start a new directory under `backend/app/modules/` by hand.
+
+Not this runbook: adding a route to a module that already exists (just add
+it), or a UI-only feature with no new tables (start at step 8).
 
 ## Pre-checks
 

@@ -5,7 +5,37 @@ and is dormant until the secrets below are configured on the repo
 (Settings → Secrets and variables → Actions). Until then, pushes to `main`
 build and push the image but the `deploy` job fails on its first step.
 
-## 1. Services to create on Render
+## Trigger
+
+Standing this template up on Render for the first time, or re-creating the
+deployment after the Render side was torn down. One-time setup: once the five
+secrets in step 3 exist, every push to `main` deploys itself and nothing here
+needs doing again.
+
+Not this runbook: a failing deploy on an already-configured repo (that is the
+`deploy` job's own logs and the Rollback section below), or the self-hosted
+`docker-compose.prod.yml` path, which shares nothing with this except the
+image.
+
+## Pre-checks
+
+- A Render account, and a decision about which plan the Postgres instance is
+  on — retention and PITR availability follow from it, and
+  `backup-restore.md` assumes you know which you have.
+- At least one successful `build` run on `main`, so `ghcr.io/<owner>/<repo>`
+  actually has an image to point the services at. Creating the services first
+  works; they just sit unhealthy until it does.
+- The domain you intend to serve from, with DNS you can change — `PROD_DOMAIN`
+  is used by the post-deploy smoke test, so a wrong value fails the deploy
+  after it has already shipped.
+- A production `backend/.env` prepared (field list in `backend/.env.example`).
+  `Settings._enforce_startup_invariants` refuses to boot outside dev without
+  TLS on `DATABASE_URL`/`REDIS_URL` and a `PASSWORD_PEPPER`, so a `.env` that
+  works locally is not one that works here.
+
+## Steps
+
+### 1. Services to create on Render
 
 - A **Web Service**, deploy method "Existing image", pointing at
   `ghcr.io/<owner>/<repo>` (private packages need a Registry Credential —
@@ -19,12 +49,12 @@ On the Web Service:
 - **Pre-Deploy Command** (optional, defense in depth alongside CI's own
   migration step): `alembic upgrade head`
 
-## 2. Registry credential (only if the GHCR package is private)
+### 2. Registry credential (only if the GHCR package is private)
 
 Dashboard → Account Settings → Registry Credentials → add a GitHub PAT with
 `read:packages` scope, then attach it to both services.
 
-## 3. GitHub Actions secrets to set
+### 3. GitHub Actions secrets to set
 
 | Secret | Where to get it |
 |---|---|
@@ -38,7 +68,7 @@ Dashboard → Account Settings → Registry Credentials → add a GitHub PAT wit
 connection string — the GitHub-hosted runner isn't on Render's private
 network, only Render's own services are.
 
-## 4. What CI does on a push to `main`
+## What CI does on a push to `main`
 
 1. `alembic upgrade head` runs inside the freshly-built, freshly-scanned
    image against the production DB. Failure aborts — nothing below runs.
@@ -53,11 +83,65 @@ network, only Render's own services are.
    with the deploy ID that was live before this run started.
 
 Verify the exact JSON shape of the `GET /deploys` list response (wrapped vs.
-flat items) against Render's live API or dashboard before relying on step 5
-in anger — it was implemented defensively (`.deploy // .`) against
+flat items) against Render's live API or dashboard before relying on step 5 of
+that list in anger — it was implemented defensively (`.deploy // .`) against
 documentation that didn't show an example response at the time this was written.
 
-## 5. Not yet wired up
+## Verification
+
+The `deploy` job's own smoke test (step 4 of "What CI does" above) is the
+automated half — it checks `https://$PROD_DOMAIN/health/ready` and rolls back
+if it fails. Do the other half by hand the first time, because a green
+`/health/ready` only proves the process reached Postgres and Redis:
+
+- Register or log in through the real domain, and confirm the refresh cookie
+  comes back as `__Host-refresh_token` with `Secure`/`HttpOnly` — a
+  reverse-proxy or domain misconfiguration shows up here and nowhere else.
+- Confirm the worker is actually consuming: trigger something that enqueues a
+  job (a password-reset email) and watch it arrive, rather than trusting the
+  worker service's "live" badge.
+- `curl -i https://$PROD_DOMAIN/metrics` from outside → not 200. Caddy blocks
+  it externally, and this is the cheapest check that the right Caddy config is
+  in front.
+- The negative check: hit the backend service's own Render URL directly. If it
+  answers, it is reachable without going through your edge, and the TLS/header
+  guarantees above are bypassable.
+
+## Rollback
+
+CI rolls itself back: its step 5 calls Render's rollback endpoint with the
+deploy ID that was live before the run, whenever the smoke test fails. Verify
+that path against Render's live API before relying on it in anger — the
+caveat under that list explains why it was written defensively.
+
+Manually: Render dashboard → the service → **Deploys** → *Rollback* on the
+last known-good deploy. Both services need it, and they are independent — a
+rolled-back backend against a still-new worker is a real state to end up in.
+
+**The migration is the part that does not roll back.** Its step 1 runs
+`alembic upgrade head` against the production database *before* either
+service is redeployed, so a rollback restores the old image against the new
+schema. That is fine for additive migrations and is not fine for a destructive
+one; a migration that drops or renames anything needs the expand/contract
+split across two deploys, not a rollback plan. Data-level recovery is
+`backup-restore.md`.
+
+## Escalation
+
+- **The `deploy` job fails on its first step**: the secrets are missing or
+  misnamed. That is the dormant state described at the top, not an incident.
+- **Migration step fails**: nothing has deployed yet — the old image is still
+  serving. Fix forward on the migration; do not re-run the job hoping for a
+  different result against a half-applied schema. Check `alembic current`
+  against production before the second attempt.
+- **Deploy reports live but the smoke test fails**: usually DNS/TLS
+  (`PROD_DOMAIN` wrong, certificate not yet issued) rather than the app.
+  Confirm by hitting the Render-provided URL directly before rolling back.
+- **Rollback itself fails** (the API shape changed, or no previous deploy
+  exists): roll back from the dashboard by hand, and fix the job afterwards —
+  do not leave a broken deploy live while debugging the automation.
+
+## Not yet wired up
 
 - Playwright E2E against staging (`playwright test --project=staging` in the
   plan) — lands with the Playwright suite in T-220 (Phase 3).

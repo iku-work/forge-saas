@@ -8,6 +8,33 @@ manual CSV loop for everyone else. Both produce the same thing — updated
 `packages/i18n/locales/<code>/*.json` files — so a project can start on the
 manual loop and move to a TMS later without changing anything downstream.
 
+## Trigger
+
+- New or changed `en` strings need translating — the usual case, and the one
+  `--missing-only` is for.
+- A translator or TMS has produced translations that need to land in the repo.
+- A locale has fallen below the 95% coverage floor and `check-locales` is
+  failing the build.
+
+Not this runbook: adding a *new* locale (that is `SUPPORTED_LOCALES` plus
+routing — `packages/i18n/README.md` and T-233), or editing `en` itself, which
+is a normal code change like any other string in the app.
+
+## Pre-checks
+
+- **Know which workflow this project is on.** Manual CSV and a TMS are
+  mutually exclusive in practice: with a TMS wired up, a hand-edited non-`en`
+  file is overwritten by the next pull, silently.
+- `en` is complete and merged first. It is the source; a key that exists in
+  another locale before it exists in `en` fails `check-locales` as an orphan,
+  which is the check working.
+- `pnpm install` done, and `@forge/i18n` built if you are running its scripts
+  across packages — a stale `dist` is the standard way this looks broken when
+  it isn't.
+- Nothing uncommitted in `packages/i18n/locales/`. Import writes over those
+  files; the diff afterwards is what you review, and it is only readable if it
+  started clean.
+
 ## Source of truth and sync direction
 
 The repo is always upstream for `en`. A TMS is upstream for everything else:
@@ -20,7 +47,11 @@ Never edit a non-`en` locale file by hand while a TMS is wired up — the next
 pull overwrites it. Either workflow below produces a normal PR; nothing
 auto-merges.
 
-## Manual CSV loop (no TMS, the default)
+## Steps
+
+Three workflows, one at a time — pick the one this project is on.
+
+### Manual CSV loop (no TMS, the default)
 
 ```bash
 # Export every locale that's missing >0 keys, or one locale explicitly:
@@ -53,7 +84,7 @@ Notes:
   non-zero exit and the offending key's name; nothing is written.
 - `i18n-export/` is gitignored — it's regenerated output, not checked in.
 
-## Crowdin setup (reference)
+### Crowdin setup (reference)
 
 Crowdin syncs against files, not individual keys, so point it at the `.po`
 export rather than the JSON directly (Crowdin's JSON support assumes flat
@@ -85,7 +116,7 @@ Sync direction:
    manual bridge).
 6. Open a normal PR with the resulting `locales/<code>/*.json` diffs.
 
-## Lokalise setup (reference)
+### Lokalise setup (reference)
 
 Lokalise supports nested JSON natively, so it can sync directly against
 `packages/i18n/locales/<code>/*.json` — the CSV/`.po` export exists for
@@ -110,7 +141,27 @@ translators and other TMS tooling, not as a hard dependency for Lokalise.
    the PR — catches orphan keys or a locale that regressed below the 95%
    coverage floor before CI does.
 
-## CI checks (extend T-230's `check-locales`)
+## Verification
+
+Before opening the PR:
+
+```bash
+pnpm --filter @forge/i18n run lint     # check-locales + check-roundtrip
+git diff --stat packages/i18n/locales  # only the locale you imported moved
+```
+
+Then look at the app in that locale. The checks below prove the files are
+structurally sound; they say nothing about whether a string fits. Two things
+only a human catches: text that overflows its control (German is reliably
+longer than English), and an interpolation that survived the round trip
+syntactically but lost its meaning — `{{count}}` in the wrong clause is a
+valid ICU message and a wrong sentence.
+
+The negative check: an import that reports success but produces an empty
+`git diff` did nothing. Usually an all-empty `translation` column, which is
+defined to mean "leave this key alone".
+
+### CI checks (extend T-230's `check-locales`)
 
 Both wired into `packages/i18n`'s `lint` script (`pnpm --filter @forge/i18n
 run lint`), which CI's root `pnpm lint` step runs via Turborepo:
@@ -124,3 +175,34 @@ run lint`), which CI's root `pnpm lint` step runs via Turborepo:
   export/import loop is lossless" means in practice — it would catch, for
   example, a change to the CSV/JSON merge logic that silently reorders keys
   or drops a translation with a comma in it.
+
+## Rollback
+
+Locale files are ordinary tracked JSON, so a bad import is `git checkout --
+packages/i18n/locales/<code>/` before commit, or a revert after. Nothing else
+in the repo holds translation state — `i18n-export/` is gitignored, generated
+output.
+
+A TMS is the exception: it keeps its own copy, and reverting the repo does not
+un-translate anything upstream. The next pull will happily re-introduce
+whatever was reverted. Fix it in the TMS first, then pull again — reverting on
+this side alone is a loop, not a rollback.
+
+## Escalation
+
+- **`check-locales` fails on a locale nobody touched.** A key was added to
+  `en` without a translation, which is the expected state until the next
+  translation round — it fails the build once coverage crosses the 95% floor.
+  Either translate it or accept the floor is doing its job; do not lower it to
+  get a PR through.
+- **`check-roundtrip` fails.** This is not a translation problem: the
+  export/import pipeline itself lost or reordered something. Do not import
+  anything else until it is fixed, and keep the failing CSV — it is the
+  reproduction.
+- **An import fails on an unrecognized key** and the key looks correct: `en`
+  has moved since the CSV was exported. Re-export, hand the translator the
+  fresh file, and don't reconcile by hand — nothing was written, so there is
+  no half-applied state to clean up.
+- **A translation renders as the raw key in the app.** Namespace mismatch, not
+  a missing translation. `packages/i18n/README.md`'s one-file-per-namespace
+  convention is the thing that broke.

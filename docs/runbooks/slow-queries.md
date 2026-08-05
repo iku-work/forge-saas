@@ -6,6 +6,22 @@ scrapes it (`docs/grafana/postgres-exporter-queries.yaml`) into Prometheus,
 `database.json`'s "hall of shame" panel visualizes it, and
 `docs/grafana/alerts.yml` pages when a statement stays slow.
 
+## Trigger
+
+- **`SlowQuerySustained` fires** (`docs/grafana/alerts.yml`) — the intended
+  entry point; see "What the alert means" below for what it does and doesn't
+  claim.
+- A statement climbs the "hall of shame" panel on `database.json` during a
+  routine look, without having paged anyone.
+- ADR-0003's replica trigger sent you here: sustained primary CPU that turns
+  out to be one pathological query rather than read volume.
+
+Not this runbook: request latency with no slow statement behind it (that is
+the application — check `http_requests_inprogress` and the pool-utilization
+panel first), or an N+1 caught in CI, which
+`backend/tests/test_query_budgets.py` reports directly with the statements it
+captured.
+
 ## Reading the dashboard
 
 Open `database.json` (`make observe` → <http://localhost:3001>, or the
@@ -36,7 +52,19 @@ slow," not "p95 latency breached a number." For real end-to-end request p95
 (the number users actually feel), check the k6 load-test suite (T-223)
 instead — this alert is a leading indicator, not the SLO measurement itself.
 
-## Investigation workflow
+## Pre-checks
+
+- A `psql` session against the database the alert came from. Note that
+  `EXPLAIN ANALYZE` **executes** the statement — on a write it writes, so wrap
+  those in a transaction you roll back.
+- Enough production-shaped data to plan against. A plan taken on a dev
+  database with 40 rows will choose a sequential scan for correct reasons and
+  tell you nothing; `make seed-load` (T-223) is the local stand-in.
+- The `queryid` from the dashboard. Copying the truncated `query` text works
+  too, but `queryid` is the stable identifier — the text is cut at 200
+  characters.
+
+## Steps
 
 1. **Find the statement.** Either copy the truncated `query` label from the
    dashboard, or connect to Postgres directly and look it up by `queryid`:
@@ -98,7 +126,27 @@ instead — this alert is a leading indicator, not the SLO measurement itself.
    SELECT pg_stat_statements_reset();
    ```
 
-## Local verification
+## Verification
+
+A fix is verified when the *dashboard* agrees, not when the plan does. After
+the counter reset in step 4, wait for a real traffic window and check:
+
+- the statement's `mean_exec_time` on the "Mean execution time by statement"
+  panel is below the 500ms alert threshold and stays there;
+- it has left the hall of shame, or has moved down it — a query called
+  constantly can be individually fast and still top a `calls × mean` ranking,
+  which is not a regression;
+- `SlowQuerySustained` has resolved rather than being silenced.
+
+The negative check: `pg_stat_statements_reset()` empties the table, so
+*everything* looks healthy for the first few minutes afterwards. A green
+dashboard immediately after a reset is evidence of the reset, not the fix.
+
+If the fix was an index, confirm it is actually being used
+(`EXPLAIN` shows the index scan on the real data volume, not just on your
+sample) — an unused index costs write throughput and buys nothing.
+
+### Local verification
 
 Against the dev stack (`make dev` + `make observe`), after generating some
 traffic:
@@ -114,3 +162,39 @@ with `shared_preload_libraries=pg_stat_statements` active (see
 `docker compose logs postgres` for a startup complaint about the preload
 flag, not the extension itself (the migration only creates the catalog
 objects; the flag is what actually turns on collection).
+
+## Rollback
+
+Everything in the investigation steps is read-only except `ANALYZE` (harmless,
+and worth keeping) and `pg_stat_statements_reset()` (irreversible — you lose
+the history, which is why step 4 comes *after* the fix ships, not before).
+
+The fix itself rolls back like any other change:
+
+- **An index**: `DROP INDEX CONCURRENTLY <name>;` — and revert the migration
+  that added it, or the next environment gets it back. Use `CONCURRENTLY` in
+  both directions on a live database; a plain `CREATE INDEX` takes a lock that
+  blocks writes on the table for the duration.
+- **A rewritten query**: revert the commit. Keep the `EXPLAIN ANALYZE` output
+  from before and after in the PR — it is the only record of why the shape
+  changed, and the next person to "simplify" it will need it.
+- **A new cache**: revert, then re-check the invalidation matrix
+  (`app/core/cache_keys.py`, T-240). A half-removed cache that still has
+  writers invalidating a key nothing reads is the worse state to stop in.
+
+## Escalation
+
+- **The plan is already optimal and the query is still slow.** The problem is
+  volume or hardware, not the statement. That is the point at which ADR-0003's
+  read-replica triggers and ADR-0002's pooler sizing are the right
+  conversation — both list their own cheaper fixes first.
+- **A statement you don't recognise tops the list.** Check whether it is
+  Alembic, the postgres-exporter's own scrape queries, or a background job
+  before optimising something no user waits on.
+- **Row-count estimates stay wrong after `ANALYZE`.** Autovacuum is likely not
+  keeping up on that table — that is a database-tuning problem
+  (`autovacuum_vacuum_scale_factor` and friends) rather than a query one, and
+  it will come back on the next table if only this one is patched.
+- **The alert fires repeatedly on different statements.** Stop fixing them
+  one at a time; something shared moved — a missing index after a restore, a
+  connection pool starving, or a replica/pooler misconfiguration.
