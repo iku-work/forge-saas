@@ -103,3 +103,7 @@ instead of per-PR.
 | 2026-08-05 | d304a67 | browse | - | - | PASS |
 | 2026-08-05 | d304a67 | presign | - | - | PASS |
 | 2026-08-05 | d304a67 | mixed | - | - | FAIL |
+| 2026-08-06 | 9f97d92 | login-burst | - | - | FAIL |
+| 2026-08-06 | 9f97d92 | browse | - | - | PASS |
+| 2026-08-06 | 9f97d92 | presign | - | - | PASS |
+| 2026-08-06 | 9f97d92 | mixed | - | - | FAIL |
