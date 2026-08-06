@@ -68,7 +68,22 @@
   },
   "impersonation": {
     "banner": "Connecté en tant que {email}",
-    "end": "Quitter l'emprunt d'identité"
+    "end": "Quitter l'emprunt d'identité",
+    "mobile_banner": "Connecté en tant que {email} · {remaining} restant",
+    "end_hint": "Met fin à l'emprunt d'identité et déconnecte cet appareil",
+    "confirm_title": "Confirmer l'emprunt d'identité",
+    "confirm_intro": "Cet appareil agira en tant que l'utilisateur ci-dessous jusqu'à la fin de la session.",
+    "confirm_user": "Utilisateur : {email}",
+    "confirm_reason": "Motif : {reason}",
+    "confirm_no_reason": "Motif : non enregistré",
+    "confirm_remaining": "La session se termine dans {remaining}",
+    "confirm_loading": "Vérification du lien…",
+    "confirm_invalid": "Ce lien est invalide ou a expiré. Créez-en un nouveau depuis la console d'administration.",
+    "confirm_accept": "Confirmer",
+    "confirm_accept_hint": "Adopte la session d'emprunt d'identité sur cet appareil",
+    "confirm_decline": "Annuler",
+    "confirm_decline_hint": "Invalide le lien et revient à la connexion",
+    "confirm_failed": "Impossible de démarrer la session d'emprunt d'identité."
   },
   "admin": {
     "badge": "Admin",
@@ -199,7 +214,8 @@
       "col_org": "Organisation",
       "col_role": "Rôle",
       "col_device": "Appareil",
-      "col_last_seen": "Dernière activité"
+      "col_last_seen": "Dernière activité",
+      "mobile_handoff_button": "Transférer vers mon mobile"
     },
     "impersonate_modal": {
       "title": "Emprunter l'identité de {email}",
@@ -229,6 +245,24 @@
     },
     "guard": {
       "denied": "Vous n'avez pas accès à la zone d'administration."
+    },
+    "mobile_handoff": {
+      "title": "Transférer {email} vers votre mobile",
+      "description": "Démarre un emprunt d'identité et le transfère vers votre propre appareil. Ce navigateur reste connecté en tant que vous.",
+      "reason_label": "Motif (10 caractères min.)",
+      "duration_label": "Durée (minutes, 60 max.)",
+      "submit": "Créer le lien",
+      "submit_pending": "Création…",
+      "cancel": "Annuler",
+      "scan_instruction": "Scannez-le avec l'appareil photo de votre mobile, ou ouvrez le lien sur l'appareil.",
+      "qr_title": "Lien profond d'emprunt d'identité",
+      "expires_in": "Le lien expire dans {seconds}s",
+      "expired": "Ce lien a expiré. Créez-en un nouveau pour réessayer.",
+      "start_over": "Nouveau lien",
+      "done": "Terminé",
+      "error_default": "Impossible de créer le lien.",
+      "copy": "Copier",
+      "copied": "Copié"
     }
   }
 }

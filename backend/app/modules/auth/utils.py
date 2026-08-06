@@ -8,7 +8,7 @@ jose, or itsdangerous directly.
 import hashlib
 import secrets
 from collections.abc import Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from typing import Any
 from uuid import UUID, uuid4
@@ -81,6 +81,14 @@ class AccessTokenPayload:
     # step-up-protected actions. Defaults to `iat` for any token that
     # predates this field (e.g. one already in flight during a deploy).
     auth_time: datetime | None = None
+    # T-261: the `exp` claim, surfaced because "how long is left on this
+    # session" is something some callers have to *show* rather than merely
+    # enforce -- the mobile impersonation banner counts down against it.
+    # kw_only so it can be required (unlike the two optional fields above it)
+    # without having to sit ahead of them in the field order: create_access_token
+    # always sets `exp`, so there is no token this can legitimately be missing
+    # from, and a default would only ever paper over a decode bug.
+    expires_at: datetime = field(kw_only=True)
 
 
 def create_access_token(  # noqa: PLR0913 -- T-218 adds auth_time on top of T-142's existing impersonator_id/expire_minutes
@@ -153,6 +161,7 @@ def verify_access_token(token: str) -> AccessTokenPayload:
                 if auth_time is not None
                 else datetime.fromtimestamp(claims["iat"], tz=UTC)
             ),
+            expires_at=datetime.fromtimestamp(claims["exp"], tz=UTC),
         )
     except (JWTError, KeyError, ValueError, TypeError) as exc:
         raise AuthenticationError(

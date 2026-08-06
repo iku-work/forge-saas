@@ -73,5 +73,6 @@
   "email_unchanged": "Tämä on jo nykyinen sähköpostiosoitteesi.",
   "invalid_email_change_token": "Tämä sähköpostin vaihtolinkki on virheellinen tai vanhentunut.",
   "invalid_email_change_cancel_token": "Tämä peruutuslinkki on virheellinen tai vanhentunut.",
-  "email_change_target_rate_limited": "Liian monta sähköpostin vaihtopyyntöä tälle osoitteelle äskettäin. Yritä myöhemmin uudelleen."
+  "email_change_target_rate_limited": "Liian monta sähköpostin vaihtopyyntöä tälle osoitteelle äskettäin. Yritä myöhemmin uudelleen.",
+  "invalid_exchange_token": "Tämä siirtolinkki on virheellinen tai vanhentunut."
 }

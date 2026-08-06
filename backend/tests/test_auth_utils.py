@@ -73,6 +73,7 @@ def test_access_token_round_trips_claims() -> None:
         permissions=("members:read", "billing:read"),
         jti=payload.jti,
         auth_time=payload.auth_time,
+        expires_at=payload.expires_at,
     )
     assert isinstance(payload.jti, UUID)
     # T-218: defaults to this token's own mint time when the caller doesn't

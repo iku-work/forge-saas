@@ -73,5 +73,6 @@
   "email_unchanged": "This is already your current email address.",
   "invalid_email_change_token": "This email change link is invalid or has expired.",
   "invalid_email_change_cancel_token": "This cancel link is invalid or has expired.",
-  "email_change_target_rate_limited": "Too many change-email requests for this address recently. Please try again later."
+  "email_change_target_rate_limited": "Too many change-email requests for this address recently. Please try again later.",
+  "invalid_exchange_token": "This handoff link is invalid or has expired."
 }

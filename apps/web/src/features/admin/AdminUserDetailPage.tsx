@@ -24,11 +24,13 @@ import { formatDate } from "@forge/utils";
 import { useRouteLocale } from "../../lib/useRouteLocale";
 import { getErrorMessage } from "../auth/getErrorMessage";
 import { ImpersonateModal } from "./ImpersonateModal";
+import { MobileHandoffModal } from "./MobileHandoffModal";
 
 export function AdminUserDetailPage({ userId }: { userId: string }) {
   const locale = useRouteLocale();
   const { t, i18n } = useTranslation();
   const [impersonateOpen, setImpersonateOpen] = useState(false);
+  const [handoffOpen, setHandoffOpen] = useState(false);
 
   const detailQuery = useQuery({
     queryKey: ["admin", "users", "detail", userId],
@@ -79,14 +81,25 @@ export function AdminUserDetailPage({ userId }: { userId: string }) {
               </p>
             </div>
             {!detail.is_superadmin ? (
-              <Button
-                type="button"
-                onClick={() => {
-                  setImpersonateOpen(true);
-                }}
-              >
-                {t("common.admin.user_detail.impersonate_button")}
-              </Button>
+              <div className="flex gap-2">
+                <Button
+                  type="button"
+                  onClick={() => {
+                    setImpersonateOpen(true);
+                  }}
+                >
+                  {t("common.admin.user_detail.impersonate_button")}
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => {
+                    setHandoffOpen(true);
+                  }}
+                >
+                  {t("common.admin.user_detail.mobile_handoff_button")}
+                </Button>
+              </div>
             ) : null}
           </div>
 
@@ -190,6 +203,12 @@ export function AdminUserDetailPage({ userId }: { userId: string }) {
             email={detail.email}
             open={impersonateOpen}
             onOpenChange={setImpersonateOpen}
+          />
+          <MobileHandoffModal
+            userId={detail.id}
+            email={detail.email}
+            open={handoffOpen}
+            onOpenChange={setHandoffOpen}
           />
         </>
       ) : null}

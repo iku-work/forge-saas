@@ -68,7 +68,22 @@
   },
   "impersonation": {
     "banner": "Impersonating {email}",
-    "end": "End impersonation"
+    "end": "End impersonation",
+    "mobile_banner": "Impersonating {email} · {remaining} left",
+    "end_hint": "Ends the impersonation session and signs this device out",
+    "confirm_title": "Confirm impersonation",
+    "confirm_intro": "This device will act as the user below until the session ends.",
+    "confirm_user": "User: {email}",
+    "confirm_reason": "Reason: {reason}",
+    "confirm_no_reason": "Reason: not recorded",
+    "confirm_remaining": "Session ends in {remaining}",
+    "confirm_loading": "Checking this link…",
+    "confirm_invalid": "This handoff link is invalid or has expired. Create a new one from the admin console.",
+    "confirm_accept": "Confirm",
+    "confirm_accept_hint": "Adopts the impersonation session on this device",
+    "confirm_decline": "Cancel",
+    "confirm_decline_hint": "Invalidates the handoff link and returns to sign-in",
+    "confirm_failed": "Couldn't start the impersonation session."
   },
   "admin": {
     "badge": "Admin",
@@ -199,7 +214,8 @@
       "col_org": "Organization",
       "col_role": "Role",
       "col_device": "Device",
-      "col_last_seen": "Last seen"
+      "col_last_seen": "Last seen",
+      "mobile_handoff_button": "Hand off to my phone"
     },
     "impersonate_modal": {
       "title": "Impersonate {email}",
@@ -229,6 +245,24 @@
     },
     "guard": {
       "denied": "You don't have access to the admin area."
+    },
+    "mobile_handoff": {
+      "title": "Hand off {email} to your phone",
+      "description": "Starts an impersonation session and hands it to your own device. This browser stays signed in as you.",
+      "reason_label": "Reason (min. 10 characters)",
+      "duration_label": "Duration (minutes, max 60)",
+      "submit": "Create handoff link",
+      "submit_pending": "Creating…",
+      "cancel": "Cancel",
+      "scan_instruction": "Scan this with your phone's camera, or open the link on the device.",
+      "qr_title": "Impersonation handoff deep link",
+      "expires_in": "Link expires in {seconds}s",
+      "expired": "This link has expired. Create a new one to try again.",
+      "start_over": "New link",
+      "done": "Done",
+      "error_default": "Couldn't create a handoff link.",
+      "copy": "Copy",
+      "copied": "Copied"
     }
   }
 }

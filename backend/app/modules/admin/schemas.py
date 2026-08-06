@@ -138,6 +138,50 @@ class AdminImpersonateResponse(AppBaseModel):
     user: UserPublic
 
 
+# T-261: which surface an impersonation session was ended from. Not a
+# hierarchy and nothing branches on it beyond the audit action name -- it
+# exists so "the agent closed the session on their phone" is answerable from
+# the audit feed, since that is the case where the session cannot be resumed.
+# Lives here rather than in service.py because the request schema below is
+# what the value is parsed into, and service.py already imports this module
+# (the reverse would be a cycle).
+ImpersonationChannel = Literal["web", "mobile"]
+
+
+class AdminEndImpersonationRequest(AppBaseModel):
+    # Optional body on a route that had none: web keeps posting nothing and
+    # keeps landing on "web", so no existing caller changes.
+    channel: ImpersonationChannel = "web"
+
+
+# ---- T-261: mobile impersonation handoff -------------------------------------
+
+
+class AdminMobileHandoffResponse(AppBaseModel):
+    deep_link: str
+    expires_at: datetime  # of the exchange token, not of the impersonation session
+
+
+class AdminMobileHandoffPreview(AppBaseModel):
+    """What the phone renders on the confirmation screen. Deliberately no
+    access token -- previewing is not adopting."""
+
+    user_email: str
+    reason: str
+    session_expires_at: datetime
+
+
+class AdminMobileExchangeRequest(AppBaseModel):
+    token: str = Field(min_length=1, max_length=512)
+
+
+class AdminMobileExchangeResponse(AppBaseModel):
+    access_token: str
+    session_expires_at: datetime
+    user_email: str
+    reason: str
+
+
 # ---- T-218: admin-assisted lost-2FA recovery ---------------------------------
 
 

@@ -37,10 +37,15 @@ from app.modules.admin.schemas import (
     AdminCompCreditRequest,
     AdminDashboardStats,
     AdminDisableTotpRequest,
+    AdminEndImpersonationRequest,
     AdminExtendTrialRequest,
     AdminFeatureFlagsResponse,
     AdminImpersonateRequest,
     AdminImpersonateResponse,
+    AdminMobileExchangeRequest,
+    AdminMobileExchangeResponse,
+    AdminMobileHandoffPreview,
+    AdminMobileHandoffResponse,
     AdminOrgDetail,
     AdminOrgSummary,
     AdminSetOrgPlanRequest,
@@ -55,6 +60,7 @@ from app.modules.admin.service import (
     AdminDirectoryService,
     AdminFeatureFlagService,
     AdminImpersonationService,
+    AdminMobileHandoffService,
 )
 from app.modules.auth.models import User
 from app.modules.auth.repository import UserRepository
@@ -346,12 +352,13 @@ async def impersonate_user(  # noqa: PLR0913 -- request+path+body+auth+session+r
 
 @router.post("/impersonate/end")
 @api_limit
-async def end_impersonation(
+async def end_impersonation(  # noqa: PLR0913 -- request+body+auth+token+session+redis, all required
     request: Request,
     user: Annotated[User, Depends(get_current_user)],  # noqa: ARG001 -- requires *some* valid, non-blocklisted token; the impersonation check itself is on the token payload in the service
     token: Annotated[str | None, Depends(oauth2_scheme)],
     session: Annotated[AsyncSession, Depends(get_session)],
     redis: Annotated[Redis, Depends(get_redis)],
+    body: AdminEndImpersonationRequest | None = None,
 ) -> Envelope[None]:
     # impersonation-ok: the way *out* of an impersonation session. Blocking
     # this one would trap a support agent in the identity they are trying to
@@ -363,7 +370,124 @@ async def end_impersonation(
         # case that coupling ever changes.
         raise AuthenticationError("errors.missing_bearer_token", fallback="Missing bearer token")
     await AdminImpersonationService(session, redis).end(
-        token=token, ip=_client_ip(request), ua=request.headers.get("user-agent", "")
+        token=token,
+        ip=_client_ip(request),
+        ua=request.headers.get("user-agent", ""),
+        # T-261: an absent body is web's existing "POST with nothing in it".
+        channel=body.channel if body is not None else "web",
+    )
+    await session.commit()
+    return Envelope(data=None, meta=Meta(request_id=_request_id(request)))
+
+
+# ---- T-261: mobile impersonation handoff -------------------------------------
+
+
+@router.post("/impersonate/mobile-handoff")
+@api_limit
+async def create_mobile_handoff(
+    request: Request,
+    user: Annotated[User, Depends(get_current_user)],
+    token: Annotated[str | None, Depends(oauth2_scheme)],
+    session: Annotated[AsyncSession, Depends(get_session)],
+    redis: Annotated[Redis, Depends(get_redis)],
+) -> Envelope[AdminMobileHandoffResponse]:
+    # impersonation-ok: this endpoint is only reachable *with* an impersonation
+    # token -- it is the one action whose entire purpose is to continue the
+    # session on another device, and it produces no side effect the
+    # impersonated user could see (no mail, no charge, no state of theirs
+    # changes). Same category as /impersonate/end above.
+    if token is None:
+        raise AuthenticationError("errors.missing_bearer_token", fallback="Missing bearer token")
+    deep_link, expires_at = await AdminMobileHandoffService(session, redis).create(
+        token=token,
+        # get_current_user resolved this from the impersonation token, so it
+        # is the impersonated user -- exactly whose email belongs on the
+        # phone's confirmation screen.
+        target=user,
+        ip=_client_ip(request),
+        ua=request.headers.get("user-agent", ""),
+    )
+    await session.commit()
+    return Envelope(
+        data=AdminMobileHandoffResponse(deep_link=deep_link, expires_at=expires_at),
+        meta=Meta(request_id=_request_id(request)),
+    )
+
+
+@router.get("/impersonate/mobile-handoff/{exchange_token}")
+@api_limit
+async def preview_mobile_handoff(
+    request: Request,
+    exchange_token: str,
+    session: Annotated[AsyncSession, Depends(get_session)],
+    redis: Annotated[Redis, Depends(get_redis)],
+) -> Envelope[AdminMobileHandoffPreview]:
+    # Unauthenticated by necessity: the phone holds the exchange token and
+    # nothing else yet. The token *is* the credential, and this leg tells its
+    # holder only what redeeming it would tell them anyway.
+    #
+    # api_limit, not sensitive_limit, on this and the two legs below: the
+    # 3/minute sensitive budget is sized for endpoints a *guess* could get
+    # somewhere against (login, password reset). Nothing here is guessable --
+    # 256 bits of entropy with a two-minute life -- while a single operator
+    # retrying a scan legitimately spends preview + cancel + preview +
+    # exchange, which 3/minute would 429 in the middle of a support call.
+    record = await AdminMobileHandoffService(session, redis).preview(exchange_token=exchange_token)
+    return Envelope(
+        data=AdminMobileHandoffPreview(
+            user_email=record.user_email,
+            reason=record.reason,
+            session_expires_at=record.session_expires_at,
+        ),
+        meta=Meta(request_id=_request_id(request)),
+    )
+
+
+@router.post("/impersonate/mobile-exchange")
+@api_limit
+async def exchange_mobile_handoff(
+    request: Request,
+    body: AdminMobileExchangeRequest,
+    session: Annotated[AsyncSession, Depends(get_session)],
+    redis: Annotated[Redis, Depends(get_redis)],
+) -> Envelope[AdminMobileExchangeResponse]:
+    # impersonation-ok: unauthenticated, and the exchange token it consumes
+    # can only have been minted from an impersonation session that was already
+    # allowed. Guarding it would be guarding on a bearer token that this leg,
+    # by construction, does not have.
+    record = await AdminMobileHandoffService(session, redis).exchange(
+        exchange_token=body.token,
+        ip=_client_ip(request),
+        ua=request.headers.get("user-agent", ""),
+    )
+    await session.commit()
+    return Envelope(
+        data=AdminMobileExchangeResponse(
+            access_token=record.access_token,
+            session_expires_at=record.session_expires_at,
+            user_email=record.user_email,
+            reason=record.reason,
+        ),
+        meta=Meta(request_id=_request_id(request)),
+    )
+
+
+@router.post("/impersonate/mobile-cancel")
+@api_limit
+async def cancel_mobile_handoff(
+    request: Request,
+    body: AdminMobileExchangeRequest,
+    session: Annotated[AsyncSession, Depends(get_session)],
+    redis: Annotated[Redis, Depends(get_redis)],
+) -> Envelope[None]:
+    # impersonation-ok: same shape as the exchange leg above, and it only ever
+    # destroys a handoff -- declining one is never the action anyone needs
+    # protecting from.
+    await AdminMobileHandoffService(session, redis).cancel(
+        exchange_token=body.token,
+        ip=_client_ip(request),
+        ua=request.headers.get("user-agent", ""),
     )
     await session.commit()
     return Envelope(data=None, meta=Meta(request_id=_request_id(request)))

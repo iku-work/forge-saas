@@ -6,6 +6,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Slot, useRouter } from "expo-router";
 import { ActivityIndicator, View } from "react-native";
 
+import { ImpersonationBanner } from "../src/components/ImpersonationBanner";
 import { onSessionExpired } from "../src/lib/api";
 import { bootstrapSession, getSessionSnapshot, useSession } from "../src/lib/auth";
 import {
@@ -13,6 +14,7 @@ import {
   initI18n,
   useSystemLocaleSync,
 } from "../src/lib/i18n";
+import { clearImpersonationOnLaunch } from "../src/lib/impersonation";
 import { initSentry, setSentryUser } from "../src/lib/sentry";
 
 // Module scope, same as apps/web/src/main.tsx's initSentry() call -- must
@@ -38,6 +40,12 @@ function RootLayout() {
       // still awaited so the very first render already has the right
       // language instead of a flash of the previous one.
       await initI18n();
+      // T-261: before anything reads the stored session. An impersonation
+      // session must not survive a cold start -- the operator who killed the
+      // app has to come back to the login screen, not silently to somebody
+      // else's account -- and clearing it here means bootstrapSession() below
+      // has nothing left to hydrate.
+      await clearImpersonationOnLaunch().catch(() => false);
       const hadStoredSession = await bootstrapSession().catch(() => false);
       if (hadStoredSession) {
         // A signed-in user's saved locale outranks the device-language guess
@@ -79,6 +87,9 @@ function RootLayout() {
 
   return (
     <QueryClientProvider client={queryClient}>
+      {/* Above <Slot />, so it is on every screen the app can reach and not
+          just the authenticated ones -- see the component's own docstring. */}
+      <ImpersonationBanner />
       <Slot />
     </QueryClientProvider>
   );

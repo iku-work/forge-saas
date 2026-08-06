@@ -73,5 +73,6 @@
   "email_unchanged": "Il s'agit déjà de votre adresse e-mail actuelle.",
   "invalid_email_change_token": "Ce lien de changement d'e-mail n'est pas valide ou a expiré.",
   "invalid_email_change_cancel_token": "Ce lien d'annulation n'est pas valide ou a expiré.",
-  "email_change_target_rate_limited": "Trop de demandes de changement d'e-mail récentes pour cette adresse. Veuillez réessayer plus tard."
+  "email_change_target_rate_limited": "Trop de demandes de changement d'e-mail récentes pour cette adresse. Veuillez réessayer plus tard.",
+  "invalid_exchange_token": "Ce lien de transfert est invalide ou a expiré."
 }

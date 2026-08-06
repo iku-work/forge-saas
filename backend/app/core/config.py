@@ -97,6 +97,11 @@ class Settings(BaseSettings):
     LOG_LEVEL: str = "INFO"
     DOMAIN: str = "localhost"  # used by Caddyfile.prod ($DOMAIN) and link generation
     FRONTEND_URL: str = "http://localhost:5173"  # base URL for links in transactional emails
+    # T-261: the custom URL scheme the mobile app registers (apps/mobile/app.json's
+    # `expo.scheme`). Only the impersonation handoff deep link is built from it
+    # today, but it is the app's identity on the device, not that one feature's
+    # setting — a product that renames the app renames this once.
+    MOBILE_DEEP_LINK_SCHEME: str = "forge"
 
     # Integrations
     # Optional: only required when billing is enabled (validated below) --

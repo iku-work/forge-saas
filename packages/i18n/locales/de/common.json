@@ -68,7 +68,22 @@
   },
   "impersonation": {
     "banner": "Angemeldet als {email} (Identitätswechsel)",
-    "end": "Identitätswechsel beenden"
+    "end": "Identitätswechsel beenden",
+    "mobile_banner": "Angemeldet als {email} · noch {remaining}",
+    "end_hint": "Beendet den Identitätswechsel und meldet dieses Gerät ab",
+    "confirm_title": "Identitätswechsel bestätigen",
+    "confirm_intro": "Dieses Gerät handelt bis zum Ende der Sitzung als der unten genannte Benutzer.",
+    "confirm_user": "Benutzer: {email}",
+    "confirm_reason": "Grund: {reason}",
+    "confirm_no_reason": "Grund: nicht erfasst",
+    "confirm_remaining": "Sitzung endet in {remaining}",
+    "confirm_loading": "Link wird geprüft…",
+    "confirm_invalid": "Dieser Link ist ungültig oder abgelaufen. Erstellen Sie in der Admin-Konsole einen neuen.",
+    "confirm_accept": "Bestätigen",
+    "confirm_accept_hint": "Übernimmt den Identitätswechsel auf diesem Gerät",
+    "confirm_decline": "Abbrechen",
+    "confirm_decline_hint": "Macht den Link ungültig und kehrt zur Anmeldung zurück",
+    "confirm_failed": "Der Identitätswechsel konnte nicht gestartet werden."
   },
   "admin": {
     "badge": "Admin",
@@ -199,7 +214,8 @@
       "col_org": "Organisation",
       "col_role": "Rolle",
       "col_device": "Gerät",
-      "col_last_seen": "Zuletzt aktiv"
+      "col_last_seen": "Zuletzt aktiv",
+      "mobile_handoff_button": "An mein Telefon übergeben"
     },
     "impersonate_modal": {
       "title": "Identität von {email} annehmen",
@@ -229,6 +245,24 @@
     },
     "guard": {
       "denied": "Sie haben keinen Zugriff auf den Admin-Bereich."
+    },
+    "mobile_handoff": {
+      "title": "{email} an Ihr Telefon übergeben",
+      "description": "Startet einen Identitätswechsel und übergibt ihn an Ihr eigenes Gerät. Dieser Browser bleibt als Sie angemeldet.",
+      "reason_label": "Grund (mind. 10 Zeichen)",
+      "duration_label": "Dauer (Minuten, max. 60)",
+      "submit": "Übergabelink erstellen",
+      "submit_pending": "Wird erstellt…",
+      "cancel": "Abbrechen",
+      "scan_instruction": "Mit der Kamera Ihres Telefons scannen oder den Link auf dem Gerät öffnen.",
+      "qr_title": "Deep-Link zur Übergabe des Identitätswechsels",
+      "expires_in": "Link läuft in {seconds}s ab",
+      "expired": "Dieser Link ist abgelaufen. Erstellen Sie einen neuen.",
+      "start_over": "Neuer Link",
+      "done": "Fertig",
+      "error_default": "Übergabelink konnte nicht erstellt werden.",
+      "copy": "Kopieren",
+      "copied": "Kopiert"
     }
   }
 }

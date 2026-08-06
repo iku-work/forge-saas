@@ -68,7 +68,22 @@
   },
   "impersonation": {
     "banner": "Suplantando a {email}",
-    "end": "Finalizar suplantación"
+    "end": "Finalizar suplantación",
+    "mobile_banner": "Suplantando a {email} · quedan {remaining}",
+    "end_hint": "Finaliza la suplantación y cierra la sesión en este dispositivo",
+    "confirm_title": "Confirmar suplantación",
+    "confirm_intro": "Este dispositivo actuará como el usuario indicado hasta que termine la sesión.",
+    "confirm_user": "Usuario: {email}",
+    "confirm_reason": "Motivo: {reason}",
+    "confirm_no_reason": "Motivo: sin registrar",
+    "confirm_remaining": "La sesión termina en {remaining}",
+    "confirm_loading": "Comprobando el enlace…",
+    "confirm_invalid": "Este enlace no es válido o ha caducado. Crea uno nuevo desde la consola de administración.",
+    "confirm_accept": "Confirmar",
+    "confirm_accept_hint": "Adopta la sesión de suplantación en este dispositivo",
+    "confirm_decline": "Cancelar",
+    "confirm_decline_hint": "Invalida el enlace y vuelve al inicio de sesión",
+    "confirm_failed": "No se pudo iniciar la sesión de suplantación."
   },
   "admin": {
     "badge": "Admin",
@@ -199,7 +214,8 @@
       "col_org": "Organización",
       "col_role": "Rol",
       "col_device": "Dispositivo",
-      "col_last_seen": "Última actividad"
+      "col_last_seen": "Última actividad",
+      "mobile_handoff_button": "Pasar a mi móvil"
     },
     "impersonate_modal": {
       "title": "Suplantar a {email}",
@@ -229,6 +245,24 @@
     },
     "guard": {
       "denied": "No tienes acceso al área de administración."
+    },
+    "mobile_handoff": {
+      "title": "Pasar {email} a tu móvil",
+      "description": "Inicia una sesión de suplantación y la pasa a tu propio dispositivo. Este navegador sigue con tu sesión.",
+      "reason_label": "Motivo (mín. 10 caracteres)",
+      "duration_label": "Duración (minutos, máx. 60)",
+      "submit": "Crear enlace",
+      "submit_pending": "Creando…",
+      "cancel": "Cancelar",
+      "scan_instruction": "Escanéalo con la cámara de tu móvil o abre el enlace en el dispositivo.",
+      "qr_title": "Enlace profundo de suplantación",
+      "expires_in": "El enlace caduca en {seconds}s",
+      "expired": "Este enlace ha caducado. Crea uno nuevo para volver a intentarlo.",
+      "start_over": "Enlace nuevo",
+      "done": "Hecho",
+      "error_default": "No se pudo crear el enlace.",
+      "copy": "Copiar",
+      "copied": "Copiado"
     }
   }
 }

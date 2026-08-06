@@ -73,5 +73,6 @@
   "email_unchanged": "Esta ya es tu dirección de correo electrónico actual.",
   "invalid_email_change_token": "Este enlace de cambio de correo electrónico no es válido o ha expirado.",
   "invalid_email_change_cancel_token": "Este enlace de cancelación no es válido o ha expirado.",
-  "email_change_target_rate_limited": "Se han realizado demasiadas solicitudes de cambio de correo electrónico para esta dirección recientemente. Inténtalo de nuevo más tarde."
+  "email_change_target_rate_limited": "Se han realizado demasiadas solicitudes de cambio de correo electrónico para esta dirección recientemente. Inténtalo de nuevo más tarde.",
+  "invalid_exchange_token": "Este enlace de traspaso no es válido o ha caducado."
 }

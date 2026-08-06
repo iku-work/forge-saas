@@ -17,6 +17,7 @@ aggregate view no single module's service was designed to provide.
 
 from datetime import datetime, timedelta
 from typing import Any
+from urllib.parse import urlencode
 from uuid import UUID, uuid4
 
 import stripe
@@ -24,14 +25,32 @@ from redis.asyncio import Redis
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core import jobs
+from app.core.audit_context import reset_impersonator_id, set_impersonator_id
 from app.core.config import get_settings
 from app.core.dependencies import invalidate_user_cache
-from app.core.exceptions import ConflictError, DomainError, NotFoundError, PermissionDeniedError
+from app.core.exceptions import (
+    AuthenticationError,
+    ConflictError,
+    DomainError,
+    NotFoundError,
+    PermissionDeniedError,
+)
 from app.core.module_loader import is_enabled
 from app.core.repository import DEFAULT_PAGE_SIZE
 from app.core.token_blocklist import block_jti
 from app.core.urls import frontend_url
 from app.models._mixins import utcnow
+from app.modules.admin.impersonation_handoff import (
+    HandoffRecord,
+    drop_handoff,
+    generate_exchange_token,
+    get_session_reason,
+    handoff_expiry,
+    peek_handoff,
+    store_handoff,
+    store_session_reason,
+    take_handoff,
+)
 from app.modules.admin.repository import AdminOrgRepository, AdminStatsRepository
 from app.modules.admin.schemas import (
     AdminAuditEntry,
@@ -47,6 +66,7 @@ from app.modules.admin.schemas import (
     AdminSubscriptionDetail,
     AdminUserDetail,
     AdminUserSummary,
+    ImpersonationChannel,
 )
 from app.modules.audit.repository import AuditRepository
 from app.modules.audit.service import AuditService
@@ -69,6 +89,26 @@ from app.modules.tenancy.repository import MembershipRepository, OrganizationRep
 # token). Also used as the blocklist TTL in end() -- an ended impersonation
 # jti never needs to stay blocked longer than the token could have lived.
 MAX_IMPERSONATION_MINUTES = 60
+
+_END_ACTIONS: dict[str, str] = {
+    "web": "admin.impersonate.end",
+    "mobile": "impersonation.mobile_ended",
+}
+
+# The path half of the handoff deep link. The scheme comes from settings
+# (MOBILE_DEEP_LINK_SCHEME) so a product that renames the app doesn't have to
+# find this string; the host is the mobile route that handles it
+# (apps/mobile/app/impersonate.tsx), and the two have to be changed together.
+_DEEP_LINK_HOST = "impersonate"
+
+
+def _deep_link(exchange_token: str, user_email: str) -> str:
+    # urlencode, not an f-string: an email address is allowed to contain "+"
+    # and "&", either of which would silently truncate or corrupt the query
+    # string the phone parses.
+    query = urlencode({"token": exchange_token, "user_email": user_email})
+    return f"{get_settings().MOBILE_DEEP_LINK_SCHEME}://{_DEEP_LINK_HOST}?{query}"
+
 
 # Placeholder stripe_subscription_id for a Subscription row an admin
 # force-assigned without a real Stripe subscription behind it (§T-141's
@@ -633,6 +673,15 @@ class AdminImpersonationService:
         access_token = create_access_token(
             target.id, None, (), impersonator_id=superadmin.id, expire_minutes=minutes
         )
+        # T-261: the reason is kept server-side, keyed by this token's jti, so
+        # the mobile confirmation screen can show *why* a session it is about
+        # to adopt exists. Deliberately not a JWT claim -- claims are readable
+        # by anyone holding the token, and a support reason ("user reports
+        # card declined, ticket 8812") is not something to hand to whoever
+        # ends up with it. Expires with the token.
+        await store_session_reason(
+            self._redis, verify_access_token(access_token).jti, reason, minutes * 60
+        )
         await self._audit.log(
             action="admin.impersonate.start",
             resource_type="user",
@@ -646,7 +695,9 @@ class AdminImpersonationService:
         )
         return access_token, utcnow() + timedelta(minutes=minutes)
 
-    async def end(self, *, token: str, ip: str | None, ua: str | None) -> None:
+    async def end(
+        self, *, token: str, ip: str | None, ua: str | None, channel: ImpersonationChannel = "web"
+    ) -> None:
         payload = verify_access_token(token)
         if payload.impersonator_id is None:
             raise DomainError(
@@ -655,7 +706,14 @@ class AdminImpersonationService:
             )
         await block_jti(self._redis, payload.jti, MAX_IMPERSONATION_MINUTES * 60)
         await self._audit.log(
-            action="admin.impersonate.end",
+            # T-261 asks for the mobile ending to be distinguishable in the
+            # feed from the web one, and it genuinely is a different fact:
+            # ending on the phone leaves the superadmin logged out there (one
+            # session per install), while ending on web silently falls back to
+            # their own refresh cookie. Same event, two names, rather than one
+            # name and a diff field, because that is what an operator reading
+            # the feed filters on.
+            action=_END_ACTIONS[channel],
             resource_type="user",
             resource_id=str(payload.user_id),
             org_id=None,
@@ -665,6 +723,151 @@ class AdminImpersonationService:
             ua=ua,
             severity="elevated",
         )
+
+
+class AdminMobileHandoffService:
+    """T-261: moves an impersonation session that already exists onto the
+    superadmin's own phone, so a mobile-only bug can be reproduced without
+    asking the user to hand over their device.
+
+    It mints nothing. The access token it hands to the phone is the *same*
+    token T-142 already issued -- same jti, same `exp`, same
+    `impersonator_id`, so it is already covered by the blocklist (T-142), the
+    destructive-action guard (T-260), the audit stamping, and the one-hour
+    cap, with no second code path that could drift from any of them. All this
+    service adds is a two-minute, single-use bearer for *that* token, short
+    enough to be safe on a screen and in an OS deep-link handler.
+
+    The exchange leg is unauthenticated by necessity -- a phone that has not
+    adopted the session yet has no credential to present but the exchange
+    token itself -- which is why that token is 32 random bytes, consumed
+    atomically (GETDEL), stored only as a hash, and dead two minutes after it
+    is minted whether or not anyone uses it.
+    """
+
+    def __init__(self, session: AsyncSession, redis: Redis) -> None:
+        self._redis = redis
+        self._audit = AuditService(session)
+
+    async def create(
+        self, *, token: str, target: User, ip: str | None, ua: str | None
+    ) -> tuple[str, datetime]:
+        """Returns (deep_link, expires_at) for an active impersonation session.
+
+        `token` is the caller's own bearer token: the route this runs behind
+        already put it through get_current_user, so it is live, unexpired and
+        not blocklisted by the time it reaches here.
+        """
+        payload = verify_access_token(token)
+        if payload.impersonator_id is None:
+            raise DomainError(
+                "errors.not_impersonating",
+                fallback="This token is not an impersonation session",
+            )
+        exchange_token = generate_exchange_token()
+        record = HandoffRecord(
+            access_token=token,
+            user_id=payload.user_id,
+            user_email=target.email,
+            impersonator_id=payload.impersonator_id,
+            reason=await get_session_reason(self._redis, payload.jti) or "",
+            session_expires_at=payload.expires_at,
+            expires_at=handoff_expiry(),
+        )
+        await store_handoff(self._redis, exchange_token, record)
+        await self._audit.log(
+            action="impersonation.mobile_handoff_created",
+            resource_type="user",
+            resource_id=str(payload.user_id),
+            org_id=None,
+            actor_id=payload.user_id,
+            diff={"expires_at": record.expires_at.isoformat()},
+            ip=ip,
+            ua=ua,
+            severity="elevated",
+        )
+        return _deep_link(exchange_token, target.email), record.expires_at
+
+    async def preview(self, *, exchange_token: str) -> HandoffRecord:
+        """What the phone shows before the operator commits: who, why, how
+        long is left. Does not consume the token -- opening the link twice
+        (an OS that re-delivers it, a backgrounded app) must not burn the one
+        redemption, and this leg reveals nothing to a holder who could simply
+        redeem it instead."""
+        record = await peek_handoff(self._redis, exchange_token)
+        if record is None:
+            raise AuthenticationError(
+                "errors.invalid_exchange_token",
+                fallback="This handoff link is invalid or has expired",
+            )
+        return record
+
+    async def exchange(
+        self, *, exchange_token: str, ip: str | None, ua: str | None
+    ) -> HandoffRecord:
+        record = await take_handoff(self._redis, exchange_token)
+        if record is None:
+            raise AuthenticationError(
+                "errors.invalid_exchange_token",
+                fallback="This handoff link is invalid or has expired",
+            )
+        await self._log_as_impersonator(
+            record,
+            action="impersonation.mobile_handoff",
+            diff={"session_expires_at": record.session_expires_at.isoformat()},
+            ip=ip,
+            ua=ua,
+        )
+        return record
+
+    async def cancel(self, *, exchange_token: str, ip: str | None, ua: str | None) -> None:
+        """The phone's Cancel button. Idempotent and silent about unknown
+        tokens: this leg is unauthenticated, so answering "that one existed"
+        differently from "that one didn't" would turn it into an oracle for
+        guessing live handoffs."""
+        record = await peek_handoff(self._redis, exchange_token)
+        if record is None:
+            return
+        await drop_handoff(self._redis, exchange_token)
+        await self._log_as_impersonator(
+            record, action="impersonation.mobile_handoff_cancelled", diff={}, ip=ip, ua=ua
+        )
+
+    async def _log_as_impersonator(
+        self,
+        record: HandoffRecord,
+        *,
+        action: str,
+        diff: dict[str, Any],
+        ip: str | None,
+        ua: str | None,
+    ) -> None:
+        """Writes an event stamped with the superadmin behind the session.
+
+        The exchange and cancel legs carry no Authorization header, so
+        app.middleware.impersonation has nothing to decode and
+        AuditService.log would otherwise record these two events -- the only
+        two in the impersonation trail that are *not* made by the impersonated
+        principal's own token -- with a blank impersonator_id. Setting the
+        same ContextVar the middleware sets keeps "who was really acting" a
+        thing the audit layer reads rather than a thing every caller may pass,
+        which is the invariant app.core.audit_context exists to hold.
+        """
+        context_token = set_impersonator_id(record.impersonator_id)
+        try:
+            await self._audit.log(
+                action=action,
+                resource_type="user",
+                resource_id=str(record.user_id),
+                org_id=None,
+                actor_id=record.user_id,
+                diff=diff,
+                ip=ip,
+                ua=ua,
+                severity="elevated",
+            )
+        finally:
+            reset_impersonator_id(context_token)
 
 
 class AdminAccountRecoveryService:

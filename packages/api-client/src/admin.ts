@@ -244,6 +244,33 @@ export function impersonateAdminUser(userId: string, body: AdminImpersonateReque
   });
 }
 
+// ---- T-261: mobile impersonation handoff ---------------------------------------
+
+export interface AdminMobileHandoffResponse {
+  deep_link: string;
+  expires_at: string;
+}
+
+/**
+ * Turns an impersonation session into a two-minute deep link for the
+ * superadmin's phone.
+ *
+ * The token is passed in and set as an explicit header instead of going through
+ * `THROW`'s `security: BEARER`: that path resolves the *module's* access token
+ * (client.ts's `accessToken`), which on this screen is still the superadmin's
+ * own. The whole point of the admin-side handoff flow is that the browser never
+ * adopts the impersonation session it is handing over -- the operator stays
+ * themselves on web -- so the one call that has to be made *as* the impersonated
+ * session has to carry that token by hand.
+ */
+export function createAdminMobileHandoff(impersonationToken: string) {
+  return client.post<Envelope<AdminMobileHandoffResponse>, ErrorBody, true>({
+    throwOnError: true,
+    url: "/api/v1/admin/impersonate/mobile-handoff",
+    headers: { Authorization: `Bearer ${impersonationToken}` },
+  });
+}
+
 // ---- T-143: dashboard + global audit feed --------------------------------------
 
 export interface AdminPaymentFailureEntry {

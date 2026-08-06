@@ -62,6 +62,21 @@
   },
   "impersonation": {
     "banner": "Esiinnyt käyttäjänä {email}",
-    "end": "Lopeta esiintyminen"
+    "end": "Lopeta esiintyminen",
+    "mobile_banner": "Esiinnyt käyttäjänä {email} · {remaining} jäljellä",
+    "end_hint": "Päättää esiintymisen ja kirjaa tämän laitteen ulos",
+    "confirm_title": "Vahvista esiintyminen",
+    "confirm_intro": "Tämä laite toimii alla olevana käyttäjänä istunnon loppuun asti.",
+    "confirm_user": "Käyttäjä: {email}",
+    "confirm_reason": "Syy: {reason}",
+    "confirm_no_reason": "Syytä ei ole kirjattu",
+    "confirm_remaining": "Istunto päättyy {remaining} kuluttua",
+    "confirm_loading": "Tarkistetaan linkkiä…",
+    "confirm_invalid": "Tämä linkki on virheellinen tai vanhentunut. Luo uusi ylläpitokonsolissa.",
+    "confirm_accept": "Vahvista",
+    "confirm_accept_hint": "Ottaa esiintymisistunnon käyttöön tällä laitteella",
+    "confirm_decline": "Peruuta",
+    "confirm_decline_hint": "Mitätöi linkin ja palaa kirjautumiseen",
+    "confirm_failed": "Esiintymisistuntoa ei voitu aloittaa."
   }
 }

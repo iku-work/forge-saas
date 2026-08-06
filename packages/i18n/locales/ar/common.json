@@ -68,7 +68,22 @@
   },
   "impersonation": {
     "banner": "انتحال شخصية {email}",
-    "end": "إنهاء الانتحال"
+    "end": "إنهاء الانتحال",
+    "mobile_banner": "تنتحل هوية {email} · يتبقى {remaining}",
+    "end_hint": "ينهي جلسة انتحال الهوية ويسجّل خروج هذا الجهاز",
+    "confirm_title": "تأكيد انتحال الهوية",
+    "confirm_intro": "سيتصرف هذا الجهاز بصفة المستخدم أدناه حتى انتهاء الجلسة.",
+    "confirm_user": "المستخدم: {email}",
+    "confirm_reason": "السبب: {reason}",
+    "confirm_no_reason": "السبب: غير مسجّل",
+    "confirm_remaining": "تنتهي الجلسة خلال {remaining}",
+    "confirm_loading": "جارٍ التحقق من الرابط…",
+    "confirm_invalid": "هذا الرابط غير صالح أو منتهي الصلاحية. أنشئ رابطًا جديدًا من وحدة تحكم المشرف.",
+    "confirm_accept": "تأكيد",
+    "confirm_accept_hint": "يعتمد جلسة انتحال الهوية على هذا الجهاز",
+    "confirm_decline": "إلغاء",
+    "confirm_decline_hint": "يُبطل الرابط ويعود إلى تسجيل الدخول",
+    "confirm_failed": "تعذّر بدء جلسة انتحال الهوية."
   },
   "admin": {
     "badge": "مسؤول",
@@ -199,7 +214,8 @@
       "col_org": "المؤسسة",
       "col_role": "الدور",
       "col_device": "الجهاز",
-      "col_last_seen": "آخر ظهور"
+      "col_last_seen": "آخر ظهور",
+      "mobile_handoff_button": "التسليم إلى هاتفي"
     },
     "impersonate_modal": {
       "title": "انتحال شخصية {email}",
@@ -229,6 +245,24 @@
     },
     "guard": {
       "denied": "ليس لديك صلاحية الوصول إلى قسم الإدارة."
+    },
+    "mobile_handoff": {
+      "title": "تسليم {email} إلى هاتفك",
+      "description": "يبدأ جلسة انتحال هوية ويسلّمها إلى جهازك. يبقى هذا المتصفح مسجّلاً بحسابك أنت.",
+      "reason_label": "السبب (10 أحرف على الأقل)",
+      "duration_label": "المدة (بالدقائق، 60 كحد أقصى)",
+      "submit": "إنشاء رابط التسليم",
+      "submit_pending": "جارٍ الإنشاء…",
+      "cancel": "إلغاء",
+      "scan_instruction": "امسحه بكاميرا هاتفك، أو افتح الرابط على الجهاز.",
+      "qr_title": "رابط تسليم انتحال الهوية",
+      "expires_in": "ينتهي الرابط خلال {seconds} ثانية",
+      "expired": "انتهت صلاحية هذا الرابط. أنشئ رابطًا جديدًا للمحاولة مرة أخرى.",
+      "start_over": "رابط جديد",
+      "done": "تم",
+      "error_default": "تعذّر إنشاء رابط التسليم.",
+      "copy": "نسخ",
+      "copied": "تم النسخ"
     }
   }
 }

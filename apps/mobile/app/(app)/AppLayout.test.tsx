@@ -11,6 +11,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
   useSession: vi.fn(),
+  useImpersonation: vi.fn(),
   registerPushToken: vi.fn(),
   setupNotificationHandlers: vi.fn(),
 }));
@@ -19,6 +20,11 @@ vi.mock("../../src/lib/auth", () => ({ useSession: mocks.useSession }));
 vi.mock("../../src/lib/push", () => ({
   registerPushToken: mocks.registerPushToken,
   setupNotificationHandlers: mocks.setupNotificationHandlers,
+}));
+// Mocked rather than left real: the module reaches expo-secure-store, whose
+// native EventEmitter doesn't exist under jsdom.
+vi.mock("../../src/lib/impersonation", () => ({
+  useImpersonation: mocks.useImpersonation,
 }));
 vi.mock("../../src/components/NotificationBanner", () => ({
   NotificationBanner: () => null,
@@ -35,6 +41,7 @@ describe("(app)/_layout", () => {
     vi.clearAllMocks();
     mocks.registerPushToken.mockResolvedValue(undefined);
     mocks.setupNotificationHandlers.mockReturnValue(vi.fn());
+    mocks.useImpersonation.mockReturnValue(null);
   });
 
   it("registers for push notifications and sets up handlers once a user is signed in", () => {
@@ -64,5 +71,25 @@ describe("(app)/_layout", () => {
     unmount();
 
     expect(cleanup).toHaveBeenCalledTimes(1);
+  });
+
+  // T-261: the leak this prevents is not subtle. Registering here would point
+  // the impersonated user's own notifications at the superadmin's phone, and
+  // would keep pointing there after the session ended -- the backend has no
+  // way to tell the registration was made under an impersonation token.
+  it("does not register this device for push while impersonating", () => {
+    mocks.useSession.mockReturnValue({ user: { id: "u1" }, isLoading: false });
+    mocks.useImpersonation.mockReturnValue({
+      email: "jane@example.com",
+      expiresAt: Date.now() + 60_000,
+      reason: "Ticket 8812",
+    });
+
+    render(<AppLayout />);
+
+    expect(mocks.registerPushToken).not.toHaveBeenCalled();
+    // Handlers still run: pushes this device was already subscribed to (the
+    // superadmin's own) must keep working.
+    expect(mocks.setupNotificationHandlers).toHaveBeenCalledTimes(1);
   });
 });
