@@ -39,6 +39,15 @@ Not this runbook: writing the module itself ([new-module.md](new-module.md)),
 or turning a *feature* on and off for one org, which is feature flags
 (`app/modules/feature_flags`), not module toggles.
 
+Also not this runbook: turning a module off **right now**, during an
+incident, without a deploy. That is T-263's emergency kill switch —
+[maintenance-mode.md](maintenance-mode.md). The two are deliberately
+different operations: a module toggle is a deploy-time decision about what
+the product *is*, and it removes routes, tables and UI together; a kill
+switch leaves all of that in place and makes the module's routes answer 503
+until you turn it back on. Use the kill switch to stop the bleeding, and this
+runbook only if the module is genuinely never coming back.
+
 ## Pre-checks
 
 - A clean working tree. Every change here is to committed config

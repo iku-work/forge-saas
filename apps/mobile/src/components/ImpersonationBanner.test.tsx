@@ -109,10 +109,15 @@ describe("root layout", () => {
       fs.readFileSync("app/_layout.tsx", "utf-8"),
     );
 
-    // Immediately above the Slot: every route the router can resolve renders
-    // underneath it, auth screens included. Matched as a pair rather than by
-    // comparing indexes, because the surrounding comment mentions the Slot
-    // too and would satisfy a looser check.
-    expect(source).toMatch(/<ImpersonationBanner \/>\s*<Slot \/>/);
+    // Above the Slot: every route the router can resolve renders underneath
+    // it, auth screens included. T-263 put GlobalBannerBar between the two
+    // (an operator inside someone else's session must be told *that* first),
+    // so this now asserts the order of all three rather than an adjacent
+    // pair -- matched as a sequence rather than by comparing indexes, because
+    // the surrounding comments mention the Slot too and would satisfy a
+    // looser check.
+    expect(source).toMatch(
+      /<ImpersonationBanner \/>[\s\S]*?<GlobalBannerBar \/>[\s\S]*?<RoutedScreens \/>/,
+    );
   });
 });

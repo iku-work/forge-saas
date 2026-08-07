@@ -10,10 +10,19 @@ export { useFeatureFlag, useFeatureFlags } from "./useFeatureFlag";
 export {
   useModules,
   useSupportSettings,
+  useGlobalBanner,
+  useMaintenance,
+  useSignupDisabled,
   getModulesSnapshot,
   bootstrapModules,
+  refreshConfig,
 } from "./useModules";
-export type { ActiveModules, SupportSettings } from "./useModules";
+export type {
+  ActiveModules,
+  SupportSettings,
+  GlobalBanner,
+  MaintenanceState,
+} from "./useModules";
 export { useLocale } from "./useLocale";
 export type { UseLocaleResult } from "./useLocale";
 export { useDirection } from "./useDirection";

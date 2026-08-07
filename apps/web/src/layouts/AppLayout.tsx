@@ -21,6 +21,7 @@ import { useTranslation } from "react-i18next";
 import {
   useAuth,
   useFeatureFlag,
+  useMaintenance,
   useModules,
   useOrg,
   usePermission,
@@ -47,6 +48,8 @@ import {
   Toaster,
 } from "@forge/ui";
 
+import { GlobalBanner } from "../components/GlobalBanner";
+import { MaintenanceScreen } from "../components/MaintenanceScreen";
 import { CreateOrgForm } from "../features/settings/CreateOrgForm";
 import { NotificationBell } from "../features/notifications/NotificationBell";
 import { SupportLink } from "../features/support/SupportLink";
@@ -374,7 +377,17 @@ export function AppLayout({ children }: { children: ReactNode }) {
   const { t } = useTranslation();
   const { orgs, isLoading } = useOrg();
   const modules = useModules();
+  const maintenance = useMaintenance();
   const location = useLocation();
+
+  // T-263, checked before the loading state: during a maintenance window every
+  // request this shell would make answers 503, so rendering it at all produces
+  // a wall of error toasts on a half-populated page. The admin shell
+  // (AdminLayout) is a separate route tree and deliberately does *not* do this
+  // -- it is the surface that ends the window.
+  if (maintenance.enabled) {
+    return <MaintenanceScreen maintenance={maintenance} />;
+  }
 
   if (isLoading) {
     return (
@@ -393,60 +406,65 @@ export function AppLayout({ children }: { children: ReactNode }) {
   const pageTitle = pageTitleFor(stripLocale(location.pathname), t);
 
   return (
-    <div className="flex min-h-screen" data-testid="app-shell">
-      <aside className="flex w-64 shrink-0 flex-col border-e p-4">
-        <div className="px-2 pb-4 text-lg font-semibold">
-          {t("common.app.name")}
-        </div>
-        {modules.multiOrg ? (
-          <div className="pb-4">
-            <OrgSwitcher />
+    // T-263: the banner sits *outside* the shell's flex row, above everything,
+    // so it pushes the whole app down rather than landing inside one column.
+    <div className="flex min-h-screen flex-col" data-testid="app-shell">
+      <GlobalBanner />
+      <div className="flex flex-1">
+        <aside className="flex w-64 shrink-0 flex-col border-e p-4">
+          <div className="px-2 pb-4 text-lg font-semibold">
+            {t("common.app.name")}
           </div>
-        ) : null}
-        <nav className="flex flex-1 flex-col gap-1">
-          {PRIMARY_NAV.filter(
-            (item) => !item.module || modules[item.module],
-          ).map((item) => (
-            <NavLink key={item.to} item={item} />
-          ))}
-          <div className="mt-4 px-3 text-xs font-medium uppercase text-muted-foreground">
-            {t("common.nav.settings")}
+          {modules.multiOrg ? (
+            <div className="pb-4">
+              <OrgSwitcher />
+            </div>
+          ) : null}
+          <nav className="flex flex-1 flex-col gap-1">
+            {PRIMARY_NAV.filter(
+              (item) => !item.module || modules[item.module],
+            ).map((item) => (
+              <NavLink key={item.to} item={item} />
+            ))}
+            <div className="mt-4 px-3 text-xs font-medium uppercase text-muted-foreground">
+              {t("common.nav.settings")}
+            </div>
+            {SETTINGS_NAV.filter(
+              (item) => !item.module || modules[item.module],
+            ).map((item) => (
+              <NavLink key={item.to} item={item} />
+            ))}
+          </nav>
+          <div className="border-t pt-2">
+            <SupportLink />
+            <UserMenu />
           </div>
-          {SETTINGS_NAV.filter(
-            (item) => !item.module || modules[item.module],
-          ).map((item) => (
-            <NavLink key={item.to} item={item} />
-          ))}
-        </nav>
-        <div className="border-t pt-2">
-          <SupportLink />
-          <UserMenu />
-        </div>
-      </aside>
+        </aside>
 
-      <div className="flex flex-1 flex-col">
-        <header className="flex items-center justify-between border-b px-6 py-3">
-          {/* Not a heading -- the breadcrumb duplicates the page's own <h1>
-              (e.g. DashboardPage's "Dashboard"); a second <h1> with the same
-              text would be both invalid document structure and ambiguous
-              for screen-reader/role-based queries. */}
-          <p className="text-sm font-medium text-muted-foreground">
-            {pageTitle}
-          </p>
-          {modules.notifications ? (
-            <NotificationBell />
-          ) : (
-            <button
-              type="button"
-              disabled
-              aria-label={t("notifications.coming_soon")}
-              className="rounded-md p-2 text-muted-foreground opacity-50"
-            >
-              <Bell className="size-4" aria-hidden="true" />
-            </button>
-          )}
-        </header>
-        <main className="flex-1 overflow-auto">{children}</main>
+        <div className="flex flex-1 flex-col">
+          <header className="flex items-center justify-between border-b px-6 py-3">
+            {/* Not a heading -- the breadcrumb duplicates the page's own <h1>
+                (e.g. DashboardPage's "Dashboard"); a second <h1> with the same
+                text would be both invalid document structure and ambiguous
+                for screen-reader/role-based queries. */}
+            <p className="text-sm font-medium text-muted-foreground">
+              {pageTitle}
+            </p>
+            {modules.notifications ? (
+              <NotificationBell />
+            ) : (
+              <button
+                type="button"
+                disabled
+                aria-label={t("notifications.coming_soon")}
+                className="rounded-md p-2 text-muted-foreground opacity-50"
+              >
+                <Bell className="size-4" aria-hidden="true" />
+              </button>
+            )}
+          </header>
+          <main className="flex-1 overflow-auto">{children}</main>
+        </div>
       </div>
       <Toaster />
     </div>

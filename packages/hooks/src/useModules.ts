@@ -53,9 +53,32 @@ export interface SupportSettings {
 // link whose real destination isn't known yet.
 const UNRESOLVED_SUPPORT: SupportSettings = { tool: "none", url: "" };
 
+// T-263: the operator-controlled half of /config. Unlike `modules` and
+// `support` above -- which are deploy-time and cannot change while the page is
+// open -- these three change when someone flips a switch in the admin UI
+// mid-session, which is what `POLL_INTERVAL_MS` below exists for.
+export interface GlobalBanner {
+  type: "info" | "warning" | "critical";
+  message: string;
+  dismissible: boolean;
+}
+
+export interface MaintenanceState {
+  enabled: boolean;
+  // Operator-written prose, rendered verbatim. Empty when they set the flag
+  // without writing any copy -- the caller falls back to its own translated
+  // default rather than showing a blank screen.
+  message: string;
+}
+
+const NO_MAINTENANCE: MaintenanceState = { enabled: false, message: "" };
+
 interface ConfigState {
   modules: ActiveModules;
   support: SupportSettings;
+  banner: GlobalBanner | null;
+  maintenance: MaintenanceState;
+  signupDisabled: boolean;
 }
 
 // Module-scoped store (not React Context) so every useModules() call site
@@ -64,6 +87,9 @@ interface ConfigState {
 let state: ConfigState = {
   modules: DENY_BY_DEFAULT,
   support: UNRESOLVED_SUPPORT,
+  banner: null,
+  maintenance: NO_MAINTENANCE,
+  signupDisabled: false,
 };
 const listeners = new Set<() => void>();
 
@@ -92,6 +118,18 @@ function getSupportSnapshot(): SupportSettings {
   return state.support;
 }
 
+function getBannerSnapshot(): GlobalBanner | null {
+  return state.banner;
+}
+
+function getMaintenanceSnapshot(): MaintenanceState {
+  return state.maintenance;
+}
+
+function getSignupDisabledSnapshot(): boolean {
+  return state.signupDisabled;
+}
+
 // The active module set never changes at runtime -- it's redeploy-only -- so
 // one fetch per page load is cached for every useModules()/route-guard
 // caller, same as useAuth's bootstrap(). Exported (as bootstrapModules) so a
@@ -100,26 +138,47 @@ function getSupportSnapshot(): SupportSettings {
 // on first render.
 let bootstrapPromise: Promise<void> | null = null;
 
-export function bootstrapModules(): Promise<void> {
-  bootstrapPromise ??= (async () => {
-    try {
-      const { data: envelope } = await getConfigApiV1ConfigGet({
-        throwOnError: true,
+async function fetchConfig(): Promise<void> {
+  try {
+    const { data: envelope } = await getConfigApiV1ConfigGet({
+      throwOnError: true,
+    });
+    if (envelope.data) {
+      setState({
+        modules: toActiveModules(envelope.data.modules),
+        support: {
+          tool: envelope.data.support_tool,
+          url: envelope.data.support_url,
+        },
+        banner: envelope.data.banner ?? null,
+        maintenance: envelope.data.maintenance,
+        signupDisabled: envelope.data.signup_disabled ?? false,
       });
-      if (envelope.data) {
-        setState({
-          modules: toActiveModules(envelope.data.modules),
-          support: {
-            tool: envelope.data.support_tool,
-            url: envelope.data.support_url,
-          },
-        });
-      }
-    } catch {
-      // Stay denied-by-default -- see DENY_BY_DEFAULT above.
     }
-  })();
+  } catch {
+    // Keep whatever we last resolved -- for a first call that is
+    // DENY_BY_DEFAULT (see above); for a refresh it is the previous answer,
+    // which is a far better thing to render than a banner that vanishes
+    // because one poll happened to fail.
+  }
+}
+
+export function bootstrapModules(): Promise<void> {
+  bootstrapPromise ??= fetchConfig();
   return bootstrapPromise;
+}
+
+/**
+ * Re-read /config now, bypassing the one-shot bootstrap.
+ *
+ * T-263 made part of this response runtime state, so "fetch once per page
+ * load" stopped being enough for the banner and the maintenance flag. This is
+ * what `useGlobalBanner` polls with; it is also what an admin page can call
+ * after changing a setting so the operator sees their own change without a
+ * reload.
+ */
+export function refreshConfig(): Promise<void> {
+  return fetchConfig();
 }
 
 export function useModules(): ActiveModules {
@@ -138,4 +197,80 @@ export function useSupportSettings(): SupportSettings {
   }, []);
 
   return useSyncExternalStore(subscribeConfig, getSupportSnapshot);
+}
+
+// How often the runtime half of /config is re-read. Deliberately the same 60s
+// as the backend's own settings cache TTL (and the response's Cache-Control):
+// polling faster than the value can change just spends requests, and the
+// operator-visible worst case is already documented as "about a minute" in
+// docs/runbooks/maintenance-mode.md.
+const POLL_INTERVAL_MS = 60_000;
+
+// One timer for the whole page, not one per hook call. `useGlobalBanner()` and
+// `useMaintenance()` are mounted together on the app shell (the layout reads
+// the maintenance state, the banner component reads the banner), and a timer
+// each would mean two /config requests a minute where one answers both. The
+// refcount is what lets the interval stop again when the last caller unmounts.
+let pollTimer: ReturnType<typeof setInterval> | null = null;
+let pollSubscribers = 0;
+
+function usePolledConfig(): void {
+  useEffect(() => {
+    void bootstrapModules();
+    pollSubscribers += 1;
+    pollTimer ??= setInterval(() => {
+      void refreshConfig();
+    }, POLL_INTERVAL_MS);
+
+    return () => {
+      pollSubscribers -= 1;
+      if (pollSubscribers === 0 && pollTimer !== null) {
+        clearInterval(pollTimer);
+        pollTimer = null;
+      }
+    };
+  }, []);
+}
+
+/**
+ * T-263's global announcement, or null when there is none.
+ *
+ * Polls, unlike every other hook in this file: an operator raising a banner
+ * mid-incident needs it to appear on tabs that are already open, which is the
+ * whole point of putting it in ProductSettings rather than in a deploy.
+ */
+export function useGlobalBanner(): GlobalBanner | null {
+  usePolledConfig();
+
+  return useSyncExternalStore(subscribeConfig, getBannerSnapshot);
+}
+
+/**
+ * Whether the product is in a maintenance window, and the operator's copy for
+ * it. Polls for the same reason `useGlobalBanner` does -- and, more
+ * importantly, so a client sitting on a maintenance screen notices by itself
+ * when the window *ends*.
+ */
+export function useMaintenance(): MaintenanceState {
+  usePolledConfig();
+
+  return useSyncExternalStore(subscribeConfig, getMaintenanceSnapshot);
+}
+
+/**
+ * Whether self-serve registration is currently closed (T-263's
+ * `signup_disabled`). The server refuses `POST /auth/register` with a 403
+ * regardless -- this only lets the sign-up page say so up front instead of
+ * after the user has filled the form in.
+ *
+ * Not polled: a visitor sitting on the registration page while an operator
+ * closes signups is a rounding error, and the request they submit is refused
+ * by the server either way.
+ */
+export function useSignupDisabled(): boolean {
+  useEffect(() => {
+    void bootstrapModules();
+  }, []);
+
+  return useSyncExternalStore(subscribeConfig, getSignupDisabledSnapshot);
 }

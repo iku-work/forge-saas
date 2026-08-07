@@ -67,29 +67,48 @@ _PASSWORD = "Correct-Horse9"
 # (auth/org/entitlement dependencies included), with no headroom added. Raise
 # one only with a reason -- the count is per *request*, so a "+1" is a new
 # round trip on a hot path for every user of that list.
+# T-263 added exactly one statement to every non-exempt route: the maintenance
+# middleware reads the ProductSettings singleton before the router runs. Every
+# budget below that is not under /api/v1/admin/* therefore went up by one, and
+# the increase is worth understanding rather than just absorbing:
+#
+#   * It is one indexed primary-key lookup, and it is *shared*: the row is
+#     cached in Redis for 60s (app.modules.product_settings.service), so in
+#     production it is one DB read per minute per deployment, not one per
+#     request. This suite flushes Redis before each measurement precisely to
+#     see the cold path, which is why it shows up here at all.
+#   * It is constant. The property this file actually defends -- the same
+#     statement count for 3 rows and for 30 -- is untouched.
+#   * The three admin budgets are unchanged, because /api/v1/admin/* is on the
+#     middleware's exemption list (an operator must be able to end a
+#     maintenance window). That asymmetry is a useful check in itself: if an
+#     admin budget ever needs +1 for this reason, the exemption has broken.
 BUDGETS: dict[str, int] = {
-    # 1 for get_current_user + 1 for the page itself.
-    "list_sessions": 2,
-    "list_oauth_accounts": 2,
-    "list_credentials": 2,
-    "list_consents": 2,
-    "list_my_orgs": 2,
+    # 1 for the maintenance check + 1 for get_current_user + 1 for the page.
+    "list_sessions": 3,
+    "list_oauth_accounts": 3,
+    "list_credentials": 3,
+    "list_consents": 3,
+    "list_my_orgs": 3,
     # Org-scoped: + the org row and the membership (the tenant-isolation
     # check, deliberately never cached -- see get_current_org).
-    "list_members": 4,
-    "list_invitations": 4,
-    "list_notifications": 4,
+    "list_members": 5,
+    "list_invitations": 5,
+    "list_notifications": 5,
     # + the org's subscription/plan behind the feature-flag map.
-    "list_feature_flags": 5,
+    "list_feature_flags": 6,
     # + require_feature("storage_gb")'s entitlement read.
-    "list_files": 6,
-    # Stripe-backed (T-133): only the auth/org dependencies touch the DB.
-    "list_invoices": 3,
-    # Unauthenticated public price list -- one SELECT, nothing else.
-    "list_plans": 1,
-    # Superadmin-gated (T-141/T-143). require_superadmin adds no query of its
-    # own; the audit feed's two extra reads are T-243's batched actor/org
-    # lookups, which used to be one query per distinct actor and org.
+    "list_files": 7,
+    # Stripe-backed (T-133): only the maintenance check and the auth/org
+    # dependencies touch the DB.
+    "list_invoices": 4,
+    # Unauthenticated public price list -- the maintenance check and one
+    # SELECT, nothing else.
+    "list_plans": 2,
+    # Superadmin-gated (T-141/T-143), and exempt from the maintenance check
+    # above. require_superadmin adds no query of its own; the audit feed's two
+    # extra reads are T-243's batched actor/org lookups, which used to be one
+    # query per distinct actor and org.
     "list_orgs": 2,
     "list_users": 2,
     "list_admin_audit_feed": 4,

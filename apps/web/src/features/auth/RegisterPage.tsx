@@ -4,7 +4,7 @@ import { Link } from "@tanstack/react-router";
 import { useForm } from "react-hook-form";
 import { useTranslation } from "react-i18next";
 
-import { useAuth } from "@forge/hooks";
+import { useAuth, useSignupDisabled } from "@forge/hooks";
 import {
   Alert,
   AlertDescription,
@@ -30,6 +30,7 @@ export function RegisterPage() {
   const { t } = useTranslation();
   const locale = useRouteLocale();
   const { register } = useAuth();
+  const signupDisabled = useSignupDisabled();
   const [formError, setFormError] = useState<string | null>(null);
   const [submitted, setSubmitted] = useState(false);
 
@@ -47,6 +48,22 @@ export function RegisterPage() {
       setFormError(getErrorMessage(error, "auth.register.error_default"));
     }
   };
+
+  // T-263: the server refuses POST /auth/register with a 403 while
+  // `signup_disabled` is set, so this only spares the visitor filling in a
+  // form that was never going to work. Deliberately not a disabled button --
+  // a form you can type into but not submit is worse than no form.
+  if (signupDisabled) {
+    return (
+      <AuthCard title={t("auth.register.title")}>
+        <Alert data-testid="register-closed">
+          <AlertDescription>
+            {t("auth.register.signup_closed")}
+          </AlertDescription>
+        </Alert>
+      </AuthCard>
+    );
+  }
 
   if (submitted) {
     return (

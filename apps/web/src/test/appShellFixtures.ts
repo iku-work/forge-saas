@@ -180,6 +180,13 @@ export const fixtureConfig: ConfigResponse = {
   // app.core.support).
   support_tool: "none",
   support_url: "mailto:support@example.com",
+  // T-263 defaults: no operator has flipped anything. `banner` and
+  // `signup_disabled` are optional on the wire (the server omits/defaults
+  // them), but they are spelled out here so a test that cares reads the
+  // baseline rather than inferring it from an absence.
+  banner: null,
+  maintenance: { enabled: false, message: "" },
+  signup_disabled: false,
 };
 
 export const fixtureSupportContext: SupportContextResponse = {

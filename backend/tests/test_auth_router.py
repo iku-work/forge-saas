@@ -59,6 +59,7 @@ from app.modules.auth.repository import (
     UserRepository,
 )
 from app.modules.auth.utils import create_access_token, hash_password, hash_token
+from app.modules.product_settings.models import ProductSettings
 
 _TABLES = [
     User.__table__,
@@ -68,6 +69,12 @@ _TABLES = [
     MagicLinkToken.__table__,
     WebAuthnCredential.__table__,
     EmailChangeToken.__table__,
+    # T-263: not an auth table, but POST /auth/register now reads it --
+    # `signup_disabled` gates the route. Deliberately created *empty* (unlike
+    # the migration, which seeds the id=1 row), so every test in this file
+    # also exercises read_settings()' missing-row path: an absent row must
+    # read as "every setting at its default", not as a 500.
+    ProductSettings.__table__,
 ]
 _VALID_PASSWORD = "Correct-Horse9"
 _REFRESH_COOKIE_NAME = "__Host-refresh_token"

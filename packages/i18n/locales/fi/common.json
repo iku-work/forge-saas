@@ -84,5 +84,53 @@
     "confirm_decline": "Peruuta",
     "confirm_decline_hint": "Mitätöi linkin ja palaa kirjautumiseen",
     "confirm_failed": "Esiintymisistuntoa ei voitu aloittaa."
+  },
+  "admin": {
+    "nav": {
+      "settings": "Asetukset"
+    },
+    "product_settings": {
+      "title": "Tuoteasetukset",
+      "description": "Yleiset kytkimet, jotka tulevat voimaan ilman uudelleenjulkaisua. Muutokset kirjataan ja tulevat voimaan noin minuutissa.",
+      "switches_title": "Kytkimet",
+      "maintenance_active": "Huoltotila on PÄÄLLÄ. Kaikki paitsi tämä ylläpitonäkymä ja terveystarkistukset palauttavat 503.",
+      "maintenance_mode_label": "Huoltotila",
+      "maintenance_message_label": "Huoltoviesti",
+      "maintenance_message_placeholder": "Takaisin klo 03.00 UTC",
+      "signup_disabled_label": "Sulje itsepalvelurekisteröinti",
+      "banner_label": "Näytä yleinen banneri",
+      "banner_type_label": "Vakavuus",
+      "banner_type_info": "Tiedote",
+      "banner_type_warning": "Varoitus",
+      "banner_type_critical": "Kriittinen",
+      "banner_message_label": "Bannerin viesti",
+      "banner_dismissible_label": "Käyttäjät voivat sulkea sen",
+      "kill_switch_label": "Hätäkatkaisijat",
+      "save": "Tallenna muutokset",
+      "saving": "Tallennetaan…",
+      "saved": "Asetukset tallennettu.",
+      "error_load": "Tuoteasetusten lataus epäonnistui.",
+      "error_save": "Tuoteasetusten tallennus epäonnistui.",
+      "last_changed": "Muutettu viimeksi {date}, tekijä {actor}.",
+      "never_changed": "Ei koskaan muutettu.",
+      "unknown_actor": "tuntematon",
+      "raw_title": "Raaka JSON",
+      "raw_advanced": "Lisäasetukset",
+      "raw_description": "Korvaa koko dokumentin: jokainen tässä poistettu avain poistetaan palvelimelta. Käytä tätä avaimille, joita tämä versio ei tunne.",
+      "raw_save": "Korvaa asetukset",
+      "raw_invalid_json": "Tämä ei ole kelvollista JSONia.",
+      "raw_not_an_object": "Asetusten on oltava JSON-objekti."
+    }
+  },
+  "banner": {
+    "dismiss": "Sulje ilmoitus",
+    "severity_info": "Ilmoitus:",
+    "severity_warning": "Varoitus:",
+    "severity_critical": "Kriittinen ilmoitus:",
+    "dismiss_hint": "Piilottaa tämän ilmoituksen, kunnes ylläpitäjä julkaisee uuden."
+  },
+  "maintenance": {
+    "title": "Palaamme pian",
+    "default_message": "Palvelu on tilapäisesti pois käytöstä huoltotöiden vuoksi. Tämä sivu päivittyy itsestään, kun olemme valmiit — sivua ei tarvitse ladata uudelleen."
   }
 }

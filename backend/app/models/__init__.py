@@ -13,6 +13,7 @@ from app.modules.billing import models as billing_models  # noqa: F401
 from app.modules.billing import usage_models as billing_usage_models  # noqa: F401
 from app.modules.gdpr import models as gdpr_models  # noqa: F401
 from app.modules.notifications import models as notifications_models  # noqa: F401
+from app.modules.product_settings import models as product_settings_models  # noqa: F401
 from app.modules.storage import models as storage_models  # noqa: F401
 from app.modules.tenancy import models as tenancy_models  # noqa: F401
 from app.workers.jobs import records as job_records  # noqa: F401

@@ -13,6 +13,8 @@ plan-override/extend-trial/comp-credit writes to this same file; T-142 adds
 impersonation.
 """
 
+from collections.abc import Iterator
+from contextlib import contextmanager
 from datetime import datetime
 from typing import Annotated
 from uuid import UUID, uuid4
@@ -30,7 +32,7 @@ from app.core.dependencies import (
     require_superadmin,
 )
 from app.core.envelope import Envelope, Meta
-from app.core.exceptions import AuthenticationError, NotFoundError
+from app.core.exceptions import AuthenticationError, NotFoundError, UnprocessableEntityError
 from app.middleware.rate_limit import api_limit
 from app.modules.admin.schemas import (
     AdminAuditFeedEntry,
@@ -48,9 +50,13 @@ from app.modules.admin.schemas import (
     AdminMobileHandoffResponse,
     AdminOrgDetail,
     AdminOrgSummary,
+    AdminProductSettingsPatchRequest,
+    AdminProductSettingsReplaceRequest,
+    AdminProductSettingsResponse,
     AdminSetOrgPlanRequest,
     AdminUserDetail,
     AdminUserSummary,
+    ProductSettingsKeyDoc,
     SetFeatureFlagOverrideRequest,
 )
 from app.modules.admin.service import (
@@ -65,6 +71,10 @@ from app.modules.admin.service import (
 from app.modules.auth.models import User
 from app.modules.auth.repository import UserRepository
 from app.modules.auth.schemas import UserPublic
+from app.modules.product_settings import keys as product_settings_keys
+from app.modules.product_settings.models import ProductSettings
+from app.modules.product_settings.repository import ProductSettingsRepository
+from app.modules.product_settings.service import ProductSettingsService
 from app.modules.tenancy.models import Organization
 from app.modules.tenancy.repository import OrganizationRepository
 
@@ -568,3 +578,123 @@ async def list_admin_audit_feed(  # noqa: PLR0913 -- cursor pagination (§0.3) p
         next_cursor=str(next_cursor) if next_cursor is not None else None,
     )
     return Envelope(data=entries, meta=meta)
+
+
+# ---- T-263: global runtime settings ------------------------------------------
+#
+# The switches an operator flips during an incident, so every route here is
+# built for someone in a hurry: GET reads straight from the database (never the
+# 60s cache -- an operator must not be shown a value they are about to change
+# from a stale copy), and both writes bust that cache before returning.
+#
+# `reject_during_impersonation` is deliberately absent, and this is the one
+# place in the codebase where that is not an oversight: these are *platform*
+# actions taken as yourself, with `require_superadmin` above them. An
+# impersonation session cannot reach them at all, because the impersonation
+# access token carries the impersonated user's identity -- who is not a
+# superadmin -- so require_superadmin rejects it two dependencies earlier.
+
+
+@contextmanager
+def _validation_errors_as_422() -> Iterator[None]:
+    """Give `SettingsValidationError` its HTTP meaning, at the boundary that
+    has one.
+
+    The keys registry raises a plain `ValueError` subclass on purpose -- it is
+    consulted from the maintenance middleware too, which runs outside the
+    exception handlers that turn a `DomainError` into a response -- so the
+    translation belongs here rather than in the service.
+    """
+    try:
+        yield
+    except product_settings_keys.SettingsValidationError as exc:
+        raise UnprocessableEntityError(
+            "errors.invalid_product_setting",
+            fallback=str(exc),
+            details={"reason": str(exc)},
+        ) from exc
+
+
+def _settings_response(row: ProductSettings | None) -> AdminProductSettingsResponse:
+    """The admin view of the settings document, built from the row the caller
+    already holds.
+
+    Takes the row rather than re-reading it: this endpoint is the one an
+    operator reloads during an incident, and reading the same singleton twice
+    per request to get its `updated_at` is a round trip for nothing.
+    """
+    return AdminProductSettingsResponse(
+        settings=dict(row.settings) if row is not None else {},
+        well_known=[
+            ProductSettingsKeyDoc(
+                key=entry.key,
+                kind=entry.kind,
+                description=entry.description,
+                default=entry.default,
+            )
+            for entry in product_settings_keys.WELL_KNOWN
+        ],
+        killable_modules=sorted(product_settings_keys.KILLABLE_MODULE_PREFIXES),
+        updated_at=row.updated_at if row is not None else None,
+        updated_by=row.updated_by if row is not None else None,
+    )
+
+
+@router.get("/settings/product")
+@api_limit
+async def get_product_settings(
+    request: Request,
+    superadmin: Annotated[User, Depends(require_superadmin)],  # noqa: ARG001 -- gate only
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> Envelope[AdminProductSettingsResponse]:
+    # No Redis dependency on purpose: this endpoint deliberately bypasses the
+    # 60s cache and reads the row itself, so an operator is never shown a value
+    # they are about to change from a stale copy.
+    row = await ProductSettingsRepository(session).get()
+    data = _settings_response(row)
+    return Envelope(data=data, meta=Meta(request_id=_request_id(request)))
+
+
+@router.patch("/settings/product")
+@api_limit
+async def patch_product_settings(
+    request: Request,
+    body: AdminProductSettingsPatchRequest,
+    superadmin: Annotated[User, Depends(require_superadmin)],
+    session: Annotated[AsyncSession, Depends(get_session)],
+    redis: Annotated[Redis, Depends(get_redis)],
+) -> Envelope[AdminProductSettingsResponse]:
+    # impersonation-ok: gated by require_superadmin, which an impersonation
+    # token can never satisfy -- it carries the impersonated user's identity,
+    # and that user is not a superadmin. See the section comment above.
+    service = ProductSettingsService(session, redis)
+    with _validation_errors_as_422():
+        await service.apply(body.settings, superadmin.id)
+    await session.commit()
+    # Again, after the commit: the service's own bust happens inside this
+    # transaction, where a concurrent reader could still re-cache the old row.
+    # See ProductSettingsService._store.
+    await service.invalidate_cache()
+    # Re-read rather than using what `apply` returned: the response also
+    # carries `updated_at`/`updated_by`, which only the row has.
+    data = _settings_response(await ProductSettingsRepository(session).get())
+    return Envelope(data=data, meta=Meta(request_id=_request_id(request)))
+
+
+@router.put("/settings/product")
+@api_limit
+async def replace_product_settings(
+    request: Request,
+    body: AdminProductSettingsReplaceRequest,
+    superadmin: Annotated[User, Depends(require_superadmin)],
+    session: Annotated[AsyncSession, Depends(get_session)],
+    redis: Annotated[Redis, Depends(get_redis)],
+) -> Envelope[AdminProductSettingsResponse]:
+    # impersonation-ok: see patch_product_settings above.
+    service = ProductSettingsService(session, redis)
+    with _validation_errors_as_422():
+        await service.replace_all(body.settings, superadmin.id)
+    await session.commit()
+    await service.invalidate_cache()  # see patch_product_settings above
+    data = _settings_response(await ProductSettingsRepository(session).get())
+    return Envelope(data=data, meta=Meta(request_id=_request_id(request)))

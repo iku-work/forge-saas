@@ -98,7 +98,8 @@
       "dashboard": "Tableau de bord",
       "orgs": "Organisations",
       "users": "Utilisateurs",
-      "audit": "Journal d'audit"
+      "audit": "Journal d'audit",
+      "settings": "Paramètres"
     },
     "user_menu_link": "Admin",
     "dashboard": {
@@ -270,6 +271,49 @@
       "copy": "Copier",
       "copied": "Copié",
       "discard": "Abandonner la session"
+    },
+    "product_settings": {
+      "title": "Paramètres du produit",
+      "description": "Interrupteurs globaux qui s'appliquent sans redéploiement. Les changements sont audités et prennent effet en une minute environ.",
+      "switches_title": "Interrupteurs",
+      "maintenance_active": "Le mode maintenance est ACTIVÉ. Tout sauf cette interface d'administration et les contrôles de santé renvoie 503.",
+      "maintenance_mode_label": "Mode maintenance",
+      "maintenance_message_label": "Message de maintenance",
+      "maintenance_message_placeholder": "De retour à 03:00 UTC",
+      "signup_disabled_label": "Fermer l'inscription en libre-service",
+      "banner_label": "Afficher une bannière globale",
+      "banner_type_label": "Gravité",
+      "banner_type_info": "Info",
+      "banner_type_warning": "Avertissement",
+      "banner_type_critical": "Critique",
+      "banner_message_label": "Message de la bannière",
+      "banner_dismissible_label": "Les utilisateurs peuvent la fermer",
+      "kill_switch_label": "Coupe-circuits d'urgence",
+      "save": "Enregistrer les modifications",
+      "saving": "Enregistrement…",
+      "saved": "Paramètres enregistrés.",
+      "error_load": "Impossible de charger les paramètres du produit.",
+      "error_save": "Impossible d'enregistrer les paramètres du produit.",
+      "last_changed": "Dernière modification le {date} par {actor}.",
+      "never_changed": "Jamais modifié.",
+      "unknown_actor": "inconnu",
+      "raw_title": "JSON brut",
+      "raw_advanced": "Avancé",
+      "raw_description": "Remplace tout le document : toute clé supprimée ici est supprimée sur le serveur. À utiliser pour les clés que cette version ne connaît pas.",
+      "raw_save": "Remplacer les paramètres",
+      "raw_invalid_json": "Ce n'est pas du JSON valide.",
+      "raw_not_an_object": "Les paramètres doivent être un objet JSON."
     }
+  },
+  "banner": {
+    "dismiss": "Fermer l'annonce",
+    "severity_info": "Annonce :",
+    "severity_warning": "Avertissement :",
+    "severity_critical": "Annonce critique :",
+    "dismiss_hint": "Masque cette annonce jusqu'à ce qu'une nouvelle soit publiée."
+  },
+  "maintenance": {
+    "title": "Nous revenons très vite",
+    "default_message": "Le service est temporairement indisponible pour maintenance. Cette page se met à jour toute seule une fois que nous avons terminé — inutile de la recharger."
   }
 }

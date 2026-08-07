@@ -1,6 +1,7 @@
 import asyncio
 import os
 from collections.abc import AsyncGenerator, Generator
+from contextlib import asynccontextmanager
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -33,6 +34,7 @@ from app.middleware import rate_limit as rate_limit_module
 from app.modules.auth.permissions import MemberRole
 from app.modules.auth.repository import UserRepository
 from app.modules.auth.utils import create_access_token, hash_password
+from app.modules.product_settings import service as product_settings_service
 from app.modules.tenancy.repository import MembershipRepository, OrganizationRepository
 
 _ENV_TEST_FILE = Path(__file__).parent.parent / ".env.test"
@@ -211,16 +213,46 @@ async def _redis_client(redis_container: RedisContainer) -> AsyncGenerator[Redis
 
 
 @pytest.fixture
+def product_settings_session(session: AsyncSession, monkeypatch: pytest.MonkeyPatch) -> None:
+    """T-263: point ProductSettings' non-DI database read at the test session.
+
+    `app.modules.product_settings.service.read_settings` is called from two
+    places FastAPI's dependency graph doesn't reach -- MaintenanceModeMiddleware
+    (Starlette middleware runs before a single dependency is solved) and any
+    test calling it directly -- so it opens its own session via
+    `settings_session_scope`. Left alone that lands on the engine
+    `app.core.db` built at *import* time, i.e. from backend/.env.test, before
+    the `engine` fixture pointed DATABASE_URL at the testcontainer. That is the
+    same import-time settings binding trap the rate limiter hit (see
+    app/middleware/rate_limit.py's comment), and it shows up here as a
+    connection refused to localhost:5432.
+
+    The scope below deliberately does not close the session it yields: it is
+    the test's own transaction-bound session, and closing it would take the
+    savepoint machinery with it.
+    """
+
+    @asynccontextmanager
+    async def _test_settings_session() -> AsyncGenerator[AsyncSession, None]:
+        yield session
+
+    monkeypatch.setattr(product_settings_service, "settings_session_scope", _test_settings_session)
+
+
+@pytest.fixture
 async def client(
     session: AsyncSession,
     _redis_client: Redis,
     _rate_limit_storage: RedisStorage,
+    product_settings_session: None,  # noqa: ARG001 -- see the fixture; the middleware needs it
 ) -> AsyncGenerator[httpx.AsyncClient, None]:
     _rate_limit_storage.reset()
     app.dependency_overrides[get_session] = lambda: session
     app.dependency_overrides[get_redis] = lambda: _redis_client
+
     try:
         async with app.router.lifespan_context(app):
+            app.state.redis = _redis_client
             transport = ASGITransport(app=app)
             # https:// base_url so httpx's cookie jar forwards Secure-marked
             # cookies (the refresh_token cookie) back on later requests.

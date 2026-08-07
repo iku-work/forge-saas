@@ -74,5 +74,9 @@
   "invalid_email_change_token": "This email change link is invalid or has expired.",
   "invalid_email_change_cancel_token": "This cancel link is invalid or has expired.",
   "email_change_target_rate_limited": "Too many change-email requests for this address recently. Please try again later.",
-  "invalid_exchange_token": "This handoff link is invalid or has expired."
+  "invalid_exchange_token": "This handoff link is invalid or has expired.",
+  "maintenance": "The service is temporarily down for maintenance. Please try again soon.",
+  "module_disabled": "{feature} is temporarily unavailable. Please try again soon.",
+  "signup_disabled": "New account registration is currently closed.",
+  "invalid_product_setting": "That setting value isn't valid."
 }

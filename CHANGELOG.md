@@ -6,6 +6,65 @@ template keep their own changes in `CHANGELOG.product.md` (see
 
 ## [Unreleased]
 ### Added
+- **Global runtime switches an operator can flip without a redeploy
+  (T-263).** A `product_settings` singleton row (one row, `id = 1`, enforced
+  by a `CHECK` constraint) holds the switches that have to change during an
+  incident rather than at the next deploy. Distinct from `product.config.py`
+  (deploy-time: which modules exist at all) and from per-org feature flags
+  (one customer's entitlements).
+  - **Maintenance mode.** `MaintenanceModeMiddleware` answers `503` with the
+    operator's own message, translated envelope and a `Retry-After`, for
+    every request except the ones needed to undo it: `/health*`, `/metrics`,
+    `/api/v1/admin/*`, `/api/v1/config`, the login/refresh/2FA endpoints, and
+    CORS preflight. Registered *first* in `app.main`, which makes it
+    innermost — locale and request id are already resolved, and the 503 is
+    still wrapped by the security-header and CORS layers.
+  - **A global banner**, rendered above the app shell on web
+    (`GlobalBanner.tsx`) and mobile (`GlobalBannerBar.tsx`), dismissible per
+    message. `useGlobalBanner()`/`useMaintenance()` (`@forge/hooks`, and the
+    mobile mirror in `src/lib/config.ts`) poll `/config` every 60s, so a
+    banner raised mid-incident reaches tabs and phones that are already open.
+  - **A maintenance screen** on both surfaces, rendered *instead of* the app
+    shell (web) and the routed screens (mobile) — not alongside them, since
+    every request they make would answer 503. It removes itself within a
+    minute of the window ending and offers no retry button for exactly that
+    reason. The admin route tree is deliberately not gated. The sign-up page
+    likewise says so up front when `signup_disabled` is set, rather than
+    letting someone fill in a form that will 403.
+  - **Per-module emergency kill switches** for the modules whose whole HTTP
+    surface sits under a prefix of their own (`billing`, `file_storage`,
+    `notifications`). A module that cannot be killed cleanly — `gdpr` and
+    `feature_flags` mount under paths shared with auth and tenancy, and
+    `admin` is the surface that undoes all of this — is rejected with a 422
+    rather than accepted as a switch that does nothing.
+  - **`signup_disabled`**, enforced as a route dependency on
+    `POST /api/v1/auth/register` (not on invitation acceptance: an existing
+    customer adding a colleague is not signup).
+  - Well-known keys are a *documented, typed registry*
+    (`app/modules/product_settings/keys.py`), not a hardcoded schema: a
+    wrong-shaped value for a known key is a 422, and an unknown key is stored
+    verbatim so a product can ship its own switches without touching the
+    template. `GET /api/v1/admin/settings/product` serves that registry, and
+    the admin form at **Admin → Settings** is generated from it rather than
+    from a copy.
+  - Reads go through Redis with a 60s TTL and every write busts the key, so a
+    flip propagates on the next request rather than at the end of a TTL. The
+    admin page itself reads straight from the database — an operator must
+    never be shown a value they are about to change from a stale copy. Every
+    change writes one `elevated`-severity audit event with a key-level diff.
+  - `GET /api/v1/config` now carries `banner`, `maintenance` and
+    `signup_disabled`; its `Cache-Control` came down from `max-age=300` to
+    `max-age=60` to match, since nothing can invalidate a browser's own HTTP
+    cache.
+  - `docs/runbooks/maintenance-mode.md` is the incident-response procedure,
+    including the two ways back in when the admin UI is what is broken, and
+    `docs/runbooks/phase3-verification.md` is the Phase 3 acceptance pass.
+
+  **Breaking for forks:** every non-admin route now issues one extra
+  statement on a cold settings cache (one indexed primary-key lookup per
+  minute per deployment, not per request). `tests/test_query_budgets.py`'s
+  budgets were raised by one accordingly; a fork with its own budgets needs
+  the same adjustment.
 - **A tool-agnostic support integration layer (T-262).** The template now
   surfaces who is asking for help, without depending on any support vendor.
   - `GET /api/v1/me/support-context` returns the signed-in user's id, email,

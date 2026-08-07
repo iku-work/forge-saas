@@ -6,7 +6,9 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Slot, useRouter } from "expo-router";
 import { ActivityIndicator, View } from "react-native";
 
+import { GlobalBannerBar } from "../src/components/GlobalBannerBar";
 import { ImpersonationBanner } from "../src/components/ImpersonationBanner";
+import { MaintenanceScreen } from "../src/components/MaintenanceScreen";
 import { onSessionExpired } from "../src/lib/api";
 import { bootstrapSession, getSessionSnapshot, useSession } from "../src/lib/auth";
 import {
@@ -14,6 +16,7 @@ import {
   initI18n,
   useSystemLocaleSync,
 } from "../src/lib/i18n";
+import { useMaintenance } from "../src/lib/config";
 import { clearImpersonationOnLaunch } from "../src/lib/impersonation";
 import { initSentry, setSentryUser } from "../src/lib/sentry";
 
@@ -90,8 +93,26 @@ function RootLayout() {
       {/* Above <Slot />, so it is on every screen the app can reach and not
           just the authenticated ones -- see the component's own docstring. */}
       <ImpersonationBanner />
-      <Slot />
+      {/* T-263, below the impersonation banner on purpose: an operator inside
+          someone else's session needs to be told *that* first. */}
+      <GlobalBannerBar />
+      {/* T-263: replaces the routed screens entirely while a maintenance
+          window is open, because every request they make answers 503. The two
+          banners above stay -- an operator inside an impersonation session
+          still needs to be told. */}
+      <RoutedScreens />
     </QueryClientProvider>
+  );
+}
+
+/** T-263: `<Slot />` normally, the maintenance screen during a window. */
+function RoutedScreens() {
+  const maintenance = useMaintenance();
+
+  return maintenance.enabled ? (
+    <MaintenanceScreen maintenance={maintenance} />
+  ) : (
+    <Slot />
   );
 }
 

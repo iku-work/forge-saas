@@ -31,7 +31,7 @@ if TYPE_CHECKING:
 
 # Revision ID of the last always-on ("core") migration. Update this constant
 # whenever a new core-only migration is appended to alembic/versions/core/.
-CORE_HEAD_REVISION = "f6a2e9c4d857"
+CORE_HEAD_REVISION = "a7e4c2f91b60"
 
 # Module name -> the alembic branch label its first migration declares.
 # Only modules that currently ship a models.py (and therefore a migration)
@@ -76,7 +76,9 @@ def upgrade(config: Config) -> None:
 def plan_summary() -> str:
     """Human-readable module-by-module summary for `make migrate-plan`."""
     modules = get_modules()
-    lines = ["core            -> always applied (auth, tenancy, audit, job_record)"]
+    lines = [
+        "core            -> always applied (auth, tenancy, audit, job_record, product_settings)"
+    ]
     for module_name in MODULE_BRANCHES:
         module_config = getattr(modules, module_name)
         state = "enabled  -> applying" if module_config.enabled else "disabled -> skipped"

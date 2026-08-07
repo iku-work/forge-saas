@@ -50,6 +50,7 @@ from app.modules.auth.schemas import (
     VerifyEmailRequest,
 )
 from app.modules.auth.service import AuthService, TwoFactorChallenge
+from app.modules.product_settings.dependencies import reject_if_signup_disabled
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -97,7 +98,12 @@ def _bearer_refresh_token(request: Request, body: RefreshRequest | None) -> str 
     return request.cookies.get(_REFRESH_COOKIE_NAME) or (body.refresh_token if body else None)
 
 
-@router.post("/register")
+# T-263: `signup_disabled` in ProductSettings closes public registration
+# without a redeploy. A route-level dependency, so FastAPI solves it before it
+# even validates the body -- an operator who has closed signups does not want
+# the endpoint doing work, and the 403 does not depend on the payload being
+# well-formed.
+@router.post("/register", dependencies=[Depends(reject_if_signup_disabled)])
 @auth_limit
 async def register(
     request: Request,

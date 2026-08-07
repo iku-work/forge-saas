@@ -32,6 +32,7 @@ from uuid import UUID, uuid4
 
 import pytest
 from redis.asyncio import Redis
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import (
     AsyncEngine,
     AsyncSession,
@@ -46,13 +47,26 @@ from app.core.exceptions import PlanLimitError
 from app.core.modules import EnabledModules, ModuleConfig
 from app.models._mixins import utcnow
 from app.modules.auth.permissions import MemberRole
-from app.modules.billing.dependencies import get_current_org_subscription, require_feature
+from app.modules.billing.dependencies import (
+    get_current_org_subscription,
+    record_usage,
+    require_feature,
+)
 from app.modules.billing.models import Plan, Subscription
+from app.modules.billing.usage_models import UsageRecord
+from app.modules.billing.usage_service import UsageService
 from app.modules.feature_flags.repository import OrgFeatureFlagRepository
 from app.modules.tenancy.models import Membership, Organization, OrgFeatureFlag
 from product import config as product_config
 
-_TABLES = [Plan.__table__, Subscription.__table__, Organization.__table__, OrgFeatureFlag.__table__]
+_TABLES = [
+    Plan.__table__,
+    Subscription.__table__,
+    Organization.__table__,
+    OrgFeatureFlag.__table__,
+    # T-132: record_usage writes here.
+    UsageRecord.__table__,
+]
 
 
 @pytest.fixture(autouse=True)
@@ -403,3 +417,116 @@ async def test_require_feature_override_cannot_grant_a_flag_the_plan_denies(
     with pytest.raises(PlanLimitError) as exc_info:
         await checker((org, _membership(org.id)), session, redis)
     assert exc_info.value.status_code == 402
+
+
+# --- record_usage (T-132) ------------------------------------------------------
+#
+# Until now this dependency had no tests and no call sites: usage metering ships
+# off by default (`usage_metering` is `enabled=False` in EnabledModules), so
+# nothing in the template mounts it. It is still a public API a product is meant
+# to attach to its own metered routes, which makes "never exercised" the wrong
+# state for it to be in -- these lock the contract that a product would rely on.
+#
+# Called directly rather than through FastAPI, same as require_feature above.
+
+
+async def _usage_rows(session: AsyncSession, org_id: UUID) -> list[UsageRecord]:
+    """UsageRecordRepository has no list-by-org method (nothing in the app
+    needs one), so this reads the table directly -- a test asserting "a row
+    landed for this org and not that one" should look at the rows."""
+    result = await session.execute(
+        select(UsageRecord).where(UsageRecord.org_id == org_id)  # type: ignore[arg-type]
+    )
+    return list(result.scalars().all())
+
+
+async def test_record_usage_writes_a_row_for_the_callers_org(
+    session: AsyncSession,
+) -> None:
+    org = _org()
+    session.add(org)
+    await session.flush()
+
+    recorder = record_usage("api_calls", quantity=3)
+    await recorder((org, _membership(org.id)), session)
+
+    records = await _usage_rows(session, org.id)
+    assert [(r.metric, r.quantity) for r in records] == [("api_calls", 3)]
+
+
+async def test_record_usage_defaults_to_one(session: AsyncSession) -> None:
+    org = _org()
+    session.add(org)
+    await session.flush()
+
+    await record_usage("exports")((org, _membership(org.id)), session)
+
+    records = await _usage_rows(session, org.id)
+    assert records[0].quantity == 1
+
+
+async def test_record_usage_never_rejects_the_request(session: AsyncSession) -> None:
+    """The difference between this and require_feature, and the reason it is a
+    separate dependency: metering observes, it does not gate. A route carrying
+    both must fail on the gate, never on the meter."""
+    org = _org()
+    session.add(org)
+    await session.flush()
+
+    # No subscription, no plan, no entitlement -- and still no exception.
+    assert await record_usage("api_calls")((org, _membership(org.id)), session) is None
+
+
+async def test_record_usage_records_against_the_org_it_was_given(
+    session: AsyncSession,
+) -> None:
+    """§0.2, structurally: UsageService is constructed with the org resolved
+    from get_current_org, so a metered route can never write usage against a
+    org the caller isn't a member of."""
+    org_a, org_b = _org(), _org()
+    session.add_all([org_a, org_b])
+    await session.flush()
+
+    await record_usage("api_calls")((org_a, _membership(org_a.id)), session)
+
+    assert len(await _usage_rows(session, org_a.id)) == 1
+    assert await _usage_rows(session, org_b.id) == []
+
+
+async def test_record_usage_is_noop_when_billing_disabled(
+    session: AsyncSession, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Same short-circuit as require_feature, for the same reason: with billing
+    off the usage_record table does not exist at all (T-062), so this must
+    return before UsageService touches it -- reaching the query would be a
+    ProgrammingError, not a no-op."""
+    # _BILLING_OFF, not a bare billing=disabled: notifications and
+    # file_storage both `requires=["billing"]`, so validate_modules rejects
+    # the half-off config at import time.
+    monkeypatch.setattr(product_config, "MODULES", _BILLING_OFF)
+    module_loader.get_modules.cache_clear()
+    org = _org()
+    session.add(org)
+    await session.flush()
+
+    await record_usage("api_calls")((org, _membership(org.id)), session)
+
+    assert await _usage_rows(session, org.id) == []
+
+
+async def test_usage_service_dedups_on_an_idempotency_key(session: AsyncSession) -> None:
+    """Not reachable through `record_usage` (which passes no key), but it is the
+    behaviour a metered route retrying a request depends on -- a second insert
+    would otherwise hit UsageRecord.idempotency_key's unique constraint and
+    raise instead of returning the row the caller already has."""
+    org = _org()
+    session.add(org)
+    await session.flush()
+    service = UsageService(session, org.id)
+
+    first = await service.record(metric="api_calls", quantity=1, idempotency_key="req-1")
+    second = await service.record(metric="api_calls", quantity=9, idempotency_key="req-1")
+
+    assert second.id == first.id
+    assert second.quantity == 1  # the retry did not double-count
+    assert len(await _usage_rows(session, org.id)) == 1

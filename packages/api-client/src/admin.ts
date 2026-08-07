@@ -344,3 +344,60 @@ export function listAdminAuditFeed(query: ListAdminAuditFeedQuery = {}) {
     query: query as Record<string, unknown>,
   });
 }
+
+// ---- T-263: global runtime settings ------------------------------------------
+
+// The stored settings blob. Deliberately `unknown` per value rather than a
+// union of the well-known shapes: the backend accepts keys it has never heard
+// of (that is what the raw-JSON editor is for), so a closed type here would be
+// a lie the first time a product ships its own switch. Callers narrow the key
+// they actually care about.
+export type ProductSettingsValue = unknown;
+
+export type ProductSettingsKind = "bool" | "str" | "banner" | "kill_switch";
+
+export interface ProductSettingsKeyDoc {
+  key: string;
+  kind: ProductSettingsKind;
+  description: string;
+  default: ProductSettingsValue;
+}
+
+export interface AdminProductSettings {
+  settings: Record<string, ProductSettingsValue>;
+  // Shipped by the server so the admin form is generated from the backend's
+  // own registry rather than a copy that drifts from it.
+  well_known: ProductSettingsKeyDoc[];
+  killable_modules: string[];
+  updated_at: string | null;
+  updated_by: string | null;
+}
+
+export function getAdminProductSettings() {
+  return client.get<Envelope<AdminProductSettings>, ErrorBody, true>({
+    ...THROW,
+    url: "/api/v1/admin/settings/product",
+  });
+}
+
+/** Merge: only the keys present are touched, and a `null` value unsets one. */
+export function patchAdminProductSettings(
+  settings: Record<string, ProductSettingsValue>,
+) {
+  return client.patch<Envelope<AdminProductSettings>, ErrorBody, true>({
+    ...THROW,
+    url: "/api/v1/admin/settings/product",
+    body: { settings },
+  });
+}
+
+/** Wholesale replacement, for the raw-JSON editor: absent keys are removed. */
+export function replaceAdminProductSettings(
+  settings: Record<string, ProductSettingsValue>,
+) {
+  return client.put<Envelope<AdminProductSettings>, ErrorBody, true>({
+    ...THROW,
+    url: "/api/v1/admin/settings/product",
+    body: { settings },
+  });
+}
