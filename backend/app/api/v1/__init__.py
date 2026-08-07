@@ -15,6 +15,7 @@ def build_router() -> APIRouter:
 
     # -- Always-on (never optional) ------------------------------------------
     from app.api.v1.config import router as config_router  # noqa: PLC0415
+    from app.api.v1.support import router as support_router  # noqa: PLC0415
     from app.modules.auth.oauth import router as oauth_router  # noqa: PLC0415
     from app.modules.auth.router import router as auth_router  # noqa: PLC0415
     from app.modules.auth.totp import router as totp_router  # noqa: PLC0415
@@ -22,6 +23,7 @@ def build_router() -> APIRouter:
     from app.modules.tenancy.router import router as tenancy_router  # noqa: PLC0415
 
     router.include_router(config_router)
+    router.include_router(support_router)
     router.include_router(auth_router)
     router.include_router(oauth_router)
     router.include_router(totp_router)

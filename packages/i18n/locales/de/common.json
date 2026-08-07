@@ -33,6 +33,12 @@
     "logout": "Abmelden",
     "logout_hint": "Meldet dieses Konto auf diesem Gerät ab"
   },
+  "support": {
+    "contact": "Support kontaktieren",
+    "contact_hint": "Öffnet den Support mit den Daten Ihres Kontos",
+    "subject": "Supportanfrage",
+    "failed": "Der Support konnte auf diesem Gerät nicht geöffnet werden. Bitte schreiben Sie uns stattdessen eine E-Mail."
+  },
   "reports": {
     "description": "Erweiterte Berichte sind in Ihrem Tarif enthalten. Hier gibt es noch nichts zu sehen."
   },

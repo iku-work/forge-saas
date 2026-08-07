@@ -31,6 +31,12 @@
     "reports": "Edistyneet raportit",
     "logout": "Kirjaudu ulos"
   },
+  "support": {
+    "contact": "Ota yhteyttä tukeen",
+    "contact_hint": "Avaa tuen ja liittää mukaan tilisi tiedot",
+    "subject": "Tukipyyntö",
+    "failed": "Tuen avaaminen ei onnistunut tällä laitteella. Lähetä meille sähköpostia."
+  },
   "reports": {
     "description": "Edistynyt raportointi sisältyy tilaukseesi. Ei vielä sisältöä."
   },

@@ -7,6 +7,8 @@ import { Banner } from "../../src/components/Banner";
 import { Button } from "../../src/components/Button";
 import { LanguagePicker } from "../../src/components/LanguagePicker";
 import { logout } from "../../src/lib/auth";
+import { useSupportSettings } from "../../src/lib/config";
+import { openSupport } from "../../src/lib/support";
 import {
   pickAndUpload,
   UploadPermissionError,
@@ -15,7 +17,10 @@ import {
 export default function SettingsScreen() {
   const { t } = useTranslation();
   const router = useRouter();
+  const support = useSupportSettings();
   const [isLoggingOut, setIsLoggingOut] = useState(false);
+  const [isOpeningSupport, setIsOpeningSupport] = useState(false);
+  const [supportFailed, setSupportFailed] = useState(false);
   const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
   const [avatarMessage, setAvatarMessage] = useState<{
     text: string;
@@ -29,6 +34,25 @@ export default function SettingsScreen() {
     } finally {
       router.replace("/login");
     }
+  };
+
+  // T-262: the phone has no support widget to boot, so this opens whatever
+  // SUPPORT_URL resolves to -- a mailto: prefilled with the user's account
+  // context, unless a product registered its own handler (see
+  // src/lib/support.ts).
+  const handleContactSupport = (): void => {
+    setSupportFailed(false);
+    setIsOpeningSupport(true);
+    void openSupport(t("common.support.subject"))
+      .then((opened) => {
+        setSupportFailed(!opened);
+      })
+      .catch(() => {
+        setSupportFailed(true);
+      })
+      .finally(() => {
+        setIsOpeningSupport(false);
+      });
   };
 
   const handleAvatarUpload = (): void => {
@@ -85,6 +109,22 @@ export default function SettingsScreen() {
       <View className="mt-6">
         <LanguagePicker />
       </View>
+      {support.url ? (
+        <View className="mt-6">
+          <Button
+            label={t("common.support.contact")}
+            hint={t("common.support.contact_hint")}
+            variant="outline"
+            disabled={isOpeningSupport}
+            onPress={handleContactSupport}
+          />
+          {supportFailed ? (
+            <View className="mt-2">
+              <Banner variant="error">{t("common.support.failed")}</Banner>
+            </View>
+          ) : null}
+        </View>
+      ) : null}
       <View className="mt-6">
         <Button
           label={

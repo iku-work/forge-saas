@@ -33,6 +33,12 @@
     "logout": "Se déconnecter",
     "logout_hint": "Déconnecte ce compte sur cet appareil"
   },
+  "support": {
+    "contact": "Contacter le support",
+    "contact_hint": "Ouvre le support avec les informations de votre compte",
+    "subject": "Demande d'assistance",
+    "failed": "Impossible d'ouvrir le support sur cet appareil. Écrivez-nous par e-mail."
+  },
   "reports": {
     "description": "Les rapports avancés sont inclus dans votre offre. Rien à afficher pour le moment."
   },

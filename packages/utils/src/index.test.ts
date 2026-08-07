@@ -1,6 +1,11 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { formatBytes, formatDate, formatRelativeTime } from "./index";
+import {
+  formatBytes,
+  formatDate,
+  formatRelativeTime,
+  supportMailtoUrl,
+} from "./index";
 
 describe("formatRelativeTime", () => {
   it("formats a past instant relative to now", () => {
@@ -60,5 +65,77 @@ describe("formatBytes", () => {
     expect(formatBytes(0)).toBe("0 B");
     expect(formatBytes(1024)).toBe("1.0 KB");
     expect(formatBytes(1024 * 1024)).toBe("1.0 MB");
+  });
+});
+
+describe("supportMailtoUrl", () => {
+  const ctx = {
+    userId: "u-1",
+    email: "jane@example.com",
+    orgId: "o-1",
+    orgName: "Acme Inc",
+    plan: "pro",
+    subscriptionStatus: "active",
+    locale: "en",
+  };
+
+  function bodyOf(url: string): string {
+    const query = url.slice(url.indexOf("?") + 1);
+    return new URLSearchParams(query).get("body") ?? "";
+  }
+
+  it("appends the user's context to the mail body", () => {
+    const body = bodyOf(supportMailtoUrl("mailto:support@example.com", ctx));
+
+    expect(body).toContain("jane@example.com");
+    expect(body).toContain("Acme Inc (o-1)");
+    expect(body).toContain("Plan: pro (active)");
+    expect(body).toContain("Locale: en");
+  });
+
+  it("reports a missing subscription rather than an empty field", () => {
+    const body = bodyOf(
+      supportMailtoUrl("mailto:support@example.com", {
+        ...ctx,
+        plan: null,
+        subscriptionStatus: null,
+      }),
+    );
+
+    expect(body).toContain("Plan: none (no subscription)");
+  });
+
+  it("adds the given subject but never overwrites one already in the URL", () => {
+    const added = supportMailtoUrl("mailto:support@example.com", ctx, {
+      subject: "Help",
+    });
+    const preserved = supportMailtoUrl(
+      "mailto:support@example.com?subject=Fixed",
+      ctx,
+      { subject: "Help" },
+    );
+
+    expect(new URLSearchParams(added.split("?")[1]).get("subject")).toBe("Help");
+    expect(new URLSearchParams(preserved.split("?")[1]).get("subject")).toBe(
+      "Fixed",
+    );
+  });
+
+  it("percent-encodes spaces so mail clients don't render literal plus signs", () => {
+    const url = supportMailtoUrl("mailto:support@example.com", ctx, {
+      subject: "Need help",
+    });
+
+    expect(url).toContain("Need%20help");
+    expect(url).not.toContain("+");
+  });
+
+  it("leaves a non-mailto URL, and a null context, untouched", () => {
+    expect(supportMailtoUrl("https://help.example.com", ctx)).toBe(
+      "https://help.example.com",
+    );
+    expect(supportMailtoUrl("mailto:support@example.com", null)).toBe(
+      "mailto:support@example.com",
+    );
   });
 });

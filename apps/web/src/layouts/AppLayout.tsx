@@ -49,6 +49,7 @@ import {
 
 import { CreateOrgForm } from "../features/settings/CreateOrgForm";
 import { NotificationBell } from "../features/notifications/NotificationBell";
+import { SupportLink } from "../features/support/SupportLink";
 import { stripLocale } from "../lib/locale-url";
 import { useRouteLocale } from "../lib/useRouteLocale";
 
@@ -418,6 +419,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
           ))}
         </nav>
         <div className="border-t pt-2">
+          <SupportLink />
           <UserMenu />
         </div>
       </aside>

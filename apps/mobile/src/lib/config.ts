@@ -9,7 +9,11 @@
  */
 import { useEffect, useSyncExternalStore } from "react";
 
-import { getConfigApiV1ConfigGet, type ModulesResponse } from "@forge/api-client";
+import {
+  getConfigApiV1ConfigGet,
+  type ConfigResponse,
+  type ModulesResponse,
+} from "@forge/api-client";
 import type { ProductConfig } from "@forge/types";
 
 import { client } from "./api";
@@ -46,17 +50,36 @@ function toActiveModules(modules: ModulesResponse): ActiveModules {
   };
 }
 
-let state: ActiveModules = DENY_BY_DEFAULT;
+// T-262: mirrors packages/hooks' useModules.ts SupportSettings. An empty
+// url means "/config hasn't answered yet", which callers read as "render no
+// support entry" -- the deny-by-default equivalent for a link whose real
+// destination isn't known yet.
+export interface SupportSettings {
+  tool: ConfigResponse["support_tool"];
+  url: string;
+}
+
+const UNRESOLVED_SUPPORT: SupportSettings = { tool: "none", url: "" };
+
+interface ConfigState {
+  modules: ActiveModules;
+  support: SupportSettings;
+}
+
+let state: ConfigState = {
+  modules: DENY_BY_DEFAULT,
+  support: UNRESOLVED_SUPPORT,
+};
 const listeners = new Set<() => void>();
 
-function setState(next: ActiveModules): void {
+function setState(next: ConfigState): void {
   state = next;
   for (const listener of listeners) {
     listener();
   }
 }
 
-function subscribeModules(listener: () => void): () => void {
+function subscribeConfig(listener: () => void): () => void {
   listeners.add(listener);
   return () => {
     listeners.delete(listener);
@@ -67,7 +90,11 @@ function subscribeModules(listener: () => void): () => void {
 // non-component code (tests, anything that needs a one-off read) check the
 // current modules without calling a hook outside a component.
 export function getModulesSnapshot(): ActiveModules {
-  return state;
+  return state.modules;
+}
+
+export function getSupportSettingsSnapshot(): SupportSettings {
+  return state.support;
 }
 
 let bootstrapPromise: Promise<void> | null = null;
@@ -80,7 +107,13 @@ export function bootstrapModules(): Promise<void> {
         throwOnError: true,
       });
       if (envelope.data) {
-        setState(toActiveModules(envelope.data.modules));
+        setState({
+          modules: toActiveModules(envelope.data.modules),
+          support: {
+            tool: envelope.data.support_tool,
+            url: envelope.data.support_url,
+          },
+        });
       }
     } catch {
       // Stay denied-by-default -- see DENY_BY_DEFAULT above.
@@ -94,5 +127,15 @@ export function useModules(): ActiveModules {
     void bootstrapModules();
   }, []);
 
-  return useSyncExternalStore(subscribeModules, getModulesSnapshot);
+  return useSyncExternalStore(subscribeConfig, getModulesSnapshot);
+}
+
+// Same single /config fetch as useModules() above -- a screen using both
+// makes one request, not two.
+export function useSupportSettings(): SupportSettings {
+  useEffect(() => {
+    void bootstrapModules();
+  }, []);
+
+  return useSyncExternalStore(subscribeConfig, getSupportSettingsSnapshot);
 }

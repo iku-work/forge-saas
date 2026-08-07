@@ -14,8 +14,9 @@ version unless you have a documented reason not to (note the reason in
 
 ## Files the product owns (template never touches)
 
-- `product.config.py` — module toggles + branding (backend)
+- `product.config.py` — module toggles + branding + support tool (backend)
 - `product.config.ts` — module toggles + branding (frontend)
+- `apps/web/src/features/support/SupportWidget.tsx` — the support vendor's widget wrapper, if you wire one (T-262; see `docs/runbooks/support-tool-integration.md`)
 - `.env.product.example` — product-specific env vars
 - `apps/web/src/routes/_product/` — product-specific routes
 - `backend/app/modules/<product-module>/` — product-specific modules (assign yourself a migration prefix block below)

@@ -33,6 +33,12 @@
     "logout": "Log out",
     "logout_hint": "Signs out of this account on this device"
   },
+  "support": {
+    "contact": "Contact support",
+    "contact_hint": "Opens support with your account details attached",
+    "subject": "Support request",
+    "failed": "Couldn't open support on this device. Please email us instead."
+  },
   "reports": {
     "description": "Advanced reporting is on your plan. Nothing to see here yet."
   },

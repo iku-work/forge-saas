@@ -33,6 +33,12 @@
     "logout": "Cerrar sesión",
     "logout_hint": "Cierra la sesión de esta cuenta en este dispositivo"
   },
+  "support": {
+    "contact": "Contactar con soporte",
+    "contact_hint": "Abre el soporte con los datos de tu cuenta adjuntos",
+    "subject": "Solicitud de soporte",
+    "failed": "No se pudo abrir el soporte en este dispositivo. Escríbenos por correo electrónico."
+  },
   "reports": {
     "description": "Los informes avanzados están incluidos en tu plan. Aún no hay nada que mostrar aquí."
   },

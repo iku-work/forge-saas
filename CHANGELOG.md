@@ -6,6 +6,35 @@ template keep their own changes in `CHANGELOG.product.md` (see
 
 ## [Unreleased]
 ### Added
+- **A tool-agnostic support integration layer (T-262).** The template now
+  surfaces who is asking for help, without depending on any support vendor.
+  - `GET /api/v1/me/support-context` returns the signed-in user's id, email,
+    name, org, plan, subscription status, signup date and locale in one
+    authenticated call — and `is_impersonating`, which is `true` while a
+    superadmin is acting as that user. It is org-scoped through
+    `get_current_org`, so a user in org A can never be handed org B's
+    context.
+  - `useSupportContext()` (`@forge/hooks`) is the web-side equivalent,
+    returning `null` until there is a real context to hand a widget, so
+    nothing boots with a half-populated or anonymous identity.
+    `apps/mobile/src/lib/support.ts` is mobile's reimplementation, plus
+    `openSupport()` and a `setSupportHandler()` seam for a native vendor SDK.
+  - `backend/product/config.py` gains `SUPPORT_TOOL`
+    (`none | intercom | crisp | plain | helpscout | custom`) and
+    `SUPPORT_URL`, both served on the public `GET /api/v1/config`.
+    `SUPPORT_URL` defaults to `mailto:SUPPORT_EMAIL`, resolved backend-side
+    so web and mobile don't each reimplement it; a bad value fails at boot
+    like a bad module or locale does.
+  - Both surfaces render a "Contact support" entry. With `SUPPORT_TOOL =
+    "none"` it is a plain link, prefilled with the user's account context
+    when it resolves to a `mailto:` (`supportMailtoUrl` in `@forge/utils`).
+    With a widget tool it dispatches a `forge:support-open` event (web) or
+    calls the registered handler (mobile); if nothing handles it — an
+    ad-blocked widget, an SDK that failed to init — the link still opens, so
+    support is never a dead button.
+  - `docs/runbooks/support-tool-integration.md` wires Intercom, Crisp, Plain
+    and Help Scout end to end, and states the rule that matters most: a
+    wrapper must not identify the user during impersonation.
 - **Encryption key rotation is a real, resumable operation (T-245).** The
   stub `reencrypt_column_job` is replaced by `rotate_encryption_keys_job`
   (`backend/app/workers/jobs/encryption.py`), which discovers every

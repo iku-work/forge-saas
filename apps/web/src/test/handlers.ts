@@ -15,6 +15,7 @@ import {
   fixturePlan,
   fixtureStoredFile,
   fixtureSubscription,
+  fixtureSupportContext,
   fixtureUser,
 } from "./appShellFixtures";
 
@@ -267,6 +268,9 @@ export const handlers = [
   ),
   http.get(`${API}/api/v1/config`, () =>
     HttpResponse.json(envelope(fixtureConfig)),
+  ),
+  http.get(`${API}/api/v1/me/support-context`, () =>
+    HttpResponse.json(envelope(fixtureSupportContext)),
   ),
   http.get(`${API}/health`, () =>
     HttpResponse.json({ status: "ok", version: "0.1.0" }),

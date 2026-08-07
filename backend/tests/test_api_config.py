@@ -24,9 +24,11 @@ from product import config as product_config
 def _clear_caches() -> Generator[None]:
     module_loader.get_modules.cache_clear()
     module_loader.get_branding.cache_clear()
+    module_loader.get_support_config.cache_clear()
     yield
     module_loader.get_modules.cache_clear()
     module_loader.get_branding.cache_clear()
+    module_loader.get_support_config.cache_clear()
 
 
 async def test_returns_branding_and_default_module_config(
@@ -98,6 +100,32 @@ async def test_reflects_disabled_locales(
     response = await client.get("/api/v1/config")
 
     assert response.json()["data"]["supported_locales"] == ["en"]
+
+
+async def test_reports_the_support_tool_and_a_resolved_support_url(
+    client: httpx.AsyncClient,
+) -> None:
+    """T-262: SUPPORT_URL is unset by default, so the URL every frontend
+    falls back to is the mailto: form of SUPPORT_EMAIL -- resolved here, not
+    in each of web and mobile."""
+    response = await client.get("/api/v1/config")
+
+    data = response.json()["data"]
+    assert data["support_tool"] == product_config.SUPPORT_TOOL
+    assert data["support_url"] == f"mailto:{product_config.SUPPORT_EMAIL}"
+
+
+async def test_configured_support_url_wins_over_the_mailto_fallback(
+    client: httpx.AsyncClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(product_config, "SUPPORT_TOOL", "intercom")
+    monkeypatch.setattr(product_config, "SUPPORT_URL", "https://help.example.com")
+
+    response = await client.get("/api/v1/config")
+
+    data = response.json()["data"]
+    assert data["support_tool"] == "intercom"
+    assert data["support_url"] == "https://help.example.com"
 
 
 async def test_accessible_without_auth_token(client: httpx.AsyncClient) -> None:

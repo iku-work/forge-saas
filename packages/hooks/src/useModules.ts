@@ -1,7 +1,7 @@
 import { useEffect, useSyncExternalStore } from "react";
 
 import { getConfigApiV1ConfigGet } from "@forge/api-client";
-import type { ModulesResponse } from "@forge/api-client";
+import type { ConfigResponse, ModulesResponse } from "@forge/api-client";
 import type { ProductConfig } from "@forge/types";
 
 export type ActiveModules = ProductConfig["modules"];
@@ -39,20 +39,42 @@ function toActiveModules(modules: ModulesResponse): ActiveModules {
   };
 }
 
+// T-262: which support tool the product wired up, and the URL to fall back
+// to when there's no widget to open. Deploy-time config like `modules`
+// above, from the same /config response -- the *user's* support context is a
+// separate, authenticated call (see useSupportContext.ts).
+export interface SupportSettings {
+  tool: ConfigResponse["support_tool"];
+  url: string;
+}
+
+// Empty url = "/config hasn't answered yet", which every caller reads as
+// "render no support entry at all" -- the deny-by-default equivalent for a
+// link whose real destination isn't known yet.
+const UNRESOLVED_SUPPORT: SupportSettings = { tool: "none", url: "" };
+
+interface ConfigState {
+  modules: ActiveModules;
+  support: SupportSettings;
+}
+
 // Module-scoped store (not React Context) so every useModules() call site
 // reads the same result without a provider component, and so this file
 // never needs JSX -- mirrors useAuth.ts/useOrg.ts.
-let state: ActiveModules = DENY_BY_DEFAULT;
+let state: ConfigState = {
+  modules: DENY_BY_DEFAULT,
+  support: UNRESOLVED_SUPPORT,
+};
 const listeners = new Set<() => void>();
 
-function setState(next: ActiveModules): void {
+function setState(next: ConfigState): void {
   state = next;
   for (const listener of listeners) {
     listener();
   }
 }
 
-function subscribeModules(listener: () => void): () => void {
+function subscribeConfig(listener: () => void): () => void {
   listeners.add(listener);
   return () => {
     listeners.delete(listener);
@@ -63,7 +85,11 @@ function subscribeModules(listener: () => void): () => void {
 // tests -- can check the current modules without calling a hook outside a
 // component. Mirrors apps/mobile/src/lib/config.ts's getModulesSnapshot().
 export function getModulesSnapshot(): ActiveModules {
-  return state;
+  return state.modules;
+}
+
+function getSupportSnapshot(): SupportSettings {
+  return state.support;
 }
 
 // The active module set never changes at runtime -- it's redeploy-only -- so
@@ -81,7 +107,13 @@ export function bootstrapModules(): Promise<void> {
         throwOnError: true,
       });
       if (envelope.data) {
-        setState(toActiveModules(envelope.data.modules));
+        setState({
+          modules: toActiveModules(envelope.data.modules),
+          support: {
+            tool: envelope.data.support_tool,
+            url: envelope.data.support_url,
+          },
+        });
       }
     } catch {
       // Stay denied-by-default -- see DENY_BY_DEFAULT above.
@@ -95,5 +127,15 @@ export function useModules(): ActiveModules {
     void bootstrapModules();
   }, []);
 
-  return useSyncExternalStore(subscribeModules, getModulesSnapshot);
+  return useSyncExternalStore(subscribeConfig, getModulesSnapshot);
+}
+
+// Same one-fetch-per-page-load store as useModules() above -- both read the
+// single /config response, so a page using both makes one request, not two.
+export function useSupportSettings(): SupportSettings {
+  useEffect(() => {
+    void bootstrapModules();
+  }, []);
+
+  return useSyncExternalStore(subscribeConfig, getSupportSnapshot);
 }

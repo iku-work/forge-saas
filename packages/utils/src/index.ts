@@ -97,3 +97,63 @@ export function slugify(str: string): string {
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "");
 }
+
+// T-262: the shape supportMailtoUrl below needs, declared structurally so
+// this package doesn't have to depend on @forge/hooks (whose SupportContext
+// satisfies it) or on the generated API client -- apps/mobile maps its own
+// response to the same field names and passes it straight in.
+export interface SupportMailtoContext {
+  userId: string;
+  email: string;
+  orgId: string;
+  orgName: string;
+  plan: string | null;
+  subscriptionStatus: string | null;
+  locale: string;
+}
+
+// Deliberately not translated: this block is read by the support agent
+// receiving the mail, not by the user sending it -- same reasoning as a bug
+// report's diagnostics footer. What the *user* reads (the "Contact support"
+// label, the subject line passed in below) does go through i18n.
+function contextBlock(ctx: SupportMailtoContext): string {
+  return [
+    "",
+    "",
+    "---",
+    "Please keep the details below — they help us find your account.",
+    `User: ${ctx.email} (${ctx.userId})`,
+    `Organization: ${ctx.orgName} (${ctx.orgId})`,
+    `Plan: ${ctx.plan ?? "none"} (${ctx.subscriptionStatus ?? "no subscription"})`,
+    `Locale: ${ctx.locale}`,
+  ].join("\n");
+}
+
+/**
+ * Pre-populates a `mailto:` support link with the user's context, so the
+ * first reply doesn't have to start with "which account are you on?".
+ *
+ * Any other URL (a help centre, a hosted contact form) is returned
+ * unchanged: there is no portable way to prefill one, and appending query
+ * params to somebody's ticket form would at best be ignored and at worst
+ * break it. Existing params on the mailto: (a `cc`, a fixed `subject`) are
+ * preserved.
+ */
+export function supportMailtoUrl(
+  url: string,
+  ctx: SupportMailtoContext | null,
+  options: { subject?: string } = {},
+): string {
+  if (!url.startsWith("mailto:") || ctx === null) {
+    return url;
+  }
+  const [address, query = ""] = url.slice("mailto:".length).split("?", 2);
+  const params = new URLSearchParams(query);
+  if (options.subject !== undefined && !params.has("subject")) {
+    params.set("subject", options.subject);
+  }
+  params.set("body", `${params.get("body") ?? ""}${contextBlock(ctx)}`);
+  // URLSearchParams encodes spaces as "+", which mail clients render
+  // literally in a body; mailto: takes percent-encoding (RFC 6068 §2).
+  return `mailto:${address}?${params.toString().replace(/\+/g, "%20")}`;
+}

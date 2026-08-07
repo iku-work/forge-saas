@@ -11,6 +11,7 @@ import type {
   SessionPublic,
   StoredFilePublic,
   SubscriptionPublic,
+  SupportContextResponse,
   UserPublic,
 } from "@forge/api-client";
 
@@ -174,6 +175,24 @@ export const fixtureConfig: ConfigResponse = {
   },
   supported_locales: ["en", "fi", "de", "es", "fr", "ar"],
   default_locale: "en",
+  // T-262 defaults: no vendor tool, so the "Contact support" entry is a
+  // plain mailto: of SUPPORT_EMAIL (resolved backend-side, see
+  // app.core.support).
+  support_tool: "none",
+  support_url: "mailto:support@example.com",
+};
+
+export const fixtureSupportContext: SupportContextResponse = {
+  user_id: fixtureUser.id,
+  email: fixtureUser.email,
+  full_name: fixtureUser.full_name,
+  org_id: fixtureOrg.id,
+  org_name: fixtureOrg.name,
+  plan: fixturePlan.slug,
+  subscription_status: fixtureSubscription.status,
+  signup_at: "2026-01-01T00:00:00Z",
+  locale: "en",
+  is_impersonating: false,
 };
 
 export const fixtureConsent: ConsentRecordPublic = {

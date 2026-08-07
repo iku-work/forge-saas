@@ -2,6 +2,7 @@ from dataclasses import dataclass
 from functools import lru_cache
 
 from app.core.modules import EnabledModules, ModuleConfig, ModuleName
+from app.core.support import SupportConfig, validate_support
 
 
 @dataclass(frozen=True)
@@ -62,3 +63,21 @@ def get_branding() -> Branding:
         logo_url=LOGO_URL,
         support_email=SUPPORT_EMAIL,
     )
+
+
+@lru_cache(maxsize=1)
+def get_support_config() -> SupportConfig:
+    """T-262: which support tool the product wired up, plus the URL every
+    frontend falls back to when there's no widget to open (mobile always,
+    web when SUPPORT_TOOL is "none"). Lazy import + lru_cache for the same
+    reasons as get_branding() above."""
+    from product.config import (  # noqa: PLC0415
+        SUPPORT_EMAIL,
+        SUPPORT_TOOL,
+        SUPPORT_URL,
+    )
+
+    validate_support(SUPPORT_TOOL, SUPPORT_URL)
+    # Concatenation, not an f-string: f"mailto:{...}" has the exact shape
+    # tests/test_cache_keys.py's sweep flags as a hand-built Redis key.
+    return SupportConfig(tool=SUPPORT_TOOL, url=SUPPORT_URL or "mailto:" + SUPPORT_EMAIL)

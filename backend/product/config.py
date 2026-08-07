@@ -5,6 +5,7 @@ The template never modifies it. Edit freely.
 
 from app.core.locales import EnabledLocales, LocaleConfig
 from app.core.modules import EnabledModules, ModuleConfig
+from app.core.support import SupportTool
 
 # ── Module toggles ──────────────────────────────────────────────────────────
 # Set enabled=False for any module you do not need.
@@ -29,6 +30,23 @@ APP_NAME = "ForgeSaaS"
 PRIMARY_COLOR = "#7c6ff7"
 LOGO_URL = "/logo.svg"
 SUPPORT_EMAIL = "support@example.com"
+
+# ── Support tool (T-262) ────────────────────────────────────────────────────
+# Which support tool this product uses. The template stays tool-agnostic: it
+# surfaces the signed-in user's context (GET /api/v1/me/support-context and
+# packages/hooks' useSupportContext) and renders a "Contact support" entry,
+# but never imports a vendor SDK. Booting the widget itself is product-side
+# code -- docs/runbooks/support-tool-integration.md walks Intercom, Crisp and
+# Plain end to end.
+#   "none"                      -> the entry is a plain link to SUPPORT_URL
+#   "intercom" | "crisp" |      -> the entry asks the product's widget to open
+#   "plain" | "helpscout" |        (falling back to the link if nothing is
+#   "custom"                       listening -- e.g. the widget was blocked)
+SUPPORT_TOOL: SupportTool = "none"
+# Where that link points. None falls back to `mailto:SUPPORT_EMAIL`; set it
+# to a help centre or a hosted contact form instead if you have one. Must be
+# an https://, http:// or mailto: URL.
+SUPPORT_URL: str | None = None
 
 # ── Internationalisation ────────────────────────────────────────────────────
 # Each locale toggle mirrors MODULES above -- enabled=False excludes it from

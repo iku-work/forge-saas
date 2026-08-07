@@ -12,7 +12,8 @@ from pydantic import BaseModel
 
 from app.core.envelope import Envelope, Meta
 from app.core.i18n import get_default_locale, get_supported_locales
-from app.core.module_loader import get_branding, get_modules
+from app.core.module_loader import get_branding, get_modules, get_support_config
+from app.core.support import SupportTool
 from app.middleware.rate_limit import api_limit
 
 router = APIRouter(tags=["config"])
@@ -42,6 +43,12 @@ class ConfigResponse(BaseModel):
     modules: ModulesResponse
     supported_locales: list[str]
     default_locale: str
+    # T-262: deploy-time, product-wide and identical for every user, so it
+    # rides along on this already-cached response rather than on the
+    # per-user /me/support-context one. Never the user's own context --
+    # that endpoint is authenticated for a reason, this one is public.
+    support_tool: SupportTool
+    support_url: str
 
 
 def _request_id(request: Request) -> str:
@@ -53,6 +60,7 @@ def _request_id(request: Request) -> str:
 async def get_config(request: Request, response: Response) -> Envelope[ConfigResponse]:
     m = get_modules()
     b = get_branding()
+    s = get_support_config()
     response.headers["Cache-Control"] = _CACHE_CONTROL
     data = ConfigResponse(
         app_name=b.app_name,
@@ -74,5 +82,7 @@ async def get_config(request: Request, response: Response) -> Envelope[ConfigRes
         ),
         supported_locales=get_supported_locales(),
         default_locale=get_default_locale(),
+        support_tool=s.tool,
+        support_url=s.url,
     )
     return Envelope(data=data, meta=Meta(request_id=_request_id(request)))
