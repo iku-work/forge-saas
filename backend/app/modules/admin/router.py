@@ -415,14 +415,23 @@ async def create_mobile_handoff(
     )
 
 
-@router.get("/impersonate/mobile-handoff/{exchange_token}")
+@router.post("/impersonate/mobile-handoff/preview")
 @api_limit
 async def preview_mobile_handoff(
     request: Request,
-    exchange_token: str,
+    body: AdminMobileExchangeRequest,
     session: Annotated[AsyncSession, Depends(get_session)],
     redis: Annotated[Redis, Depends(get_redis)],
 ) -> Envelope[AdminMobileHandoffPreview]:
+    # impersonation-ok: a read, and an unauthenticated one -- it consumes
+    # nothing and changes nothing. POST rather than GET *because* it is
+    # unauthenticated: the exchange token is a live credential for the next two
+    # minutes, and a path parameter would put it in the access log of every
+    # proxy on the way in and in Sentry's `request.url` (app.core.sentry's
+    # _before_send scrubs bodies, headers and cookies -- not the URL). A body
+    # keeps it out of all of them, the same way the exchange and cancel legs
+    # below already do.
+    #
     # Unauthenticated by necessity: the phone holds the exchange token and
     # nothing else yet. The token *is* the credential, and this leg tells its
     # holder only what redeeming it would tell them anyway.
@@ -433,7 +442,7 @@ async def preview_mobile_handoff(
     # 256 bits of entropy with a two-minute life -- while a single operator
     # retrying a scan legitimately spends preview + cancel + preview +
     # exchange, which 3/minute would 429 in the middle of a support call.
-    record = await AdminMobileHandoffService(session, redis).preview(exchange_token=exchange_token)
+    record = await AdminMobileHandoffService(session, redis).preview(exchange_token=body.token)
     return Envelope(
         data=AdminMobileHandoffPreview(
             user_email=record.user_email,

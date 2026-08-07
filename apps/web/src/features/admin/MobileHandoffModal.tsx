@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next";
 
 import {
   createAdminMobileHandoff,
+  endAdminImpersonationSession,
   impersonateAdminUser,
 } from "@forge/api-client";
 import {
@@ -33,6 +34,14 @@ const MAX_DURATION_MINUTES = 60;
 interface Handoff {
   deepLink: string;
   expiresAt: number;
+  /**
+   * The impersonation token this link was cut from. Kept, not discarded, for
+   * one reason: it is the only revocation handle in existence. The phone can
+   * end a session it adopted, but a session nobody scanned has no other holder
+   * — without this, "create a link, change your mind" would leave a live
+   * session running for up to the full hour with nothing able to stop it.
+   */
+  sessionToken: string;
 }
 
 /**
@@ -78,6 +87,7 @@ export function MobileHandoffModal({
       return {
         deepLink: link.data.deep_link,
         expiresAt: new Date(link.data.expires_at).getTime(),
+        sessionToken: session.data.access_token,
       };
     },
   });
@@ -95,14 +105,30 @@ export function MobileHandoffModal({
   };
 
   const handleOpenChange = (next: boolean): void => {
-    // A link left on screen after the dialog closes is a link nobody is
-    // watching; the two-minute server-side expiry is the real control, but
-    // there is no reason to keep rendering it either.
+    // Closing leaves the session running on purpose: the ordinary way out of
+    // this dialog is "I scanned it", and revoking on close would kill the
+    // session the operator is at that moment carrying to their phone.
+    // Abandoning one is the explicit button below.
     if (!next) {
       setHandoff(null);
       setError(null);
     }
     onOpenChange(next);
+  };
+
+  /** Revokes the session behind the current link and drops the link.
+   *
+   * A failure is deliberately not surfaced: the link is gone from this screen
+   * either way, and the session expires on its own — an error toast here would
+   * only offer the operator a retry for something already out of their hands.
+   */
+  const discardSession = (): void => {
+    if (handoff) {
+      void endAdminImpersonationSession(handoff.sessionToken).catch(
+        () => undefined,
+      );
+    }
+    setHandoff(null);
   };
 
   const durationValue = Number(duration);
@@ -191,10 +217,21 @@ export function MobileHandoffModal({
                 type="button"
                 variant="outline"
                 onClick={() => {
-                  // Back to the form. Generating another link means starting
-                  // another impersonation session, which is why this is a
-                  // deliberate step rather than an automatic refresh.
-                  setHandoff(null);
+                  discardSession();
+                  handleOpenChange(false);
+                }}
+              >
+                {t("common.admin.mobile_handoff.discard")}
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => {
+                  // Back to the form. A new link means a new impersonation
+                  // session, so the previous one is revoked on the way --
+                  // otherwise every click here would leave another live
+                  // session behind.
+                  discardSession();
                 }}
               >
                 {t("common.admin.mobile_handoff.start_over")}

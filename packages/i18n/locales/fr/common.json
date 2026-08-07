@@ -262,7 +262,8 @@
       "done": "Terminé",
       "error_default": "Impossible de créer le lien.",
       "copy": "Copier",
-      "copied": "Copié"
+      "copied": "Copié",
+      "discard": "Abandonner la session"
     }
   }
 }

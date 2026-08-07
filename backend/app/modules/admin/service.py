@@ -42,7 +42,6 @@ from app.core.urls import frontend_url
 from app.models._mixins import utcnow
 from app.modules.admin.impersonation_handoff import (
     HandoffRecord,
-    drop_handoff,
     generate_exchange_token,
     get_session_reason,
     handoff_expiry,
@@ -824,11 +823,19 @@ class AdminMobileHandoffService:
         """The phone's Cancel button. Idempotent and silent about unknown
         tokens: this leg is unauthenticated, so answering "that one existed"
         differently from "that one didn't" would turn it into an oracle for
-        guessing live handoffs."""
-        record = await peek_handoff(self._redis, exchange_token)
+        guessing live handoffs.
+
+        Consumes the record through the same GETDEL as `exchange` rather than
+        reading it and then deleting it: cancel and exchange race each other
+        whenever two devices open the same link, and a peek-then-delete cancel
+        would happily log `impersonation.mobile_handoff_cancelled` for a
+        handoff the other device had already adopted -- an audit trail saying
+        the operator declined a session they are, at that moment, using.
+        Exactly one of the two calls can win the GETDEL.
+        """
+        record = await take_handoff(self._redis, exchange_token)
         if record is None:
             return
-        await drop_handoff(self._redis, exchange_token)
         await self._log_as_impersonator(
             record, action="impersonation.mobile_handoff_cancelled", diff={}, ip=ip, ua=ua
         )

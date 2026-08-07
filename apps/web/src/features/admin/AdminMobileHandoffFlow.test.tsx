@@ -68,9 +68,10 @@ function renderFullApp(initialPath: string) {
 
 interface Handlers {
   onHandoff?: (authorization: string | null) => void;
+  onEnd?: (authorization: string | null) => void;
 }
 
-function stubAdminApi({ onHandoff }: Handlers = {}) {
+function stubAdminApi({ onHandoff, onEnd }: Handlers = {}) {
   server.use(
     http.post(`${API}/api/v1/auth/refresh`, () =>
       HttpResponse.json(
@@ -104,6 +105,10 @@ function stubAdminApi({ onHandoff }: Handlers = {}) {
         );
       },
     ),
+    http.post(`${API}/api/v1/admin/impersonate/end`, ({ request }) => {
+      onEnd?.(request.headers.get("authorization"));
+      return HttpResponse.json(envelope(null));
+    }),
     // AdminLayout's nav preloads its <Link>s -- see AdminImpersonateFlow's
     // note on why these are needed even though this test never visits them.
     http.get(`${API}/api/v1/orgs`, () => HttpResponse.json(envelope([]))),
@@ -205,5 +210,62 @@ describe("Admin mobile handoff flow (T-261)", () => {
       expect(screen.getByRole("alert")).toBeInTheDocument();
     });
     expect(screen.queryByTestId("handoff-deep-link")).not.toBeInTheDocument();
+  }, 15000);
+
+  it("revokes the session when the operator discards an unscanned link", async () => {
+    const ends: (string | null)[] = [];
+    stubAdminApi({ onEnd: (auth) => ends.push(auth) });
+
+    renderFullApp(`/admin/users/${target.id}`);
+    await submitHandoffForm();
+    await screen.findByTestId("handoff-deep-link");
+
+    await userEvent.click(
+      screen.getByRole("button", { name: "Discard session" }),
+    );
+
+    // The dialog is the only holder of that token -- a session nobody scanned
+    // has no other way to be revoked, so not spending it here would leave one
+    // live for up to an hour with nothing able to stop it.
+    await waitFor(() => {
+      expect(ends).toEqual([`Bearer ${impersonationToken}`]);
+    });
+  }, 15000);
+
+  it("revokes the previous session before minting a second link", async () => {
+    const ends: (string | null)[] = [];
+    stubAdminApi({ onEnd: (auth) => ends.push(auth) });
+
+    renderFullApp(`/admin/users/${target.id}`);
+    await submitHandoffForm();
+    await screen.findByTestId("handoff-deep-link");
+
+    await userEvent.click(screen.getByRole("button", { name: "New link" }));
+
+    // Otherwise every click of "New link" would strand another live session.
+    await waitFor(() => {
+      expect(ends).toHaveLength(1);
+    });
+    expect(
+      screen.getByRole("button", { name: "Create handoff link" }),
+    ).toBeInTheDocument();
+  }, 15000);
+
+  it("leaves the session running when the operator is done with the link", async () => {
+    const ends: (string | null)[] = [];
+    stubAdminApi({ onEnd: (auth) => ends.push(auth) });
+
+    renderFullApp(`/admin/users/${target.id}`);
+    await submitHandoffForm();
+    await screen.findByTestId("handoff-deep-link");
+
+    await userEvent.click(screen.getByRole("button", { name: "Done" }));
+
+    // "Done" means "I scanned it" -- revoking here would kill the session the
+    // operator is at that moment carrying to their phone.
+    await waitFor(() => {
+      expect(screen.queryByTestId("handoff-deep-link")).not.toBeInTheDocument();
+    });
+    expect(ends).toEqual([]);
   }, 15000);
 });

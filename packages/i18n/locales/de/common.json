@@ -262,7 +262,8 @@
       "done": "Fertig",
       "error_default": "Übergabelink konnte nicht erstellt werden.",
       "copy": "Kopieren",
-      "copied": "Kopiert"
+      "copied": "Kopiert",
+      "discard": "Sitzung verwerfen"
     }
   }
 }

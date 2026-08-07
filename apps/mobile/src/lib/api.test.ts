@@ -14,8 +14,13 @@ import {
   client,
   getCachedAccessToken,
   hydrateAccessTokenCache,
+  IMPERSONATION_SESSION_KEY,
   REFRESH_TOKEN_KEY,
 } from "./api";
+// Imported for its side effect as much as its exports: T-261's module
+// registers an onSessionExpired listener at load, exactly as the root layout
+// causes it to in the real app.
+import { acceptHandoff, getImpersonationSnapshot } from "./impersonation";
 
 const OLD_ACCESS_TOKEN = "old-access-token";
 const OLD_REFRESH_TOKEN = "old-refresh-token";
@@ -136,6 +141,66 @@ describe("apps/mobile/src/lib/api", () => {
     expect(fetchMock).toHaveBeenCalledTimes(2);
     expect(secureStore.deleteItemAsync).toHaveBeenCalledWith(ACCESS_TOKEN_KEY);
     expect(secureStore.deleteItemAsync).toHaveBeenCalledWith(REFRESH_TOKEN_KEY);
+    // T-261: and the impersonation flag, which is stored beside them. A wipe
+    // that left it behind would make the next cold start read the operator's
+    // own session as an impersonation one and discard it.
+    expect(secureStore.deleteItemAsync).toHaveBeenCalledWith(
+      IMPERSONATION_SESSION_KEY,
+    );
     expect(getCachedAccessToken()).toBeNull();
+  });
+
+  it("does not treat a 401 from a handoff leg as the session ending", async () => {
+    fetchMock.mockResolvedValueOnce(
+      jsonResponse(401, {
+        data: null,
+        error: { message_key: "errors.invalid_exchange_token" },
+      }),
+    );
+
+    const { response } = await client.post({
+      url: "/api/v1/admin/impersonate/mobile-handoff/preview",
+      body: { token: "expired" },
+    });
+
+    // An expired QR code says nothing about this device's own session: the
+    // 401 comes straight back, with no refresh attempt and no token wipe --
+    // and so no forced redirect to /login over the screen that was about to
+    // say "this link has expired".
+    expect(response?.status).toBe(401);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(secureStore.deleteItemAsync).not.toHaveBeenCalled();
+  });
+
+  it("takes an impersonation session down completely when its token expires", async () => {
+    // An impersonation session never has a refresh token, so the first 401
+    // after its access token expires is immediately terminal.
+    secureStore.getItemAsync.mockImplementation((key: string) =>
+      key === ACCESS_TOKEN_KEY ? "impersonation-jwt" : null,
+    );
+    fetchMock.mockResolvedValueOnce(
+      jsonResponse(200, {
+        data: {
+          access_token: "impersonation-jwt",
+          session_expires_at: "2026-08-06T12:30:00Z",
+          user_email: "jane@example.com",
+          reason: "Ticket 8812",
+        },
+      }),
+    );
+    await acceptHandoff("exchange-abc");
+    expect(getImpersonationSnapshot()).not.toBeNull();
+
+    fetchMock.mockResolvedValueOnce(
+      jsonResponse(401, { data: null, error: { code: "unauthorized" } }),
+    );
+    await meApiV1AuthMeGet({ client });
+
+    // Otherwise the red banner keeps counting down "00:00 left" over the login
+    // screen the operator was just bounced to.
+    expect(getImpersonationSnapshot()).toBeNull();
+    expect(secureStore.deleteItemAsync).toHaveBeenCalledWith(
+      IMPERSONATION_SESSION_KEY,
+    );
   });
 });

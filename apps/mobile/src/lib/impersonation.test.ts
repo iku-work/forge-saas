@@ -36,6 +36,7 @@ const {
 } = await import("./impersonation");
 const { ACCESS_TOKEN_KEY, REFRESH_TOKEN_KEY, getCachedAccessToken } =
   await import("./api");
+const { getSessionSnapshot } = await import("./auth");
 
 const SESSION_EXPIRES_AT = "2026-08-06T12:30:00Z";
 
@@ -63,8 +64,8 @@ describe("impersonation", () => {
     secureStore.getItemAsync.mockResolvedValue(null);
   });
 
-  it("previews a handoff by exchange token without consuming it", async () => {
-    client.get.mockResolvedValue({
+  it("previews a handoff without consuming it, and without putting the token in the URL", async () => {
+    client.post.mockResolvedValue({
       data: {
         data: {
           user_email: "jane@example.com",
@@ -77,10 +78,17 @@ describe("impersonation", () => {
     const preview = await previewHandoff("exchange-abc");
 
     expect(preview.reason).toBe("Ticket 8812");
-    expect(client.get).toHaveBeenCalledWith(
-      expect.objectContaining({ path: { exchange_token: "exchange-abc" } }),
+    // In the body, not the path: the token is a live credential for two
+    // minutes, and a URL is the one part of a request that reliably ends up
+    // in proxy logs and in Sentry's unscrubbed `request.url`.
+    // The url is a fixed path with no interpolation, and the token rides in
+    // the body -- that pairing is the assertion.
+    expect(client.post).toHaveBeenCalledWith(
+      expect.objectContaining({
+        url: "/api/v1/admin/impersonate/mobile-handoff/preview",
+        body: { token: "exchange-abc" },
+      }),
     );
-    expect(client.post).not.toHaveBeenCalled();
   });
 
   it("stores the access token and deletes any refresh token when a handoff is accepted", async () => {
@@ -186,5 +194,19 @@ describe("impersonation", () => {
 
     expect(found).toBe(false);
     expect(secureStore.deleteItemAsync).not.toHaveBeenCalled();
+  });
+
+  it("drops the impersonated user from the session store when the session ends", async () => {
+    client.post.mockResolvedValue(exchangeResponse());
+    await acceptHandoff("exchange-abc");
+    client.post.mockResolvedValue({ data: { data: null } });
+
+    await endImpersonation();
+
+    // Not just the tokens: useSession() has to stop handing out the
+    // impersonated identity, or the next navigation re-renders it with the
+    // banner already gone -- an operator acting as someone else with nothing
+    // on screen saying so.
+    expect(getSessionSnapshot().user).toBeNull();
   });
 });

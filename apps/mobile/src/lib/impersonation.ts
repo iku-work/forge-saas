@@ -14,10 +14,16 @@
  *    into "you are now someone else again". Clearing it makes expiry mean
  *    what it says: back to the login screen.
  *
- * 2. **The flag never survives a cold start.** `clearOnLaunch()` runs before
- *    anything reads the stored session, so an app killed mid-impersonation
- *    comes back signed out rather than quietly still impersonating -- the one
- *    state where an operator could forget which identity they are in.
+ * 2. **The flag never outlives the session it describes.**
+ *    `clearImpersonationOnLaunch()` runs before anything reads the stored
+ *    session, so an app killed mid-impersonation comes back signed out rather
+ *    than quietly still impersonating -- the one state where an operator could
+ *    forget which identity they are in. The other half of that rule lives in
+ *    ./api: `clearStoredTokens()` removes the flag too, so a logout or an
+ *    expiry can't leave one behind for the *next* launch to find and act on
+ *    (it would wipe the operator's own session). And when the session expires
+ *    on its own, the listener at the bottom of this file drops the banner
+ *    rather than leaving it counting down "00:00" over the login screen.
  *
  * 3. **Push registration is not touched.** Nothing here calls
  *    registerPushToken(); apps/mobile/app/(app)/_layout.tsx skips it while
@@ -32,15 +38,21 @@ import * as SecureStore from "expo-secure-store";
 
 import {
   ACCESS_TOKEN_KEY,
+  IMPERSONATION_SESSION_KEY,
   REFRESH_TOKEN_KEY,
   clearStoredTokens,
   client,
   hydrateAccessTokenCache,
+  onSessionExpired,
 } from "./api";
+import { clearSession } from "./auth";
 
-export const IMPERSONATION_SESSION_KEY = "forge_is_impersonation_session";
+// Re-exported so callers (and this module's tests) have one import for the
+// whole impersonation surface; it is *defined* in ./api because
+// clearStoredTokens() has to be able to remove it. See its comment there.
+export { IMPERSONATION_SESSION_KEY };
 
-const HANDOFF_PATH = "/api/v1/admin/impersonate/mobile-handoff";
+const PREVIEW_PATH = "/api/v1/admin/impersonate/mobile-handoff/preview";
 const EXCHANGE_PATH = "/api/v1/admin/impersonate/mobile-exchange";
 const CANCEL_PATH = "/api/v1/admin/impersonate/mobile-cancel";
 const END_PATH = "/api/v1/admin/impersonate/end";
@@ -101,9 +113,13 @@ export function useImpersonation(): ImpersonationState | null {
 }
 
 export async function previewHandoff(token: string): Promise<HandoffPreview> {
-  const { data } = await client.get<Envelope<HandoffPreview>, unknown, true>({
-    url: `${HANDOFF_PATH}/{exchange_token}`,
-    path: { exchange_token: token },
+  // POST for a read: the exchange token is a live credential, and a path
+  // parameter would leave it in every proxy access log and in Sentry's
+  // `request.url`. The backend leg is shaped the same way for the same
+  // reason -- see admin/router.py's preview_mobile_handoff.
+  const { data } = await client.post<Envelope<HandoffPreview>, unknown, true>({
+    url: PREVIEW_PATH,
+    body: { token },
     throwOnError: true,
   });
   if (!data.data) {
@@ -181,8 +197,12 @@ export async function endImpersonation(): Promise<void> {
       throwOnError: true,
     });
   } finally {
-    await SecureStore.deleteItemAsync(IMPERSONATION_SESSION_KEY);
+    // clearStoredTokens() removes the impersonation flag along with the
+    // tokens, and clearSession() drops the impersonated user from
+    // useSession() -- without that second step the app would keep rendering
+    // that identity, banner-less, on the next navigation.
     await clearStoredTokens();
+    clearSession();
     setState(null);
   }
 }
@@ -200,8 +220,20 @@ export async function clearImpersonationOnLaunch(): Promise<boolean> {
   if (stored === null) {
     return false;
   }
-  await SecureStore.deleteItemAsync(IMPERSONATION_SESSION_KEY);
   await clearStoredTokens();
+  clearSession();
   setState(null);
   return true;
 }
+
+// An impersonation session has no refresh token, so the first call made after
+// its access token expires takes api.ts's "refresh failed, the session is
+// over" path. Without this, the red banner would keep counting down "00:00
+// left" over the login screen the operator was just bounced to, and -- worse
+// before clearStoredTokens() learned to remove the flag -- the leftover key
+// would be waiting for the next cold start. Registered at module load,
+// alongside auth.ts's own listener, so it fires from wherever the expiry is
+// noticed.
+onSessionExpired(() => {
+  setState(null);
+});

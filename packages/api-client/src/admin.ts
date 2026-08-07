@@ -271,6 +271,24 @@ export function createAdminMobileHandoff(impersonationToken: string) {
   });
 }
 
+/**
+ * Revokes an impersonation session the browser started but never adopted.
+ *
+ * Same explicit-header reason as createAdminMobileHandoff above, and the same
+ * endpoint the phone and the web banner both use to end a session -- one jti,
+ * one revocation path. This is what stops "create a link, change your mind"
+ * from leaving a live session nobody is watching for up to an hour: the
+ * handoff dialog is the only place holding that token, so if it does not spend
+ * it here, nothing can.
+ */
+export function endAdminImpersonationSession(impersonationToken: string) {
+  return client.post<Envelope<null>, ErrorBody, true>({
+    throwOnError: true,
+    url: "/api/v1/admin/impersonate/end",
+    headers: { Authorization: `Bearer ${impersonationToken}` },
+  });
+}
+
 // ---- T-143: dashboard + global audit feed --------------------------------------
 
 export interface AdminPaymentFailureEntry {

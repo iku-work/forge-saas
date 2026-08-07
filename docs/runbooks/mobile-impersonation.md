@@ -83,7 +83,9 @@ Two things are worth knowing at this step:
 
 - **This starts the impersonation session immediately**, even though your
   browser stays signed in as you. The clock on the *session* (your 30 minutes)
-  starts now, not when you scan.
+  starts now, not when you scan. If you change your mind, use **Discard
+  session** rather than closing the dialog — that is what actually revokes it,
+  and once the dialog is closed nothing can (see Rollback).
 - **The link is a credential.** Anyone who can read your screen for the next
   two minutes can take this session. Don't create one on a shared screen, and
   don't paste it into a ticket.
@@ -111,8 +113,9 @@ across the top of every screen reading
 `Impersonating <email> · MM:SS left · End`. The banner cannot be dismissed.
 
 Tapping **Cancel** instead invalidates the link immediately and returns to the
-sign-in screen. The impersonation session itself stays alive (unused) until it
-expires or you end it from the admin console.
+sign-in screen. The impersonation *session* behind it is a separate thing and
+stays alive, unused: end it with **Discard session** in the browser dialog that
+is still open, or it runs to its expiry.
 
 ### 5. Reproduce the problem
 
@@ -167,20 +170,33 @@ any impersonation state on launch.
 
 There is nothing to undo, and one point of no return:
 
-- **A handoff link you regret** — create nothing, tap Cancel on the phone, or
-  simply wait: it dies two minutes after it was minted, and is single-use, so a
-  link that was already redeemed cannot be redeemed again.
-- **A session you want to stop early** — tap End on the phone, or click "End
-  impersonation" on web if the browser also adopted one. Either revokes the
-  same jti, which stops it on every device at once.
+- **A link you created and then thought better of** — click **Discard session**
+  in the handoff dialog. That is not just closing the dialog: it revokes the
+  impersonation session behind the link, which matters because *creating the
+  link started the session* (step 2). **New link** does the same thing on the
+  way to minting a replacement, so clicking it repeatedly does not strand a
+  live session per click.
+- **A link you already closed the dialog on, unscanned** — this is the one case
+  with no clean undo. The dialog held the only handle on that session, and
+  closing it dropped that handle; the link itself dies in two minutes, but the
+  session keeps running for the duration you chose. It cannot be revoked from
+  the console. Options: scan it on your phone and tap End, or wait it out.
+  **This is the reason to pick a short duration** — the default 30 minutes is a
+  worst case you are choosing every time you click Create.
+- **A session you want to stop early, once someone holds it** — tap End on the
+  phone, or click "End impersonation" on web if the browser also adopted one.
+  Either revokes the same jti, which stops it on every device at once.
 - **Point of no return: step 5.** Reads performed as the user are performed;
   they are in the audit log and cannot be un-performed. This is the reason the
   reason field is mandatory. No write action can be taken at all (T-260), so
   there is no data change to roll back — the only lasting effect of a handoff
   is the record that it happened.
-- **A lost or compromised phone mid-session** — end the session from the admin
-  console immediately (that revokes the token everywhere), then follow your
-  normal device-loss procedure for the superadmin account itself.
+- **A lost or compromised phone mid-session** — end the session from that phone
+  if you still can; otherwise, if the browser also adopted the session, "End
+  impersonation" there revokes the same jti. If neither is available, the
+  session cannot be revoked and expires on its own — escalate on the
+  superadmin account itself (rotate its credentials, review the audit feed for
+  what the session did) rather than waiting quietly for the clock.
 
 ## Escalation
 

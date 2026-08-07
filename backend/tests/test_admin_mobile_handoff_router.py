@@ -11,6 +11,7 @@ superadmin behind the session -- even though neither request carries a token
 for app.middleware.impersonation to read.
 """
 
+import asyncio
 from datetime import UTC, datetime, timedelta
 from urllib.parse import parse_qs, urlparse
 from uuid import uuid4
@@ -22,7 +23,14 @@ from redis.asyncio import Redis
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.modules.admin.impersonation_handoff import HANDOFF_TTL_SECONDS
+from app.modules.admin.impersonation_handoff import (
+    HANDOFF_TTL_SECONDS,
+    HandoffRecord,
+    generate_exchange_token,
+    handoff_expiry,
+    store_handoff,
+    take_handoff,
+)
 from app.modules.audit.models import AuditEvent
 from app.modules.auth.models import User
 from app.modules.auth.repository import UserRepository
@@ -81,6 +89,12 @@ async def _handoff(client: httpx.AsyncClient) -> tuple[str, str]:
     deep_link: str = response.json()["data"]["deep_link"]
     query = parse_qs(urlparse(deep_link).query)
     return query["token"][0], deep_link
+
+
+async def _preview(client: httpx.AsyncClient, exchange_token: str) -> httpx.Response:
+    return await client.post(
+        "/api/v1/admin/impersonate/mobile-handoff/preview", json={"token": exchange_token}
+    )
 
 
 async def _events(session: AsyncSession, action: str) -> list[AuditEvent]:
@@ -172,7 +186,9 @@ async def test_preview_shows_the_reason_from_the_original_impersonation_request(
     exchange_token, _ = await _handoff(client)
     del client.headers["Authorization"]  # the phone has no session yet
 
-    response = await client.get(f"/api/v1/admin/impersonate/mobile-handoff/{exchange_token}")
+    response = await client.post(
+        "/api/v1/admin/impersonate/mobile-handoff/preview", json={"token": exchange_token}
+    )
 
     assert response.status_code == 200
     data = response.json()["data"]
@@ -190,8 +206,8 @@ async def test_preview_does_not_consume_the_token(
     await _start_impersonation(client, session)
     exchange_token, _ = await _handoff(client)
 
-    first = await client.get(f"/api/v1/admin/impersonate/mobile-handoff/{exchange_token}")
-    second = await client.get(f"/api/v1/admin/impersonate/mobile-handoff/{exchange_token}")
+    first = await _preview(client, exchange_token)
+    second = await _preview(client, exchange_token)
     exchange = await client.post(
         "/api/v1/admin/impersonate/mobile-exchange", json={"token": exchange_token}
     )
@@ -200,9 +216,26 @@ async def test_preview_does_not_consume_the_token(
 
 
 async def test_preview_of_an_unknown_token_returns_401(client: httpx.AsyncClient) -> None:
-    response = await client.get("/api/v1/admin/impersonate/mobile-handoff/not-a-real-token")
+    response = await _preview(client, "not-a-real-token")
 
     assert response.status_code == 401
+
+
+async def test_preview_never_puts_the_exchange_token_in_the_url(
+    client: httpx.AsyncClient, session: AsyncSession
+) -> None:
+    """The token is a live credential for two minutes, and a URL is the one
+    place a request leaks by default: proxy access logs, and Sentry's
+    `request.url`, which app.core.sentry's _before_send does not scrub (it
+    covers extra/contexts/data/headers/cookies). This is the regression test
+    for that -- it is about where the secret travels, not about the verb."""
+    await _start_impersonation(client, session)
+    exchange_token, _ = await _handoff(client)
+
+    response = await _preview(client, exchange_token)
+
+    assert response.status_code == 200
+    assert exchange_token not in str(response.request.url)
 
 
 # ---- POST /impersonate/mobile-exchange ---------------------------------------
@@ -355,6 +388,43 @@ async def test_cancel_of_an_unknown_token_succeeds_silently(
     # No event: the endpoint is unauthenticated, so writing one per unknown
     # token would let anyone fill the feed, and there is nothing to record.
     assert await _events(session, "impersonation.mobile_handoff_cancelled") == []
+
+
+async def test_a_handoff_can_only_be_taken_once_even_by_concurrent_callers(
+    redis: Redis,
+) -> None:
+    """The primitive behind both the exchange and the cancel leg.
+
+    Two devices opening the same link is the ordinary case, not the exotic one:
+    an operator scans, the OS delivers the link to a second handler, or Cancel
+    is tapped just as Confirm lands. Both legs consume the record through this
+    one GETDEL, so whichever arrives second finds nothing -- which is what
+    stops the audit trail from recording that a session was declined and
+    adopted.
+
+    Tested here rather than through the two endpoints because the test client
+    shares a single AsyncSession (and so a single asyncpg connection) across
+    requests, which cannot serve two of them at once -- the concurrency this
+    is about lives in Redis, not in the request handlers.
+    """
+    token = generate_exchange_token()
+    await store_handoff(
+        redis,
+        token,
+        HandoffRecord(
+            access_token="jwt",
+            user_id=uuid4(),
+            user_email="jane@example.com",
+            impersonator_id=uuid4(),
+            reason=_REASON,
+            session_expires_at=datetime.now(UTC) + timedelta(minutes=30),
+            expires_at=handoff_expiry(),
+        ),
+    )
+
+    taken = await asyncio.gather(take_handoff(redis, token), take_handoff(redis, token))
+
+    assert sum(record is not None for record in taken) == 1
 
 
 async def test_cancel_writes_an_audit_event_for_a_real_handoff(

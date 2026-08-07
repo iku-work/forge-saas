@@ -262,7 +262,8 @@
       "done": "Done",
       "error_default": "Couldn't create a handoff link.",
       "copy": "Copy",
-      "copied": "Copied"
+      "copied": "Copied",
+      "discard": "Discard session"
     }
   }
 }

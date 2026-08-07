@@ -23,6 +23,15 @@ import * as SecureStore from "expo-secure-store";
 
 export const ACCESS_TOKEN_KEY = "forge_access_token";
 export const REFRESH_TOKEN_KEY = "forge_refresh_token";
+// T-261: present exactly while the stored access token belongs to an
+// impersonation session. Declared here rather than in lib/impersonation.ts
+// because this module owns what the device stores about its session, and
+// clearStoredTokens() below has to be able to remove it -- a flag left behind
+// by a logout or an expiry would make the *next* cold start's
+// clearImpersonationOnLaunch() wipe the operator's own freshly-signed-in
+// session. (impersonation.ts imports it from here; the reverse would be a
+// cycle, since it depends on this module's client.)
+export const IMPERSONATION_SESSION_KEY = "forge_is_impersonation_session";
 
 const REFRESH_PATH = "/api/v1/auth/refresh";
 const PLATFORM_HEADER = "X-Client-Platform";
@@ -31,6 +40,26 @@ const MOBILE_PLATFORM = "mobile";
 // cycle, so a 401 on the retry itself is reported as-is instead of looping --
 // mirrors packages/api-client's authInterceptor.ts.
 const RETRY_HEADER = "X-Auth-Retried";
+
+// Endpoints whose 401 means "this token/link is bad", not "your session
+// ended" -- mirrors packages/api-client's authInterceptor.ts, which grew the
+// same list on web for the same reason. Without it the response interceptor
+// below treats their 401 as session expiry, wipes the device's stored tokens
+// and fires notifySessionExpired(), which the root layout turns into a forced
+// `router.replace("/login")` -- navigating away from the very screen that was
+// about to explain what went wrong. T-261's handoff legs are the acute case:
+// an expired QR code opened on a phone the agent is not signed in on would
+// bounce to the login screen instead of rendering
+// impersonate.tsx's "this link is invalid or has expired".
+const SESSION_INDEPENDENT_PATHS = [
+  "/api/v1/admin/impersonate/mobile-handoff/preview",
+  "/api/v1/admin/impersonate/mobile-exchange",
+  "/api/v1/admin/impersonate/mobile-cancel",
+];
+
+function isSessionIndependentRequest(url: string): boolean {
+  return SESSION_INDEPENDENT_PATHS.some((path) => url.includes(path));
+}
 
 function getApiBaseUrl(): string {
   return process.env.EXPO_PUBLIC_API_URL ?? "http://localhost:8000";
@@ -71,6 +100,11 @@ export async function clearStoredTokens(): Promise<void> {
   await Promise.all([
     SecureStore.deleteItemAsync(ACCESS_TOKEN_KEY),
     SecureStore.deleteItemAsync(REFRESH_TOKEN_KEY),
+    // Whatever ends a session ends an impersonation session too -- a token
+    // wipe that left the flag behind would be read on the next launch as "the
+    // session in the store is an impersonation one", and the store would by
+    // then hold the operator's own.
+    SecureStore.deleteItemAsync(IMPERSONATION_SESSION_KEY),
   ]);
 }
 
@@ -168,7 +202,11 @@ client.interceptors.response.use(async (response, request, options) => {
   if (response.status !== 401) {
     return response;
   }
-  if (request.url.includes(REFRESH_PATH) || request.headers.has(RETRY_HEADER)) {
+  if (
+    request.url.includes(REFRESH_PATH) ||
+    request.headers.has(RETRY_HEADER) ||
+    isSessionIndependentRequest(request.url)
+  ) {
     return response;
   }
 

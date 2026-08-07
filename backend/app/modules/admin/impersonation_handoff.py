@@ -142,13 +142,6 @@ async def take_handoff(redis: Redis, exchange_token: str) -> HandoffRecord | Non
     return None if utcnow() >= record.expires_at else record
 
 
-async def drop_handoff(redis: Redis, exchange_token: str) -> bool:
-    """Invalidates a handoff without redeeming it (the phone's Cancel button).
-    Returns whether anything was actually there, so the caller can stay silent
-    in the audit log about a token that never existed."""
-    return bool(await redis.delete(_handoff_key(exchange_token)))
-
-
 async def store_session_reason(redis: Redis, jti: UUID, reason: str, ttl_seconds: int) -> None:
     if ttl_seconds > 0:
         await redis.set(_session_key(jti), reason, ex=ttl_seconds)

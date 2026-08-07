@@ -62,6 +62,21 @@ export function getSessionSnapshot(): SessionState {
   return sessionState;
 }
 
+/**
+ * Drops the in-memory session without calling the server (T-261).
+ *
+ * logout() below does this as the tail of a real /auth/logout call, which is
+ * wrong for the two paths that end a session some other way: ending an
+ * impersonation session (its own endpoint) and discarding one at cold start.
+ * Those have to clear `user` too -- otherwise useSession() keeps handing out
+ * the identity whose token was just wiped, and a navigation back into the app
+ * re-renders it with the impersonation banner already gone: exactly the
+ * unbadged state the banner exists to prevent.
+ */
+export function clearSession(): void {
+  setSessionState({ user: null, isLoading: false });
+}
+
 export function useSession(): SessionState {
   return useSyncExternalStore(subscribeSession, getSessionSnapshot);
 }

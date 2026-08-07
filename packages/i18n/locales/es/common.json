@@ -262,7 +262,8 @@
       "done": "Hecho",
       "error_default": "No se pudo crear el enlace.",
       "copy": "Copiar",
-      "copied": "Copiado"
+      "copied": "Copiado",
+      "discard": "Descartar sesión"
     }
   }
 }
