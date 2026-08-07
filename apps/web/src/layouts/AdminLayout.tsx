@@ -1,11 +1,19 @@
 import type { ReactNode } from "react";
 import { Link, useLocation, useNavigate } from "@tanstack/react-router";
-import { LayoutDashboard, ListChecks, LogOut, ScrollText, Users } from "lucide-react";
+import {
+  LayoutDashboard,
+  ListChecks,
+  LogOut,
+  ScrollText,
+  SlidersHorizontal,
+  Users,
+} from "lucide-react";
 import { useTranslation } from "react-i18next";
 
 import { useAuth } from "@forge/hooks";
 import { Badge, Toaster } from "@forge/ui";
 
+import { GlobalBanner } from "../components/GlobalBanner";
 import { stripLocale } from "../lib/locale-url";
 import { useRouteLocale } from "../lib/useRouteLocale";
 
@@ -18,7 +26,8 @@ interface AdminNavItem {
     | "/$locale/admin"
     | "/$locale/admin/orgs"
     | "/$locale/admin/users"
-    | "/$locale/admin/audit";
+    | "/$locale/admin/audit"
+    | "/$locale/admin/settings";
   path: string;
   labelKey: string;
   icon: typeof LayoutDashboard;
@@ -48,6 +57,14 @@ const ADMIN_NAV: AdminNavItem[] = [
     path: "/admin/audit",
     labelKey: "common.admin.nav.audit",
     icon: ScrollText,
+  },
+  // T-263: last in the nav on purpose -- it is the only entry here that
+  // *changes* the running product rather than reporting on it.
+  {
+    to: "/$locale/admin/settings",
+    path: "/admin/settings",
+    labelKey: "common.admin.nav.settings",
+    icon: SlidersHorizontal,
   },
 ];
 
@@ -122,6 +139,10 @@ export function AdminLayout({ children }: { children: ReactNode }) {
           ) : null}
         </div>
       </header>
+      {/* T-263: the operator sees the banner their users see -- a banner that
+          is only visible outside the admin surface is one nobody notices they
+          left up. */}
+      <GlobalBanner />
       <main className="flex-1 overflow-auto bg-background text-foreground">
         {children}
       </main>

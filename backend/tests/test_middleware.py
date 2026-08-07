@@ -28,6 +28,7 @@ from fastapi.testclient import TestClient
 from app.main import app
 from app.main import settings as app_settings
 from app.middleware.security_headers import SECURITY_HEADERS
+from app.modules.product_settings import service as product_settings
 
 
 @pytest.mark.owasp("A02")
@@ -61,11 +62,14 @@ def test_cache_control_no_store_applied_to_404s_too() -> None:
 async def test_cache_control_not_overridden_when_handler_sets_its_own(
     client: httpx.AsyncClient,
 ) -> None:
-    # api/v1/config (T-063) deliberately sets a long-lived public
+    # api/v1/config (T-063) deliberately sets a public, cacheable
     # Cache-Control -- the security-headers default must not clobber it.
+    # T-263 shortened the max-age from 300s to the settings-cache TTL (the
+    # response now carries operator-flippable state); this asserts against
+    # that constant rather than a literal so the two cannot drift apart.
     response = await client.get("/api/v1/config")
 
-    assert response.headers["Cache-Control"] == "public, max-age=300"
+    assert response.headers["Cache-Control"] == (f"public, max-age={product_settings.TTL_SECONDS}")
 
 
 def test_request_id_echoed_when_provided() -> None:

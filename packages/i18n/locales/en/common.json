@@ -98,7 +98,8 @@
       "dashboard": "Dashboard",
       "orgs": "Organizations",
       "users": "Users",
-      "audit": "Audit log"
+      "audit": "Audit log",
+      "settings": "Settings"
     },
     "user_menu_link": "Admin",
     "dashboard": {
@@ -270,6 +271,49 @@
       "copy": "Copy",
       "copied": "Copied",
       "discard": "Discard session"
+    },
+    "product_settings": {
+      "title": "Product settings",
+      "description": "Global switches that take effect without a redeploy. Changes are audited and apply within about a minute.",
+      "switches_title": "Switches",
+      "maintenance_active": "Maintenance mode is ON. Everything except this admin surface and the health checks is returning 503.",
+      "maintenance_mode_label": "Maintenance mode",
+      "maintenance_message_label": "Maintenance message",
+      "maintenance_message_placeholder": "Back at 03:00 UTC",
+      "signup_disabled_label": "Close self-serve sign-up",
+      "banner_label": "Show a global banner",
+      "banner_type_label": "Severity",
+      "banner_type_info": "Info",
+      "banner_type_warning": "Warning",
+      "banner_type_critical": "Critical",
+      "banner_message_label": "Banner message",
+      "banner_dismissible_label": "Users can dismiss it",
+      "kill_switch_label": "Emergency kill switches",
+      "save": "Save changes",
+      "saving": "Saving…",
+      "saved": "Settings saved.",
+      "error_load": "Couldn't load product settings.",
+      "error_save": "Couldn't save product settings.",
+      "last_changed": "Last changed {date} by {actor}.",
+      "never_changed": "Never changed.",
+      "unknown_actor": "unknown",
+      "raw_title": "Raw JSON",
+      "raw_advanced": "Advanced",
+      "raw_description": "Replaces the whole document: any key you remove here is removed on the server. Use this for keys this build doesn't know about.",
+      "raw_save": "Replace settings",
+      "raw_invalid_json": "That isn't valid JSON.",
+      "raw_not_an_object": "Settings must be a JSON object."
     }
+  },
+  "banner": {
+    "dismiss": "Dismiss announcement",
+    "severity_info": "Announcement:",
+    "severity_warning": "Warning:",
+    "severity_critical": "Critical announcement:",
+    "dismiss_hint": "Hides this announcement until the operator posts a new one."
+  },
+  "maintenance": {
+    "title": "We'll be right back",
+    "default_message": "The service is temporarily down for maintenance. This page updates itself when we're done — there's no need to reload."
   }
 }

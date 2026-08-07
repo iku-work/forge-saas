@@ -98,7 +98,8 @@
       "dashboard": "لوحة التحكم",
       "orgs": "المؤسسات",
       "users": "المستخدمون",
-      "audit": "سجل التدقيق"
+      "audit": "سجل التدقيق",
+      "settings": "الإعدادات"
     },
     "user_menu_link": "الإدارة",
     "dashboard": {
@@ -270,6 +271,49 @@
       "copy": "نسخ",
       "copied": "تم النسخ",
       "discard": "تجاهل الجلسة"
+    },
+    "product_settings": {
+      "title": "إعدادات المنتج",
+      "description": "مفاتيح عامة تُطبَّق دون إعادة نشر. تُسجَّل التغييرات في سجل التدقيق وتسري خلال دقيقة تقريبًا.",
+      "switches_title": "المفاتيح",
+      "maintenance_active": "وضع الصيانة مُفعَّل. كل شيء عدا واجهة الإدارة هذه وفحوص السلامة يُرجع 503.",
+      "maintenance_mode_label": "وضع الصيانة",
+      "maintenance_message_label": "رسالة الصيانة",
+      "maintenance_message_placeholder": "نعود في الساعة 03:00 بالتوقيت العالمي",
+      "signup_disabled_label": "إغلاق التسجيل الذاتي",
+      "banner_label": "إظهار شريط إعلان عام",
+      "banner_type_label": "الخطورة",
+      "banner_type_info": "معلومات",
+      "banner_type_warning": "تحذير",
+      "banner_type_critical": "حرِج",
+      "banner_message_label": "نص الشريط",
+      "banner_dismissible_label": "يمكن للمستخدمين إغلاقه",
+      "kill_switch_label": "مفاتيح الإيقاف الطارئ",
+      "save": "حفظ التغييرات",
+      "saving": "جارٍ الحفظ…",
+      "saved": "تم حفظ الإعدادات.",
+      "error_load": "تعذَّر تحميل إعدادات المنتج.",
+      "error_save": "تعذَّر حفظ إعدادات المنتج.",
+      "last_changed": "آخر تغيير في {date} بواسطة {actor}.",
+      "never_changed": "لم يُغيَّر مطلقًا.",
+      "unknown_actor": "غير معروف",
+      "raw_title": "JSON خام",
+      "raw_advanced": "متقدم",
+      "raw_description": "يستبدل المستند بالكامل: أي مفتاح تحذفه هنا يُحذف من الخادم. استخدمه للمفاتيح التي لا تعرفها هذه النسخة.",
+      "raw_save": "استبدال الإعدادات",
+      "raw_invalid_json": "هذا ليس JSON صالحًا.",
+      "raw_not_an_object": "يجب أن تكون الإعدادات كائن JSON."
     }
+  },
+  "banner": {
+    "dismiss": "إغلاق الإعلان",
+    "severity_info": "إعلان:",
+    "severity_warning": "تحذير:",
+    "severity_critical": "إعلان حرِج:",
+    "dismiss_hint": "يخفي هذا الإعلان إلى أن يُنشر إعلان جديد."
+  },
+  "maintenance": {
+    "title": "سنعود قريبًا",
+    "default_message": "الخدمة متوقفة مؤقتًا للصيانة. تُحدَّث هذه الصفحة تلقائيًا عند انتهائنا، ولا حاجة لإعادة تحميلها."
   }
 }

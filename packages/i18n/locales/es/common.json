@@ -98,7 +98,8 @@
       "dashboard": "Panel",
       "orgs": "Organizaciones",
       "users": "Usuarios",
-      "audit": "Registro de auditoría"
+      "audit": "Registro de auditoría",
+      "settings": "Configuración"
     },
     "user_menu_link": "Admin",
     "dashboard": {
@@ -270,6 +271,49 @@
       "copy": "Copiar",
       "copied": "Copiado",
       "discard": "Descartar sesión"
+    },
+    "product_settings": {
+      "title": "Configuración del producto",
+      "description": "Interruptores globales que se aplican sin un nuevo despliegue. Los cambios quedan auditados y se aplican en aproximadamente un minuto.",
+      "switches_title": "Interruptores",
+      "maintenance_active": "El modo de mantenimiento está ACTIVADO. Todo excepto esta interfaz de administración y las comprobaciones de estado responde 503.",
+      "maintenance_mode_label": "Modo de mantenimiento",
+      "maintenance_message_label": "Mensaje de mantenimiento",
+      "maintenance_message_placeholder": "Volvemos a las 03:00 UTC",
+      "signup_disabled_label": "Cerrar el registro autoservicio",
+      "banner_label": "Mostrar un aviso global",
+      "banner_type_label": "Gravedad",
+      "banner_type_info": "Información",
+      "banner_type_warning": "Advertencia",
+      "banner_type_critical": "Crítico",
+      "banner_message_label": "Mensaje del aviso",
+      "banner_dismissible_label": "Los usuarios pueden cerrarlo",
+      "kill_switch_label": "Interruptores de emergencia",
+      "save": "Guardar cambios",
+      "saving": "Guardando…",
+      "saved": "Configuración guardada.",
+      "error_load": "No se pudo cargar la configuración del producto.",
+      "error_save": "No se pudo guardar la configuración del producto.",
+      "last_changed": "Última modificación el {date} por {actor}.",
+      "never_changed": "Nunca se ha modificado.",
+      "unknown_actor": "desconocido",
+      "raw_title": "JSON sin procesar",
+      "raw_advanced": "Avanzado",
+      "raw_description": "Reemplaza todo el documento: cualquier clave que elimines aquí se elimina en el servidor. Úsalo para claves que esta versión no conoce.",
+      "raw_save": "Reemplazar configuración",
+      "raw_invalid_json": "Eso no es JSON válido.",
+      "raw_not_an_object": "La configuración debe ser un objeto JSON."
     }
+  },
+  "banner": {
+    "dismiss": "Cerrar el aviso",
+    "severity_info": "Aviso:",
+    "severity_warning": "Advertencia:",
+    "severity_critical": "Aviso crítico:",
+    "dismiss_hint": "Oculta este aviso hasta que se publique uno nuevo."
+  },
+  "maintenance": {
+    "title": "Volvemos enseguida",
+    "default_message": "El servicio no está disponible temporalmente por mantenimiento. Esta página se actualiza sola cuando terminemos; no hace falta recargarla."
   }
 }

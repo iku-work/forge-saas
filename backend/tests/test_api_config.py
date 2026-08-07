@@ -17,6 +17,7 @@ from app.core import module_loader
 from app.core.i18n import get_supported_locales
 from app.core.locales import EnabledLocales, LocaleConfig
 from app.core.modules import EnabledModules, ModuleConfig
+from app.modules.product_settings import service as product_settings
 from product import config as product_config
 
 
@@ -136,7 +137,25 @@ async def test_accessible_without_auth_token(client: httpx.AsyncClient) -> None:
     assert response.status_code == 200
 
 
-async def test_cache_control_header_present(client: httpx.AsyncClient) -> None:
+async def test_cache_control_matches_the_settings_ttl(client: httpx.AsyncClient) -> None:
+    """T-263 brought this down from 300s. Nothing can invalidate a browser's
+    own HTTP cache, so this max-age *is* the worst case an operator waits for
+    a banner or a maintenance flag to reach an already-open tab -- it is
+    pinned to the settings cache TTL rather than left five times longer."""
     response = await client.get("/api/v1/config")
 
-    assert response.headers["cache-control"] == "public, max-age=300"
+    assert response.headers["cache-control"] == (f"public, max-age={product_settings.TTL_SECONDS}")
+
+
+async def test_reports_no_banner_and_no_maintenance_by_default(
+    client: httpx.AsyncClient,
+) -> None:
+    """T-263: the runtime half of this response, with nothing flipped. The
+    populated cases live in tests/test_maintenance_mode.py and
+    tests/test_admin_product_settings_router.py, which can actually set a
+    value first."""
+    data = (await client.get("/api/v1/config")).json()["data"]
+
+    assert data["banner"] is None
+    assert data["maintenance"] == {"enabled": False, "message": ""}
+    assert data["signup_disabled"] is False

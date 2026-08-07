@@ -74,5 +74,9 @@
   "invalid_email_change_token": "Dieser Link zur E-Mail-Änderung ist ungültig oder abgelaufen.",
   "invalid_email_change_cancel_token": "Dieser Stornierungslink ist ungültig oder abgelaufen.",
   "email_change_target_rate_limited": "Zu viele Anfragen zur E-Mail-Änderung für diese Adresse in letzter Zeit. Bitte versuchen Sie es später erneut.",
-  "invalid_exchange_token": "Dieser Übergabelink ist ungültig oder abgelaufen."
+  "invalid_exchange_token": "Dieser Übergabelink ist ungültig oder abgelaufen.",
+  "maintenance": "Der Dienst ist vorübergehend wegen Wartungsarbeiten nicht verfügbar. Bitte versuchen Sie es in Kürze erneut.",
+  "module_disabled": "{feature} ist vorübergehend nicht verfügbar. Bitte versuchen Sie es in Kürze erneut.",
+  "signup_disabled": "Die Registrierung neuer Konten ist derzeit geschlossen.",
+  "invalid_product_setting": "Dieser Einstellungswert ist ungültig."
 }

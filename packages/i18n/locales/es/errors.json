@@ -74,5 +74,9 @@
   "invalid_email_change_token": "Este enlace de cambio de correo electrónico no es válido o ha expirado.",
   "invalid_email_change_cancel_token": "Este enlace de cancelación no es válido o ha expirado.",
   "email_change_target_rate_limited": "Se han realizado demasiadas solicitudes de cambio de correo electrónico para esta dirección recientemente. Inténtalo de nuevo más tarde.",
-  "invalid_exchange_token": "Este enlace de traspaso no es válido o ha caducado."
+  "invalid_exchange_token": "Este enlace de traspaso no es válido o ha caducado.",
+  "maintenance": "El servicio no está disponible temporalmente por mantenimiento. Inténtalo de nuevo en breve.",
+  "module_disabled": "{feature} no está disponible temporalmente. Inténtalo de nuevo en breve.",
+  "signup_disabled": "El registro de cuentas nuevas está cerrado en este momento.",
+  "invalid_product_setting": "Ese valor de configuración no es válido."
 }

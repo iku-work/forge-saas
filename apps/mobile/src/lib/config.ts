@@ -61,14 +61,35 @@ export interface SupportSettings {
 
 const UNRESOLVED_SUPPORT: SupportSettings = { tool: "none", url: "" };
 
+// T-263: mirrors packages/hooks' useModules.ts GlobalBanner/MaintenanceState.
+// Unlike `modules` and `support`, these change while the app is open -- an
+// operator raises a banner mid-incident -- which is what POLL_INTERVAL_MS
+// below exists for.
+export interface GlobalBanner {
+  type: "info" | "warning" | "critical";
+  message: string;
+  dismissible: boolean;
+}
+
+export interface MaintenanceState {
+  enabled: boolean;
+  message: string;
+}
+
+const NO_MAINTENANCE: MaintenanceState = { enabled: false, message: "" };
+
 interface ConfigState {
   modules: ActiveModules;
   support: SupportSettings;
+  banner: GlobalBanner | null;
+  maintenance: MaintenanceState;
 }
 
 let state: ConfigState = {
   modules: DENY_BY_DEFAULT,
   support: UNRESOLVED_SUPPORT,
+  banner: null,
+  maintenance: NO_MAINTENANCE,
 };
 const listeners = new Set<() => void>();
 
@@ -97,29 +118,48 @@ export function getSupportSettingsSnapshot(): SupportSettings {
   return state.support;
 }
 
+export function getBannerSnapshot(): GlobalBanner | null {
+  return state.banner;
+}
+
+export function getMaintenanceSnapshot(): MaintenanceState {
+  return state.maintenance;
+}
+
 let bootstrapPromise: Promise<void> | null = null;
 
-export function bootstrapModules(): Promise<void> {
-  bootstrapPromise ??= (async () => {
-    try {
-      const { data: envelope } = await getConfigApiV1ConfigGet({
-        client,
-        throwOnError: true,
+async function fetchConfig(): Promise<void> {
+  try {
+    const { data: envelope } = await getConfigApiV1ConfigGet({
+      client,
+      throwOnError: true,
+    });
+    if (envelope.data) {
+      setState({
+        modules: toActiveModules(envelope.data.modules),
+        support: {
+          tool: envelope.data.support_tool,
+          url: envelope.data.support_url,
+        },
+        banner: envelope.data.banner ?? null,
+        maintenance: envelope.data.maintenance,
       });
-      if (envelope.data) {
-        setState({
-          modules: toActiveModules(envelope.data.modules),
-          support: {
-            tool: envelope.data.support_tool,
-            url: envelope.data.support_url,
-          },
-        });
-      }
-    } catch {
-      // Stay denied-by-default -- see DENY_BY_DEFAULT above.
     }
-  })();
+  } catch {
+    // Keep the last resolved answer -- DENY_BY_DEFAULT on a first call, the
+    // previous response on a refresh. A banner that vanishes because one poll
+    // failed is worse than one that is a minute stale.
+  }
+}
+
+export function bootstrapModules(): Promise<void> {
+  bootstrapPromise ??= fetchConfig();
   return bootstrapPromise;
+}
+
+/** T-263: re-read /config now, bypassing the one-shot bootstrap. */
+export function refreshConfig(): Promise<void> {
+  return fetchConfig();
 }
 
 export function useModules(): ActiveModules {
@@ -138,4 +178,53 @@ export function useSupportSettings(): SupportSettings {
   }, []);
 
   return useSyncExternalStore(subscribeConfig, getSupportSettingsSnapshot);
+}
+
+// Same 60s as the backend's settings cache TTL and as the web hook's poll --
+// polling faster than the value can change just spends battery and requests.
+const POLL_INTERVAL_MS = 60_000;
+
+// One timer for the whole page, not one per hook call. `useGlobalBanner()` and
+// `useMaintenance()` are mounted together on the app shell (the layout reads
+// the maintenance state, the banner component reads the banner), and a timer
+// each would mean two /config requests a minute where one answers both. The
+// refcount is what lets the interval stop again when the last caller unmounts.
+let pollTimer: ReturnType<typeof setInterval> | null = null;
+let pollSubscribers = 0;
+
+function usePolledConfig(): void {
+  useEffect(() => {
+    void bootstrapModules();
+    pollSubscribers += 1;
+    pollTimer ??= setInterval(() => {
+      void refreshConfig();
+    }, POLL_INTERVAL_MS);
+
+    return () => {
+      pollSubscribers -= 1;
+      if (pollSubscribers === 0 && pollTimer !== null) {
+        clearInterval(pollTimer);
+        pollTimer = null;
+      }
+    };
+  }, []);
+}
+
+/**
+ * T-263's global announcement, or null. Polls, unlike useModules() above: the
+ * whole point of putting a banner in ProductSettings rather than in a build is
+ * that it reaches an app that is already open -- and on mobile, "already open"
+ * can mean an install that will not be updated for weeks.
+ */
+export function useGlobalBanner(): GlobalBanner | null {
+  usePolledConfig();
+
+  return useSyncExternalStore(subscribeConfig, getBannerSnapshot);
+}
+
+/** Whether the product is in a maintenance window, and the operator's copy. */
+export function useMaintenance(): MaintenanceState {
+  usePolledConfig();
+
+  return useSyncExternalStore(subscribeConfig, getMaintenanceSnapshot);
 }

@@ -65,6 +65,7 @@ def load_models_for_migration() -> None:
     # core — always
     import app.modules.audit.models  # noqa: PLC0415
     import app.modules.auth.models  # noqa: PLC0415
+    import app.modules.product_settings.models  # noqa: PLC0415
     import app.modules.tenancy.models  # noqa: PLC0415
     import app.workers.jobs.records  # noqa: PLC0415
 

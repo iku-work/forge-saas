@@ -26,6 +26,7 @@ from app.core.sentry import init_sentry
 from app.core.tracing import configure_tracing
 from app.middleware.impersonation import ImpersonationContextMiddleware
 from app.middleware.locale import LocaleMiddleware
+from app.middleware.maintenance import MaintenanceModeMiddleware
 from app.middleware.rate_limit import register_rate_limiting
 from app.middleware.request_id import RequestIDMiddleware
 from app.middleware.security_headers import SecurityHeadersMiddleware
@@ -66,6 +67,12 @@ app = FastAPI(
 )
 register_exception_handlers(app)
 register_rate_limiting(app)
+# T-263, added first and therefore *innermost*: Starlette applies middleware
+# in reverse registration order, so this one runs last on the way in --
+# immediately before the router, with locale and request id already resolved,
+# and still wrapped by the security-header and CORS layers below. See that
+# module's docstring; the ordering is load-bearing, not incidental.
+app.add_middleware(MaintenanceModeMiddleware)
 app.add_middleware(SecurityHeadersMiddleware)
 app.add_middleware(RequestIDMiddleware)
 app.add_middleware(ImpersonationContextMiddleware)

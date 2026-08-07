@@ -49,6 +49,17 @@ deletes either:
   * dunning day-7 downgrade .......... workers.jobs.billing.send_dunning_email
   * trial expiry sweep ............... workers.jobs.billing.expire_trials_to_inactive
   * feature-flag override toggled .... feature_flags.service.set_override / delete_override
+
+product_settings_key -- T-263's global singleton row, as a whole dict rather
+than a key at a time (it is one row, and the maintenance middleware reads it
+on every request, so one Redis GET has to answer every question about it):
+  * any operator write ............... product_settings.service.ProductSettingsService.set
+                                       / replace_all -- both go through
+                                       _store, which is the only writer and
+                                       busts this key before it returns.
+  (There is no other write path. The row is never written by a job, a webhook
+  or a user-facing endpoint -- if one is ever added, it belongs on this list,
+  because a stale maintenance flag is an outage that outlives the fix.)
 """
 
 from uuid import UUID
@@ -61,6 +72,7 @@ FEATURE_FLAGS_NAMESPACE = "feature_flags"
 INVOICES_NAMESPACE = "invoices"
 NOTIFICATIONS_NAMESPACE = "notif"
 STORAGE_NAMESPACE = "storage"
+PRODUCT_SETTINGS_NAMESPACE = "product_settings"
 
 CACHE_NAMESPACES: tuple[str, ...] = (
     USER_NAMESPACE,
@@ -69,6 +81,7 @@ CACHE_NAMESPACES: tuple[str, ...] = (
     INVOICES_NAMESPACE,
     NOTIFICATIONS_NAMESPACE,
     STORAGE_NAMESPACE,
+    PRODUCT_SETTINGS_NAMESPACE,
 )
 
 
@@ -110,3 +123,10 @@ def notification_unread_count_key(user_id: UUID) -> str:
 
 def storage_total_bytes_key(org_id: UUID) -> str:
     return f"{STORAGE_NAMESPACE}:total_bytes:{org_id}"
+
+
+def product_settings_key() -> str:
+    """T-263. Takes no argument -- there is exactly one settings row, and the
+    key is a function anyway so it lives under the same no-inline-literals
+    rule tests/test_cache_keys.py enforces for every other key here."""
+    return f"{PRODUCT_SETTINGS_NAMESPACE}:all"

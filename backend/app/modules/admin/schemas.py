@@ -1,8 +1,9 @@
 """Request/response schemas for the admin module: feature-flag overrides
-(T-122) plus the T-141 org/user directory and plan-override endpoints."""
+(T-122), the T-141 org/user directory and plan-override endpoints, and
+T-263's global runtime settings."""
 
 from datetime import datetime
-from typing import Literal
+from typing import Any, Literal
 from uuid import UUID
 
 from pydantic import Field
@@ -219,3 +220,49 @@ class AdminAuditFeedEntry(AppBaseModel):
     org_id: UUID | None
     org_name: str | None
     impersonator_id: UUID | None
+
+
+# ---- T-263: global runtime settings -----------------------------------------
+
+
+class ProductSettingsKeyDoc(AppBaseModel):
+    """One well-known key, as the admin UI needs it to render a typed field.
+
+    Shipped in the GET response rather than duplicated in the frontend: the
+    registry lives in app.modules.product_settings.keys, and a form built from
+    a hardcoded copy of it is a form that silently stops matching the backend
+    the first time a key is added.
+    """
+
+    key: str
+    kind: Literal["bool", "str", "banner", "kill_switch"]
+    description: str
+    default: Any = None
+
+
+class AdminProductSettingsResponse(AppBaseModel):
+    # Everything stored, including keys that are not well-known -- this is
+    # what the raw-JSON editor loads and posts back.
+    settings: dict[str, Any]
+    well_known: list[ProductSettingsKeyDoc]
+    # Which modules EMERGENCY_KILL_SWITCH can actually turn off. Not every
+    # enabled module qualifies; see KILLABLE_MODULE_PREFIXES.
+    killable_modules: list[str]
+    updated_at: datetime | None
+    updated_by: UUID | None
+
+
+class AdminProductSettingsPatchRequest(AppBaseModel):
+    """A partial update. Each value is validated against its well-known key's
+    shape; `null` unsets the key rather than storing a falsy value that reads
+    identically in the UI and differently in a diff."""
+
+    settings: dict[str, Any] = Field(default_factory=dict)
+
+
+class AdminProductSettingsReplaceRequest(AppBaseModel):
+    """Wholesale replacement, for the raw-JSON editor. Any key absent from
+    `settings` is removed -- which is why the editor posts back the document
+    it loaded, not a fragment of it."""
+
+    settings: dict[str, Any] = Field(default_factory=dict)

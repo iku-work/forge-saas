@@ -98,7 +98,8 @@
       "dashboard": "Dashboard",
       "orgs": "Organisationen",
       "users": "Benutzer",
-      "audit": "Audit-Protokoll"
+      "audit": "Audit-Protokoll",
+      "settings": "Einstellungen"
     },
     "user_menu_link": "Admin",
     "dashboard": {
@@ -270,6 +271,49 @@
       "copy": "Kopieren",
       "copied": "Kopiert",
       "discard": "Sitzung verwerfen"
+    },
+    "product_settings": {
+      "title": "Produkteinstellungen",
+      "description": "Globale Schalter, die ohne erneutes Deployment wirksam werden. Änderungen werden protokolliert und greifen innerhalb von etwa einer Minute.",
+      "switches_title": "Schalter",
+      "maintenance_active": "Der Wartungsmodus ist AKTIV. Alles außer dieser Admin-Oberfläche und den Health-Checks antwortet mit 503.",
+      "maintenance_mode_label": "Wartungsmodus",
+      "maintenance_message_label": "Wartungsmeldung",
+      "maintenance_message_placeholder": "Zurück um 03:00 UTC",
+      "signup_disabled_label": "Selbstregistrierung schließen",
+      "banner_label": "Globales Banner anzeigen",
+      "banner_type_label": "Schweregrad",
+      "banner_type_info": "Info",
+      "banner_type_warning": "Warnung",
+      "banner_type_critical": "Kritisch",
+      "banner_message_label": "Banner-Text",
+      "banner_dismissible_label": "Nutzer können es schließen",
+      "kill_switch_label": "Not-Aus-Schalter",
+      "save": "Änderungen speichern",
+      "saving": "Wird gespeichert…",
+      "saved": "Einstellungen gespeichert.",
+      "error_load": "Produkteinstellungen konnten nicht geladen werden.",
+      "error_save": "Produkteinstellungen konnten nicht gespeichert werden.",
+      "last_changed": "Zuletzt geändert am {date} von {actor}.",
+      "never_changed": "Nie geändert.",
+      "unknown_actor": "unbekannt",
+      "raw_title": "Rohes JSON",
+      "raw_advanced": "Erweitert",
+      "raw_description": "Ersetzt das gesamte Dokument: jeder hier entfernte Schlüssel wird auch auf dem Server entfernt. Für Schlüssel, die dieser Build nicht kennt.",
+      "raw_save": "Einstellungen ersetzen",
+      "raw_invalid_json": "Das ist kein gültiges JSON.",
+      "raw_not_an_object": "Einstellungen müssen ein JSON-Objekt sein."
     }
+  },
+  "banner": {
+    "dismiss": "Hinweis schließen",
+    "severity_info": "Hinweis:",
+    "severity_warning": "Warnung:",
+    "severity_critical": "Kritischer Hinweis:",
+    "dismiss_hint": "Blendet diesen Hinweis aus, bis ein neuer veröffentlicht wird."
+  },
+  "maintenance": {
+    "title": "Wir sind gleich zurück",
+    "default_message": "Der Dienst ist vorübergehend wegen Wartungsarbeiten nicht verfügbar. Diese Seite aktualisiert sich von selbst, sobald wir fertig sind — ein Neuladen ist nicht nötig."
   }
 }
