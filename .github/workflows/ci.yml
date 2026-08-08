@@ -259,6 +259,14 @@ jobs:
     needs: lint
     runs-on: ubuntu-latest
 
+    # Hoisted out of the Chromatic step below because a *step-level* `if:`
+    # cannot see the `secrets` context -- only `env` (among others). Reading
+    # the secret here, where the secrets context is available, and testing
+    # `env.` in the condition is the supported way to write "skip this step
+    # when the token isn't configured".
+    env:
+      CHROMATIC_PROJECT_TOKEN: ${{ secrets.CHROMATIC_PROJECT_TOKEN }}
+
     steps:
       - uses: actions/checkout@v4
 
@@ -335,10 +343,8 @@ jobs:
       # visual-regression snapshots. Skips cleanly (not a failure) until
       # CHROMATIC_PROJECT_TOKEN is added to repo secrets.
       - name: Chromatic visual regression (packages/ui)
-        if: ${{ secrets.CHROMATIC_PROJECT_TOKEN != '' }}
+        if: env.CHROMATIC_PROJECT_TOKEN != ''
         uses: chromaui/action@latest
-        env:
-          CHROMATIC_PROJECT_TOKEN: ${{ secrets.CHROMATIC_PROJECT_TOKEN }}
         with:
           workingDir: packages/ui
           buildScriptName: storybook:build
