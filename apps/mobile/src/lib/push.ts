@@ -14,7 +14,7 @@ import { useSyncExternalStore } from "react";
 import Constants from "expo-constants";
 import * as Device from "expo-device";
 import * as Notifications from "expo-notifications";
-import { router, type Href } from "expo-router";
+import { router } from "expo-router";
 import * as SecureStore from "expo-secure-store";
 import { Platform } from "react-native";
 
@@ -151,10 +151,13 @@ function handleNotificationResponse(
 ): void {
   const actionUrl = getActionUrl(response.notification.request.content.data);
   if (actionUrl) {
-    // Backend-controlled and unknown to the typed-routes generator ahead of
-    // time -- same escape hatch NotificationsScreen.tsx's own action link
-    // uses for the identical field.
-    router.push(actionUrl as Href);
+    // Backend-controlled, so it is a plain string rather than one of the
+    // generated route literals. No cast needed: `actionUrl` is already
+    // narrowed to string here, and Href accepts that. (NotificationsScreen
+    // does cast for the identical field -- there the property is read inside
+    // a callback, where TypeScript cannot carry the narrowing, so the
+    // assertion is doing real work.)
+    router.push(actionUrl);
   }
 }
 
