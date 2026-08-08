@@ -111,3 +111,7 @@ instead of per-PR.
 | 2026-08-07 | 4da6268 | browse | - | - | PASS |
 | 2026-08-07 | 4da6268 | presign | - | - | PASS |
 | 2026-08-07 | 4da6268 | mixed | - | - | FAIL |
+| 2026-08-08 | 2d24c0f | login-burst | - | - | FAIL |
+| 2026-08-08 | 2d24c0f | browse | - | - | PASS |
+| 2026-08-08 | 2d24c0f | presign | - | - | PASS |
+| 2026-08-08 | 2d24c0f | mixed | - | - | FAIL |
