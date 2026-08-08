@@ -6459,50 +6459,842 @@ For each of `packages/{ui,api-client,types,hooks,validation,utils}`:
 # Phase 4 — Growth layer
 
 > HTML ref: §"Build phases" → "Phase 4"
+>
+> **Prerequisite:** Phase 3's acceptance criterion is green. Phase 4 adds public surface area — a site crawlers index, keys third parties hold, requests leaving your network, and identity a customer's IdP asserts. Every one of those is harder to un-ship than to ship.
+>
+> **Acceptance:** the per-sub-phase criteria and the phase gate are at the end of this phase, under §Phase-4 verification (T-350). In summary: (1) Each of the three modules this phase adds can be switched off and the product still boots, migrates, builds, lints and type-checks — proven by a CI matrix, not by claim. (2) The marketing site meets its Lighthouse budget on landing, pricing, a blog post and a docs page. (3) An API key calls a scoped endpoint, is rate-limited independently of any user, and stops working the moment the module is disabled. (4) A webhook whose consumer was down for an hour arrives on retry, and its payload survives replay unchanged. (5) A member of an SSO-enforced org signs in through their own IdP and never sees a password field.
+
+---
+
+## P4-0 · New module toggles — do this first
+
+> Everything Phase 4 adds is optional. Read `TEMPLATE.md`'s module table and `backend/app/core/modules.py` before writing a line of P4-A.
+
+### T-290 Three new module toggles: `marketing`, `public_api`, `enterprise_sso`
+
+> needs: T-060, T-061, T-062 (registry, conditional routers, conditional migrations), T-063 (public config endpoint), T-064 (conditional frontend routes + nav)
+
+**Goal** A product that wants the app and nothing else sets three booleans to `false` and gets no marketing build, no API-key surface, and no SAML dependency — the same contract `billing`, `admin` and `gdpr` already honour.
+
+**Build**
+
+- `backend/app/core/modules.py` — three members on `ModuleName`, three fields on `EnabledModules`:
+
+  ```python
+  marketing: ModuleConfig = field(default_factory=lambda: ModuleConfig(enabled=True))
+  public_api: ModuleConfig = field(default_factory=lambda: ModuleConfig(enabled=False))
+  enterprise_sso: ModuleConfig = field(
+      default_factory=lambda: ModuleConfig(enabled=False, requires=["oauth"])
+  )
+  ```
+
+  The defaults are deliberate, not cosmetic. Nearly every product wants a landing page → `marketing` on. An org-scoped API key is attack surface nobody asked for → `public_api` off. SAML drags `python3-saml` → `xmlsec` → native `libxmlsec1` into the backend image → `enterprise_sso` off. `enterprise_sso` requires `oauth` because T-331's OIDC SP reuses authlib's client registry and T-025's account-linking; `validate_modules()` fails the boot on the illegal combination, which is exactly what that function is for.
+
+- `backend/product/config.py` — the three entries, each with a comment saying what turning it off actually removes.
+- `product.config.ts` and `packages/types/src/index.ts` — `marketing`, `publicApi`, `enterpriseSso` on `ProductConfig["modules"]`, camelCase like every existing key.
+- `backend/app/api/v1/config.py` — three `bool` fields on `ModulesResponse`.
+- `packages/hooks/src/useModules.ts` — three keys in `DENY_BY_DEFAULT` **and** three lines in `toActiveModules()`. Forgetting the first is the dangerous half: a key absent from `DENY_BY_DEFAULT` reads `undefined` before `/config` resolves, which is falsy today and becomes a render-it-early bug the moment someone writes `!modules.publicApi`.
+- `backend/app/api/v1/__init__.py` — `if modules.public_api.enabled:` and `if modules.enterprise_sso.enabled:` blocks with function-local router imports (`# noqa: PLC0415`), the same shape as billing's. `marketing` gets **no** block: it owns no routes.
+- `backend/alembic/env.py` — `MODULE_TABLES["public_api"] = {"api_key"}`, `MODULE_TABLES["enterprise_sso"] = {"sso_connection"}`, plus the conditional imports in `load_models_for_migration()`.
+- `backend/app/core/migrations.py` — `MODULE_BRANCHES` entries `public_api` and `enterprise_sso`. T-310's and T-331's migrations go on those branches, never on the main line. `marketing` has no branch — no tables.
+- `backend/app/models/__init__.py` — unconditional imports (only alembic's view is filtered).
+- `TEMPLATE.md` — three rows in the module table, and a migration-prefix block per new branch.
+
+`marketing` is the odd one out: it gates a **build**, not a router.
+
+- `apps/marketing/package.json`'s `build` runs `node scripts/guard-enabled.mjs` first. The guard reads `modules.marketing` from `product.config.ts` and, when false, prints `marketing module disabled — skipping build` and exits **0**. Exit 0, not 1: `turbo build` at the repo root has to stay green for a product that turned it off.
+- Caddy and compose: the marketing block serves `/srv/marketing`, and with the module off that block must be absent rather than 404ing — see T-307.
+- The web app reads it from `/config` like any other module. The footer's "← Back to site" link, the login page's logo href, and marketing links in transactional emails all fall back to the app root when `marketing` is false.
+
+**Tests**
+
+- `enterprise_sso=True` + `oauth=False` → `RuntimeError` naming both modules (a new case on the existing `validate_modules` parametrisation).
+- A set-equality test between `ModulesResponse`'s field names and `ModuleName`'s members. A fourth module can then never be added to one and forgotten in the other.
+- Key-parity test in `packages/hooks` between `DENY_BY_DEFAULT`, `toActiveModules()`'s return, and `ProductConfig["modules"]`. The type-level relation is compile-time only; this catches the runtime object.
+- With `public_api=False`: `/api/v1/api-keys` 404s, `alembic upgrade` creates no `api_key` table, and `alembic revision --autogenerate` proposes an empty migration (the `MODULE_TABLES` guard doing its job).
+- With `marketing=False`: root `pnpm build` is green and no `apps/marketing/dist` exists.
+
+**Done when**
+
+- [ ] All three off → `make migrate && make dev` boots; `pnpm build && pnpm lint && pnpm type-check` clean
+- [ ] T-291's matrix covers the all-off combination
+- [ ] `mypy --strict` clean, `TEMPLATE.md` updated
+
+---
+
+### T-291 Extend the module matrix to the build, not just the process
+
+> needs: T-290, T-066 (module toggle smoke test + `docs/runbooks/module-toggle-guide.md`)
+
+**Goal** T-066 already parametrises three configurations in-process — it monkeypatches `get_modules()` and asserts absent routes and absent tables. **Read it first and extend it; do not write a second matrix beside it.** What it cannot reach is everything outside the Python process: the frontend build, a real `alembic upgrade` from zero, and app boot as a subprocess reading an actual `product/config.py`. Phase 4 takes the toggle count from eleven to fourteen and adds the first toggle that gates a *build* rather than a router, so that gap now has teeth.
+
+**Build**
+
+- Extend `backend/tests/modules/test_module_toggles.py`'s `MODULE_CONFIGS` with the three new modules: `public_api` off (absent routes `/api/v1/api-keys`, absent table `api_key`), `enterprise_sso` off (absent `/auth/sso/*`, absent `sso_connection`), and an `enterprise_sso` on + `oauth` off case asserting the `validate_modules()` `RuntimeError`. Same file, same parametrisation — a reader should find every toggle assertion in one place.
+- Extend `docs/runbooks/module-toggle-guide.md` with a section per new module: what turning it off actually removes, and what a product must do when re-enabling `public_api` on a live database (existing rows in `api_key` become live again — spell this out, it is the one re-enable that has a security consequence).
+- `.github/workflows/ci.yml` — a new `module-matrix` job after the backend job, covering what the in-process test cannot. Three combinations:
+  - **A** — the template default, `product/config.py` as committed.
+  - **B** — every optional module `False`. Note that `notifications`, `file_storage`, `usage_metering` and `outbound_webhooks` all require `billing`, so "everything off" is legal while "billing off, notifications on" is not. B is the minimum-surface product, which is the configuration a template user is most likely to want and least likely to have been tested.
+  - **C** — the three Phase 4 modules on, everything else at defaults.
+- Each combination copies a fixture from `backend/tests/fixtures/module_configs/` over `product/config.py` **and the matching `product.config.ts`**, then runs: `alembic upgrade` from an empty database through `migration_targets()`, app boot as a subprocess, `curl /api/v1/config`, `pytest -m "not module_dependent"`, and `pnpm build && pnpm lint && pnpm type-check` at the repo root. The frontend half is the point — it is where a disabled `marketing` either builds green or breaks the whole pipeline.
+- Restore both config files in an `if: always()` step. The T-251 module-generator smoke job already does exactly this dance against a dirty checkout — copy that pattern rather than inventing a second one.
+- Backend tests that assume a module is on get a `module_dependent` marker, registered in `pytest.ini`, so combination B can deselect them.
+
+**Tests** — the job is the test. One unit test guards the fixtures: every file in `module_configs/` imports, passes `validate_modules()`, and agrees key-for-key with its `product.config.ts` twin.
+
+**Done when**
+
+- [ ] Three combinations green, backend **and** frontend
+- [ ] T-066's in-process matrix covers all fourteen modules
+- [ ] Deliberately unconditionalising a router import in `build_router()` turns combination B red
+- [ ] Deliberately removing the `marketing` guard script turns combination B red too
+
+---
 
 ## P4-A · Marketing site + SEO
 
-| ID    | Title                                                                                     | Needs |
-| ----- | ----------------------------------------------------------------------------------------- | ----- |
-| T-300 | New `apps/marketing` — Next.js (or Astro — write ADR for choice); shares `@forge/ui`      | T-038 |
-| T-301 | Pages: landing, pricing, features, blog (MDX), docs (MDX), privacy, terms                 | T-300 |
-| T-302 | SEO component: typed meta + Open Graph + Twitter card; one import per page                | T-301 |
-| T-303 | JSON-LD: `Organization`, `SoftwareApplication`, `Product` (pricing), `FAQPage`            | T-301 |
-| T-304 | Auto-generated `sitemap.xml` + `robots.txt` (allow marketing, disallow `/app` and `/api`) | T-301 |
-| T-305 | `hreflang` per locale; locale in path `/en`, `/fi`                                        | T-304 |
-| T-306 | Lighthouse CI in pipeline: LCP < 2.5 s, INP < 200 ms, CLS < 0.1, SEO ≥ 95                 | T-304 |
+> Module: `marketing`. Every task below is skipped entirely when it is off — including the CI jobs.
+
+### T-300 `apps/marketing` — Astro, sharing `@forge/ui`
+
+> HTML ref: §"Build phases" → "Phase 4" (T-300)
+> needs: T-038 (design tokens in `@forge/ui`), T-290
+
+**Goal** A pre-rendered marketing app in the workspace that shares the product's design tokens and locale files, ships approximately no JavaScript, and deploys as a directory of static files.
+
+**Build**
+
+- **Close ADR-0004** (`docs/adr/0004-marketing-framework.md`, currently `Proposed — placeholder`). Flip Status to `Accepted`, name **Astro**, and answer the four constraints it left open. The reasoning to record:
+  - Constraint 1 (`"use client"` boundary) — **this is why Astro wins.** `@forge/ui` is React 18 + Radix and ships no `"use client"` directives; every component in it is client-only by construction. Astro's islands model asks for the opposite annotation: pages are static HTML and a React component is mounted deliberately with `client:visible` / `client:idle`. So the package needs **no directives added** and no wrapper layer, and `apps/web` is untouched. Next.js's RSC-by-default would have required one or the other.
+  - Constraint 2 (locale in path) — `astro:i18n` routes on a locale segment natively; `@forge/i18n`'s locale JSON stays the single source (T-305).
+  - Constraint 3 (MDX) — `@astrojs/mdx` plus content collections with typed frontmatter, first-party.
+  - Constraint 4 (static deploy) — `output: "static"` is a directory Caddy serves. No Node runtime, no second deployment topology, nothing new that can be down.
+  - Additionally, and not in the ADR's original framing: Astro is Vite-based, so it reuses the toolchain this repo already runs — `@tailwindcss/vite` v4 (the same plugin `apps/web` and `@forge/ui`'s Storybook use), the same tsconfig idioms, the same `turbo` task graph. Next.js would put a second build system in the monorepo.
+  - Record the revisit trigger: the day marketing needs per-request personalisation or ISR, Astro's `output: "server"` adapter — or a move to Next — is back on the table. That is a hosting decision, not a rewrite.
+  - Cost to record honestly in Consequences: a second component model to hold in your head alongside the SPA's, and a smaller ecosystem for SEO/analytics integrations Next treats as first-party.
+- `apps/marketing/` — deps `astro`, `@astrojs/react`, `@astrojs/mdx`, `@astrojs/sitemap`, `@tailwindcss/vite`, each with the justification comment §7 requires.
+  - `astro.config.mjs`: `output: "static"`, `site: process.env.PUBLIC_SITE_URL`, and an `i18n` block whose locale list is **read from `product.config.ts`**, not hardcoded a second time.
+  - `src/layouts/BaseLayout.astro` — `<html lang dir>` (`dir="rtl"` for `ar`, the same rule the app shell applies), `<Seo>` slot, header, footer, skip link.
+  - Tailwind imports the shared token layer from `@forge/ui` so `primaryColor` in `product.config.ts` stays the one place brand colour is defined. The marketing site, the app, and `packages/email-templates` (whose React Email components already share these tokens) must not be able to drift.
+  - **Tailwind v4 will not scan `node_modules` by default.** A `@forge/ui` component mounted as an island renders classes that live only in the package's `dist`, and they will silently not exist in the marketing CSS. Add an explicit `@source "../../packages/ui/dist"` — this fails as missing styles, not as an error, so it is worth a comment.
+  - `pnpm-workspace.yaml` already globs `apps/*`. Add `type-check: astro check` so the root turbo task covers it.
+- **Each island is its own React root.** Wrapping every one in an i18next provider means shipping i18next to a static page and initialising it N times. Translate in the `.astro` page — read `@forge/i18n`'s locale JSON at build time and pass strings down as props. Reach for a provider only for an island that genuinely switches language client-side, and justify it in review.
+- **The island rule, enforced by review:** a page may only hydrate a component that cannot be expressed as markup. Pricing toggle, mobile nav, FAQ accordion — yes. Everything else renders in `.astro`. This rule is what makes T-306 pass; without it Astro degrades into a slower Next.
+
+**Tests**
+
+- `pnpm --filter marketing build` produces `dist/index.html` containing the rendered landing copy, not an empty shell.
+- Total `<script>` bytes for `/` are zero — assert against the build output. The zero-JS claim is a test, not a hope.
+- `astro check` clean.
+- Guard script: `modules.marketing = false` → build exits 0 and `dist/` is absent.
+
+**Done when**
+
+- [ ] ADR-0004 is `Accepted` and answers all four constraints
+- [ ] A `@forge/ui` button renders on a marketing page as an island, with `apps/web` and `packages/ui` unmodified
+- [ ] Root `pnpm build`, `pnpm lint`, `pnpm type-check` clean with the module both on and off
+
+---
+
+### T-301 Pages: landing, pricing, features, blog (MDX), docs (MDX), legal
+
+> needs: T-300
+
+**Goal** The content surface, with frontmatter that is validated at build time rather than discovered wrong in production.
+
+**Build**
+
+- `src/content/config.ts` — content collections with zod schemas (`zod` is already a workspace dep):
+  - `blog` — title, description, publishedAt, updatedAt?, author, tags[], draft, ogImage?
+  - `docs` — title, description, section, order, ogImage?
+  - `legal` — title, effectiveDate
+  A schema violation fails the build. That is the entire reason to use collections instead of a glob.
+- Routes: `/`, `/pricing`, `/features`, `/blog`, `/blog/[slug]`, `/guides`, `/guides/[...slug]`, `/privacy`, `/terms`, plus a 404. All nested under the locale segment per T-305.
+  - **`/guides`, not `/docs`.** The Caddyfile routes `/docs*` to the backend's Swagger UI. T-307 splits marketing onto its own host, which technically frees the path — but a template whose marketing docs and API docs differ only by hostname is a trap for the next person. Take the unambiguous name.
+- **Pricing data.** Plans live in the `billing` module's database; a static site cannot query at request time. Fetch `/api/v1/plans` at build time into the page, with a committed `src/content/pricing.ts` as the fallback when the API is unreachable during the build. Document the staleness contract in the file: prices change on the next deploy, not on the next `UPDATE`. When `billing` is off, `/pricing` is not built, not linked in the nav, and not in the sitemap.
+- Drafts (`draft: true`) render in dev, are excluded from production builds and from the sitemap.
+- Prose styling: `@tailwindcss/typography` is acceptable here with a justification comment — the alternative is hand-rolling a type scale that then drifts from `@forge/ui`'s.
+
+**Tests**
+
+- A post missing `publishedAt` fails the build with a message naming the file.
+- A `draft: true` post is absent from a production build and present in dev.
+- `/guides/<slug>` renders MDX including a fenced code block.
+- Pricing falls back to committed data when the build-time fetch fails, and the page still builds.
+- With `billing` off: no `/pricing` in `dist`, no link to it in the rendered nav, no entry in `sitemap.xml`.
+
+**Done when**
+
+- [ ] Every route builds in every enabled locale
+- [ ] No `/docs` path collision with the backend's Swagger UI
+
+---
+
+### T-302 `<Seo>` — typed meta, Open Graph, Twitter card
+
+> needs: T-301
+
+**Goal** One import per page, and a build that fails rather than shipping a page with no description.
+
+**Build**
+
+- `src/components/Seo.astro` with a typed props interface: `title`, `description`, `canonical?`, `image?`, `type?`, `noindex?`, `publishedAt?`. Emits `<title>`, meta description, canonical, `og:{title,description,url,image,type,locale,alternate_locale}`, and `twitter:card=summary_large_image`.
+- Defaults live in one `src/config/site.ts` that reads `product.config.ts` — app name, brand colour, support email. No page repeats the brand.
+- **OG images:** a committed default plus a per-entry `ogImage` override in the collection schema. Runtime/build-time image generation (satori, headless Chrome) is an explicit non-goal — a rendering dependency and a CI browser for a marginal gain over a well-made default.
+- `scripts/check-seo.mjs`, run as part of the marketing build: walks `dist/**/*.html` and fails on any page missing a title, a description, or a canonical, or carrying more than one of any of them. This is what makes "one import per page" a guarantee instead of a convention.
+
+**Tests**
+
+- Each built route has exactly one `<title>`, one canonical, and a non-empty `og:image`.
+- A `noindex` page emits the robots meta **and** is absent from `sitemap.xml`.
+- `check-seo.mjs` fails against a fixture page with an empty description.
+
+**Done when**
+
+- [ ] Every built page passes `check-seo.mjs`
+- [ ] A social preview debugger renders the landing page card correctly (verify once by hand)
+
+---
+
+### T-303 JSON-LD structured data
+
+> needs: T-301
+
+**Goal** Rich results that reflect what the product actually is, generated from the same data the pages render.
+
+**Build**
+
+- `src/components/JsonLd.astro` — typed props, serialised into `<script type="application/ld+json">`. Two traps to handle in the component, once, so no caller has to think about them:
+  - Escape `<` as `\u003c` in the serialised JSON. A payload containing `</script>` otherwise terminates the block and injects markup.
+  - **CSP.** A `<script type="application/ld+json">` block is still a script element and is subject to `script-src`. The app's strict CSP would block it, and crawlers read the DOM. T-307 gives marketing its own, simpler CSP header; confirm in a browser console that no CSP violation is reported for the block, then re-run a rich-results test.
+- Types: `Organization` (site-wide, in `BaseLayout`), `SoftwareApplication` (landing), `Product` + `Offer` per plan (pricing, from T-301's plan data — never a second hand-maintained copy of the prices), `FAQPage` (landing and pricing), `BlogPosting` (blog posts), `BreadcrumbList` (guides). The last two are beyond the original table and are where most of the actual search value is.
+- `schema-dts` for compile-time typing — types-only, zero runtime bytes.
+
+**Tests**
+
+- Each page type's JSON-LD parses and carries its required fields.
+- A payload containing `</script>` round-trips without breaking the document.
+- Pricing JSON-LD offers match the rendered prices exactly — one assertion over both.
+
+**Done when**
+
+- [ ] Google's Rich Results Test reports no errors for landing, pricing, and a blog post
+- [ ] No CSP violation on any page
+
+---
+
+### T-304 `sitemap.xml` + `robots.txt`
+
+> needs: T-301
+
+**Build**
+
+- `@astrojs/sitemap`, with a filter that drops `noindex` pages, drafts, and any route belonging to a disabled module. Alternates per locale come from T-305.
+- `src/pages/robots.txt.ts` as an endpoint rather than a static file, so it can read the module and locale config: allow the marketing paths, `Disallow: /api`, `/_admin`, and the app host's paths. Reference the sitemap URL absolutely.
+- **Staging must not be indexed.** When `PUBLIC_SITE_URL` is not the production host, emit `X-Robots-Tag: noindex` (T-307 sets the header in Caddy) *and* a `Disallow: /` robots.txt. A staging marketing site that outranks production is a genuinely expensive mistake to undo.
+
+**Tests**
+
+- `sitemap.xml` contains every indexable page and no draft, no `noindex` page, no disabled-module page.
+- `robots.txt` on a non-production `PUBLIC_SITE_URL` disallows everything.
+- Every sitemap URL returns 200 from the built output.
+
+**Done when**
+
+- [ ] Sitemap validates and every URL in it resolves
+- [ ] Staging serves `noindex` from both the header and robots.txt
+
+---
+
+### T-305 `hreflang` per locale, locale in path
+
+> needs: T-304
+
+**Goal** Locale handling identical to the app's, so a user crossing from marketing to the product never watches the locale disappear and come back.
+
+**Build**
+
+- Match `apps/web`'s T-233 prefix policy **exactly** — read it before configuring `prefixDefaultLocale`. A user in `fi` clicking "Sign in" must land in `fi`.
+- Every page emits `<link rel="alternate" hreflang="…">` for each **enabled** locale plus `x-default`. A locale disabled in `product.config.ts` gets no page and no alternate.
+- Translated content lives at `src/content/blog/<locale>/<slug>.mdx`. **An untranslated post is not published in that locale** — it does not fall back to English under `/fi/`. Publishing English content at a Finnish URL with a `hreflang="fi"` annotation is precisely what hreflang exists to prevent; a missing page is the correct answer.
+- UI strings come from `@forge/i18n` (the same locale JSON as the app), not from a marketing-only string file.
+- RTL: `ar` pages set `dir="rtl"` and are asserted in the built HTML. **Do not add an `ar` visual-regression test here** — the existing `ar` RTL visual test is known-unpassable (see T-262's notes); adding a second instance of a broken check helps nobody. Assert the attribute and the logical-property CSS instead.
+
+**Tests**
+
+- Alternates on a page are exactly the enabled locales plus `x-default`, and each target returns 200.
+- Disabling a locale in `product.config.ts` removes its pages and its alternates from the whole build.
+- An untranslated post yields no page in that locale and no `hreflang` pointing at one.
+- `ar` pages carry `dir="rtl"`.
+
+**Done when**
+
+- [ ] Locale prefix policy is byte-identical to T-233's
+- [ ] No `hreflang` anywhere points at a URL that 404s or serves another language
+
+---
+
+### T-306 Lighthouse CI in the pipeline
+
+> needs: T-304
+
+**Goal** The performance budget is enforced by the build, not by a screenshot someone took once.
+
+**Build**
+
+- `@lhci/cli` against the built static output served by `http-server`. No Docker, no backend, no database — the site is static, so this job is fast and independent.
+- Assertions, mobile preset, 3 runs, median: LCP < 2.5 s, CLS < 0.1, performance ≥ 0.9, SEO ≥ 0.95, accessibility ≥ 1.0 (hold marketing to the same bar T-221 holds the app to), best-practices ≥ 0.9.
+- **On INP:** the plan's "INP < 200 ms" cannot be asserted here. INP is a field metric measured from real interactions; Lighthouse lab runs report Total Blocking Time instead. Assert **TBT < 200 ms** as the lab proxy and write the reason in the config next to it, so nobody later "fixes" the discrepancy by weakening something. Real INP needs CrUX or RUM data, which is a post-launch measurement, not a CI gate.
+- Pages: `/`, `/pricing`, a real blog post, a real guides page.
+- The usual budget killers, handled up front: self-hosted fonts with `font-display: swap` and a preload for the above-the-fold face; Astro `<Image>` with explicit width and height everywhere (CLS 0); no third-party script without an ADR.
+- The job is skipped when `modules.marketing === false`.
+
+**Tests** — the job is the test. Add one regression fixture: a page that hydrates an unnecessary island fails the budget, demonstrating that the gate has teeth.
+
+**Done when**
+
+- [ ] Four pages pass every assertion in CI
+- [ ] The INP-vs-TBT substitution is documented where the thresholds live
+
+---
+
+### T-307 Serving marketing: Caddy, compose, headers
+
+> needs: T-300, T-304
+> Beyond the original table, and non-optional: without it the site exists only in `dist/`.
+
+**Goal** Marketing and the app coexist without either becoming a second-class citizen, and without reopening the cross-origin session bug T-220 already fixed once.
+
+**Build**
+
+- **Separate hosts, not a path split.** Marketing at the apex (`example.com`), the app at `app.example.com`. A path split would mean either moving every `apps/web` route under `/app/*` — breaking TanStack Router's basepath, every Playwright spec, every invite link and every transactional email URL — or maintaining a brittle allowlist of marketing path prefixes in Caddy. Neither is worth it.
+- **Locally and in CI, `localhost` stays the app.** Marketing gets `marketing.localhost`, with its own `tls internal` leaf. Every existing E2E spec, ZAP config, and load-test target keeps working untouched, which is the point of choosing this split over the alternative.
+- **Cookies are the risk.** T-220 lost a session to a cross-origin redirect once already. Marketing is fully static and needs no session at all, so the session cookie must stay scoped to the app host — do **not** widen it to `.example.com` to make a "logged in" state visible on marketing. If marketing ever needs to know, that is a public, cacheable endpoint, not a cookie. Write this in the Caddyfile comment where the next person will look.
+- `Caddyfile` / `Caddyfile.prod` / `docker-compose.yml` — a marketing site block serving `/srv/marketing` from a read-only bind mount of `apps/marketing/dist`, alongside the existing `/srv/web` mount. Hashed assets get `Cache-Control: public, max-age=31536000, immutable`; HTML gets a short max-age.
+- Marketing gets its **own** security headers, not the app's: a simpler CSP that permits the JSON-LD blocks (T-303) with no inline application scripts, plus HSTS and the standard set.
+- `X-Robots-Tag: noindex` on non-production hosts (T-304).
+- **Module off:** the marketing block is absent from the generated config and `dist/` is empty. Assert that the app host is unaffected — the failure to avoid is a disabled marketing module 404ing the product.
+
+**Tests**
+
+- Both hosts serve their own app over TLS in the local stack.
+- A marketing asset carries the immutable cache header; marketing HTML does not.
+- The app's session cookie is not sent to the marketing host.
+- With `marketing=False`, the stack boots, the app host is fully functional, and the marketing host does not resolve.
+
+**Done when**
+
+- [ ] Existing Playwright, ZAP and k6 targets pass unchanged
+- [ ] `docs/runbooks/deploy-render.md` documents the second host and its DNS
+
+---
+
+### T-308 Analytics and cookie consent
+
+> needs: T-307
+> Beyond the original table, and the gap most likely to be discovered by a lawyer rather than a test: a marketing site is where tracking lands, and this repo already has a `gdpr` module with a `consent_record` table.
+
+**Goal** Make the privacy-preserving option the default and the tracking option a deliberate, consented act — rather than leaving a `<script>` tag as an exercise for the reader.
+
+**Build**
+
+- **Default: no analytics wired, and therefore no cookie banner.** Ship the integration point, not a vendor. A template that defaults to cookieless (or to nothing) avoids the banner entirely, and a banner avoided is worth more than a banner implemented well — it is the CLS, the consent record, and the legal review that do not happen.
+- `src/config/analytics.ts` with a documented shape and a `none` default. `docs/runbooks/` gains a short section covering the two paths a product takes: a cookieless, no-consent-required provider, or a cookie-setting one.
+- **If a product picks the cookie-setting path**, the template must make the correct behaviour the easy one:
+  - No tracking script loads before consent. Not "loads and waits" — does not load.
+  - The banner is a static, pre-rendered element with reserved height. A banner injected by JavaScript after paint is a guaranteed CLS regression and will fail T-306.
+  - Consent is written to the `gdpr` module's `consent_record` for signed-in users, and to a first-party cookie for anonymous visitors; the two reconcile at login.
+  - Withdrawal is as easy as granting, from a permanent footer link.
+- When `gdpr` is off, the banner and the consent endpoint are both absent — this task is gated on that module, not on `marketing` alone.
+- Any third-party script needs the ADR §7 demands, and its own CSP entry (T-307). "Marketing asked for it" is not a justification.
+
+**Tests**
+
+- Default config: no cookies set on first visit, no third-party requests in the built output.
+- Cookie path: no tracking request fires before consent; consent then loads it; withdrawal stops it and clears the cookies.
+- Consent state survives login and lands in `consent_record`.
+- Banner present in the pre-rendered HTML; T-306's CLS assertion still passes with it displayed.
+
+**Done when**
+
+- [ ] Default build sets zero cookies and makes zero third-party requests
+- [ ] The consent path is documented well enough that a product owner can pick a provider without reading the code
+
+---
 
 ## P4-B · Public API keys
 
-| ID    | Title                                                                                 | Needs |
-| ----- | ------------------------------------------------------------------------------------- | ----- |
-| T-310 | `ApiKey` model: org-scoped, SHA-256 hashed, scopes list, `last_used_at`, `expires_at` | T-010 |
-| T-311 | API key auth dependency (alternative to JWT Bearer)                                   | T-310 |
-| T-312 | Per-key rate limiting (separate from user limits)                                     | T-311 |
-| T-313 | API key management UI in org settings                                                 | T-311 |
+> Module: `public_api` (default **off**). Scaffold with `make new-module NAME=api_keys`.
+
+### T-310 `ApiKey` model — org-scoped, hashed, scoped, expiring
+
+> needs: T-010, T-290
+
+**Build**
+
+- `backend/app/modules/api_keys/models.py`:
+  - `org_id` (FK + index in the same migration, per §7), `name`, `prefix`, `key_hash`, `scopes: list[str]` (JSONB), `created_by`, `last_used_at`, `expires_at`, `revoked_at`.
+  - The presented key is `fk_live_<prefix>_<secret>`: `prefix` is stored in clear, indexed and unique, and is what the lookup queries; `secret` is 32 bytes from `secrets.token_urlsafe` and only its digest is stored.
+- **SHA-256, not argon2 — and the comment must say why.** This is a 256-bit random secret, not a human-chosen password: there is no dictionary to slow down, and the entropy already puts brute force out of reach. Argon2 here would put ~100 ms of CPU on the hot path of every API request, which is the exact failure T-223's load test caught blocking the event loop. Verify the hash with `hmac.compare_digest`.
+- The full key is returned **once**, from the create endpoint. Never stored, never logged, never in an error message (§7).
+- `key_hash` ends in `_hash`, so the `EncryptedString` Semgrep rule does not apply — but declare `RedactedReprMixin` with `__redacted_fields__` anyway. A model that appears in a traceback should not print a credential digest.
+- Migration on the `public_api` alembic branch; `api_key` in `MODULE_TABLES`.
+- The prefix→key lookup is cached; its key belongs in `app/core/cache_keys.py` (T-240 — a test fails the build on an inline one), and revoking a key busts it immediately. Add the create/revoke paths to T-240's invalidation matrix; a new write path that is not in that matrix is the cache bug this repo has already learned to prevent.
+- **Lifecycle beyond the happy path**, and the same three questions apply to T-320's endpoints and T-331's connections:
+  - Deleting an org cascades to its keys. A live credential outliving its tenant is the worst possible orphan.
+  - GDPR export (T-037) and erasure (T-036) must account for `created_by`: a user's export lists the keys they minted, and erasing that user nulls the column rather than deleting an org's still-active key.
+  - Deactivating a member does **not** revoke their keys automatically — but the offboarding runbook has to say so, because the natural assumption is the opposite.
+
+**Tests**
+
+- Create returns the full key exactly once; re-fetching never exposes it.
+- Digest comparison rejects a key differing in one character.
+- Expired, revoked, and other-org keys all fail lookup.
+- No log line in the create/auth path contains the secret.
+- Revocation invalidates the cache within the same request.
+
+**Done when**
+
+- [ ] Migration up and down clean on the `public_api` branch
+- [ ] `mypy --strict` clean
+
+---
+
+### T-311 API key auth — a second kind of principal
+
+> needs: T-310
+
+**Goal** Third parties authenticate without a user session, and *nothing* is reachable with a key unless someone deliberately opened it.
+
+**Build**
+
+- `Authorization: Bearer fk_live_…` — the same header as JWT, dispatched on the key prefix. This is what every API consumer expects, and the JWT path is untouched for any token that does not start with the prefix.
+- Introduce `CurrentPrincipal` (`actor_type: "user" | "api_key"`, `org_id`, `scopes`, `actor_id`). `get_current_user` stays exactly as it is for user-only endpoints — the two are not merged.
+- **Opt-in per endpoint, always.** A route accepts a key only by declaring `require_scope("orgs:read")`. The default for every existing and future endpoint is "keys cannot call this". Never a blanket dependency swap.
+- Interactions to honour, each of which already has a CI check behind it:
+  - T-260's impersonation blocklist: a key must never reach an impersonation endpoint, and the sweep demanding a guard or an `# impersonation-ok:` comment applies to everything new here.
+  - T-243's query budgets: every endpoint opened to keys needs its `BUDGETS` entry or the build fails.
+  - Audit: every key-authenticated write logs `actor_type=api_key` and the key id, never the key.
+- `last_used_at` is throttled through Redis to at most one write per key per minute. A write per request on a hot key is an N+1 wearing a different hat.
+- **Disabled module:** the router is never registered, and a key minted while the module was on must not authenticate after it is turned off. The auth dependency checks `is_enabled("public_api")`, because a stale row in a table that still physically exists is exactly the situation `MODULE_TABLES` exists to tolerate.
+
+**Tests**
+
+- Valid key + correct scope → 200; wrong scope → 403; unknown key → 401.
+- A JWT still authenticates on the same header, unchanged.
+- An endpoint without `require_scope` rejects a valid key.
+- An impersonation endpoint rejects a key regardless of scope.
+- Module disabled → a previously valid key gets 401, and the routes 404.
+- `last_used_at` writes once across ten rapid requests.
+
+**Done when**
+
+- [ ] Every key-callable endpoint is enumerable from the code and listed in the docs
+- [ ] The T-260 sweep, T-243 budgets, T-049 cross-tenant sweep and T-050 Schemathesis run all cover the new endpoints
+- [ ] `@forge/api-client` regenerated and rebuilt, so the new endpoints exist as typed symbols before T-313 consumes them
+
+---
+
+### T-312 Per-key rate limiting
+
+> needs: T-311
+
+**Build**
+
+- Reuse T-223's limiter, keyed on `api_key:{id}` — not on IP (proxies collapse to one) and not on user (a key has none).
+- Default budget in settings (`API_KEY_RATE_LIMIT_PER_MINUTE`), overridable per key by a nullable column, so one integration can be raised without raising everyone.
+- **Read the budget through `get_settings()` at request time.** Do not bind it at import. This is the repo's recurring trap: middleware and limiters constructed at `app.main` import time read `backend/.env` before conftest applies `.env.test`, which bit T-223's rate limiter and `test_middleware.py` both.
+- 429 carries `Retry-After` and `X-RateLimit-{Limit,Remaining,Reset}`, and the OpenAPI description documents them — an undocumented rate limit is a support ticket.
+
+**Tests**
+
+- Budget+1 requests on one key → 429 with correct headers; a second key in the same org is unaffected.
+- A user session hitting the same endpoint is limited by the user limiter, not this one.
+- Per-key override takes effect without a restart.
+- A test overriding the limit via `.env.test` actually changes behaviour (the import-time-binding regression test).
+
+**Done when**
+
+- [ ] Limits are per key, verified under concurrency
+- [ ] Headers documented in the OpenAPI schema
+
+---
+
+### T-313 API key management UI
+
+> needs: T-311
+
+**Build**
+
+- `apps/web/src/features/settings/ApiKeysPage.tsx`, gated on `useModules().publicApi` **and** the org-manage permission. Nav entry and route both disappear when the module is off.
+- Create dialog: name, scope checkboxes, optional expiry. On success, show the key once with a copy button and an unmissable "this will not be shown again". Hold it in component state — never in the react-query cache, which persists and would leak it into a later render.
+- List: name, prefix, scopes, created, last used, expires, revoke (with a typed-confirmation dialog). Cap keys per org (50) so the list needs no virtualization — say so in a comment, since T-241 otherwise implies every list gets `VirtualList`.
+- Form shape follows the admin form T-263 built; the two React lint rules that dictated its structure apply here identically.
+- Every string through `@forge/i18n`, all enabled locales, and the `BUDGETS` entry for the list endpoint.
+
+**Tests**
+
+- Module off → no route, no nav entry (extend the existing modules-disabled layout test).
+- Secret renders once and is gone after close and re-open.
+- Revoke removes the row and the key stops working (integration).
+- Non-admin member sees no page.
+- axe clean (T-221); visual baseline added (T-224). Baselines are Linux-rendered and this repo is developed on Windows — use the Docker recipe in T-262's notes rather than regenerating them locally and committing Windows renders.
+
+**Done when**
+
+- [ ] `pnpm lint && pnpm type-check && pnpm test` clean
+- [ ] Query budget green, route bundle budget not exceeded
+
+---
+
+### T-314 The public surface itself — scopes and published docs
+
+> needs: T-311, T-313
+> Beyond the original table: a "public API" with no defined surface is half a feature.
+
+**Build**
+
+- A scope vocabulary in one file — `orgs:read`, `members:read`, `members:write`, `files:read`, … — with a test that every scope referenced in a `require_scope` exists in it.
+- Tag key-callable endpoints and emit a **separate public OpenAPI document** (`/api/v1/openapi-public.json`) containing only them. Internal endpoints are not a public contract and must not leak into one.
+- A `/guides/api` page on the marketing site rendering that document, plus an authentication section covering key creation, the `Authorization` header, scopes, rate-limit headers, and error shapes. Skipped when `marketing` is off; the document is still served.
+- Versioning and deprecation policy in the docs: what a breaking change is, and the notice period.
+
+**Tests**
+
+- Public OpenAPI contains exactly the tagged endpoints, no more.
+- A scope used but not declared fails the build.
+- The rendered docs page builds from the live document.
+
+**Done when**
+
+- [ ] A newcomer can create a key and make a successful call using only the published page
+
+---
 
 ## P4-C · Outbound webhooks
 
-| ID    | Title                                                                               | Needs |
-| ----- | ----------------------------------------------------------------------------------- | ----- |
-| T-320 | `WebhookEndpoint` + `WebhookDelivery` models; HMAC signing with per-endpoint secret | T-010 |
-| T-321 | Delivery ARQ job with retry schedule: 1 m, 5 m, 30 m, 2 h, 12 h                     | T-034 |
-| T-322 | Webhook UI: add endpoint, delivery log, replay                                      | T-320 |
+> Module: `outbound_webhooks` (already in `product.config.py`, default off, requires `billing`).
+
+### T-320 `WebhookEndpoint` + `WebhookDelivery`, HMAC signing
+
+> needs: T-010
+
+**Build**
+
+- `WebhookEndpoint`: `org_id` (FK + index), `url`, `secret`, `event_types: list[str]`, `enabled`, `description`, `consecutive_failures`.
+  - `secret` ends in `_secret`, so §7's Semgrep rule requires **`EncryptedString`**, plus `RedactedReprMixin` and `__redacted_fields__`. Not optional and mechanically checked.
+  - `url` is validated through `validate_outbound_url()` from T-212's `url_guard` — Phase 3's A10 mapping built it specifically for this task and left a comment saying so.
+- `WebhookDelivery`: endpoint id, event type, payload (JSONB), attempt count, status, response code, truncated response body, `next_attempt_at`, `delivered_at`, `delivery_id`.
+- Signature: `X-Forge-Signature: t=<unix>,v1=<hex hmac-sha256 of "{t}.{raw_body}">`, alongside `X-Forge-Event` and `X-Forge-Delivery`. Sign the raw bytes, not a re-serialised dict — a consumer that re-serialises will never match, and neither will you. Document a 5-minute timestamp tolerance so consumers can reject replays.
+- `app/modules/webhooks/events.py` — a typed registry mapping event name to payload schema. Emitting an unregistered event fails a test; the registry is also what the docs render from.
+- **SSRF is a delivery-time problem, not a save-time one.** Validate the URL when it is saved *and* re-resolve at delivery, since a hostname that passed yesterday can point at `169.254.169.254` today. T-209's guard already does the resolved-IP check — call it from the job, not only from the form.
+
+**Tests**
+
+- Signature verifies against a known vector; a mutated body fails.
+- A private-range, loopback, metadata-IP or non-http(s) URL is rejected at save and at delivery.
+- A hostname re-resolving to a private IP between save and delivery is blocked.
+- `secret` is absent from `repr()`, logs, and API responses.
+- An unregistered event type raises.
+
+**Done when**
+
+- [ ] Semgrep, migration up/down, and `mypy --strict` clean
+
+---
+
+### T-321 Delivery job with retry, backoff, and a dead letter
+
+> needs: T-320, T-034
+
+**Build**
+
+- ARQ job per delivery. Retries at 1 m, 5 m, 30 m, 2 h, 12 h, then dead-lettered.
+- 10 s connect and read timeouts. One slow consumer must never occupy a worker; this is the difference between a degraded integration and a degraded product.
+- Auto-disable an endpoint after N consecutive failures and notify org owners — guarded, because `notifications` may be off. Never assume a sibling module.
+- Idempotency: `delivery_id` in the header so consumers can dedupe; retries reuse it, replays (T-322) get a new one.
+- Per-endpoint circuit breaker so a dead consumer stops consuming queue capacity.
+- **Metrics:** queue depth and failure rate are worker-side, and a worker-side Prometheus metric in this repo goes through Redis rather than a process-local registry — follow `forge_active_sessions` (T-245's notes explain why the in-process gauge is wrong here).
+- Payload is captured at emit time and stored. A replay must send what happened then, not what the row says now.
+- **Retention.** `webhook_delivery` is the fastest-growing table this template will ever add — one row per event per endpoint, with a stored payload. Add a scheduled prune job (APScheduler, alongside the T-036 purge job) with a `WEBHOOK_DELIVERY_RETENTION_DAYS` setting defaulting to 30, deleting in batches so it never takes a long lock. A delivery log with no retention policy is a disk-full incident with a date on it.
+
+**Tests**
+
+- Consumer returning 500 → retried on schedule (with a clock fixture, not sleeps) → dead-lettered after the last attempt.
+- Consumer timing out does not exceed the timeout budget.
+- N consecutive failures disable the endpoint; a success resets the counter.
+- Retries carry the same `delivery_id`.
+- Queue-depth metric is visible from the API process, not only inside the worker.
+
+**Done when**
+
+- [ ] A consumer down for an hour receives the event on schedule once it returns
+- [ ] Grafana shows delivery rate, failure rate, and queue depth
+
+---
+
+### T-322 Webhook UI: endpoints, delivery log, replay
+
+> needs: T-320
+
+**Build**
+
+- Endpoint CRUD gated on `useModules().outboundWebhooks` and the org-manage permission. Secret shown once on create, with rotate (old secret valid for a 24 h overlap so consumers can roll without downtime — say so in the UI).
+- Event-type multi-select rendered from the T-320 registry, not a hardcoded list.
+- Delivery log: status filter, response viewer, payload viewer. **Keyset pagination, never OFFSET** (§7), and `VirtualList` (T-241) — delivery logs are the longest list in the product.
+- Replay creates a new delivery from the stored payload. It never mutates the original row; the log is an audit trail.
+- `BUDGETS` entry, i18n keys in every enabled locale, axe pass, visual baseline, route bundle budget.
+
+**Tests**
+
+- Module off → no route, no nav.
+- Replay creates a new row with a new `delivery_id` and leaves the original untouched.
+- Secret rotation keeps the old secret valid for the overlap window and then rejects it.
+- Log paginates by keyset under a fixed query budget with 10k rows.
+
+**Done when**
+
+- [ ] A developer can add an endpoint, see a delivery fail, fix their consumer, and replay it — without support
+
+---
 
 ## P4-D · Enterprise SSO
 
-| ID    | Title                                                   | Needs |
-| ----- | ------------------------------------------------------- | ----- |
-| T-330 | ADR: SAML vs OIDC priority + library choice             | —     |
-| T-331 | OIDC SP via authlib (already a dep); per-org IdP config | T-025 |
-| T-332 | SAML 2.0 SP via `python3-saml`                          | T-330 |
+> Module: `enterprise_sso` (default **off**, requires `oauth`).
+
+### T-330 ADR: SAML vs OIDC priority, and the library
+
+> needs: —
+
+**Goal** Decide, in writing, whether T-332 happens at all.
+
+**Build** — `docs/adr/0006-enterprise-sso.md`, following T-252's required sections. The recommendation to argue for and record:
+
+- **OIDC first (T-331), SAML only on a named trigger.** authlib is already a dependency and OIDC needs no new native code. `python3-saml` pulls `xmlsec` and native `libxmlsec1` into the backend image, adds its own CVE cadence, and complicates every base-image bump. That cost is worth paying for a signed enterprise contract and not for a hypothesis.
+- Write the trigger explicitly — e.g. "a customer under contract whose IdP cannot do OIDC" — so the next person knows whether T-332 is theirs to do.
+- Also decide and record: per-org IdP config (yes — a global IdP is not multi-tenant); JIT provisioning and its default role; group-to-role mapping (define the shape now even if unimplemented); SCIM (out of scope, named as such so it is not silently assumed).
+- Record the packaging decision T-332 depends on: SAML support ships as an **optional extra** (`pip install .[saml]`), so `enterprise_sso=False` means the native dependency is genuinely not installed. This is the concrete payoff of making SSO a module at all.
+
+**Done when**
+
+- [ ] ADR passes `backend/scripts/check_docs.py` and is `Accepted` with a date in `## Status`
+- [ ] The SAML trigger is stated as an observable condition, not a feeling
+
+---
+
+### T-331 OIDC SP via authlib, per-org IdP config
+
+> needs: T-025, T-330, T-290
+
+**Build**
+
+- `SsoConnection`: `org_id` (FK + index, unique), provider label, issuer, `client_id`, `client_secret` (**`EncryptedString`** — §7's rule again), discovery URL, `email_domain`, `jit_provisioning`, `default_role`, `enforced`, `enabled`. Migration on the `enterprise_sso` branch.
+- Flow: `GET /auth/sso/{org_slug}/start` → discovery document (cached, refreshed on rotation) → authorize with `state` + `nonce` → `/auth/sso/callback` → validate `iss`, `aud`, `exp`, `nonce`, and signature against JWKS → match by email or JIT-create → issue the **normal** session through T-025's account linking.
+  - The redirect chain is new surface: T-220 lost a session to exactly this shape of cross-origin hop. Cookie attributes on the callback need a Playwright test, not an argument.
+- Domain-based routing on the login page: entering an email whose domain matches an enabled, enforced connection replaces the password field with "Continue with <IdP>". **This leaks whether a domain has an org.** Decide explicitly and record it — the acceptable version for a template is to make domain hinting opt-in per org (default off), with `/auth/sso/{org_slug}/start` as the always-available entry point.
+- Enforcement: an enforced org rejects password login for its members, with a break-glass — the last remaining owner can always use a password, or an org can lock itself out permanently and the fix is a DBA.
+- 2FA: honour an `amr`/`acr` MFA claim from the IdP rather than prompting a second time; with no claim, TOTP still applies.
+- Rate-limit the start and callback endpoints; audit every SSO login, JIT provision, and connection change.
+- **Scope: web only.** A native app cannot use this redirect flow as-is — it needs `ASWebAuthenticationSession` / Custom Tabs and a deep-link return, which is its own task on top of the deep-link infrastructure T-261 already built. State that in the task rather than discovering it when a customer asks: mobile SSO is a follow-up, not a footnote.
+
+**Tests**
+
+- Full flow against a mock IdP (discovery, JWKS, tokens): new user JIT-provisioned with the default role; existing user linked, not duplicated.
+- Wrong `nonce`, wrong `aud`, expired `exp`, bad signature — four separate rejections.
+- Enforced org: password login → 403; break-glass owner → allowed.
+- `client_secret` never appears in a response, log, or `repr()`.
+- Module disabled → routes 404 even with a row present.
+- Session cookie survives the callback redirect (Playwright, both browsers).
+
+**Done when**
+
+- [ ] A test org signs in end to end against a real IdP once (Okta or Entra dev tenant), then the mock covers CI
+- [ ] `docs/runbooks/sso-onboarding.md` walks an admin through connecting an IdP
+
+---
+
+### T-332 SAML 2.0 SP via `python3-saml`
+
+> needs: T-330 — **do not start until T-330's trigger has actually fired.**
+
+**Build**
+
+- `python3-saml` as an **optional extra**, per T-330. `libxmlsec1-dev` and `pkg-config` enter the backend Dockerfile's build stage only for the SAML image variant; a product with the module off must not pay for either.
+- SP metadata endpoint, ACS endpoint, SLO. Per-org IdP metadata upload with signature validation on the metadata itself.
+- Security, all of it non-negotiable and testable:
+  - Signed assertions **required**; encrypted assertions supported.
+  - Replay cache on assertion ID with a TTL past the validity window.
+  - Clock-skew tolerance, bounded and configurable.
+  - `NameID` format handling and mapping to the user identity.
+  - **XML Signature Wrapping test vectors** in the test suite. XSW is SAML's signature bug class and every SP gets to rediscover it; borrow the standard vectors rather than inventing them.
+- Reuse T-331's session issuance, enforcement, JIT provisioning and audit paths verbatim. SAML is a second front door, not a second house.
+
+**Tests**
+
+- Round-trip against a mock IdP; unsigned assertion rejected; replayed assertion rejected; each XSW vector rejected; skew beyond tolerance rejected.
+- Image built without the extra does not import the module, and the app boots.
+
+**Done when**
+
+- [ ] Every XSW vector fails closed
+- [ ] The default backend image contains no `libxmlsec1`
+
+---
 
 ## P4-E · Multi-tenancy upgrade path
 
-| ID    | Title                                                                                  | Needs |
-| ----- | -------------------------------------------------------------------------------------- | ----- |
-| T-340 | ADR: row-level (current) vs schema-per-tenant — criteria + decision                    | —     |
-| T-341 | Schema-per-tenant tooling: `search_path` session middleware, migration per-org tooling | T-340 |
+### T-340 ADR: row-level (current) vs schema-per-tenant
+
+> needs: —
+
+**Goal** Answer the question once, with numbers, so it stops being reopened in every architecture conversation.
+
+**Build** — `docs/adr/0007-tenancy-model.md`. It must contain measurable criteria, not preferences:
+
+- Largest tenant's share of the biggest table; noisy-neighbour incidents in the last quarter; a contractual demand for physical isolation; a per-tenant point-in-time restore requirement; tenant count and growth rate.
+- The costs to state plainly: schema-per-tenant makes migration time O(tenants) and degrades sharply past roughly 1–5k schemas; per-tenant restore becomes easy and every schema change becomes a scheduled operation.
+- **Name the middle option the original brief omits: PostgreSQL row-level security.** If the motivation is isolation assurance rather than performance, RLS gets most of it for a fraction of the operational cost, and it composes with the current model instead of replacing it.
+- The recommendation to argue for: **stay row-level.** The performance motivations are already addressed — T-246's read replicas, T-243's query budgets, T-240's cache layer, T-244's pgbouncer. Adopt RLS if and when isolation assurance is the actual requirement.
+- Revisit triggers, each an observable threshold rather than a feeling.
+
+**Done when**
+
+- [ ] ADR is `Accepted` with a decision, not a survey
+- [ ] Every revisit trigger is something a dashboard can show
+
+---
+
+### T-341 Schema-per-tenant tooling
+
+> needs: T-340 — **only if T-340 chose it.** If T-340 chose row-level, close this task as won't-do and link the ADR; that is a completed outcome, not a skipped one.
+
+**Build** (if reached)
+
+- `search_path` session middleware, tenant provisioning and de-provisioning, a per-org migration runner with progress and resume, per-tenant backup and restore.
+- **The blocker to resolve before anything else: pgbouncer runs in transaction mode (T-244), and a session-level `SET search_path` does not survive transaction pooling.** A connection returned to the pool mid-session can hand another tenant's request a search path pointing at the wrong schema — a cross-tenant data leak, not a bug report. The options are `SET LOCAL` inside every transaction, a schema-qualified query layer, or session pooling for these connections (which forfeits what T-244 bought). Decide this in the ADR, before writing the middleware.
+- Migration runner must be resumable and checkpointed — T-245's key-rotation job is the pattern to copy, including its dry-run mode.
+
+**Done when**
+
+- [ ] The pooling interaction has a tested answer, demonstrated by a concurrency test that would fail without it
+- [ ] A tenant can be provisioned, migrated, backed up and restored from a runbook
+
+---
+
+## §Phase-4 verification
+
+### T-350 Phase 4 acceptance runbook
+
+> needs: every Phase 4 task
+
+**Goal** Document and execute the Phase 4 acceptance flow, the same way T-160 gates Phase 2. Phase 4 is the first phase whose output is visible to people who are not users — crawlers, integrators, IdP admins — so the runbook has to be executable by someone who did not build it.
+
+**Build**
+
+- `docs/runbooks/phase4-verification.md`, numbered steps, matching the shape of `phase1-`, `phase2-` and `phase3-verification.md`:
+  1. `make dev`, `make seed`, `pnpm --filter marketing dev` — every surface up.
+  2. **Marketing:** landing in `en` and in `fi` via the locale path; nav, pricing, features, a blog post and a guides page all render; footer legal links resolve.
+  3. **SEO:** `check-seo.mjs` passes on the production build; `sitemap.xml` validates and every URL in it 200s; `robots.txt` correct for the production host and `Disallow: /` on staging; `hreflang` alternates resolve in both directions; Rich Results Test clean on landing, pricing and a post.
+  4. **Performance:** Lighthouse CI locally against the built output — four pages, all assertions.
+  5. **Consent:** first visit sets no cookies and makes no third-party request in the default configuration (T-308).
+  6. **API keys:** create a key in org settings → the secret shows once → call a scoped endpoint with it → call an unscoped one and get 403 → exceed the budget and get 429 with headers → revoke → 401. Then set `public_api=False`, restart, and confirm the same key gets 401 and the routes 404.
+  7. **Webhooks:** point an endpoint at a local receiver, emit an event, stop the receiver, watch the retry schedule advance, restart it, confirm delivery, then replay a delivered event and confirm the payload is byte-identical and the original row untouched.
+  8. **SSO:** connect a dev-tenant IdP to a test org, sign in a new user (JIT provisioned with the default role), enable enforcement, confirm password login is refused, confirm the break-glass owner still works.
+  9. **Module flips:** set `marketing`, `public_api` and `enterprise_sso` all `False`; `make migrate && make dev && pnpm build` — the product is intact, no route 404s that should not, and `/api/v1/config` reports all three off.
+  10. **Security re-scan:** ZAP baseline extended to the marketing host and to every key-callable endpoint; T-049's cross-tenant sweep and T-050's Schemathesis run both extended to the new endpoints, including the public OpenAPI document.
+  11. **Load:** the k6 suite (T-223) gains an API-key-authenticated scenario. Key auth is a different hot path from JWT — a per-request lookup plus a digest comparison — and is exactly the kind of path where the argon2-on-the-event-loop class of bug hides.
+- Update `docs/runbooks/module-toggle-guide.md` and `TEMPLATE.md` so a product adopting the template sees the three new toggles documented at the same level as the existing eleven.
+
+**Done when**
+
+- [ ] The runbook executes start to finish without intervention or undocumented steps
+- [ ] Every acceptance criterion below is ticked
+
+---
+
+## Phase 4 acceptance criteria
+
+Each sub-phase is independently shippable and independently gated. A sub-phase whose module is disabled in `product/config.py` passes by having its absence verified — that is a pass, not a skip.
+
+**P4-0 · Module system**
+
+```
+- [ ] Fourteen modules; T-066's in-process matrix asserts routes and tables for every one
+- [ ] T-291's CI matrix green on default, everything-off, and Phase-4-modules-on — backend and frontend
+- [ ] `enterprise_sso` without `oauth` fails at boot with a message naming both
+- [ ] ModuleName, ModulesResponse, ProductConfig["modules"], DENY_BY_DEFAULT and toActiveModules() agree key-for-key, enforced by a test
+- [ ] `marketing=False` → root `pnpm build` green, no dist, app host unaffected
+- [ ] module-toggle-guide.md and TEMPLATE.md document all three, including the re-enable path for public_api
+```
+
+**P4-A · Marketing site + SEO**
+
+```
+- [ ] ADR-0004 Accepted, names Astro, answers all four of its constraints (in particular the "use client" boundary)
+- [ ] @forge/ui renders on marketing as an island with packages/ui and apps/web unmodified
+- [ ] Landing, pricing, features, blog, guides, legal and 404 build in every enabled locale
+- [ ] check-seo.mjs passes on every built page; JSON-LD clean in Rich Results with no CSP violation
+- [ ] sitemap + robots correct per environment; hreflang alternates all resolve; no locale serves another locale's content
+- [ ] Lighthouse CI green on four pages (LCP, CLS, TBT-as-INP-proxy, SEO ≥ 0.95, a11y = 1.0)
+- [ ] Both hosts serve over TLS; the app's session cookie never reaches the marketing host
+- [ ] Default build sets zero cookies and makes zero third-party requests
+- [ ] `/pricing` absent from build, nav and sitemap when `billing` is off
+```
+
+**P4-B · Public API keys**
+
+```
+- [ ] A key authenticates only on endpoints that declare a scope; every other endpoint refuses it
+- [ ] Key is shown once, stored only as a digest, and appears in no log, response or repr
+- [ ] Rate limiting is per key and survives a config change without a restart
+- [ ] Revocation, expiry, org deletion and module disable each kill a live key
+- [ ] Public OpenAPI contains exactly the tagged endpoints; T-049 and T-050 cover them
+- [ ] A newcomer creates a key and makes a successful call using only the published docs
+```
+
+**P4-C · Outbound webhooks**
+
+```
+- [ ] Signature verifies against a fixed vector; a mutated body fails
+- [ ] SSRF guard rejects at save and again at delivery, including a hostname that re-resolves private
+- [ ] Retry schedule observed exactly; dead-letter and auto-disable both fire; a recovered consumer receives the event
+- [ ] Replay produces a new delivery with a new id and leaves the original row untouched
+- [ ] Delivery log paginates by keyset under budget at 10k rows, and the retention job prunes
+- [ ] Endpoint secret is EncryptedString, redacted in repr, and rotatable with an overlap window
+- [ ] Delivery rate, failure rate and queue depth visible in Grafana from outside the worker
+```
+
+**P4-D · Enterprise SSO**
+
+```
+- [ ] ADR-0006 Accepted, with the SAML trigger stated as an observable condition
+- [ ] OIDC end to end against a real dev tenant once, then a mock in CI
+- [ ] Four separate rejections proven: bad nonce, bad aud, expired, bad signature
+- [ ] Enforcement blocks password login for members; break-glass owner is never locked out
+- [ ] Session survives the callback redirect in both Playwright browsers
+- [ ] client_secret encrypted at rest and absent from every response, log and repr
+- [ ] Module disabled → routes 404 with rows present; default image carries no libxmlsec1
+- [ ] Mobile SSO is explicitly recorded as out of scope, not silently missing
+```
+
+**P4-E · Multi-tenancy upgrade path**
+
+```
+- [ ] ADR-0007 Accepted with a decision, measurable revisit triggers, and RLS evaluated as the middle option
+- [ ] If row-level: T-341 closed as won't-do with the ADR linked — a completed outcome
+- [ ] If schema-per-tenant: the pgbouncer transaction-mode interaction has a tested answer before any middleware is written
+```
+
+**Phase 4 gate — all of the above, plus**
+
+```
+- [ ] §7's cross-cutting checklist passes for every task in this phase
+- [ ] pytest --cov thresholds not regressed; new auth-adjacent code (api_keys, sso) at 100%
+- [ ] ZAP baseline extended to the marketing host and the public API, and green
+- [ ] Every new setting has a .env.example entry and a line in the deploy runbook
+- [ ] ADRs 0004, 0006 and 0007 pass backend/scripts/check_docs.py, and docs/adr/README.md's index is regenerated rather than hand-edited
+- [ ] docs/runbooks/phase4-verification.md executes clean on a fresh checkout
+```
 
 ---
 
