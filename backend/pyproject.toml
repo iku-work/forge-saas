@@ -76,7 +76,14 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = [
-    "ruff>=0.7",
+    # Pinned exactly, not floated: ruff.toml selects ["ALL"], so every rule a
+    # new ruff release promotes out of preview lands as a build failure with
+    # no code change behind it. 0.16.2 did exactly that to a green tree --
+    # CPY001 (copyright header) and PLR0917 (positional-arg count) together
+    # produced 350 errors in files nobody had touched. Upgrading is a
+    # deliberate act: bump this, run `ruff check .`, and either fix or ignore
+    # the new rules in ruff.toml as part of the same commit.
+    "ruff==0.15.17",
     "mypy>=1.13",
     "pytest>=8.3",
     "pytest-asyncio>=0.24",
