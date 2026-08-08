@@ -7,7 +7,7 @@
     "dev": "expo start",
     "android": "expo run:android",
     "ios": "expo run:ios",
-    "lint": "eslint .",
+    "lint": "pnpm run typegen && eslint .",
     "typegen": "node scripts/generate-router-types.mjs",
     "type-check": "pnpm run typegen && tsc --noEmit",
     "test": "vitest run"
