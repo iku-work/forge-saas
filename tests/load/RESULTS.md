@@ -115,3 +115,7 @@ instead of per-PR.
 | 2026-08-08 | 2d24c0f | browse | - | - | PASS |
 | 2026-08-08 | 2d24c0f | presign | - | - | PASS |
 | 2026-08-08 | 2d24c0f | mixed | - | - | FAIL |
+| 2026-08-09 | f65ca67 | login-burst | - | - | FAIL |
+| 2026-08-09 | f65ca67 | browse | - | - | PASS |
+| 2026-08-09 | f65ca67 | presign | - | - | PASS |
+| 2026-08-09 | f65ca67 | mixed | - | - | FAIL |
