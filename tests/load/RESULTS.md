@@ -119,3 +119,7 @@ instead of per-PR.
 | 2026-08-09 | f65ca67 | browse | - | - | PASS |
 | 2026-08-09 | f65ca67 | presign | - | - | PASS |
 | 2026-08-09 | f65ca67 | mixed | - | - | FAIL |
+| 2026-08-10 | 02b7dab | login-burst | - | - | FAIL |
+| 2026-08-10 | 02b7dab | browse | - | - | PASS |
+| 2026-08-10 | 02b7dab | presign | - | - | PASS |
+| 2026-08-10 | 02b7dab | mixed | - | - | FAIL |
