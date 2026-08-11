@@ -123,3 +123,7 @@ instead of per-PR.
 | 2026-08-10 | 02b7dab | browse | - | - | PASS |
 | 2026-08-10 | 02b7dab | presign | - | - | PASS |
 | 2026-08-10 | 02b7dab | mixed | - | - | FAIL |
+| 2026-08-11 | a04c8e7 | login-burst | - | - | FAIL |
+| 2026-08-11 | a04c8e7 | browse | - | - | PASS |
+| 2026-08-11 | a04c8e7 | presign | - | - | PASS |
+| 2026-08-11 | a04c8e7 | mixed | - | - | FAIL |
