@@ -131,3 +131,7 @@ instead of per-PR.
 | 2026-08-12 | 72f9d1b | browse | - | - | PASS |
 | 2026-08-12 | 72f9d1b | presign | - | - | PASS |
 | 2026-08-12 | 72f9d1b | mixed | - | - | FAIL |
+| 2026-08-13 | 2787c0e | login-burst | - | - | FAIL |
+| 2026-08-13 | 2787c0e | browse | - | - | PASS |
+| 2026-08-13 | 2787c0e | presign | - | - | PASS |
+| 2026-08-13 | 2787c0e | mixed | - | - | FAIL |
