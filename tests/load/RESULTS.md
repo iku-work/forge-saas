@@ -135,3 +135,7 @@ instead of per-PR.
 | 2026-08-13 | 2787c0e | browse | - | - | PASS |
 | 2026-08-13 | 2787c0e | presign | - | - | PASS |
 | 2026-08-13 | 2787c0e | mixed | - | - | FAIL |
+| 2026-08-14 | 357326e | login-burst | - | - | FAIL |
+| 2026-08-14 | 357326e | browse | - | - | PASS |
+| 2026-08-14 | 357326e | presign | - | - | PASS |
+| 2026-08-14 | 357326e | mixed | - | - | FAIL |
