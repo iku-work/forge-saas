@@ -139,3 +139,7 @@ instead of per-PR.
 | 2026-08-14 | 357326e | browse | - | - | PASS |
 | 2026-08-14 | 357326e | presign | - | - | PASS |
 | 2026-08-14 | 357326e | mixed | - | - | FAIL |
+| 2026-08-15 | 6c3d044 | login-burst | - | - | FAIL |
+| 2026-08-15 | 6c3d044 | browse | - | - | PASS |
+| 2026-08-15 | 6c3d044 | presign | - | - | PASS |
+| 2026-08-15 | 6c3d044 | mixed | - | - | FAIL |
