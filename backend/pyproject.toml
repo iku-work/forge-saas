@@ -84,7 +84,12 @@ dev = [
     # deliberate act: bump this, run `ruff check .`, and either fix or ignore
     # the new rules in ruff.toml as part of the same commit.
     "ruff==0.15.17",
-    "mypy>=1.13",
+    # Pinned for the same reason as ruff above, with a sharper edge: 2.1 needs
+    # the `type: ignore[no-untyped-call]` on stripe's construct_event, and 2.3
+    # sees real annotations there and rejects that same ignore as unused. No
+    # single source satisfies both, so the version has to be the thing that is
+    # fixed. 2.1.0 is what the tree is verifiably green against.
+    "mypy==2.1.0",
     "pytest>=8.3",
     "pytest-asyncio>=0.24",
     "pytest-cov>=5.0",
