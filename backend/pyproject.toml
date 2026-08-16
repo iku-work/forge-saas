@@ -23,7 +23,12 @@ dependencies = [
     "arq>=0.26",
     "apscheduler>=3.10",
     "redis>=5.0",
-    "stripe>=11.0",
+    # Floor is 15.5, not 11.0, for a type-checking reason: construct_event
+    # gained parameter annotations in 15.x. Below that floor it reads as an
+    # untyped call, which mypy --strict rejects without a
+    # `type: ignore[no-untyped-call]` -- and *with* that ignore, arguments go
+    # unchecked. billing/webhooks.py depends on the annotated version.
+    "stripe>=15.5",
     "resend>=2.4",
     "slowapi>=0.1.9",
     "loguru>=0.7",

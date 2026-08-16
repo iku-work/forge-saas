@@ -49,20 +49,12 @@ async def stripe_webhook(
     sig_header = request.headers.get("stripe-signature", "")
 
     try:
-        # stripe-python ships py.typed but construct_event itself has no
-        # parameter/return annotations -- mypy strict's no-untyped-call has
-        # no other way to know this returns a stripe.Event. (mypy 2.3 does
-        # see annotations here and reports the ignore as unused; the pin in
-        # pyproject.toml is what keeps one answer. Whoever lifts that pin
-        # drops this comment and the ignore -- the cast below is already
-        # what the newer checker asks for.)
-        #
         # The secret is `str | None` on Settings, but validate_billing_settings()
         # refuses to boot with billing enabled and it unset, and this route only
         # exists when billing is enabled -- so it is never None here. A cast,
         # not a runtime guard: the branch would be unreachable, and billing is
         # held to 100% coverage.
-        stripe_event = stripe.Webhook.construct_event(  # type: ignore[no-untyped-call]
+        stripe_event = stripe.Webhook.construct_event(
             raw_body, sig_header, cast("str", settings.STRIPE_WEBHOOK_SECRET)
         )
     except (stripe.SignatureVerificationError, ValueError) as exc:
