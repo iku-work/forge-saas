@@ -338,7 +338,7 @@ function TypedSettingsForm({
             </Label>
           </div>
           {bannerEnabled ? (
-            <div className="space-y-3 pl-6">
+            <div className="space-y-3 ps-6">
               <div className="space-y-1">
                 <Label htmlFor="banner-type">
                   {t("common.admin.product_settings.banner_type_label")}
@@ -392,7 +392,7 @@ function TypedSettingsForm({
           <span className="text-sm font-medium">
             {t("common.admin.product_settings.kill_switch_label")}
           </span>
-          <div className="space-y-2 pl-1">
+          <div className="space-y-2 ps-1">
             {data.killable_modules.map((module) => (
               <div key={module} className="flex items-center gap-2">
                 <Checkbox
