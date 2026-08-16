@@ -101,7 +101,16 @@ dev = [
     "httpx>=0.27",
     "testcontainers[postgres,redis,minio]>=4.8",
     "polyfactory>=2.18",
-    "schemathesis>=3.36",
+    # Pinned with hypothesis alongside it: tests/contract/test_schemathesis.py
+    # suppresses hypothesis's function_scoped_fixture health check through
+    # `schema.config.update(suppress_health_check=...)`, which is the only
+    # route schemathesis 4 exposes. That stopped taking effect somewhere
+    # between 4.21.8 and 4.24.3, and the health check then fails the contract
+    # test on a fixture the file uses deliberately (see its module docstring).
+    # Pinned to the pair the suite is green against rather than guessing at a
+    # replacement suppression that cannot be verified without Docker.
+    "schemathesis==4.21.8",
+    "hypothesis==6.155.3",
     "freezegun>=1.5",
     "bandit>=1.7",
     "semgrep>=1.168",
