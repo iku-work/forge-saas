@@ -120,7 +120,11 @@ WELL_KNOWN_BY_KEY: dict[str, WellKnownKey] = {entry.key: entry for entry in WELL
 #     tenancy's /orgs;
 #   * `oauth` and `totp_2fa` live under /api/v1/auth/*, and killing those
 #     takes authentication down with them;
-#   * `multi_org` has no routes of its own;
+#   * `multi_org` has no routes of its own, and neither does T-290's
+#     `marketing` -- it gates a separate site, which Caddy serves and this
+#     process never sees. `public_api` and `enterprise_sso` will each qualify
+#     once they have routes (T-310, T-331); `enterprise_sso`'s live under
+#     /api/v1/auth/*, so it inherits the objection above rather than an entry;
 #   * `admin` is absent deliberately -- a kill switch that locks the operator
 #     out of the surface that undoes it is a trap, not a safety feature.
 #

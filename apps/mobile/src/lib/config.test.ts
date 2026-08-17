@@ -34,6 +34,9 @@ const CONFIG_BODY = {
       multi_org: true,
       usage_metering: false,
       outbound_webhooks: false,
+      marketing: true,
+      public_api: false,
+      enterprise_sso: false,
     },
   },
   error: null,
@@ -68,6 +71,9 @@ describe("apps/mobile/src/lib/config", () => {
       multiOrg: false,
       usageMetering: false,
       outboundWebhooks: false,
+      marketing: false,
+      publicApi: false,
+      enterpriseSso: false,
     });
   });
 
@@ -91,6 +97,9 @@ describe("apps/mobile/src/lib/config", () => {
       multiOrg: true,
       usageMetering: false,
       outboundWebhooks: false,
+      marketing: true,
+      publicApi: false,
+      enterpriseSso: false,
     });
   });
 

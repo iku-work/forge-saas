@@ -154,7 +154,8 @@ export const fixtureExportJob: DataExportJobPublic = {
 };
 
 // Mirrors backend/product/config.py's defaults -- every module on except
-// usage_metering/outbound_webhooks (opt-in, off by default).
+// usage_metering/outbound_webhooks and T-290's public_api/enterprise_sso
+// (all opt-in, off by default).
 export const fixtureConfig: ConfigResponse = {
   app_name: "ForgeSaaS",
   primary_color: "#7c6ff7",
@@ -172,6 +173,9 @@ export const fixtureConfig: ConfigResponse = {
     multi_org: true,
     usage_metering: false,
     outbound_webhooks: false,
+    marketing: true,
+    public_api: false,
+    enterprise_sso: false,
   },
   supported_locales: ["en", "fi", "de", "es", "fr", "ar"],
   default_locale: "en",

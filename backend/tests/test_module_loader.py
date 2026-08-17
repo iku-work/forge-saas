@@ -14,18 +14,72 @@ def _clear_modules_cache() -> Generator[None]:
     module_loader.get_modules.cache_clear()
 
 
-def test_validate_modules_raises_on_unmet_dependency() -> None:
-    modules = EnabledModules(billing=ModuleConfig(enabled=False))
-
+@pytest.mark.parametrize(
+    ("modules", "dependent", "dependency"),
+    [
+        pytest.param(
+            EnabledModules(billing=ModuleConfig(enabled=False)),
+            "notifications",
+            "billing",
+            id="notifications-without-billing",
+        ),
+        # T-290: enterprise_sso's OIDC SP (T-331) reuses authlib's client
+        # registry and auth's account-linking, so SSO without oauth is a
+        # half-stack, not a smaller product.
+        pytest.param(
+            EnabledModules(
+                oauth=ModuleConfig(enabled=False),
+                enterprise_sso=ModuleConfig(enabled=True),
+            ),
+            "enterprise_sso",
+            "oauth",
+            id="enterprise-sso-without-oauth",
+        ),
+    ],
+)
+def test_validate_modules_raises_on_unmet_dependency(
+    modules: EnabledModules, dependent: str, dependency: str
+) -> None:
     with pytest.raises(RuntimeError) as exc_info:
         module_loader.validate_modules(modules)
 
     assert str(exc_info.value) == (
-        "Module 'notifications' requires 'billing' which is disabled.\n"
-        "Fix: either set billing=ModuleConfig(enabled=True) "
-        "or set notifications=ModuleConfig(enabled=False) "
-        "in backend/product/config.py"
+        f"Module '{dependent}' requires '{dependency}' which is disabled.\n"
+        f"Fix: either set {dependency}=ModuleConfig(enabled=True) "
+        f"or set {dependent}=ModuleConfig(enabled=False) "
+        f"in backend/product/config.py"
     )
+
+
+def test_validate_modules_enforces_edges_a_spelled_out_config_would_drop() -> None:
+    # backend/product/config.py spells every module out, and an explicitly
+    # constructed ModuleConfig has an empty `requires` -- the default_factory
+    # that carries the edge only runs for *omitted* fields. Reading the edges
+    # off the instance would therefore have made this exact config (the one a
+    # product author actually writes) boot cleanly into a broken product.
+    modules = EnabledModules(
+        billing=ModuleConfig(enabled=False),
+        notifications=ModuleConfig(enabled=True),
+        file_storage=ModuleConfig(enabled=True),
+    )
+    assert modules.notifications.requires == []
+
+    with pytest.raises(RuntimeError, match="'notifications' requires 'billing'"):
+        module_loader.validate_modules(modules)
+
+
+def test_validate_modules_honours_an_edge_only_the_instance_declares() -> None:
+    # The union half of the same rule: a product-specific module can add an
+    # edge the template never declared, and it is enforced too.
+    modules = EnabledModules(
+        billing=ModuleConfig(enabled=False),
+        notifications=ModuleConfig(enabled=False),
+        file_storage=ModuleConfig(enabled=False),
+        admin=ModuleConfig(enabled=True, requires=["billing"]),
+    )
+
+    with pytest.raises(RuntimeError, match="'admin' requires 'billing'"):
+        module_loader.validate_modules(modules)
 
 
 def test_validate_modules_with_valid_config_does_not_raise() -> None:

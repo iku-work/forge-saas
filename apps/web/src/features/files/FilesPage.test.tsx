@@ -28,6 +28,9 @@ const hooks = vi.hoisted(() => ({
     multiOrg: false,
     usageMetering: false,
     outboundWebhooks: false,
+    marketing: false,
+    publicApi: false,
+    enterpriseSso: false,
   })),
 }));
 vi.mock("@forge/hooks", () => hooks);

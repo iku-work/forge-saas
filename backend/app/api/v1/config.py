@@ -44,6 +44,9 @@ class ModulesResponse(BaseModel):
     multi_org: bool
     usage_metering: bool
     outbound_webhooks: bool
+    marketing: bool
+    public_api: bool
+    enterprise_sso: bool
 
 
 class GlobalBannerResponse(BaseModel):
@@ -125,6 +128,9 @@ async def get_config(
             multi_org=m.multi_org.enabled,
             usage_metering=m.usage_metering.enabled,
             outbound_webhooks=m.outbound_webhooks.enabled,
+            marketing=m.marketing.enabled,
+            public_api=m.public_api.enabled,
+            enterprise_sso=m.enterprise_sso.enabled,
         ),
         supported_locales=get_supported_locales(),
         default_locale=get_default_locale(),

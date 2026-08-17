@@ -25,6 +25,9 @@ describe("useModules", () => {
       multiOrg: fixtureConfig.modules.multi_org,
       usageMetering: fixtureConfig.modules.usage_metering,
       outboundWebhooks: fixtureConfig.modules.outbound_webhooks,
+      marketing: fixtureConfig.modules.marketing,
+      publicApi: fixtureConfig.modules.public_api,
+      enterpriseSso: fixtureConfig.modules.enterprise_sso,
     });
   });
 });

@@ -45,11 +45,20 @@ config.set_main_option("sqlalchemy.url", get_settings().migrations_database_url)
 # autogenerate never proposes a CREATE for a disabled module's table (model
 # not imported -> not on metadata anyway) nor a DROP for one that is still
 # physically present in the DB from a time the module was enabled.
+#
+# T-290 registered `public_api` and `enterprise_sso` here ahead of their
+# models: the entries are table *names*, so they cost nothing until T-310 and
+# T-331 add `ApiKey`/`SsoConnection`, and having them already in place means
+# neither task can add a table that autogenerate then proposes for a product
+# that turned the module off. `marketing` owns no tables at all -- it gates a
+# build, not a schema.
 MODULE_TABLES: dict[str, set[str]] = {
     "billing": {"plan", "subscription", "webhook_event", "dunning_campaign", "usage_record"},
     "gdpr": {"consent_record", "data_export_job"},
     "notifications": {"notification", "push_token"},
     "file_storage": {"stored_file"},
+    "public_api": {"api_key"},
+    "enterprise_sso": {"sso_connection"},
 }
 
 
@@ -79,6 +88,11 @@ def load_models_for_migration() -> None:
         import app.modules.notifications.models  # noqa: PLC0415
     if modules.file_storage.enabled:
         import app.modules.storage.models  # noqa: PLC0415
+    # No branch for public_api / enterprise_sso yet: T-290 added the toggles,
+    # but the models they would import (app.modules.api_keys.models,
+    # app.modules.sso.models) arrive with T-310 and T-331. Their MODULE_TABLES
+    # entries above are already in place -- add the import here at the same
+    # time as the model, or autogenerate will not see the new table at all.
 
 
 load_models_for_migration()

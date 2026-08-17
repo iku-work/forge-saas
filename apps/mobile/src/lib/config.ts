@@ -32,6 +32,9 @@ const DENY_BY_DEFAULT: ActiveModules = {
   multiOrg: false,
   usageMetering: false,
   outboundWebhooks: false,
+  marketing: false,
+  publicApi: false,
+  enterpriseSso: false,
 };
 
 function toActiveModules(modules: ModulesResponse): ActiveModules {
@@ -47,6 +50,9 @@ function toActiveModules(modules: ModulesResponse): ActiveModules {
     multiOrg: modules.multi_org,
     usageMetering: modules.usage_metering,
     outboundWebhooks: modules.outbound_webhooks,
+    marketing: modules.marketing,
+    publicApi: modules.public_api,
+    enterpriseSso: modules.enterprise_sso,
   };
 }
 

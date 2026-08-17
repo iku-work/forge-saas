@@ -23,6 +23,19 @@ MODULES = EnabledModules(
     multi_org=ModuleConfig(enabled=True),
     usage_metering=ModuleConfig(enabled=False),
     outbound_webhooks=ModuleConfig(enabled=False),
+    # Off removes the whole apps/marketing build (its `build` script exits 0
+    # without producing a dist) and the Caddy block that serves it. The app
+    # itself is untouched -- links that would point at the marketing site fall
+    # back to the app root.
+    marketing=ModuleConfig(enabled=True),
+    # Off removes the API-key surface entirely: no /api/v1/api-keys routes, no
+    # `api_key` table, no second kind of principal that can authenticate. Turn
+    # it on only when third parties actually need to call you.
+    public_api=ModuleConfig(enabled=False),
+    # Off removes per-org OIDC/SAML sign-in (and keeps python3-saml's native
+    # libxmlsec1 dependency out of the backend image). Requires oauth -- see
+    # EnabledModules in app/core/modules.py.
+    enterprise_sso=ModuleConfig(enabled=False),
 )
 
 # ── Branding ────────────────────────────────────────────────────────────────

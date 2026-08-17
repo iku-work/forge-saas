@@ -125,6 +125,12 @@ export interface ProductConfig {
     multiOrg: boolean;
     usageMetering: boolean;
     outboundWebhooks: boolean;
+    // T-290 (Phase 4). `marketing` is the odd one out: it gates the
+    // apps/marketing *build* rather than a router, so the app reads it only
+    // to decide whether a link off to the marketing site is worth rendering.
+    marketing: boolean;
+    publicApi: boolean;
+    enterpriseSso: boolean;
   };
   // Per-locale toggle, mirroring `modules` above (and
   // backend/product/config.py's EnabledLocales/LocaleConfig, T-231) -- each
