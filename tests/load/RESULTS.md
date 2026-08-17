@@ -147,3 +147,7 @@ instead of per-PR.
 | 2026-08-16 | 0216bcb | browse | - | - | PASS |
 | 2026-08-16 | 0216bcb | presign | - | - | PASS |
 | 2026-08-16 | 0216bcb | mixed | - | - | FAIL |
+| 2026-08-17 | 013e12c | login-burst | - | - | FAIL |
+| 2026-08-17 | 013e12c | browse | - | - | PASS |
+| 2026-08-17 | 013e12c | presign | - | - | PASS |
+| 2026-08-17 | 013e12c | mixed | - | - | FAIL |
