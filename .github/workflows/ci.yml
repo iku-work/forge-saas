@@ -52,6 +52,30 @@ jobs:
       - name: Install frontend dependencies
         run: pnpm install --frozen-lockfile
 
+      # packages/api-client/src/generated/ is gitignored (it is produced from
+      # the live OpenAPI schema), so on a fresh checkout @forge/api-client
+      # cannot build -- and `pnpm lint`/`type-check` both depend on `^build`
+      # via turbo. Every other frontend-touching job here already boots the
+      # backend for this; lint was the one that did not, which is why it
+      # failed on @forge/api-client#build rather than on any lint rule.
+      # Client generation only needs /openapi.json, which never touches the
+      # DB/Redis -- .env.test's dummy credentials are enough.
+      - name: Start backend for OpenAPI schema
+        working-directory: backend
+        run: |
+          cp .env.test .env
+          nohup uvicorn app.main:app --host 0.0.0.0 --port 8000 > uvicorn.log 2>&1 &
+          for i in $(seq 1 30); do
+            curl -sf http://localhost:8000/health && exit 0
+            sleep 1
+          done
+          echo "backend did not become ready" >&2
+          cat uvicorn.log
+          exit 1
+
+      - name: Generate API client from live OpenAPI schema
+        run: pnpm --filter @forge/api-client generate
+
       - name: Frontend lint + type-check
         run: |
           pnpm lint
@@ -259,6 +283,14 @@ jobs:
     needs: lint
     runs-on: ubuntu-latest
 
+    # Hoisted out of the Chromatic step below because a *step-level* `if:`
+    # cannot see the `secrets` context -- only `env` (among others). Reading
+    # the secret here, where the secrets context is available, and testing
+    # `env.` in the condition is the supported way to write "skip this step
+    # when the token isn't configured".
+    env:
+      CHROMATIC_PROJECT_TOKEN: ${{ secrets.CHROMATIC_PROJECT_TOKEN }}
+
     steps:
       - uses: actions/checkout@v4
 
@@ -335,10 +367,8 @@ jobs:
       # visual-regression snapshots. Skips cleanly (not a failure) until
       # CHROMATIC_PROJECT_TOKEN is added to repo secrets.
       - name: Chromatic visual regression (packages/ui)
-        if: ${{ secrets.CHROMATIC_PROJECT_TOKEN != '' }}
+        if: env.CHROMATIC_PROJECT_TOKEN != ''
         uses: chromaui/action@latest
-        env:
-          CHROMATIC_PROJECT_TOKEN: ${{ secrets.CHROMATIC_PROJECT_TOKEN }}
         with:
           workingDir: packages/ui
           buildScriptName: storybook:build

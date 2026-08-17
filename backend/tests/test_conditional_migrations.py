@@ -28,6 +28,8 @@ fixture is a sync fixture despite running migrations against a real DB).
 import asyncio
 import re
 import shutil
+import subprocess
+import sys
 from collections.abc import Generator
 from pathlib import Path
 
@@ -168,6 +170,48 @@ def test_billing_enabled_creates_billing_tables(real_config: Config) -> None:
 
     tables = _table_names(real_config)
     assert {"plan", "subscription", "webhook_event"} <= tables
+
+
+def test_the_migrations_build_exactly_what_the_models_declare(real_config: Config) -> None:
+    """No drift between `alembic upgrade` and the models.
+
+    `alembic check` is the same comparison `revision --autogenerate` makes,
+    with no script written. A migration that creates something no model
+    declares -- T-132's `usage_record` did both: a `UniqueConstraint` beside
+    an already-unique column, and a composite index missing from
+    `__table_args__` -- leaves a diff that every later autogenerate run
+    proposes to "fix" by dropping. That is how a deliberate index gets deleted
+    by someone applying a generated script nobody read, and the noise hides
+    the one diff that mattered.
+
+    Default product config, so this covers every enabled module's branch at
+    once.
+
+    Run as a subprocess rather than via `command.check` in-process, because
+    `SQLModel.metadata` is global and the test suite adds to it: TestEntity
+    (test_base_repository), ReplicaEntity (test_read_replica) and
+    AlembicRoundTripEntity (test_alembic) are all registered on it once pytest
+    has collected those files, and no migration creates them. In-process this
+    test therefore passed alone and failed in a full run -- which is also
+    exactly what a developer gets, since a fresh `alembic` CLI imports only
+    app models. Checking the way the CLI does keeps the answer honest.
+    """
+    migration_runner.upgrade(real_config)
+
+    # DATABASE_URL is already pointed at this test's container by real_config's
+    # monkeypatch.setenv, so the child inherits it.
+    result = subprocess.run(
+        [sys.executable, "-m", "alembic", "check"],
+        cwd=_REAL_ALEMBIC_DIR.parent,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert result.returncode == 0, (
+        "alembic check reported drift between the migrations and the models:\n"
+        f"{result.stdout}\n{result.stderr}"
+    )
 
 
 def test_round_trip_up_down_up_with_billing_disabled(

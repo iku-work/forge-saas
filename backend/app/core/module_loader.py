@@ -1,7 +1,12 @@
 from dataclasses import dataclass
 from functools import lru_cache
 
-from app.core.modules import EnabledModules, ModuleConfig, ModuleName
+from app.core.modules import (
+    EnabledModules,
+    ModuleConfig,
+    ModuleName,
+    declared_requirements,
+)
 from app.core.support import SupportConfig, validate_support
 
 
@@ -16,14 +21,23 @@ class Branding:
 def validate_modules(modules: EnabledModules) -> None:
     """
     Called at startup. Raises RuntimeError with a clear message if any
-    enabled module declares a `requires` dependency that is disabled.
+    enabled module has a `requires` dependency that is disabled.
     Fast-fail: developers learn about misconfiguration at boot, not at runtime.
+
+    The edges come from `declared_requirements()` -- i.e. from the template's
+    own registry -- not from the ModuleConfig instances passed in, which are
+    free of them whenever a product spells its config out. See that function.
     """
+    declared = declared_requirements()
     for name, config in vars(modules).items():
         if not isinstance(config, ModuleConfig):
             continue
         if config.enabled:
-            for dep in config.requires:
+            # Template-declared edges first, then anything this instance adds
+            # of its own -- see declared_requirements() for why the instance
+            # alone is not enough. dict.fromkeys dedupes without disturbing
+            # the order the error messages are emitted in.
+            for dep in dict.fromkeys([*declared.get(name, ()), *config.requires]):
                 dep_cfg = getattr(modules, dep)
                 if not dep_cfg.enabled:
                     raise RuntimeError(

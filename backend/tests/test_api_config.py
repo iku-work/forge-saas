@@ -9,14 +9,16 @@ already wired into `client`.
 """
 
 from collections.abc import Generator
+from typing import get_args
 
 import httpx
 import pytest
 
+from app.api.v1.config import ModulesResponse
 from app.core import module_loader
 from app.core.i18n import get_supported_locales
 from app.core.locales import EnabledLocales, LocaleConfig
-from app.core.modules import EnabledModules, ModuleConfig
+from app.core.modules import EnabledModules, ModuleConfig, ModuleName
 from app.modules.product_settings import service as product_settings
 from product import config as product_config
 
@@ -55,9 +57,22 @@ async def test_returns_branding_and_default_module_config(
         "multi_org": True,
         "usage_metering": False,
         "outbound_webhooks": False,
+        "marketing": True,
+        "public_api": False,
+        "enterprise_sso": False,
     }
     assert data["supported_locales"] == get_supported_locales()
     assert data["default_locale"] == product_config.DEFAULT_LOCALE
+
+
+def test_modules_response_covers_every_registered_module() -> None:
+    # T-290. This response is the only way web and mobile learn which modules
+    # are on, so a module registered in EnabledModules but missing here is a
+    # switch no frontend can ever read -- and a field here with no module
+    # behind it is a lie the client would happily gate UI on. Set equality
+    # catches both directions, which is the point: the next module to be added
+    # cannot be added to one of these and forgotten in the other.
+    assert set(ModulesResponse.model_fields) == set(get_args(ModuleName))
 
 
 async def test_reflects_disabled_modules(

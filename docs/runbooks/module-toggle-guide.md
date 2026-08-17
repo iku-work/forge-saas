@@ -10,17 +10,39 @@ proof of this; this runbook is the manual walkthrough.
 
 ## What's actually toggleable today
 
-`EnabledModules` (`backend/app/core/modules.py`) declares eleven module
-names, but only two ship a real router + `models.py` + migration as of
-Phase 1.5: **billing** and **gdpr**. `notifications` and `file_storage` both
-declare `requires=["billing"]` and exist only as empty module directories —
-disabling billing disables them too (enforced by `validate_modules` at
-startup: an enabled module that requires a disabled one is a `RuntimeError`,
-not a silent inconsistency). `feature_flags`, `admin`, `oauth`, `totp_2fa`,
-`multi_org`, `usage_metering`, and `outbound_webhooks` are declared now so
-Phase 2+ modules have a config slot to land in, but nothing reads them yet —
-toggling them today has no observable effect. Treat the steps below as the
-worked example; the mechanism is identical for every module added later.
+`EnabledModules` (`backend/app/core/modules.py`) declares fourteen module
+names, and they are not all at the same stage. `TEMPLATE.md`'s module table is
+the per-module contract; what matters operationally is which of the three
+things a toggle actually removes today:
+
+- **Routes and tables both.** `billing`, `gdpr`, `notifications`,
+  `file_storage` — a real router, `models.py`, and a migration branch each.
+  `notifications` and `file_storage` `require` billing, so disabling billing
+  disables them too (enforced by `validate_modules` at startup: an enabled
+  module that requires a disabled one is a `RuntimeError`, not a silent
+  inconsistency).
+- **Routes only.** `feature_flags` and `admin` own routers but no tables of
+  their own.
+- **UI only.** `multi_org` has no routes to remove — the frontend reads it from
+  `/config` and hides the org switcher.
+- **Nothing yet.** `oauth` and `totp_2fa` ship routers in `build_router()`'s
+  always-on block, so their toggles do not currently remove anything;
+  `usage_metering` and `outbound_webhooks` are Phase-2 slots; and T-290's
+  `marketing`, `public_api` and `enterprise_sso` are Phase-4 slots whose
+  surface arrives with T-300, T-310 and T-331 respectively. Toggling any of
+  these today changes only what `/api/v1/config` reports.
+
+Treat the steps below as the worked example; the mechanism is identical for
+every module added later.
+
+One rule is worth stating on its own, because it is the one that bites when a
+product edits `product/config.py` rather than reading it. **Dependency edges
+belong to the template, not to your config.** Writing
+`notifications=ModuleConfig(enabled=True)` constructs a fresh `ModuleConfig`
+whose own `requires` is empty — the declared edge lives on the field default in
+`app/core/modules.py`, and `validate_modules` reads it from there
+(`declared_requirements()`), so the boot-time check holds no matter how the
+entry is spelled.
 
 ## Trigger
 

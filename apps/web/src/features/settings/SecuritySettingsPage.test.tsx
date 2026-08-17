@@ -36,6 +36,9 @@ const allModulesEnabled = {
   multiOrg: true,
   usageMetering: true,
   outboundWebhooks: true,
+  marketing: true,
+  publicApi: true,
+  enterpriseSso: true,
 };
 
 function renderPage() {

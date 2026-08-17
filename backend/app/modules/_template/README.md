@@ -57,15 +57,28 @@ deliberately leaves to you, in the order they hurt least.
    `if modules.<name>.enabled:` branch if the module is optional — in which
    case it also needs an entry in `ModuleName` / `EnabledModules`
    (`app/core/modules.py`) and in `backend/product/config.py` (T-059/T-060).
-4. **Create the migration**: `alembic revision --autogenerate -m
-   "__MODULE_NAME___tables"`, then read the generated script before applying
-   it. Autogenerate diffs against the models Alembic imports *by hand* in
-   `load_models_for_migration()` (`alembic/env.py`) — until this module's
-   `models.py` is listed there it proposes nothing at all, silently. The
-   running app needs the same import added to `app/models/__init__.py`. If
+4. **Create the migration**, then read the generated script before applying
+   it:
+   ```bash
+   cd backend && alembic revision --autogenerate -m "__MODULE_NAME___tables" \
+     --head "$(python -c 'from app.core.migrations import CORE_HEAD_REVISION; print(CORE_HEAD_REVISION)')" \
+     --version-path alembic/versions/product
+   ```
+   Both flags are load-bearing: this repo always has several heads (one per
+   optional module's branch), so without `--head` Alembic refuses with
+   `Multiple heads are present`; and without `--version-path` it writes into
+   the first configured location, `alembic/versions/core/`, which the template
+   owns and overwrites. Autogenerate diffs against the models Alembic imports
+   *by hand* in `load_models_for_migration()` (`alembic/env.py`) — until this
+   module's `models.py` is listed there it proposes nothing at all, silently.
+   The running app needs the same import added to `app/models/__init__.py`. If
    the module is optional, the new table also belongs in `MODULE_TABLES` in
    `alembic/env.py` and in `MODULE_BRANCHES` in `app/core/migrations.py`, or
-   disabling the module will not remove its tables.
+   disabling the module will not remove its tables — and its first migration
+   needs `--branch-label __MODULE_NAME__` plus its own `version_locations`
+   entry. Declare every index the migration creates in `__table_args__` too,
+   or autogenerate will propose dropping it forever after (`alembic check`
+   tells you whether model and database still agree).
 5. **Fill in the query budget.** Every `list_*` route needs a row in
    `BUDGETS` in `backend/tests/test_query_budgets.py` — the suite fails the
    build on a list route without one, which is how N+1s stay caught (T-243).

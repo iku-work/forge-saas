@@ -26,6 +26,12 @@ describe("useModules (deny-by-default)", () => {
       multiOrg: false,
       usageMetering: false,
       outboundWebhooks: false,
+      // `marketing` defaults to *on* in product config, and still reads false
+      // here: deny-by-default is about what renders before /config answers,
+      // not about the product's own default.
+      marketing: false,
+      publicApi: false,
+      enterpriseSso: false,
     });
   });
 });

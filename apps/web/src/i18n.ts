@@ -361,6 +361,20 @@ export function readStoredLocale(): string | null {
   }
 }
 
+/** Write, or clear when `locale` is null. Never throws -- see readStoredLocale. */
+function writeStoredLocale(locale: string | null): void {
+  try {
+    if (locale === null) {
+      localStorage.removeItem(LOCALE_STORAGE_KEY);
+    } else {
+      localStorage.setItem(LOCALE_STORAGE_KEY, locale);
+    }
+  } catch {
+    // Storage disabled -- the in-memory language is still correct for this
+    // session, it just won't survive a reload.
+  }
+}
+
 /**
  * Which locale a *locale-less* entry point should resolve to (T-233's
  * redirect rule, and this module's own pre-router bootstrap). The signed-in
@@ -377,28 +391,55 @@ export function detectPreferredLocale(
   });
 }
 
-// True only while the URL -- not the user -- is driving a language change.
+// Locales the URL -- not the user -- has driven a change to.
+//
 // T-233: "the active URL locale wins over the stored preference for
 // rendering [...] but does not silently overwrite" it. Rendering a shared
 // /de/... link must therefore not leave "de" behind in localStorage (nor,
 // via useLocale().setLocale, in User.locale) for the visitor's next
 // locale-less visit.
-let localeChangeIsUrlDriven = false;
+//
+// Sticky, and deliberately never cleared when a change settles. This was a
+// boolean set for the duration of `changeLanguage`, which is a window around
+// an `await` -- and any window is wrong here, because the `languageChanged`
+// event that has to be classified does not reliably arrive inside it:
+// `/$locale`'s beforeLoad is re-entrant, so URL-driven changes overlap each
+// other and an abandoned navigation's bundle can finish loading long after a
+// later change already settled. Both directions were broken and only one was
+// visible: the URL locale sometimes *was* persisted (a shared link quietly
+// became the visitor's preference -- the locale-routing suite caught this
+// roughly one run in four), and an explicit setLocale() that overlapped a
+// URL-driven change was sometimes swallowed as URL-driven, losing a
+// preference the user did choose.
+//
+// Membership answers "did this language get here from a URL?" without
+// reference to when the event arrives. Only an explicit choice clears it --
+// which is a fact no timing can tell us, so the call site says so outright.
+const urlDrivenLocales = new Set<string>();
 
 /**
  * Applies the locale a matched `/$locale/...` route carries. Idempotent, so
  * every navigation can call it unconditionally.
  */
 export async function setUrlLocale(locale: SupportedLocale): Promise<void> {
+  urlDrivenLocales.add(locale);
   if (i18next.language === locale) {
     return;
   }
-  localeChangeIsUrlDriven = true;
-  try {
-    await i18next.changeLanguage(locale);
-  } finally {
-    localeChangeIsUrlDriven = false;
-  }
+  await i18next.changeLanguage(locale);
+}
+
+/**
+ * "What follows is the user's own choice, not a URL's."
+ *
+ * Called by lib/RoutedLocaleSwitcher.tsx before `useLocale().setLocale`, the
+ * one path on web that means a deliberate switch. That hook is shared with
+ * mobile and knows nothing about URLs or localStorage, so it cannot say this
+ * itself -- and nothing about the resulting `changeLanguage` call looks any
+ * different from a URL-driven one by the time the event arrives.
+ */
+export function markExplicitLocaleChoice(): void {
+  urlDrivenLocales.clear();
 }
 
 let initPromise: Promise<typeof i18next> | null = null;
@@ -433,18 +474,13 @@ export function initI18n(): Promise<typeof i18next> {
     i18next.on("languageChanged", (lng: string) => {
       document.documentElement.lang = lng;
       document.documentElement.dir = localeMeta(lng)?.dir ?? "ltr";
-      if (localeChangeIsUrlDriven) {
+      if (urlDrivenLocales.has(lng)) {
         // Viewing a shared /de/... link is not a preference change -- see
-        // localeChangeIsUrlDriven above. <html lang>/<html dir> still track
-        // it, since those describe what's on screen right now.
+        // urlDrivenLocales above. <html lang>/<html dir> still track it,
+        // since those describe what's on screen right now.
         return;
       }
-      try {
-        localStorage.setItem(LOCALE_STORAGE_KEY, lng);
-      } catch {
-        // Storage disabled -- the in-memory language is still correct for
-        // this session, it just won't survive a reload.
-      }
+      writeStoredLocale(lng);
     });
 
     return i18next;

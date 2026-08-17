@@ -20,8 +20,9 @@ no fixed replay window to bound how long the key needs to stay unique for.
 """
 
 from datetime import datetime
+from typing import ClassVar
 
-from sqlalchemy import DateTime
+from sqlalchemy import DateTime, Index
 from sqlmodel import Field, SQLModel
 
 from app.models._mixins import OrgScopedMixin, TimestampMixin, UUIDPKMixin
@@ -31,6 +32,22 @@ _TZ_DATETIME = DateTime(timezone=True)
 
 class UsageRecord(UUIDPKMixin, TimestampMixin, OrgScopedMixin, SQLModel, table=True):
     __tablename__ = "usage_record"
+    __table_args__: ClassVar[tuple[Index, ...]] = (
+        # The read path report_usage_to_stripe actually runs: unreported
+        # records grouped by (org_id, metric). Not covered by the individual
+        # single-column indexes below.
+        #
+        # T-132's migration created this index but never declared it here, so
+        # autogenerate proposed dropping it on every run -- the index was one
+        # `alembic upgrade` away from being silently removed by whoever
+        # applied the next generated script without reading it.
+        Index(
+            "ix_usage_record_reported_to_stripe_at_org_id_metric",
+            "reported_to_stripe_at",
+            "org_id",
+            "metric",
+        ),
+    )
 
     metric: str = Field(index=True)  # e.g. "api_calls", "ai_tokens", "exports"
     quantity: int  # always non-negative; multiply up for fractional units

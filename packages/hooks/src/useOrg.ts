@@ -94,17 +94,46 @@ function pickOrgId(orgs: OrganizationPublic[]): string | null {
 // momentarily showing the previous user's orgs.
 let loadedForUserId: string | null = null;
 
+// Bumped whenever the store's owner changes -- a new bootstrap, or a logout.
+// A bootstrap compares it after every await and drops itself if it no longer
+// matches, because deciding "is this response still wanted?" before the
+// request is sent cannot survive the wait.
+//
+// Setting `loadedForUserId` up front is not that check: it says which load
+// *started*, and was then trusted at commit time by a response that may have
+// been overtaken. All three orderings below really happen, and the first is
+// the one the guard above was written to prevent:
+//
+//   * A logs out, B logs in, A's in-flight /orgs response resolves last ->
+//     B is shown A's organisations, and setCurrentOrgId pins A's org as the
+//     X-Org-ID on every subsequent request;
+//   * A logs out with nobody logging in -> the in-flight response repopulates
+//     a store that was just cleared, so a logged-out shell shows orgs again;
+//   * refreshOrgs() overlaps the initial bootstrap -> whichever response is
+//     slower wins, which is not necessarily the newer one.
+let loadGeneration = 0;
+
 async function bootstrap(userId: string): Promise<void> {
   loadedForUserId = userId;
+  const generation = ++loadGeneration;
   setState({ isLoading: true });
   try {
     const { data } = await listMyOrgsApiV1OrgsGet({ throwOnError: true });
+    if (generation !== loadGeneration) {
+      return;
+    }
     const orgs = data.data ?? [];
     const currentOrgId = pickOrgId(orgs);
     setCurrentOrgId(currentOrgId);
     const role = currentOrgId ? await loadRole(userId, currentOrgId) : null;
+    if (generation !== loadGeneration) {
+      return;
+    }
     setState({ orgs, currentOrgId, role, isLoading: false });
   } catch {
+    if (generation !== loadGeneration) {
+      return;
+    }
     setCurrentOrgId(null);
     setState({ orgs: [], currentOrgId: null, role: null, isLoading: false });
   }
@@ -127,6 +156,9 @@ export function useOrg(): UseOrgResult {
     if (!user) {
       if (loadedForUserId !== null) {
         loadedForUserId = null;
+        // Abandons any bootstrap still in flight: without this, its response
+        // repopulates the store microseconds after logout cleared it.
+        loadGeneration += 1;
         setCurrentOrgId(null);
         setState({ orgs: [], currentOrgId: null, role: null, isLoading: false });
       }
@@ -145,6 +177,15 @@ export function useOrg(): UseOrgResult {
       const userId = user?.id;
       if (userId) {
         void loadRole(userId, orgId).then((role) => {
+          // Same staleness rule as bootstrap's: switching A -> B faster than
+          // A's member list comes back would otherwise leave B selected while
+          // showing the caller's role in A. `role` drives client-side
+          // permission gating (ROLE_PERMISSIONS), so the wrong one renders
+          // controls for an org the user may only be a member of -- the API
+          // still refuses them, but the UI should not offer them.
+          if (state.currentOrgId !== orgId) {
+            return;
+          }
           setState({ role });
         });
       }

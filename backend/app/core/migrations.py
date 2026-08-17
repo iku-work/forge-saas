@@ -36,6 +36,12 @@ CORE_HEAD_REVISION = "a7e4c2f91b60"
 # Module name -> the alembic branch label its first migration declares.
 # Only modules that currently ship a models.py (and therefore a migration)
 # are listed here.
+#
+# T-290's `public_api` and `enterprise_sso` are deliberately *not* here yet.
+# An entry makes migration_targets() ask Alembic for "<branch>@head", which is
+# a hard error while no migration declares that branch label -- so the entry
+# lands with the migration, in T-310 and T-331 respectively, on its own branch
+# rather than on the trunk. `marketing` never gets one: it owns no tables.
 MODULE_BRANCHES: dict[ModuleName, str] = {
     "billing": "billing",
     "gdpr": "gdpr",

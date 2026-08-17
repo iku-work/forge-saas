@@ -67,4 +67,11 @@ def build_router() -> APIRouter:
 
         router.include_router(admin_router)
 
+    # T-290 added the `public_api` and `enterprise_sso` toggles; their blocks
+    # belong here, in the same shape as billing's, and land with the routers
+    # themselves (T-310 and T-331). Registering them now would mean importing
+    # modules that do not exist, so a product enabling the toggle early gets a
+    # module with no HTTP surface -- not a crash. `marketing` never gets a
+    # block: it gates the apps/marketing build, not a router.
+
     return router

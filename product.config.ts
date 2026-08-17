@@ -22,6 +22,11 @@ export const config = {
     multiOrg: true,
     usageMetering: false,
     outboundWebhooks: false,
+    // Keep these three in step with backend/product/config.py's MODULES --
+    // that file carries the note on what each one actually removes.
+    marketing: true,
+    publicApi: false,
+    enterpriseSso: false,
   },
   locales: {
     en: true,

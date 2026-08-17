@@ -265,6 +265,24 @@ def _locate(repo_root: Path, relative: str, needle: str) -> str:
     return relative
 
 
+def _core_head_revision(backend_root: Path) -> str:
+    """The trunk revision a new module's first migration chains onto.
+
+    Read textually rather than imported: this generator is a standalone CLI,
+    and `from app.core.migrations import CORE_HEAD_REVISION` would drag
+    alembic, the module loader and product/config.py into a script whose only
+    job is copying files -- so an unrelated breakage there would stop anyone
+    generating a module. Falls back to the flag name itself, which fails
+    loudly and readably if the constant is ever renamed.
+    """
+    try:
+        source = (backend_root / "app" / "core" / "migrations.py").read_text(encoding="utf-8")
+    except OSError:
+        return "<CORE_HEAD_REVISION>"
+    match = re.search(r'^CORE_HEAD_REVISION = "([^"]+)"', source, re.MULTILINE)
+    return match.group(1) if match else "<CORE_HEAD_REVISION>"
+
+
 def follow_ups(name: str, backend_root: Path = BACKEND_ROOT) -> list[FollowUp]:
     """The manual steps, with pointers resolved against the tree as it is now.
 
@@ -324,14 +342,22 @@ def follow_ups(name: str, backend_root: Path = BACKEND_ROOT) -> list[FollowUp]:
         FollowUp(
             title="Create the migration",
             detail=(
-                f'cd backend && alembic revision --autogenerate -m "{name}_tables"\n'
-                "Autogenerate diffs against the models alembic imports by hand, so "
-                "it proposes nothing until the module's models.py is imported in "
-                "load_models_for_migration() -- and the app needs the same import "
-                "in app/models/__init__.py. If the module is optional, its table "
-                "also belongs in MODULE_TABLES and MODULE_BRANCHES, or disabling "
-                "it will not remove its tables. Read the generated script before "
-                "applying it."
+                f'cd backend && alembic revision --autogenerate -m "{name}_tables" \\\n'
+                f"  --head {_core_head_revision(backend_root)} "
+                f"--version-path alembic/versions/product\n"
+                "Both flags are required: every optional module's migrations sit on "
+                "their own branch, so without --head alembic refuses with 'Multiple "
+                "heads are present'; and without --version-path it writes into the "
+                "first configured location (alembic/versions/core/), which the "
+                "template owns and overwrites. Autogenerate diffs against the models "
+                "alembic imports by hand, so it proposes nothing until the module's "
+                "models.py is imported in load_models_for_migration() -- and the app "
+                "needs the same import in app/models/__init__.py. If the module is "
+                "optional, its table also belongs in MODULE_TABLES and "
+                "MODULE_BRANCHES, or disabling it will not remove its tables. Read "
+                "the generated script before applying it, and declare every index it "
+                "creates in __table_args__ -- one the model does not know about is "
+                "proposed for removal by every later autogenerate run."
             ),
             pointers=(
                 _locate(repo, "backend/alembic/env.py", "def load_models_for_migration("),

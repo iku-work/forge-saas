@@ -30,3 +30,20 @@ export function ensureCurrentOrg(): Promise<void> {
   })();
   return bootstrapPromise;
 }
+
+/**
+ * Forgets the pinned org. Called from lib/auth.ts whenever a session ends.
+ *
+ * The memoised promise above is "resolve this once per app run", which was a
+ * session-lifetime assumption dressed as a process-lifetime one: nothing
+ * cleared it, so after a logout and a different login `ensureCurrentOrg()`
+ * returned the already-resolved promise and left the *previous* user's org
+ * pinned as X-Org-ID. Every org-scoped request the new user made then carried
+ * an org they are not a member of, and the backend refused it -- correctly,
+ * which is why this surfaced as unexplained 403s on the notifications and
+ * files screens rather than as anyone seeing another tenant's data.
+ */
+export function resetCurrentOrg(): void {
+  bootstrapPromise = null;
+  setCurrentOrgId(null);
+}

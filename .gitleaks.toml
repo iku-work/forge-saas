@@ -21,4 +21,9 @@ paths = [
   # T-244: same dummy keypair as .env.test above, in the fixture CI's
   # pgbouncer-prod-compose job boots docker-compose.prod.yml with.
   '''backend/\.env\.prod-compose''',
+  # T-220: same dummy keypair again, in the fixture the e2e-web job (and
+  # maestro-mobile.yml) copies to .env to boot the stack for Playwright.
+  '''backend/\.env\.e2e''',
+  # T-223: and again, for the k6 load-test stack.
+  '''backend/\.env\.loadtest''',
 ]

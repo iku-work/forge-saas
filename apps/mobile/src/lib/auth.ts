@@ -25,6 +25,7 @@ import {
   onSessionExpired,
   setStoredTokens,
 } from "./api";
+import { resetCurrentOrg } from "./org";
 
 // Module-scoped store (not React Context) so every useSession() call site --
 // the root layout's redirect, the (app) group's guard, the invitation screen
@@ -75,6 +76,10 @@ export function getSessionSnapshot(): SessionState {
  */
 export function clearSession(): void {
   setSessionState({ user: null, isLoading: false });
+  // The pinned org belongs to the session that just ended, not to the app --
+  // see resetCurrentOrg's own comment. Every path that ends a session routes
+  // through here so this cannot be forgotten by one of them.
+  resetCurrentOrg();
 }
 
 export function useSession(): SessionState {
@@ -86,7 +91,7 @@ export function useSession(): SessionState {
 // genuinely over, not just mid-refresh. Subscribed once at module load so it
 // fires regardless of which screen currently has a useSession() call mounted.
 onSessionExpired(() => {
-  setSessionState({ user: null, isLoading: false });
+  clearSession();
 });
 
 // Thrown when /auth/login responds with a 2FA challenge instead of tokens --
@@ -142,7 +147,7 @@ export async function logout(): Promise<void> {
     });
   } finally {
     await clearStoredTokens();
-    setSessionState({ user: null, isLoading: false });
+    clearSession();
   }
 }
 

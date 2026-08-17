@@ -1,2 +1,4 @@
 backend/\.env\.test$
 backend/\.env\.prod-compose$
+backend/\.env\.e2e$
+backend/\.env\.loadtest$
