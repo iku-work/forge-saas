@@ -26,4 +26,11 @@ paths = [
   '''backend/\.env\.e2e''',
   # T-223: and again, for the k6 load-test stack.
   '''backend/\.env\.loadtest''',
+  # Local-dev Postgres DSNs against the compose database, which only exists
+  # inside forge-net. Kept in step with .trufflehog-exclude.txt (see the
+  # comment on CI's trufflehog step for why history makes the compose file
+  # one of them). docker-compose.prod.yml stays scanned.
+  '''\.env\.pgbouncer\.example''',
+  '''\.env\.postgres-exporter\.example''',
+  '''docker-compose\.yml''',
 ]

@@ -55,8 +55,15 @@ jobs:
         working-directory: backend
         run: cp .env.loadtest .env
 
+      # --build, because the `backend` service names an image
+      # (forge-saas-backend-dev) that exists only on a developer's machine.
+      # Without it compose tries the registry first and logs "pull access
+      # denied for forge-saas-backend-dev, repository does not exist" before
+      # falling back to building -- harmless, but it reads exactly like the
+      # cause of a failed run, which is a bad thing for a nightly job's log to
+      # say when something else is actually wrong.
       - name: Boot ephemeral stack (backend + Postgres + Redis + MinIO)
-        run: docker compose up -d postgres redis minio minio-init backend
+        run: docker compose up -d --build postgres redis minio minio-init backend
 
       - name: Wait for backend
         run: |
@@ -83,6 +90,16 @@ jobs:
       - name: Run k6 load scripts
         run: |
           mkdir -p tests/load/results
+          # grafana/k6 runs as its own unprivileged user (uid 12345), not as
+          # root and not as the runner (uid 1001) that just created this
+          # directory -- so the bind-mounted /results is read-only to it and
+          # `--summary-export` dies with "could not open '/results/<x>.json':
+          # permission denied". k6 reports that as a failed run, which marked
+          # every script FAIL even though the thresholds all passed
+          # (checks_failed 0.00%). Widening the mode here rather than adding
+          # `user: root` to the compose service keeps `make load-test` on a
+          # dev machine behaving exactly as it does today.
+          chmod 777 tests/load/results
           : > tests/load/results/status.txt
           overall=0
           for script in login-burst browse presign mixed; do

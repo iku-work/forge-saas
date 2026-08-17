@@ -2,3 +2,6 @@ backend/\.env\.test$
 backend/\.env\.prod-compose$
 backend/\.env\.e2e$
 backend/\.env\.loadtest$
+\.env\.pgbouncer\.example$
+\.env\.postgres-exporter\.example$
+^docker-compose\.yml$

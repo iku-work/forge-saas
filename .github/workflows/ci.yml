@@ -510,6 +510,17 @@ jobs:
       # --exclude-paths: backend/.env.test is a committed test fixture with a
       # structurally-valid but never-deployed dummy RS256 keypair + Fernet key
       # (Settings() needs real-shaped key material to construct in tests).
+      #
+      # The three non-backend entries are local-dev Postgres DSNs that
+      # trufflehog's Postgres detector reports as *unverified* (it cannot
+      # resolve host `postgres`, which only exists inside forge-net):
+      # .env.pgbouncer.example's password is literally `change-me`,
+      # .env.postgres-exporter.example is postgres/postgres against the
+      # compose database, and docker-compose.yml carried the same DSN in an
+      # earlier revision -- this scan walks git history, so fixing today's
+      # file would not clear it. docker-compose.prod.yml is deliberately NOT
+      # excluded: the dev stack is the only one whose credentials are
+      # throwaway by construction.
       - name: Trufflehog (git history secret scan)
         run: |
           trufflehog git file://. --fail --no-update \
