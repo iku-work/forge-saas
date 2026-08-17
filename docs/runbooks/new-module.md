@@ -146,12 +146,37 @@ Add the same import to `backend/app/models/__init__.py` (that is what the
 running app uses). Then:
 
 ```bash
-cd backend && alembic revision --autogenerate -m "invoices_tables"
+cd backend && alembic revision --autogenerate -m "invoices_tables" \
+  --head "$(python -c 'from app.core.migrations import CORE_HEAD_REVISION; print(CORE_HEAD_REVISION)')" \
+  --version-path alembic/versions/product
 ```
 
-Expected: one new script under `alembic/versions/` with a `create_table` for
-your table and a `create_index` for the composite index. **Read it before
-applying it** — autogenerate is a suggestion. Then `make migrate`.
+Both flags are required here, and neither is optional politeness:
+
+- **`--head`** — every optional module's migrations sit on their own branch, so
+  this repo always has five heads or more. Without it Alembic refuses with
+  `Multiple heads are present`. `CORE_HEAD_REVISION` is the trunk tip
+  (`app/core/migrations.py`), which is what a new module chains onto.
+- **`--version-path`** — `alembic.ini` lists one `version_locations` entry per
+  branch, and Alembic does not ask which one you meant: it silently writes to
+  the *first*, `alembic/versions/core/`, i.e. into a template-owned directory
+  that the next template update overwrites (`TEMPLATE.md`).
+
+If the module is optional it also needs `--branch-label invoices` and its own
+directory added to `version_locations`, so that disabling it can skip the
+branch entirely.
+
+Expected: one new script under `alembic/versions/product/` with a
+`create_table` for your table and a `create_index` for the composite index.
+**Read it before applying it** — autogenerate is a suggestion. Then
+`make migrate`.
+
+Anything the migration creates but the model does not declare — an extra
+index, a `UniqueConstraint` beside an already-unique column — becomes a
+permanent phantom diff: every later `--autogenerate` proposes dropping it, and
+one of those scripts eventually gets applied without being read. Declare it in
+`__table_args__` or don't create it. `alembic check` is the fast way to ask
+whether the model and the database still agree.
 
 If the module is optional, its table also belongs in `MODULE_TABLES`
 (`alembic/env.py`) and its branch in `MODULE_BRANCHES`
