@@ -3,6 +3,7 @@ import { useNavigate, useRouterState } from "@tanstack/react-router";
 import { useLocale } from "@forge/hooks";
 import { LocaleSwitcher } from "@forge/ui";
 
+import { markExplicitLocaleChoice } from "../i18n";
 import { withLocale } from "./locale-url";
 
 /**
@@ -24,6 +25,10 @@ export function RoutedLocaleSwitcher() {
   return (
     <LocaleSwitcher
       onSwitch={async (next) => {
+        // Before setLocale, not after: this is what tells i18n.ts's
+        // languageChanged handler that the change about to happen is a
+        // preference worth remembering, rather than a URL being followed.
+        markExplicitLocaleChoice();
         await setLocale(next);
         // href, not pathname: the page the user is on includes its query and
         // hash, and a language switch must not drop them.

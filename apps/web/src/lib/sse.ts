@@ -107,7 +107,11 @@ async function readStream(signal: AbortSignal): Promise<void> {
       }
     }
   } finally {
-    setConnected(false);
+    // Same ownership rule as connectLoop's finally below: a superseded
+    // stream ending must not report the *live* one as disconnected.
+    if (abortController?.signal === signal) {
+      setConnected(false);
+    }
   }
 }
 
@@ -136,6 +140,15 @@ function connectLoop(): Promise<void> {
       // `finally` -- nothing case-specific to do here.
     })
     .finally(() => {
+      // Only if this run is still the current one. An aborted stream settles
+      // asynchronously, so hiding and re-showing the tab quickly starts a new
+      // connection *before* the old one's `finally` gets to run -- and this
+      // used to then null out the new connection's registration and schedule
+      // a reconnect on top of it, leaving two live streams delivering every
+      // notification twice, then four.
+      if (abortController !== controller) {
+        return;
+      }
       abortController = null;
       scheduleReconnect();
     });

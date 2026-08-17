@@ -15,10 +15,14 @@ import { renderApp } from "../test/render";
 // those inbound URLs work.
 
 afterEach(async () => {
-  localStorage.removeItem(LOCALE_STORAGE_KEY);
+  // Language first, key second. changeLanguage() here is *not* URL-driven, so
+  // i18n.ts's languageChanged handler persists it -- clearing the key before
+  // that ran left "en" written straight back, so a test could inherit a
+  // preference from whichever test ran before it.
   if (i18next.language !== "en") {
     await i18next.changeLanguage("en");
   }
+  localStorage.removeItem(LOCALE_STORAGE_KEY);
 });
 
 describe("locale-prefixed routing", () => {
