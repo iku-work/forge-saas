@@ -52,6 +52,7 @@ from dataclasses import dataclass
 from typing import Any
 
 import httpx
+import hypothesis
 import pytest
 import schemathesis
 import stripe
@@ -80,6 +81,22 @@ schema.config.generation.max_examples = 20
 # exactly that as suspicious; schemathesis.config.HealthCheck doesn't expose
 # it individually (only via `all`), unlike hypothesis's own enum.
 schema.config.update(suppress_health_check=[HealthCheck.all])
+# ...and again through hypothesis's own settings, because the line above is
+# not reliably enough on its own: CI fails this file on exactly the health
+# check it suppresses, while the same commit, the same pins and the same
+# `pytest --cov=app tests/ -x` pass on Linux in a container and on Windows.
+# Whatever schemathesis does with its config, hypothesis is the library that
+# raises FailedHealthCheck, and a registered profile is the mechanism its own
+# error message points at -- so suppress it at that layer too rather than
+# depend on the translation between the two holding everywhere.
+#
+# Scoped by loading the profile here, at this module's import: no other test
+# in the suite uses hypothesis, so nothing else inherits it.
+hypothesis.settings.register_profile(
+    "schemathesis_contract",
+    suppress_health_check=[hypothesis.HealthCheck.function_scoped_fixture],
+)
+hypothesis.settings.load_profile("schemathesis_contract")
 
 schemathesis.checks.load_all_checks()
 _CHECKS = schemathesis.checks.CHECKS.get_by_names(
