@@ -236,9 +236,16 @@ jobs:
       - name: Install frontend dependencies
         run: pnpm install --frozen-lockfile
 
+      # `python -m app.core.migrations`, not `alembic upgrade head`: every
+      # optional module's migrations sit on their own branch (T-062), so this
+      # tree always has several heads and a bare `head` is ambiguous -- alembic
+      # refuses with "Multiple head revisions are present". That module walks
+      # migration_targets() instead, applying the core trunk plus exactly the
+      # branches product/config.py enables, which is also what `make migrate`
+      # runs.
       - name: Migrate test database
         working-directory: backend
-        run: alembic upgrade head
+        run: python -m app.core.migrations
 
       - name: Start backend
         working-directory: backend
@@ -555,8 +562,15 @@ jobs:
           curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh \
             | sh -s -- -b /usr/local/bin v0.71.2
 
+      # --skip-files: the same three dummy fixtures trufflehog and gitleaks
+      # already allowlist above. Trivy runs its own secret scanner with its own
+      # rules, so it needs telling separately -- otherwise the never-deployed
+      # RS256 keypair every one of them carries (Settings() needs real-shaped
+      # key material to construct) fails this step on three "secrets" that are
+      # committed on purpose.
       - name: Trivy filesystem scan (deps + secrets, high+ severity)
-        run: trivy fs . --exit-code 1 --severity HIGH,CRITICAL --skip-dirs node_modules
+        run: |
+          trivy fs . --exit-code 1 --severity HIGH,CRITICAL --skip-dirs node_modules             --skip-files backend/.env.e2e             --skip-files backend/.env.loadtest             --skip-files backend/.env.prod-compose
 
       - uses: actions/setup-python@v5
         with:
@@ -980,8 +994,13 @@ jobs:
 
       # Same image that was scanned + pushed in `build` -- never reinstalled
       # from source, so what ran migrations is byte-for-byte what gets deployed.
+      # Same multi-head reason as the test job's migrate step above -- and it
+      # matters more here: `alembic upgrade head` could never have succeeded
+      # against this schema, so the production migration step was broken from
+      # the day the first module branch landed. Nothing caught it because this
+      # workflow had never run.
       - name: Run migrations against production DB (fail = abort, no deploy)
-        run: docker run --rm --env-file prod.env "$IMAGE" alembic upgrade head
+        run: docker run --rm --env-file prod.env "$IMAGE" python -m app.core.migrations
 
       - name: Capture currently-live deploy (rollback target if the new one fails)
         id: previous
