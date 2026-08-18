@@ -82,8 +82,24 @@ def _validation_error() -> ResendError:
 # --- _email_renderer_cli_path: dual-path resolution (mirrors app.core.i18n) --
 
 
-def test_email_renderer_cli_path_prefers_package_dir_when_present() -> None:
-    assert email_job._email_renderer_cli_path() == email_job._PACKAGE_EMAIL_RENDERER_CLI
+def test_email_renderer_cli_path_prefers_package_dir_when_present(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    # Both paths are monkeypatched, like the fallback test below, because the
+    # real _PACKAGE_EMAIL_RENDERER_CLI points at packages/email-templates/dist/
+    # -- a gitignored build output. Asserting against the unpatched constant
+    # made this test pass only on a machine that had run `pnpm build` at some
+    # point, and fail on any clean checkout: CI's test job never builds the
+    # frontend, so it saw the fallback branch and a green local run said
+    # nothing about it. What is worth testing here is the branch, not whether
+    # somebody happens to have a dist directory.
+    package = tmp_path / "package" / "cli.js"
+    package.parent.mkdir(parents=True)
+    package.touch()
+    monkeypatch.setattr(email_job, "_PACKAGE_EMAIL_RENDERER_CLI", package)
+    monkeypatch.setattr(email_job, "_BAKED_EMAIL_RENDERER_CLI", tmp_path / "baked" / "cli.js")
+
+    assert email_job._email_renderer_cli_path() == package
 
 
 def test_email_renderer_cli_path_falls_back_to_baked_path_when_package_dir_absent(
