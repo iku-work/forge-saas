@@ -155,3 +155,7 @@ instead of per-PR.
 | 2026-08-18 | ce0d480 | browse | - | - | PASS |
 | 2026-08-18 | ce0d480 | presign | - | - | PASS |
 | 2026-08-18 | ce0d480 | mixed | - | - | FAIL |
+| 2026-08-19 | 1de0901 | login-burst | - | - | FAIL |
+| 2026-08-19 | 1de0901 | browse | - | - | PASS |
+| 2026-08-19 | 1de0901 | presign | - | - | PASS |
+| 2026-08-19 | 1de0901 | mixed | - | - | FAIL |
