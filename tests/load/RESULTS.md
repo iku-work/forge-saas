@@ -159,3 +159,7 @@ instead of per-PR.
 | 2026-08-19 | 1de0901 | browse | - | - | PASS |
 | 2026-08-19 | 1de0901 | presign | - | - | PASS |
 | 2026-08-19 | 1de0901 | mixed | - | - | FAIL |
+| 2026-08-20 | dfd3325 | login-burst | - | - | FAIL |
+| 2026-08-20 | dfd3325 | browse | - | - | PASS |
+| 2026-08-20 | dfd3325 | presign | - | - | PASS |
+| 2026-08-20 | dfd3325 | mixed | - | - | FAIL |
