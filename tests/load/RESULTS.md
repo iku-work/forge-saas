@@ -163,3 +163,7 @@ instead of per-PR.
 | 2026-08-20 | dfd3325 | browse | - | - | PASS |
 | 2026-08-20 | dfd3325 | presign | - | - | PASS |
 | 2026-08-20 | dfd3325 | mixed | - | - | FAIL |
+| 2026-08-21 | 8cb199a | login-burst | - | - | FAIL |
+| 2026-08-21 | 8cb199a | browse | - | - | PASS |
+| 2026-08-21 | 8cb199a | presign | - | - | PASS |
+| 2026-08-21 | 8cb199a | mixed | - | - | FAIL |
