@@ -128,6 +128,11 @@ async def test_returns_the_callers_own_user_and_org_context(
     assert data["is_impersonating"] is False
 
 
+# Both of these seed a real subscription row, so they need billing's tables
+# to exist -- including the second one, whose *assertion* is about billing
+# being off (it writes the row first precisely so a regression shows up as a
+# wrong answer rather than a lucky null).
+@pytest.mark.module_dependent
 async def test_reports_the_orgs_plan_and_subscription_status(
     client: httpx.AsyncClient, session: AsyncSession
 ) -> None:
@@ -157,6 +162,7 @@ async def test_org_without_a_subscription_reports_null_plan(
     assert data["subscription_status"] is None
 
 
+@pytest.mark.module_dependent
 async def test_billing_disabled_reports_null_plan_without_querying_billing_tables(
     client: httpx.AsyncClient, session: AsyncSession, monkeypatch: pytest.MonkeyPatch
 ) -> None:

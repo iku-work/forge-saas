@@ -59,6 +59,11 @@ from app.modules.feature_flags.repository import OrgFeatureFlagRepository
 from app.modules.tenancy.models import Membership, Organization, OrgFeatureFlag
 from product import config as product_config
 
+# T-291: this file needs billing enabled -- its routes, its tables, or
+# both. CI's module-matrix job deselects it in the combination that turns
+# every optional module off.
+pytestmark = pytest.mark.module_dependent
+
 _TABLES = [
     Plan.__table__,
     Subscription.__table__,

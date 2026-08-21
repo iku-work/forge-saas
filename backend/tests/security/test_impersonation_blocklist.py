@@ -222,6 +222,12 @@ def test_the_marker_is_read_through_the_rate_limit_decorator() -> None:
     assert login.marked
 
 
+# T-291: the eight tests marked in this file name a specific module's route
+# (billing checkout, notification read-state) or assert over the whole guarded
+# set, which shrinks when a module is off. The sweep itself -- every write
+# route carries a guard or an `# impersonation-ok:` comment -- is core and
+# runs in every combination of CI's module-matrix job.
+@pytest.mark.module_dependent
 def test_route_traversal_still_finds_the_real_routes() -> None:
     """If a FastAPI upgrade changes how included routers are flattened,
     route_facts could quietly return nothing -- and then the sweep above would
@@ -251,6 +257,7 @@ def test_guarding_a_public_route_does_not_make_it_look_authenticated() -> None:
     ]
 
 
+@pytest.mark.module_dependent
 def test_every_category_is_actually_used() -> None:
     """A category nobody applies is a category that was renamed in one place
     and not the other -- BlockedActionKind is a closed set for exactly that
@@ -417,6 +424,7 @@ async def test_a_blocked_attempt_writes_an_elevated_audit_event(
     }
 
 
+@pytest.mark.module_dependent
 async def test_checkout_session_during_impersonation_is_blocked(
     world: ImpersonatedWorld, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -447,6 +455,7 @@ async def test_checkout_session_during_impersonation_is_blocked(
     assert response.json()["error"]["details"] == {"kind": "billing"}
 
 
+@pytest.mark.module_dependent
 async def test_marking_a_notification_read_during_impersonation_leaves_it_unread(
     world: ImpersonatedWorld, redis: Redis
 ) -> None:
@@ -475,6 +484,7 @@ async def test_marking_a_notification_read_during_impersonation_leaves_it_unread
     assert still_unread.read_at is None
 
 
+@pytest.mark.module_dependent
 async def test_the_same_user_can_mark_it_read_themselves(
     world: ImpersonatedWorld, redis: Redis
 ) -> None:
@@ -530,6 +540,7 @@ def push_probe(world: ImpersonatedWorld, redis: Redis) -> httpx.AsyncClient:
     return httpx.AsyncClient(transport=ASGITransport(app=probe), base_url="https://testserver")
 
 
+@pytest.mark.module_dependent
 async def test_a_notification_raised_during_impersonation_sends_no_push(
     world: ImpersonatedWorld,
     push_probe: httpx.AsyncClient,
@@ -544,6 +555,7 @@ async def test_a_notification_raised_during_impersonation_sends_no_push(
     assert [function for function, _ in enqueued_jobs] == ["send_email"]
 
 
+@pytest.mark.module_dependent
 async def test_the_same_notification_outside_impersonation_does_send_a_push(
     world: ImpersonatedWorld,
     push_probe: httpx.AsyncClient,
@@ -556,6 +568,7 @@ async def test_the_same_notification_outside_impersonation_does_send_a_push(
     assert {function for function, _ in enqueued_jobs} == {"send_email", "send_push"}
 
 
+@pytest.mark.module_dependent
 async def test_the_suppressed_push_is_recorded_on_the_audit_event(
     world: ImpersonatedWorld, push_probe: httpx.AsyncClient
 ) -> None:

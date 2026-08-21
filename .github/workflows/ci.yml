@@ -286,6 +286,255 @@ jobs:
             --suppress-health-check=filter_too_much \
             --max-examples=20
 
+  # T-291: the half of the module matrix that cannot run in-process.
+  #
+  # backend/tests/modules/test_module_toggles.py already parametrises module
+  # configurations by monkeypatching get_modules(), and it runs in the `test`
+  # job above. What it cannot reach is everything outside a single Python
+  # process: a real `alembic upgrade` from an empty database, app boot as a
+  # subprocess reading an actual product/config.py off disk, and the frontend
+  # build -- which from T-300 onward is gated by a module toggle of its own
+  # (`marketing` switches off a *build*, not a router).
+  #
+  # Three combinations, each a whole-repo run. B is the one that earns the
+  # job: "every optional module off" is the configuration a template user is
+  # most likely to want and least likely to have been tested.
+  module-matrix:
+    needs: test
+    runs-on: ubuntu-latest
+
+    name: module-matrix (${{ matrix.id }})
+
+    strategy:
+      # Independent configurations: knowing that B is broken is not a reason
+      # to stop finding out about C.
+      fail-fast: false
+      matrix:
+        include:
+          # A copies nothing on purpose. This is a template: a product edits
+          # backend/product/config.py, and that edited file is what has to
+          # boot and build. A committed "default" fixture would test the
+          # template's opinion instead of the product's.
+          - id: a-default
+            fixture: ""
+          - id: b-minimal
+            fixture: minimal
+          - id: c-phase4
+            fixture: phase4
+
+    # Same creds/DB name as backend/.env.test, exactly like the `test` job --
+    # forge_test starts empty, which is what makes the migrate step below a
+    # from-zero upgrade rather than an incremental one.
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: forge_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U postgres"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=10
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd="redis-cli ping"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: backend/pyproject.toml
+
+      - name: Install backend dependencies
+        working-directory: backend
+        run: pip install -e ".[dev]"
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: pnpm
+
+      - name: Install frontend dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Copy test environment file
+        working-directory: backend
+        run: cp .env.test .env
+
+      # Deliberately *before* the fixture is applied, and from the committed
+      # config in every combination. packages/api-client/src/generated is
+      # produced from a live /openapi.json, and apps/web imports its symbols
+      # unconditionally (listAdminOrgs, getAdminDashboard, ...) because the
+      # SPA gates modules at runtime from /api/v1/config, not at compile time
+      # -- one bundle serves every configuration. Generating from combination
+      # B's own (smaller) schema would delete symbols the app's source
+      # imports, and type-check would fail on the template's design rather
+      # than on anything the toggle got wrong.
+      - name: Start backend for OpenAPI schema (committed config)
+        working-directory: backend
+        run: |
+          nohup uvicorn app.main:app --host 0.0.0.0 --port 8000 > openapi.log 2>&1 &
+          echo $! > openapi.pid
+          for i in $(seq 1 30); do
+            curl -sf http://localhost:8000/health && exit 0
+            sleep 1
+          done
+          echo "backend did not become ready" >&2
+          cat openapi.log
+          exit 1
+
+      - name: Generate API client from live OpenAPI schema
+        run: pnpm --filter @forge/api-client generate
+
+      # Waits for the port to come free rather than just signalling. The boot
+      # check below binds :8000 again -- the generator's input URL is
+      # hardcoded, so both backends have to live there -- and a predecessor
+      # that was still listening would answer that health poll perfectly
+      # happily, from the *committed* config. That is the one process this
+      # job must never mistake for the fixture's.
+      - name: Stop the schema backend
+        working-directory: backend
+        run: |
+          kill "$(cat openapi.pid)" || true
+          for i in $(seq 1 20); do
+            curl -sf http://localhost:8000/health > /dev/null || exit 0
+            sleep 1
+          done
+          echo "the schema backend is still listening on :8000" >&2
+          exit 1
+
+      # Both files, always together: a half-applied toggle (backend 404s, UI
+      # still offers the page) is the exact failure the runbook warns about,
+      # and the matrix would hide it by only ever changing one side.
+      # tests/test_product_config_parity.py has already proven the pair agrees
+      # before this job gets anywhere near a container.
+      - name: Apply the ${{ matrix.id }} module fixture
+        if: matrix.fixture != ''
+        run: |
+          cp "backend/tests/fixtures/module_configs/${{ matrix.fixture }}.py" backend/product/config.py
+          cp "backend/tests/fixtures/module_configs/${{ matrix.fixture }}.config.ts" product.config.ts
+
+      - name: Migration plan for this combination
+        working-directory: backend
+        run: python -m app.core.migrations plan
+
+      # migration_targets() asks Alembic only for the branches this
+      # combination enables; a branch nobody asks for is never recorded in
+      # alembic_version. Against the empty forge_test above, this is the
+      # from-scratch upgrade a new deployment of this product would run.
+      - name: alembic upgrade from an empty database
+        working-directory: backend
+        run: python -m app.core.migrations
+
+      # A subprocess, not TestClient: this is the only check that
+      # product/config.py on disk -- not a monkeypatched module object --
+      # boots the real app, with validate_modules() and validate_stripe_keys()
+      # running for real.
+      - name: Boot the app as a subprocess
+        working-directory: backend
+        run: |
+          nohup uvicorn app.main:app --host 0.0.0.0 --port 8000 > uvicorn.log 2>&1 &
+          for i in $(seq 1 30); do
+            curl -sf http://localhost:8000/health && exit 0
+            sleep 1
+          done
+          echo "backend did not boot under the ${{ matrix.id }} module config" >&2
+          cat uvicorn.log
+          exit 1
+
+      - name: /api/v1/config reports exactly this combination's modules
+        working-directory: backend
+        run: |
+          python - <<'PY'
+          import json
+          import urllib.request
+          from typing import get_args
+
+          from app.core.modules import ModuleName
+          from product.config import MODULES
+
+          with urllib.request.urlopen("http://localhost:8000/api/v1/config") as response:
+              reported = json.load(response)["data"]["modules"]
+
+          expected = {name: getattr(MODULES, name).enabled for name in get_args(ModuleName)}
+          print(json.dumps(reported, indent=2, sort_keys=True))
+          assert reported == expected, f"/config disagrees with product/config.py: {reported} != {expected}"
+          PY
+
+      # --no-cov: the suite is deliberately narrowed here, so the 85% gate the
+      # `test` job enforces over the *whole* suite would be measuring a
+      # different thing. `module_dependent` marks the tests that need an
+      # optional module's routes, tables or seed rows -- see pyproject.toml's
+      # marker description. Combination B is the one that needs the
+      # deselection; A and C run the same command for comparability, and the
+      # `test` job above still runs everything at the committed config.
+      #
+      # test_module_toggles.py is *not* module_dependent (it supplies its own
+      # configuration), so it runs here too -- which is what makes
+      # unconditionalising a router import in build_router() turn B red.
+      - name: Backend tests that do not require an optional module
+        working-directory: backend
+        run: pytest -m "not module_dependent" --no-cov tests/
+
+      - name: Frontend build, lint and type-check
+        run: |
+          pnpm build
+          pnpm lint
+          pnpm type-check
+
+      # T-300 creates apps/marketing and its scripts/guard-enabled.mjs, which
+      # reads modules.marketing from product.config.ts and exits 0 without
+      # producing a dist when it is false. Until then there is nothing to
+      # assert, and this step says so rather than passing silently. The moment
+      # that app exists, the check below is what makes deleting the guard turn
+      # combination B red.
+      - name: The marketing build honours its toggle
+        run: |
+          if [ ! -d apps/marketing ]; then
+            echo "apps/marketing does not exist yet (T-300) — nothing to check"
+            exit 0
+          fi
+          # Read the toggle from the Python config rather than by grepping the
+          # TypeScript one: the two are proven identical by
+          # tests/test_product_config_parity.py, which ran in the pytest step
+          # above against these very files, and a dataclass attribute cannot be
+          # matched by accident the way `marketing: true` in a comment can.
+          enabled=$(cd backend && python -c \
+            "from product.config import MODULES; print(str(MODULES.marketing.enabled).lower())")
+          if [ "$enabled" = "true" ] && [ ! -d apps/marketing/dist ]; then
+            echo "marketing is enabled but pnpm build produced no apps/marketing/dist" >&2
+            exit 1
+          fi
+          if [ "$enabled" = "false" ] && [ -d apps/marketing/dist ]; then
+            echo "marketing is disabled but apps/marketing/dist was built anyway — is scripts/guard-enabled.mjs still wired into apps/marketing's build script?" >&2
+            exit 1
+          fi
+          echo "marketing=$enabled, dist present: $([ -d apps/marketing/dist ] && echo yes || echo no)"
+
+      # Same dance as the module-generator smoke in `test`: this job works
+      # against a dirty checkout, so it puts the checkout back the way it
+      # found it whether or not anything above failed. Nothing later in this
+      # job reads the config files, but an artifact upload or a cache save
+      # added tomorrow would, and it would silently capture combination B's.
+      - name: Restore the product config files
+        if: always()
+        run: git checkout -- backend/product/config.py product.config.ts
+
   storybook:
     needs: lint
     runs-on: ubuntu-latest

@@ -55,6 +55,15 @@ at boot, whether or not you spelled the `requires` out yourself.
 `apps/marketing`'s `build` script exits 0 without producing a `dist`, so a
 repo-root `turbo build` stays green for a product that turned it off.
 
+Your combination is tested, not assumed. CI's `module-matrix` job runs three
+of them from scratch — migrate from an empty database, boot, `GET
+/api/v1/config`, `pytest -m "not module_dependent"`, then `pnpm build && lint
+&& type-check`. One of the three is **your** `product.config.py` exactly as
+you edited it; the other two are template fixtures in
+`backend/tests/fixtures/module_configs/`. If your product ends up on a
+configuration you want permanently covered, add a fixture pair there and a
+leg to that job's matrix.
+
 ## Migration prefix convention
 
 Alembic migrations are numbered so template and product migrations never

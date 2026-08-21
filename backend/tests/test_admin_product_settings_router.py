@@ -27,6 +27,11 @@ from app.modules.product_settings import keys
 from app.modules.product_settings.service import AUDIT_ACTION
 from app.modules.tenancy.repository import MembershipRepository, OrganizationRepository
 
+# T-291: this file needs admin enabled -- its routes, its tables, or
+# both. CI's module-matrix job deselects it in the combination that turns
+# every optional module off.
+pytestmark = pytest.mark.module_dependent
+
 _PASSWORD = "Correct-Horse9"
 _URL = "/api/v1/admin/settings/product"
 

@@ -168,6 +168,7 @@ def test_all_invariants_satisfied_in_dev_does_not_require_pepper_or_tls(
     assert settings.ENVIRONMENT == "dev"
 
 
+@pytest.mark.module_dependent  # the assertion is about billing being on
 def test_validate_stripe_keys_raises_when_billing_enabled_and_keys_missing(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

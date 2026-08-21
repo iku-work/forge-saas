@@ -1,19 +1,20 @@
-# Module toggle guide (T-066)
+# Module toggle guide (T-066, T-291)
 
 The module toggle system (T-060–T-065) makes every optional module —
 billing, GDPR, and whatever the product adds later — a single switch in
 `backend/product/config.py` (+ the mirrored `product.config.ts` at the repo
 root for the frontend). Flipping a module off removes its routes (404, not
-hidden), its DB tables (never created), and its UI (absent, not disabled)
-together. `backend/tests/modules/test_module_toggles.py` is the automated
-proof of this; this runbook is the manual walkthrough.
+hidden), its DB tables (never created), its UI (absent, not disabled) and —
+since T-290 — a whole app's build, together.
+`backend/tests/modules/test_module_toggles.py` and CI's `module-matrix` job
+are the automated proof of this; this runbook is the manual walkthrough.
 
 ## What's actually toggleable today
 
 `EnabledModules` (`backend/app/core/modules.py`) declares fourteen module
 names, and they are not all at the same stage. `TEMPLATE.md`'s module table is
-the per-module contract; what matters operationally is which of the three
-things a toggle actually removes today:
+the per-module contract; what matters operationally is what a toggle actually
+removes today:
 
 - **Routes and tables both.** `billing`, `gdpr`, `notifications`,
   `file_storage` — a real router, `models.py`, and a migration branch each.
@@ -25,12 +26,21 @@ things a toggle actually removes today:
   their own.
 - **UI only.** `multi_org` has no routes to remove — the frontend reads it from
   `/config` and hides the org switcher.
+- **A build, not a router.** `marketing` is the only one of the fourteen that
+  removes no HTTP surface at all and still removes something real: the whole
+  `apps/marketing` build (T-300). It is the reason the module matrix had to
+  grow a CI job — see Verification.
 - **Nothing yet.** `oauth` and `totp_2fa` ship routers in `build_router()`'s
   always-on block, so their toggles do not currently remove anything;
   `usage_metering` and `outbound_webhooks` are Phase-2 slots; and T-290's
-  `marketing`, `public_api` and `enterprise_sso` are Phase-4 slots whose
-  surface arrives with T-300, T-310 and T-331 respectively. Toggling any of
-  these today changes only what `/api/v1/config` reports.
+  `public_api` and `enterprise_sso` are Phase-4 slots whose surface arrives
+  with T-310 and T-331 respectively. Toggling any of these today changes only
+  what `/api/v1/config` reports.
+
+`backend/tests/modules/test_module_toggles.py`'s `MODULE_SURFACE` is the
+machine-readable version of this list, one entry per module, with a note
+explaining every entry that is deliberately empty. If this section and that
+table ever disagree, the table is the one that is tested.
 
 Treat the steps below as the worked example; the mechanism is identical for
 every module added later.
@@ -132,6 +142,81 @@ config files removes `/api/v1/me/export`, `/api/v1/me/consents`, and
 `DELETE /api/v1/me`, and skips creating `consent_record`/`data_export_job`.
 Nothing else depends on `gdpr`, so it can be toggled alone.
 
+### Disabling marketing (T-290)
+
+`marketing` is the odd one out: it gates a **build**, not a router. Nothing
+about the API changes when it goes off, which is why the in-process test
+matrix has nothing to assert for it and CI's `module-matrix` job does.
+
+1. `marketing=ModuleConfig(enabled=False)` in `backend/product/config.py`,
+   `marketing: false` in `product.config.ts`.
+2. `pnpm build` at the repo root stays **green**. `apps/marketing`'s build
+   script runs `scripts/guard-enabled.mjs` first, which reads
+   `modules.marketing` from `product.config.ts`, prints
+   `marketing module disabled — skipping build`, and exits `0` — not `1`,
+   because `turbo build` has to stay green for a product that turned it off.
+   No `apps/marketing/dist` is produced.
+3. Drop the marketing block from the Caddyfile (T-307). With the module off
+   that block must be **absent**, not left in place serving 404s from an
+   empty `/srv/marketing`.
+4. In the app, the footer's "← Back to site" link, the login page's logo
+   href, and marketing links in transactional emails all fall back to the app
+   root. Nothing to configure — they read the module from `/config`.
+
+Turning it off does not delete `apps/marketing/`; the source stays in the
+workspace and simply never builds. Re-enabling is one boolean and a redeploy.
+
+### Enabling public_api — and what re-enabling it costs
+
+`public_api` ships **off** (T-290): an org-scoped API key is attack surface
+nobody asked for. Off, there are no `/api/v1/api-keys` routes, no `api_key`
+table, and no second kind of principal that can authenticate — a key is a
+credential that is not a user, does not carry a session, and cannot be
+stopped by disabling a person's account.
+
+On, you get all three, plus the `public_api` migration branch.
+
+> **The one re-enable with a security consequence.** Every other module in
+> this template can be switched off and on again with no more effect than
+> "the routes come back". `public_api` cannot. Disabling it removes the
+> routes but **leaves every row in `api_key` exactly where it was** — the
+> toggle skips migrations, it never drops anything. Turning the module back
+> on makes each of those keys a working credential again, immediately, with
+> no further deploy: keys issued months ago, to integrations that have since
+> been decommissioned, to people who have since left. Nothing in the flip
+> notifies anyone or expires anything.
+>
+> So, before re-enabling on a database that has ever had the module on:
+>
+> 1. `select id, org_id, name, created_at, last_used_at, revoked_at from api_key
+>    order by created_at;` — read it, in full, with the org owners.
+> 2. Revoke, don't reason. Anything you cannot positively account for gets
+>    revoked *before* the module goes back on, not after.
+> 3. Only then flip the boolean in both config files and redeploy.
+>
+> The same applies to a database restored from a backup taken while the
+> module was on. See [backup-restore.md](backup-restore.md).
+
+### Enabling enterprise_sso
+
+`enterprise_sso` also ships **off**, for a build reason as much as a security
+one: SAML drags `python3-saml` → `xmlsec` → the native `libxmlsec1` library
+into the backend image.
+
+- It **requires `oauth`** — T-331's OIDC SP reuses authlib's client registry
+  and T-025's account linking. `enterprise_sso=True` with `oauth=False` is a
+  `RuntimeError` at boot naming both modules, which is the whole point of
+  `validate_modules`. There is no configuration in which half of it works.
+- Off removes per-org OIDC/SAML sign-in (`/api/v1/auth/sso/*`) and the
+  `sso_connection` table. Members of an org that was using SSO fall back to
+  whatever other sign-in method their account has — which, for an account
+  provisioned purely through the IdP, may be none. Check that before turning
+  it off on a live system: it is an account-recovery problem, not a routing
+  one.
+- Unlike `public_api`, an inert `sso_connection` row is not a credential.
+  Re-enabling exposes org SSO configuration, not a way in — but the same
+  "read the table before you flip it" habit applies.
+
 ### Adding a new product-specific module
 
 1. `make new-module NAME=invoices` — generates
@@ -161,24 +246,57 @@ the removed route (not an empty 200), and an absent tab in the UI. Run all
 four; the route check and the UI check fail independently, which is precisely
 what a half-mirrored toggle looks like.
 
-The whole matrix is verified at once by the suite:
-`backend/tests/modules/test_module_toggles.py` runs three representative
-configs end-to-end (its own Postgres container per scenario, since each
+Beyond the per-scenario checks, two automated layers verify the whole matrix.
+
+**In-process** — `backend/tests/modules/test_module_toggles.py` runs five
+configurations end-to-end (its own Postgres container per scenario, since each
 drives a distinct `alembic upgrade`):
 
-| Config | Disabled | Routes asserted absent | Tables asserted absent |
-|---|---|---|---|
-| `no_billing` | billing, notifications, file_storage | `/api/v1/billing/*` | `plan`, `subscription`, `webhook_event` |
-| `no_gdpr` | gdpr | `/api/v1/me/export`, `/api/v1/me/consents` | `consent_record`, `data_export_job` |
-| `minimal` | all of the above | both sets | both sets |
+| Config | Disabled |
+|---|---|
+| `no_billing` | billing, notifications, file_storage |
+| `no_gdpr` | gdpr |
+| `no_public_api` | public_api |
+| `no_enterprise_sso` | enterprise_sso |
+| `minimal` | all fourteen |
 
-Every scenario also asserts `/api/v1/auth/login`, `/api/v1/orgs`, and
-`/api/v1/config` stay reachable — the always-on surface must survive every
-optional module toggle. Run it directly with:
+What each one removes is not written per scenario. `MODULE_SURFACE` at the top
+of that file declares, once per module, every route and table its toggle owns —
+and every scenario asserts the route table equals *the full surface minus the
+disabled modules'*. Both directions fail: a route that should have gone with
+its module and didn't, and a route that vanished though nothing claimed it.
+`MODULE_SURFACE` is checked for set-equality against `ModuleName` itself, so a
+fifteenth module cannot be added and silently assert nothing. Every scenario
+also asserts `/api/v1/auth/login`, `/api/v1/orgs` and `/api/v1/config` survive.
 
 ```sh
 cd backend && pytest tests/modules/test_module_toggles.py -v
 ```
+
+**Out of process** — CI's `module-matrix` job (T-291). Everything above happens
+inside one Python process with `get_modules()` monkeypatched, which cannot see
+a migration run from an empty database, an app booting as a subprocess off a
+real `product/config.py`, or the frontend build. Three combinations, each
+copying a fixture from `backend/tests/fixtures/module_configs/` over **both**
+config files and then migrating, booting, curl-ing `/api/v1/config`, running
+`pytest -m "not module_dependent"`, and building/linting/type-checking the
+whole workspace:
+
+| Combination | Config | Why it is there |
+|---|---|---|
+| **A** | `backend/product/config.py` as committed | your product's own configuration, whatever you edited it to |
+| **B** | every optional module `False` | the minimum-surface product: most likely to be wanted, least likely to have been tested |
+| **C** | the three Phase 4 modules on | two of them ship off, so nothing else ever exercises them |
+
+To run a combination locally, do by hand what the job does — copy the fixture
+pair over `backend/product/config.py` and `product.config.ts`, run the checks,
+and `git checkout --` both files afterwards.
+
+Backend tests that need an optional module's routes, tables or seed rows carry
+a `module_dependent` marker (registered in `backend/pyproject.toml`); that is
+what combination B deselects. A test written against a module's surface without
+one will fail combination B rather than being skipped by it — which is the
+correct outcome for a test nobody classified.
 
 ## Rollback
 

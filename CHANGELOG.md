@@ -6,6 +6,47 @@ template keep their own changes in `CHANGELOG.product.md` (see
 
 ## [Unreleased]
 ### Added
+- **The module matrix covers the build now, not just the process (T-291).**
+  `backend/tests/modules/test_module_toggles.py` proved that a disabled
+  module's routes and tables disappear together, inside one Python process
+  with `get_modules()` monkeypatched. What it could not see is a migration
+  run from an empty database, an app booting off a real `product/config.py`,
+  or the frontend build — and from T-300 the build is itself gated by a
+  toggle, since `marketing` switches off an app's build rather than a router.
+  - **`MODULE_SURFACE`** declares, once per module, every route and table
+    that module's toggle owns. Each scenario now asserts that the route table
+    equals the baseline minus the disabled modules' surfaces, so a route that
+    outlives its module *and* a route that vanishes with nothing claiming it
+    both fail. That declaration is checked for set-equality against
+    `ModuleName` itself, which is what makes "all fourteen toggles are
+    covered" a fact rather than a claim. Five scenarios, ending in `minimal`
+    — every optional module off.
+  - **CI's `module-matrix` job** runs three whole-repo combinations: the
+    committed `product/config.py`, every optional module off, and the three
+    Phase 4 modules on. Each migrates an empty database through
+    `migration_targets()`, boots uvicorn as a subprocess, compares
+    `GET /api/v1/config` field-for-field against the config on disk, runs
+    `pytest -m "not module_dependent"`, and builds, lints and type-checks the
+    whole workspace.
+  - **`module_dependent`** (registered in `backend/pyproject.toml`) marks the
+    backend tests that need an optional module's routes, tables or seed rows
+    — 361 of 2081 today. A test *without* it must pass with every module off,
+    so one written against a module's surface and left unmarked fails the
+    minimum-surface combination instead of being quietly skipped by it.
+  - `backend/tests/fixtures/module_configs/` holds the config pairs that job
+    copies — each a whole `product/config.py` replacement plus its
+    `product.config.ts` twin — guarded in-process by
+    `backend/tests/test_product_config_parity.py`: every fixture loads,
+    passes `validate_modules()`, agrees key-for-key with its twin, and
+    differs from the shipped config in nothing but its modules. There is
+    deliberately no `default` fixture: the first combination runs the
+    product's own committed config, which is the file a template user
+    actually edits.
+  - `docs/runbooks/module-toggle-guide.md` gains a section per Phase 4
+    module, including the one re-enable in this template that carries a
+    security consequence — turning `public_api` back on makes every surviving
+    `api_key` row a working credential again, immediately, with no deploy and
+    no notice to anyone.
 - **Global runtime switches an operator can flip without a redeploy
   (T-263).** A `product_settings` singleton row (one row, `id = 1`, enforced
   by a `CHECK` constraint) holds the switches that have to change during an

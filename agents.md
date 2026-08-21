@@ -6544,10 +6544,39 @@ For each of `packages/{ui,api-client,types,hooks,validation,utils}`:
 
 **Done when**
 
-- [ ] Three combinations green, backend **and** frontend
-- [ ] T-066's in-process matrix covers all fourteen modules
-- [ ] Deliberately unconditionalising a router import in `build_router()` turns combination B red
-- [ ] Deliberately removing the `marketing` guard script turns combination B red too
+- [x] Three combinations green, backend **and** frontend —
+      `module-matrix` in `.github/workflows/ci.yml`, three legs: A the
+      committed `product/config.py`, B every optional module off, C the three
+      Phase 4 modules on. Each was run by hand exactly as the job runs it —
+      fixture pair copied over both config files, database dropped and
+      recreated, `python -m app.core.migrations` from empty, uvicorn as a
+      subprocess, `GET /api/v1/config` compared field-for-field with the
+      config on disk. B deselects 361 tests and passes 1670 (6 skipped);
+      `pnpm build && pnpm lint && pnpm type-check` green. CI has not executed
+      the job itself yet: it `needs: test`, which was red on a stale
+      `alembic upgrade head` assertion until this branch fixed it
+- [x] T-066's in-process matrix covers all fourteen modules —
+      `MODULE_SURFACE` in `backend/tests/modules/test_module_toggles.py`
+      declares route and table ownership once per module and is asserted
+      set-equal to `ModuleName`, so a fifteenth toggle cannot be added
+      without an entry, and every scenario diffs the whole route table
+      against the baseline rather than listing paths by hand. Five scenarios
+      between them switch off all fourteen, which is itself a test; a module
+      that legitimately removes nothing carries a `note` explaining what its
+      toggle does instead, and that is enforced too
+- [x] Deliberately unconditionalising a router import in `build_router()` turns combination B red —
+      confirmed by patching `if modules.billing.enabled:` to `if True:` in
+      `app/api/v1/__init__.py`: `test_module_config_matrix` fails on both
+      `no_billing` and `minimal`, naming all seven surviving
+      `/api/v1/billing/*` paths. That file is deliberately *not*
+      `module_dependent`, which is what carries the check into the matrix job
+- [ ] Deliberately removing the `marketing` guard script turns combination B red too —
+      not verifiable until T-300: `apps/marketing` does not exist yet. The
+      job's step is wired and self-activating — today it prints
+      `does not exist yet (T-300)` and exits 0; once the app appears it fails
+      B if `marketing` is off and a `dist` was produced anyway. It reads the
+      toggle from `product.config.MODULES` rather than grepping the `.ts`, so
+      a comment cannot satisfy it
 
 ---
 

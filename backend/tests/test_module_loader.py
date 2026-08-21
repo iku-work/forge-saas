@@ -130,6 +130,7 @@ def test_is_enabled_reflects_product_config_override(monkeypatch: pytest.MonkeyP
     assert module_loader.is_enabled("billing") is False
 
 
+@pytest.mark.module_dependent  # 'default' means the committed product/config.py
 def test_is_enabled_true_for_default_config() -> None:
     assert module_loader.is_enabled("billing") is True
 

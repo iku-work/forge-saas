@@ -174,28 +174,39 @@ async def _list_notifications(ctx: TenantIsolationContext) -> httpx.Response:
     )
 
 
-# (test id, request builder, status codes that prove isolation held)
-_CASES: list[tuple[str, RequestFn, tuple[int, ...]]] = [
-    ("GET /orgs/{org_id}", _get_org, (403,)),
-    ("PATCH /orgs/{org_id}", _update_org, (403,)),
-    ("GET /orgs/{org_id}/members", _list_members, (403,)),
-    ("PATCH /orgs/{org_id}/members/{membership_id}", _update_member_role, (404,)),
-    ("DELETE /orgs/{org_id}/members/{membership_id}", _remove_member, (404,)),
-    ("GET /orgs/{org_id}/invitations", _list_invitations, (403,)),
-    ("POST /orgs/{org_id}/invitations", _create_invitation, (403,)),
-    ("POST /billing/checkout-session", _checkout_session, (403,)),
-    ("POST /billing/portal-session", _portal_session, (403,)),
-    ("GET /billing/subscription", _get_subscription, (403,)),
-    ("GET /orgs/{org_id}/feature-flags", _get_feature_flags, (403,)),
-    ("POST /files/presign", _presign_file_upload, (403,)),
-    ("GET /files", _list_files, (403,)),
-    ("GET /notifications", _list_notifications, (403,)),
+# (test id, request builder, status codes that prove isolation held, owning
+# module). The last field is None for the always-on tenancy surface and a
+# module name for an endpoint that only exists while that module is enabled --
+# T-291 uses it to keep the seven core cases running in CI's module-matrix
+# combination that turns every optional module off, where the other seven
+# endpoints have no route to sweep.
+_CASES: list[tuple[str, RequestFn, tuple[int, ...], str | None]] = [
+    ("GET /orgs/{org_id}", _get_org, (403,), None),
+    ("PATCH /orgs/{org_id}", _update_org, (403,), None),
+    ("GET /orgs/{org_id}/members", _list_members, (403,), None),
+    ("PATCH /orgs/{org_id}/members/{membership_id}", _update_member_role, (404,), None),
+    ("DELETE /orgs/{org_id}/members/{membership_id}", _remove_member, (404,), None),
+    ("GET /orgs/{org_id}/invitations", _list_invitations, (403,), None),
+    ("POST /orgs/{org_id}/invitations", _create_invitation, (403,), None),
+    ("POST /billing/checkout-session", _checkout_session, (403,), "billing"),
+    ("POST /billing/portal-session", _portal_session, (403,), "billing"),
+    ("GET /billing/subscription", _get_subscription, (403,), "billing"),
+    ("GET /orgs/{org_id}/feature-flags", _get_feature_flags, (403,), "feature_flags"),
+    ("POST /files/presign", _presign_file_upload, (403,), "file_storage"),
+    ("GET /files", _list_files, (403,), "file_storage"),
+    ("GET /notifications", _list_notifications, (403,), "notifications"),
 ]
 
 
 @pytest.mark.parametrize(
     ("make_request", "allowed_statuses"),
-    [case[1:] for case in _CASES],
+    [
+        pytest.param(
+            *case[1:3],
+            marks=pytest.mark.module_dependent if case[3] is not None else (),
+        )
+        for case in _CASES
+    ],
     ids=[case[0] for case in _CASES],
 )
 async def test_cross_tenant_access_denied(

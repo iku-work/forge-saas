@@ -12,6 +12,7 @@ from datetime import UTC, datetime, timedelta
 from uuid import uuid4
 
 import httpx
+import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.modules.audit.service import AuditService
@@ -19,6 +20,11 @@ from app.modules.auth.repository import UserRepository
 from app.modules.auth.utils import create_access_token, hash_password
 from app.modules.billing.models import Plan, Subscription
 from app.modules.tenancy.repository import OrganizationRepository
+
+# T-291: this file needs admin enabled -- its routes, its tables, or
+# both. CI's module-matrix job deselects it in the combination that turns
+# every optional module off.
+pytestmark = pytest.mark.module_dependent
 
 _PASSWORD = "Correct-Horse9"
 

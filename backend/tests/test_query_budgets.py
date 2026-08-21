@@ -59,6 +59,12 @@ from app.modules.tenancy.repository import (
 )
 from tests.fixtures.query_counter import QueryLog, count_queries
 
+# T-291: this file needs every module that owns a list endpoint -- the shared
+# seed alone writes a Plan, and half of ENDPOINTS is module-owned. CI's
+# module-matrix job deselects it in the combination that turns every optional
+# module off.
+pytestmark = pytest.mark.module_dependent
+
 _PASSWORD = "Correct-Horse9"
 
 # Endpoint function name -> the most SQL statements one page may issue.

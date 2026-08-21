@@ -51,6 +51,11 @@ from app.modules.auth.models import User
 from app.modules.auth.utils import create_access_token
 from app.modules.notifications.service import IN_APP_CHANNEL_PREFIX
 
+# T-291: this file needs notifications enabled -- its routes, its tables, or
+# both. CI's module-matrix job deselects it in the combination that turns
+# every optional module off.
+pytestmark = pytest.mark.module_dependent
+
 _TABLES = [User.__table__]
 
 

@@ -32,6 +32,11 @@ from app.modules.tenancy.models import Organization
 from app.modules.tenancy.repository import OrganizationRepository
 from product import config as product_config
 
+# T-291: this file needs feature_flags + billing enabled -- its routes, its tables, or
+# both. CI's module-matrix job deselects it in the combination that turns
+# every optional module off.
+pytestmark = pytest.mark.module_dependent
+
 # Same dependents-must-go-too caveat as test_billing_dependencies.py's
 # _BILLING_OFF: notifications/file_storage both `requires=["billing"]`.
 _BILLING_OFF = EnabledModules(

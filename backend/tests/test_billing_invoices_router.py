@@ -46,6 +46,11 @@ from app.modules.auth.utils import create_access_token
 from app.modules.billing.models import Plan
 from app.modules.tenancy.models import Membership, Organization
 
+# T-291: this file needs billing enabled -- its routes, its tables, or
+# both. CI's module-matrix job deselects it in the combination that turns
+# every optional module off.
+pytestmark = pytest.mark.module_dependent
+
 # Plan is along for the ride: Organization.plan_id declares a real FK to
 # plan.id (see test_usage_repository.py's identical note).
 _TABLES = [User.__table__, Plan.__table__, Organization.__table__, Membership.__table__]

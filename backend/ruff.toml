@@ -41,6 +41,12 @@ ignore = [
 # __init__.py -- they are run as `python scripts/x.py`) and T201 (printing to
 # the terminal is the entire point of a CLI).
 "scripts/**" = ["INP001", "T201"]
+# T-291's module-config fixtures are whole replacements for
+# backend/product/config.py, copied over it by CI's module-matrix job. They are
+# never imported as `tests.fixtures.module_configs.minimal`, and an __init__.py
+# beside them would only make the directory listing that enumerates them
+# (tests/test_product_config_parity.py) have to filter it back out.
+"tests/fixtures/module_configs/**" = ["INP001"]
 # alembic migrations are generated/templated, not hand-styled application code.
 # F401: script.py.mako always imports sqlmodel for AutoString columns, even in
 # migrations that end up with none.

@@ -25,6 +25,11 @@ from app.modules.billing.service import BillingService
 from app.modules.tenancy.models import Organization
 from app.modules.tenancy.repository import OrganizationRepository
 
+# T-291: this file needs admin + billing enabled -- its routes, its tables, or
+# both. CI's module-matrix job deselects it in the combination that turns
+# every optional module off.
+pytestmark = pytest.mark.module_dependent
+
 _PASSWORD = "Correct-Horse9"
 
 

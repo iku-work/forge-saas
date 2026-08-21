@@ -56,6 +56,11 @@ from app.workers.jobs.billing import expire_trials_to_inactive, send_dunning_ema
 from app.workers.jobs.gdpr import purge_user_data
 from tests.fixtures.query_counter import assert_max_queries
 
+# T-291: this file needs billing, notifications and file_storage enabled --
+# their routes, their tables, or both. CI's module-matrix job deselects it in
+# the combination that turns every optional module off.
+pytestmark = pytest.mark.module_dependent
+
 _PASSWORD = "Correct-Horse9"
 _NEW_PASSWORD = "Correct-Horse10"
 

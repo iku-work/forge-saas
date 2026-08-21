@@ -31,6 +31,11 @@ from app.core.migrations import build_config
 from app.core.migrations import upgrade as upgrade_migrations
 from app.modules.gdpr.models import ConsentRecord
 
+# T-291: this file needs gdpr enabled -- its routes, its tables, or
+# both. CI's module-matrix job deselects it in the combination that turns
+# every optional module off.
+pytestmark = pytest.mark.module_dependent
+
 
 @pytest.fixture
 def postgres_container() -> "PostgresContainer":

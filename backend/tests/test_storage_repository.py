@@ -20,6 +20,11 @@ from app.modules.auth.repository import UserRepository
 from app.modules.storage.repository import StoredFileRepository
 from app.modules.tenancy.repository import OrganizationRepository
 
+# T-291: this file needs file_storage enabled -- its routes, its tables, or
+# both. CI's module-matrix job deselects it in the combination that turns
+# every optional module off.
+pytestmark = pytest.mark.module_dependent
+
 
 @pytest.fixture
 def redis(_redis_client: Redis) -> Redis:
