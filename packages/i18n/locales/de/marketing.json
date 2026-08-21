@@ -1,0 +1,26 @@
+{
+  "nav": {
+    "skip_to_content": "Zum Inhalt springen",
+    "primary_label": "Hauptnavigation",
+    "sign_in": "Anmelden"
+  },
+  "hero": {
+    "title": "Bauen Sie das Produkt, nicht das Fundament",
+    "subtitle": "Konten, Teams, Abrechnung und eine Admin-Konsole sind bereits gebaut und getestet. Fangen Sie dort an, wo die interessante Arbeit beginnt.",
+    "cta_primary": "Loslegen",
+    "cta_secondary": "Anmelden"
+  },
+  "highlights": {
+    "heading": "Womit Sie starten",
+    "accounts_title": "Konten und Teams",
+    "accounts_body": "Registrierung, Sitzungen, Zwei-Faktor-Authentifizierung, Einladungen und Rollen pro Organisation – ab der ersten Abfrage nach Mandanten getrennt.",
+    "billing_title": "Abonnements, die aufgehen",
+    "billing_body": "Tarife, Testphasen, Upgrades und Mahnläufe – samt Webhook-Verarbeitung, die auch beim doppelten Eintreffen desselben Ereignisses korrekt bleibt.",
+    "operations_title": "Vom ersten Tag an betreibbar",
+    "operations_body": "Strukturierte Logs, Metriken, Audit-Protokolle und Runbooks – damit der erste Vorfall etwas zum Nachlesen ist und nicht zum Raten."
+  },
+  "footer": {
+    "support": "Support kontaktieren",
+    "rights": "© {year} {name}. Alle Rechte vorbehalten."
+  }
+}

@@ -1,0 +1,82 @@
+---
+/**
+ * The landing page. Zero script bytes, asserted by tests/build.test.ts --
+ * @forge/ui's Card and its button classes render here as HTML, with no React
+ * in the output at all.
+ */
+import { Card, CardContent, CardHeader, CardTitle, buttonVariants } from "@forge/ui";
+
+import BaseLayout from "../layouts/BaseLayout.astro";
+import { translator } from "../lib/i18n";
+import { appLink, defaultLocale, modules, product } from "../lib/product";
+
+const locale = defaultLocale;
+const t = translator(locale);
+
+// The billing highlight is a claim about the product, so it follows the
+// module that makes the claim true: with `billing` off there are no plans,
+// no trials and no dunning, and advertising them is the marketing half of
+// the half-applied toggle docs/runbooks/module-toggle-guide.md warns about.
+const highlights = [
+  {
+    title: t("marketing.highlights.accounts_title"),
+    body: t("marketing.highlights.accounts_body"),
+    enabled: true,
+  },
+  {
+    title: t("marketing.highlights.billing_title"),
+    body: t("marketing.highlights.billing_body"),
+    enabled: modules.billing,
+  },
+  {
+    title: t("marketing.highlights.operations_title"),
+    body: t("marketing.highlights.operations_body"),
+    enabled: true,
+  },
+].filter((highlight) => highlight.enabled);
+---
+
+<BaseLayout title={product.name} description={t("marketing.hero.subtitle")} locale={locale}>
+  <section class="mx-auto max-w-5xl px-6 py-20">
+    {/* primaryColor from product.config.ts, the one place the brand colour is
+        set -- an inline custom property, not a second copy of the value in a
+        stylesheet. */}
+    <div class="brand-rule mb-8 h-1 w-16 rounded-full"></div>
+    <h1 class="max-w-3xl text-balance text-4xl font-semibold tracking-tight sm:text-5xl">
+      {t("marketing.hero.title")}
+    </h1>
+    <p class="mt-6 max-w-2xl text-pretty text-lg text-muted-foreground">
+      {t("marketing.hero.subtitle")}
+    </p>
+    <div class="mt-10 flex flex-wrap gap-3">
+      <a href={appLink("register")} class={buttonVariants({ size: "lg" })}>
+        {t("marketing.hero.cta_primary")}
+      </a>
+      <a href={appLink("login")} class={buttonVariants({ variant: "outline", size: "lg" })}>
+        {t("marketing.hero.cta_secondary")}
+      </a>
+    </div>
+  </section>
+
+  <section class="mx-auto max-w-5xl px-6 pb-4">
+    <h2 class="text-2xl font-semibold tracking-tight">{t("marketing.highlights.heading")}</h2>
+    <div class="mt-8 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+      {
+        highlights.map((highlight) => (
+          <Card className="h-full">
+            <CardHeader>
+              <CardTitle>{highlight.title}</CardTitle>
+            </CardHeader>
+            <CardContent className="text-sm text-muted-foreground">{highlight.body}</CardContent>
+          </Card>
+        ))
+      }
+    </div>
+  </section>
+</BaseLayout>
+
+<style define:vars={{ brandColor: product.primaryColor }}>
+  .brand-rule {
+    background-color: var(--brandColor);
+  }
+</style>

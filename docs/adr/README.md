@@ -82,6 +82,6 @@ as the change" rule in step 4 is for.
 | [0001](0001-security-baseline.md) | Security Baseline — OWASP ASVS 4.0 Level 2 | Accepted | 2026-07-08 |
 | [0002](0002-pgbouncer.md) | PgBouncer in transaction mode | Accepted | 2026-08-04 |
 | [0003](0003-read-replica.md) | Read-replica routing | Accepted | 2026-08-05 |
-| [0004](0004-marketing-framework.md) | Marketing site framework | Proposed | 2026-08-05 |
+| [0004](0004-marketing-framework.md) | Marketing site framework | Accepted | 2026-08-21 |
 | [0005](0005-runtime-operator-switches.md) | A database-backed maintenance switch that fails open | Accepted | 2026-08-07 |
 <!-- adr-index:end -->

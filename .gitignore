@@ -18,6 +18,10 @@ dist/
 packages/api-client/src/generated/
 packages/i18n/src/keys.ts
 
+# Astro (T-300) -- apps/marketing/.astro holds the route and content types
+# `astro sync` regenerates on every build and type-check.
+.astro/
+
 # i18n translator export (T-232) -- generated CSV/PO output, not checked in
 packages/i18n/i18n-export/
 

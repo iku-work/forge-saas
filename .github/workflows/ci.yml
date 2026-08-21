@@ -268,6 +268,13 @@ jobs:
       - name: Frontend tests
         run: pnpm --filter web test --run
 
+      - name: Marketing site tests
+        # Runs a real `astro build` per case and asserts over dist/ -- the
+        # zero-JavaScript landing page, the hydrated island, and the module
+        # guard. It rebuilds apps/marketing/dist itself, so it neither needs
+        # nor disturbs the `pnpm build` above.
+        run: pnpm --filter marketing test
+
       - name: i18n package tests
         run: pnpm --filter @forge/i18n test
 

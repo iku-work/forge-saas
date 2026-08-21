@@ -1,0 +1,65 @@
+---
+/**
+ * The shell every marketing page renders inside (T-300).
+ *
+ * `lang`/`dir` follow @forge/i18n's locale registry -- the same rule
+ * apps/web's shell applies in src/i18n.ts, so `ar` is right-to-left on both
+ * sides of the product rather than only inside the login.
+ */
+import { localeMeta } from "@forge/i18n";
+
+import SiteFooter from "../components/SiteFooter.astro";
+import SiteHeader from "../components/SiteHeader.astro";
+import { translator } from "../lib/i18n";
+import { defaultLocale } from "../lib/product";
+import "../styles/global.css";
+
+interface Props {
+  title: string;
+  description: string;
+  locale?: string;
+  noindex?: boolean;
+}
+
+const { title, description, locale = defaultLocale, noindex = false } = Astro.props;
+const t = translator(locale);
+const dir = localeMeta(locale)?.dir ?? "ltr";
+
+// T-302 introduces <Seo>, which owns the whole meta block: title, canonical,
+// Open Graph, Twitter card. Until it exists this layout emits the minimum a
+// page must never ship without -- but it steps aside the moment a page fills
+// the slot, so the two can never both emit a <title> and trip T-302's
+// check-seo.mjs "more than one of any of them" rule.
+const ownsHead = !Astro.slots.has("seo");
+---
+
+<html lang={locale} dir={dir}>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    {noindex && <meta name="robots" content="noindex, nofollow" />}
+    {
+      ownsHead && (
+        <>
+          <title>{title}</title>
+          <meta name="description" content={description} />
+        </>
+      )
+    }
+    <slot name="seo" />
+  </head>
+  <body class="min-h-screen bg-background text-foreground antialiased">
+    <a
+      href="#main"
+      class="sr-only rounded-md bg-primary px-4 py-2 text-primary-foreground focus:not-sr-only focus:absolute focus:start-4 focus:top-4 focus:z-50"
+    >
+      {t("marketing.nav.skip_to_content")}
+    </a>
+    <SiteHeader locale={locale} />
+    <main id="main">
+      <slot />
+    </main>
+    <SiteFooter locale={locale} />
+  </body>
+</html>

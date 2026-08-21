@@ -1,0 +1,26 @@
+{
+  "nav": {
+    "skip_to_content": "Skip to content",
+    "primary_label": "Main navigation",
+    "sign_in": "Sign in"
+  },
+  "hero": {
+    "title": "Ship the product, not the plumbing",
+    "subtitle": "Accounts, teams, billing and an admin console are already built and already tested. Start where the interesting work is.",
+    "cta_primary": "Get started",
+    "cta_secondary": "Sign in"
+  },
+  "highlights": {
+    "heading": "What you start with",
+    "accounts_title": "Accounts and teams",
+    "accounts_body": "Sign-up, sessions, two-factor authentication, invitations and per-organization roles, isolated by tenant from the first query.",
+    "billing_title": "Subscriptions that reconcile",
+    "billing_body": "Plans, trials, upgrades and dunning, with webhook handling that stays correct when the same event arrives twice.",
+    "operations_title": "Operable from day one",
+    "operations_body": "Structured logs, metrics, audit trails and runbooks, so the first incident is something you read about rather than guess at."
+  },
+  "footer": {
+    "support": "Contact support",
+    "rights": "© {year} {name}. All rights reserved."
+  }
+}

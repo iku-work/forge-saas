@@ -1,0 +1,21 @@
+{
+  "extends": "astro/tsconfigs/strictest",
+  "compilerOptions": {
+    // Astro's preset already carries the repo's strictness (strict,
+    // noUncheckedIndexedAccess, exactOptionalPropertyTypes) plus the JSX
+    // settings @astrojs/react needs. The root tsconfig is not extended here
+    // because its `noEmit`/module settings are tuned for the SPA and tsup
+    // packages, and Astro owns those for this app.
+    "jsx": "react-jsx",
+    "jsxImportSource": "react",
+    // The type-checker's view of the alias astro.config.mjs sets from
+    // PRODUCT_CONFIG_PATH: always the committed config, since that is the one
+    // whose shape the source has to satisfy.
+    "baseUrl": ".",
+    "paths": {
+      "#product-config": ["../../product.config.ts"]
+    }
+  },
+  "include": [".astro/types.d.ts", "**/*"],
+  "exclude": ["dist"]
+}

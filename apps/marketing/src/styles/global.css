@@ -1,0 +1,15 @@
+@import "tailwindcss";
+
+/* The design tokens, shared with apps/web and @forge/ui's Storybook. Defining
+ * them here instead would give the marketing site its own copy of the brand,
+ * which is exactly the drift a template exists to prevent -- see
+ * packages/ui/styles/tokens.css. */
+@import "@forge/ui/styles/tokens.css";
+
+/* Tailwind v4 does not scan node_modules. A @forge/ui component mounted as an
+ * island renders classes that exist only in the package's built output, and
+ * without this line they are silently absent from this stylesheet: the island
+ * renders, unstyled, and nothing errors. tokens.css already scans the
+ * package's src/ for consumers inside this workspace; this covers the built
+ * artifact that is what an island actually imports. */
+@source "../../../../packages/ui/dist";

@@ -1,5 +1,11 @@
 {
   "$schema": "https://turbo.build/schema.json",
+  // T-300: product.config.ts lives at the repo root, so it is not part of any
+  // package's inputs -- turbo would happily replay a cached build from before
+  // a module toggle flipped. It is a global dependency because it genuinely
+  // is one: apps/marketing builds or does not build according to it, and from
+  // T-301 its pages and sitemap follow it too.
+  "globalDependencies": ["product.config.ts"],
   "tasks": {
     "gen-client": {
       "cache": false,

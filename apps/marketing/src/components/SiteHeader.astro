@@ -1,0 +1,31 @@
+---
+/**
+ * Markup only, no island. A hamburger that toggles a menu is the textbook
+ * case for hydrating something -- but at this size the nav fits on a phone
+ * without one, and `/` is held to zero script bytes by a test. T-301 is what
+ * grows this nav; whoever adds the breakpoint that needs a toggle should
+ * reach for <details> before reaching for a React root.
+ */
+import { buttonVariants } from "@forge/ui";
+
+import { translator } from "../lib/i18n";
+import { appLink, defaultLocale, product } from "../lib/product";
+
+interface Props {
+  locale?: string;
+}
+
+const { locale = defaultLocale } = Astro.props;
+const t = translator(locale);
+---
+
+<header class="border-b border-border">
+  <div class="mx-auto flex max-w-5xl items-center justify-between gap-4 px-6 py-4">
+    <a href="/" class="text-lg font-semibold tracking-tight">{product.name}</a>
+    <nav aria-label={t("marketing.nav.primary_label")}>
+      <a href={appLink("login")} class={buttonVariants({ variant: "ghost", size: "sm" })}>
+        {t("marketing.nav.sign_in")}
+      </a>
+    </nav>
+  </div>
+</header>

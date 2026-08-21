@@ -1,0 +1,26 @@
+{
+  "nav": {
+    "skip_to_content": "Siirry sisältöön",
+    "primary_label": "Päänavigointi",
+    "sign_in": "Kirjaudu sisään"
+  },
+  "hero": {
+    "title": "Julkaise tuote, älä putkitusta",
+    "subtitle": "Tilit, tiimit, laskutus ja hallintakonsoli ovat jo valmiina ja testattuina. Aloita siitä, missä työ on kiinnostavaa.",
+    "cta_primary": "Aloita",
+    "cta_secondary": "Kirjaudu sisään"
+  },
+  "highlights": {
+    "heading": "Mistä aloitat",
+    "accounts_title": "Tilit ja tiimit",
+    "accounts_body": "Rekisteröityminen, istunnot, kaksivaiheinen tunnistautuminen, kutsut ja organisaatiokohtaiset roolit – eristettynä vuokralaisittain ensimmäisestä kyselystä alkaen.",
+    "billing_title": "Tilaukset, jotka täsmäävät",
+    "billing_body": "Paketit, kokeilujaksot, päivitykset ja maksumuistutukset sekä webhook-käsittely, joka pysyy oikeana silloinkin, kun sama tapahtuma saapuu kahdesti.",
+    "operations_title": "Ylläpidettävissä ensimmäisestä päivästä",
+    "operations_body": "Rakenteiset lokit, mittarit, auditointijäljet ja runbookit – ensimmäinen häiriötilanne on jotain, josta luetaan, ei jotain, jota arvaillaan."
+  },
+  "footer": {
+    "support": "Ota yhteyttä tukeen",
+    "rights": "© {year} {name}. Kaikki oikeudet pidätetään."
+  }
+}

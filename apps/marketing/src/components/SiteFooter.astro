@@ -1,0 +1,26 @@
+---
+import { translator } from "../lib/i18n";
+import { defaultLocale, product } from "../lib/product";
+
+interface Props {
+  locale?: string;
+}
+
+const { locale = defaultLocale } = Astro.props;
+const t = translator(locale);
+
+// A string, not a number: ICU formats a numeric argument for the locale, so
+// `{year}` would render as "2 026" in fr and "٢٠٢٦" in ar.
+const year = String(new Date().getFullYear());
+---
+
+<footer class="mt-16 border-t border-border">
+  <div
+    class="mx-auto flex max-w-5xl flex-col gap-2 px-6 py-8 text-sm text-muted-foreground sm:flex-row sm:items-center sm:justify-between"
+  >
+    <p>{t("marketing.footer.rights", { year, name: product.name })}</p>
+    <a class="underline underline-offset-4" href={`mailto:${product.supportEmail}`}>
+      {t("marketing.footer.support")}
+    </a>
+  </div>
+</footer>

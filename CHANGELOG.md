@@ -6,6 +6,46 @@ template keep their own changes in `CHANGELOG.product.md` (see
 
 ## [Unreleased]
 ### Added
+- **`apps/marketing` — a pre-rendered marketing site, in Astro (T-300).**
+  [ADR-0004](docs/adr/0004-marketing-framework.md) is now `Accepted` and names
+  the framework. The deciding constraint was `@forge/ui`: it is React 18 +
+  Radix and ships no `"use client"` directives, so every component in it is
+  client-only by construction. Astro's islands model asks for the opposite
+  annotation — pages are static HTML and a React component is hydrated only
+  where one is written — so the package is consumable exactly as it ships,
+  with no directives added to it and no wrapper layer. Next.js's
+  RSC-by-default would have required one or the other. Astro is also
+  Vite-based, so the site reuses this repo's toolchain (`@tailwindcss/vite`
+  v4, the same tsconfig idioms, the same turbo graph) rather than adding a
+  second build system.
+  - **Zero JavaScript on `/`, asserted rather than intended.**
+    `apps/marketing/tests/build.test.ts` runs real builds and reads `dist/`:
+    the landing copy is in the HTML rather than behind an empty shell, `/`
+    contains no `<script>` at all, and a `@forge/ui` component still hydrates
+    on the one page that asks for it. JSON-LD is excluded from that count in
+    advance, so T-303 can add it without weakening the check.
+  - **The design tokens moved to `@forge/ui`.** They lived in
+    `apps/web/src/index.css`, which made the SPA their owner while Storybook
+    already reached across the workspace to import them and marketing would
+    have been the second consumer to do so. They are now
+    `packages/ui/styles/tokens.css`, imported by every surface as
+    `@forge/ui/styles/tokens.css`. No token value changed. `primaryColor` in
+    `product.config.ts` stays the one place the brand colour is written down —
+    the favicon is generated from it rather than committed.
+  - **The `marketing` toggle gates a build, not a router.**
+    `apps/marketing/scripts/guard-enabled.mjs` reads it from
+    `product.config.ts`, and when it is off skips `astro build`, removes any
+    stale `dist/`, and exits 0 — the behaviour CI's `module-matrix` job has
+    been asserting against a placeholder since T-291. `product.config.ts`
+    became a `globalDependencies` entry in `turbo.json` at the same time: it
+    sits at the repo root, outside every package's inputs, so turbo would
+    otherwise replay a cached build from before a toggle flipped.
+  - **A `marketing` namespace in `@forge/i18n`**, in all six locales, so
+    marketing copy comes from the same locale JSON as the product rather than
+    a marketing-only string file. Pages translate at build time and pass
+    finished strings to islands as props — no i18next provider, because every
+    island is its own React root.
+
 - **The module matrix covers the build now, not just the process (T-291).**
   `backend/tests/modules/test_module_toggles.py` proved that a disabled
   module's routes and tables disappear together, inside one Python process

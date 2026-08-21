@@ -1,0 +1,26 @@
+{
+  "nav": {
+    "skip_to_content": "Aller au contenu",
+    "primary_label": "Navigation principale",
+    "sign_in": "Se connecter"
+  },
+  "hero": {
+    "title": "Livrez le produit, pas la tuyauterie",
+    "subtitle": "Comptes, équipes, facturation et console d'administration sont déjà construits et testés. Commencez là où le travail devient intéressant.",
+    "cta_primary": "Commencer",
+    "cta_secondary": "Se connecter"
+  },
+  "highlights": {
+    "heading": "Ce dont vous héritez",
+    "accounts_title": "Comptes et équipes",
+    "accounts_body": "Inscription, sessions, authentification à deux facteurs, invitations et rôles par organisation, isolés par locataire dès la première requête.",
+    "billing_title": "Des abonnements qui tombent juste",
+    "billing_body": "Forfaits, essais, changements d'offre et relances, avec un traitement des webhooks qui reste correct quand le même événement arrive deux fois.",
+    "operations_title": "Exploitable dès le premier jour",
+    "operations_body": "Journaux structurés, métriques, pistes d'audit et runbooks : le premier incident se lit, il ne se devine pas."
+  },
+  "footer": {
+    "support": "Contacter le support",
+    "rights": "© {year} {name}. Tous droits réservés."
+  }
+}

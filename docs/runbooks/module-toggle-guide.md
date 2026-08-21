@@ -153,9 +153,19 @@ matrix has nothing to assert for it and CI's `module-matrix` job does.
 2. `pnpm build` at the repo root stays **green**. `apps/marketing`'s build
    script runs `scripts/guard-enabled.mjs` first, which reads
    `modules.marketing` from `product.config.ts`, prints
-   `marketing module disabled — skipping build`, and exits `0` — not `1`,
-   because `turbo build` has to stay green for a product that turned it off.
-   No `apps/marketing/dist` is produced.
+   `marketing is disabled in product.config.ts — skipping astro build`,
+   and exits `0` — not `1`, because `turbo build` has to stay green for a
+   product that turned it off. No `apps/marketing/dist` is produced, and a
+   `dist/` left over from before the toggle flipped is **removed**: a stale
+   site is worse than no site, because T-307's Caddy would serve it and
+   T-304's sitemap would list it.
+
+   Two things that look wrong and are not. `turbo` prints
+   `WARNING no output files found for task marketing#build` — correct, there
+   is no output. And `product.config.ts` is a `globalDependencies` entry in
+   `turbo.json`, so flipping this toggle invalidates every cached task: the
+   file sits at the repo root, outside any package's inputs, and without that
+   entry turbo would replay the build from before the flip.
 3. Drop the marketing block from the Caddyfile (T-307). With the module off
    that block must be **absent**, not left in place serving 404s from an
    empty `/srv/marketing`.

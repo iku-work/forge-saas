@@ -9,10 +9,12 @@
     ".": {
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
-    }
+    },
+    "./styles/tokens.css": "./styles/tokens.css"
   },
   "files": [
-    "dist"
+    "dist",
+    "styles"
   ],
   "scripts": {
     "build": "tsup",

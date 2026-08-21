@@ -1,0 +1,26 @@
+{
+  "nav": {
+    "skip_to_content": "Ir al contenido",
+    "primary_label": "Navegación principal",
+    "sign_in": "Iniciar sesión"
+  },
+  "hero": {
+    "title": "Lanza el producto, no la fontanería",
+    "subtitle": "Las cuentas, los equipos, la facturación y una consola de administración ya están construidas y probadas. Empieza donde está el trabajo interesante.",
+    "cta_primary": "Empezar",
+    "cta_secondary": "Iniciar sesión"
+  },
+  "highlights": {
+    "heading": "Con lo que empiezas",
+    "accounts_title": "Cuentas y equipos",
+    "accounts_body": "Registro, sesiones, autenticación en dos pasos, invitaciones y roles por organización, aislados por inquilino desde la primera consulta.",
+    "billing_title": "Suscripciones que cuadran",
+    "billing_body": "Planes, pruebas, mejoras de plan y reclamación de pagos, con un manejo de webhooks que sigue siendo correcto cuando el mismo evento llega dos veces.",
+    "operations_title": "Operable desde el primer día",
+    "operations_body": "Registros estructurados, métricas, pistas de auditoría y runbooks, para que el primer incidente sea algo que se lee y no algo que se adivina."
+  },
+  "footer": {
+    "support": "Contactar con soporte",
+    "rights": "© {year} {name}. Todos los derechos reservados."
+  }
+}
