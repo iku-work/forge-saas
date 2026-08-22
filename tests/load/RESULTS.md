@@ -167,3 +167,7 @@ instead of per-PR.
 | 2026-08-21 | 8cb199a | browse | - | - | PASS |
 | 2026-08-21 | 8cb199a | presign | - | - | PASS |
 | 2026-08-21 | 8cb199a | mixed | - | - | FAIL |
+| 2026-08-22 | 44f433b | login-burst | - | - | FAIL |
+| 2026-08-22 | 44f433b | browse | - | - | PASS |
+| 2026-08-22 | 44f433b | presign | - | - | PASS |
+| 2026-08-22 | 44f433b | mixed | - | - | FAIL |
