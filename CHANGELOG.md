@@ -46,6 +46,149 @@ template keep their own changes in `CHANGELOG.product.md` (see
     finished strings to islands as props — no i18next provider, because every
     island is its own React root.
 
+- **`<Seo>` — one meta block per page, and a build that refuses to ship one
+  without it (T-302).** `src/components/Seo.astro` emits the title, the meta
+  description, the canonical, the full Open Graph set and the Twitter card from
+  typed props. No page imports it: `BaseLayout` renders it from the props it
+  already took, so a new page cannot forget it, cannot order the tags
+  differently, and cannot emit a second `<title>`. A page that needs more than
+  the defaults — a blog post is an `article` with a publication date, an entry
+  can carry its own card — passes those through the layout.
+  - **`scripts/check-seo.mjs` turns the convention into a guarantee.** It runs
+    as an Astro integration on `astro:build:done`, walks `dist/**/*.html`, and
+    fails the build on any page missing a title, a description or a canonical,
+    carrying two of one, or carrying an empty one — the cases the component
+    itself cannot see. It is wired into the build rather than into a
+    `package.json` script because every build in this repo goes through
+    `scripts/guard-enabled.mjs`, the tests' builds included, and a check bolted
+    onto the package script would be absent from all of them.
+  - **Every URL is absolute, from one origin.** Canonical, `og:url` and
+    `og:image` all resolve against `Astro.site`, which is `PUBLIC_SITE_URL`
+    read once in `astro.config.mjs` — a crawler has no base URL to resolve a
+    root-relative `og:image` against, and there is no second copy of that
+    origin in TypeScript to drift from it.
+  - **One committed Open Graph card, drawn from `primaryColor`.**
+    `scripts/make-og-image.mjs` writes `public/og-default.png` with a PNG
+    encoder in ~40 lines of `zlib` rather than a dependency; a test decodes the
+    committed file and fails when its ground is no longer the brand colour.
+    Per-page image generation (satori, a headless browser) is an explicit
+    non-goal, and the card carries no words because a template cannot know the
+    product it will become — `og:image:alt` carries the name instead. Entries
+    override it with `ogImage` in their frontmatter.
+  - **`og:alternate_locale` lists translations that exist**, from
+    `entryLocales()`, rather than every enabled locale: a post written only in
+    English announcing five translations is the metadata form of a dead link.
+    T-305's `hreflang` links read the same list.
+  - `src/config/site.ts` is now the one module inside `src/` that names the
+    brand — product name, brand colour, support address, all derived from
+    `product.config.ts`. The two legal documents gained a real `description`
+    in their schema; they had been reusing their own title, which is the
+    degenerate form of having none.
+
+- **JSON-LD, built from the data the pages already render (T-303).**
+  `src/components/JsonLd.astro` is the only place this site serialises
+  structured data, and `src/lib/structured-data.ts` the only place it builds
+  any: `Organization` site-wide, `SoftwareApplication` on the landing page,
+  a `Product` with a monthly and a yearly `Offer` per plan on `/pricing`,
+  `FAQPage` on both, `BlogPosting` on a post and `BreadcrumbList` on a
+  guide. Everything is typed with `schema-dts` — types only, zero runtime
+  bytes — so an `Offer` with `currency` instead of `priceCurrency` is a
+  compile error rather than a Search Console notice six weeks later.
+  - **The Rich Results Test needs a public URL; its error rules do not.**
+    Google's hosted tool cannot see this site until T-307 gives it a host, so
+    the part of it that reports *errors* — the properties each type must
+    carry — is a table in `tests/structured-data.test.ts` walked over every
+    node on every built page. It is why the landing page's
+    `SoftwareApplication` carries an `AggregateOffer`: Google's Software App
+    result requires one of `offers`, `aggregateRating` or `review`, and a
+    template has no honest ratings. The range comes from the same catalogue
+    and points at `/pricing`, where the per-plan detail lives.
+  - **Nothing is a second copy of anything.** The offers quote the same cents
+    `src/lib/plan-view.ts` formats into the cards, the post metadata is the
+    frontmatter the article renders, and the product name comes from
+    `src/config/site.ts` like every other mention of it. A test takes the
+    price out of a rendered `Offer`, formats it with the page's own
+    formatter, and requires the result to be on the page — in three locales,
+    where the same cents render as `$49`, `49 $` and `49 $US`.
+  - **Structured data and visible markup come out of one array.**
+    `FaqSection.astro` emits the `<dl>` a visitor reads and the
+    `FAQPage` node a crawler reads from the same list of questions, and
+    `Breadcrumbs.astro` does the same for the trail. Google's rule is that
+    FAQ structured data must reflect what is on the page; the usual way that
+    breaks is a hand-maintained block drifting from copy someone edited, and
+    here there is nothing to drift. The FAQ itself is new visible content, in
+    all six locales, and its billing question follows the `billing` toggle.
+  - **A payload cannot end its own script block.** Every left angle bracket is
+    written as its JSON unicode escape, which closes both ways out of a
+    raw-text element (`</script` and `<!--`). A blog post whose title
+    contains a closing script tag is a test fixture, and the assertion scans
+    the built HTML exactly as a parser would.
+  - **The plan catalogue is fetched once per build, not once per page.** Both
+    `/` and `/pricing` need it now, in six locales each, so `loadPlans()`
+    memoises its promise — one process builds the whole site, and a dozen
+    identical requests (and a dozen copies of the fallback warning) were the
+    alternative.
+  - **On CSP** (T-307 owns marketing's header): a `<script>` whose `type`
+    is not a JavaScript MIME type is a *data block* in the HTML spec — never
+    prepared, never executed — so `script-src` does not gate these and they
+    need no nonce or hash. What would break them is a header that forbade
+    inline markup wholesale.
+  - **`check-seo.mjs` no longer truncates a tag at a `>` inside an
+    attribute value.** Only `&` and `"` need escaping there, so a
+    description containing `>` is valid markup that the old `<meta[^>]*>`
+    pattern cut in half — reading the `content` attribute as empty and
+    failing the build over a page that was fine. Found by T-303's escaping
+    fixture; pinned by `tests/fixtures/seo/clean/angle-brackets.html`.
+  - The generated favicon now declares an intrinsic size, because it is also
+    the `Organization` logo and Google asks for at least 112×112.
+    `product.config.ts`'s `logoUrl` is deliberately not used: it points at
+    `/logo.svg`, which nothing in this repository serves.
+
+- **The marketing content surface: pages, MDX collections, and pricing (T-301).**
+  Every route now exists in every enabled locale — landing, features, pricing,
+  blog, guides, privacy, terms and a 404 — built from one page file each under
+  `src/pages/[...locale]/` rather than a duplicated page tree. Where the locale
+  sits in the URL is `src/lib/routing.ts` and one line of `astro.config.mjs`,
+  and nowhere else; T-305 flips those two together to match `apps/web`'s T-233
+  policy.
+  - **Content collections with zod schemas**, so a frontmatter mistake fails
+    the build with a message naming the file instead of rendering `undefined`
+    in production. `blog`, `guides` and `legal`, each keyed by locale in its
+    path (`src/content/blog/<locale>/<slug>.mdx`) — the layout T-305 needs, and
+    what makes "this post is not published in Finnish" expressible at all. A
+    missing date says `publishedAt: is required, and must be a date like
+    2026-08-22`, because `z.coerce.date()` on its own reports a *missing* field
+    as "expected date, received object".
+  - **`/guides`, not `/docs`.** The repo-root `Caddyfile` routes `/docs*` to the
+    backend's Swagger UI. T-307 gives marketing its own host, which technically
+    frees the path, but a template whose product docs and API docs differ only
+    by hostname is a trap. The collection is called `guides` too.
+  - **Pricing is fetched at build time, with a committed fallback.** Plans live
+    in the billing module's database and a static site cannot query at request
+    time, so `src/lib/plans.ts` reads `/api/v1/billing/plans` once during the
+    build and falls back to `src/content/pricing.ts` when it cannot — an API
+    that is restarting during a deploy must not mean a pricing page with no
+    prices. The staleness that buys is written down in that file: **prices
+    change on the next deploy, not the next `UPDATE`**, and the page says so on
+    itself when it rendered from the committed catalogue.
+  - **The pricing period toggle is the site's one island**, and it replaces
+    T-300's `island-check.astro` as the executable form of ADR-0004's
+    constraint 1 — Radix tabs out of `@forge/ui`, hydrated with the package
+    unmodified. Everything else on the site is markup, and `/` still ships zero
+    script bytes.
+  - **A disabled module disappears from all three places at once.** The header,
+    the footer and the sitemap read one list (`src/lib/nav.ts`), so with
+    `billing` off there is no `/pricing` page, no link to one, and no sitemap
+    entry — asserted together, because a half-applied toggle is exactly what
+    survives when they are checked separately.
+  - **Drafts render in `astro dev` and never reach `dist/`.** The filter keys
+    off Vite's `MODE` rather than `import.meta.env.PROD`: `PROD` is derived
+    from `NODE_ENV`, which `vitest` and plenty of CI images set to something
+    other than `production`, and under those a build would have shipped the
+    drafts.
+  - `@tailwindcss/typography` for MDX prose, with its palette variables pointed
+    at `@forge/ui`'s tokens so a guide is the same ink as a `<Card>` beside it.
+
 - **The module matrix covers the build now, not just the process (T-291).**
   `backend/tests/modules/test_module_toggles.py` proved that a disabled
   module's routes and tables disappear together, inside one Python process

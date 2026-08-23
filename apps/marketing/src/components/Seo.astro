@@ -1,0 +1,135 @@
+---
+/**
+ * Every page's meta block, emitted once, from typed props (T-302).
+ *
+ * The plan's goal for this component was "one import per page". What it
+ * actually got is *zero* imports per page: `BaseLayout` renders it from the
+ * props it already takes, so a new page cannot forget the import, cannot
+ * order the tags differently, and cannot invent a second title. A page that
+ * needs more than the defaults (a blog post is an `article` with a date, a
+ * guide can carry its own card) passes those through the layout. The
+ * component is still importable on its own, and `scripts/check-seo.mjs` is
+ * what holds the whole arrangement to its promise from outside: it reads
+ * `dist/` after every build and fails on a page missing a title, a
+ * description or a canonical, or carrying two of any of them.
+ *
+ * Absolute URLs throughout. A crawler resolves `og:image` against nothing --
+ * a root-relative path is not "the site root" to it, it is a broken image --
+ * so every URL here goes through `Astro.site`.
+ */
+import {
+  OG_IMAGE_HEIGHT,
+  OG_IMAGE_WIDTH,
+  ogLocale,
+  pageTitle,
+  site,
+} from "../config/site";
+import { enabledLocales } from "../lib/routing";
+import { siteOrigin } from "../lib/site-url";
+
+interface Props {
+  /** The page's own title, without the product name -- `pageTitle()` adds that. */
+  title: string;
+  description: string;
+  /** The page's locale, for `og:locale`. Also what `alternateLocales` defaults against. */
+  locale: string;
+  /** Site path to declare canonical. Defaults to the page's own path, which is what a static page wants. */
+  canonical?: string | undefined;
+  /** Site path of a card image for this page. Defaults to the committed one. */
+  image?: string | undefined;
+  type?: "website" | "article" | undefined;
+  noindex?: boolean | undefined;
+  /** Only emitted for `type="article"` -- `article:published_time` is meaningless on a landing page. */
+  publishedAt?: Date | undefined;
+  /**
+   * The locales this page exists in. Its own is dropped here, so a caller
+   * passes "where this exists" and never has to remember to exclude itself.
+   *
+   * Defaults to every enabled locale, which is right for the routes that are
+   * built once per locale and wrong for a blog post that was only ever
+   * written in English -- so the content pages pass the real list, from
+   * `entryLocales()`. T-305's hreflang links need the same answer and should
+   * read it from the same place.
+   */
+  alternateLocales?: string[] | undefined;
+}
+
+const {
+  title,
+  description,
+  locale,
+  canonical,
+  image,
+  type = "website",
+  noindex = false,
+  publishedAt,
+  alternateLocales = enabledLocales,
+} = Astro.props;
+
+// One shared invariant, one message: T-303's JSON-LD is absolute for exactly
+// the same reason this block is, and both reach it through src/lib/site-url.ts.
+const origin = siteOrigin(Astro.site);
+
+// The build fails here rather than in check-seo.mjs when a page can say which
+// page it is. Both exist on purpose: this names the route, and the post-build
+// check catches anything that reaches dist/ without coming through here.
+for (const [field, value] of [
+  ["title", title],
+  ["description", description],
+] as const) {
+  if (value.trim() === "") {
+    throw new Error(
+      `apps/marketing: ${Astro.url.pathname} passed an empty ${field} to <Seo>. ` +
+        `Every page needs a real one -- it is what a search result and a shared link show.`,
+    );
+  }
+}
+
+const alternates = alternateLocales.filter((code) => code !== locale);
+const canonicalUrl = new URL(canonical ?? Astro.url.pathname, origin);
+const imageUrl = new URL(image ?? site.ogImage, origin);
+
+// The dimensions are only declared for the card this app draws, whose size it
+// knows. An entry's own `ogImage` is a file nothing here has measured, and a
+// crawler told the wrong size lays out the wrong box or drops the image.
+const declaresImageSize = image === undefined;
+---
+
+<title>{pageTitle(title)}</title>
+<meta name="description" content={description} />
+<link rel="canonical" href={canonicalUrl.href} />
+{noindex && <meta name="robots" content="noindex, nofollow" />}
+{/* The browser chrome on mobile, from the same value as the favicon and the landing page's rule. */}
+<meta name="theme-color" content={site.brandColor} />
+
+<meta property="og:type" content={type} />
+<meta property="og:site_name" content={site.name} />
+{/* Without the product name: og:site_name carries it, and a card that says it twice looks broken. */}
+<meta property="og:title" content={title} />
+<meta property="og:description" content={description} />
+<meta property="og:url" content={canonicalUrl.href} />
+<meta property="og:image" content={imageUrl.href} />
+{
+  declaresImageSize && (
+    <>
+      <meta property="og:image:width" content={String(OG_IMAGE_WIDTH)} />
+      <meta property="og:image:height" content={String(OG_IMAGE_HEIGHT)} />
+    </>
+  )
+}
+{/* A proper noun, so it is not a translated string -- and the card itself carries no words to translate. */}
+<meta property="og:image:alt" content={site.name} />
+<meta property="og:locale" content={ogLocale(locale)} />
+{alternates.map((code) => <meta property="og:alternate_locale" content={ogLocale(code)} />)}
+{
+  type === "article" && publishedAt && (
+    <meta property="article:published_time" content={publishedAt.toISOString()} />
+  )
+}
+
+{/* summary_large_image everywhere: the card is 1.91:1, which is the shape that layout expects. */}
+<meta name="twitter:card" content="summary_large_image" />
+<meta name="twitter:title" content={title} />
+<meta name="twitter:description" content={description} />
+<meta name="twitter:image" content={imageUrl.href} />
+<meta name="twitter:image:alt" content={site.name} />

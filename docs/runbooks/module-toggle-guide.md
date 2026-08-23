@@ -30,6 +30,13 @@ removes today:
   removes no HTTP surface at all and still removes something real: the whole
   `apps/marketing` build (T-300). It is the reason the module matrix had to
   grow a CI job — see Verification.
+- **A module can also remove someone else's page.** Since T-301, disabling
+  `billing` removes `/pricing` from the marketing site as well as the billing
+  router — the page is not built, the header and footer do not link it, and it
+  is not in the sitemap. That is the general rule rather than a special case:
+  a marketing page that advertises a module is part of that module's surface,
+  and `apps/marketing/src/lib/nav.ts` is the one list the header, the footer
+  and the sitemap all read so the three cannot disagree.
 - **Nothing yet.** `oauth` and `totp_2fa` ship routers in `build_router()`'s
   always-on block, so their toggles do not currently remove anything;
   `usage_metering` and `outbound_webhooks` are Phase-2 slots; and T-290's

@@ -5,6 +5,7 @@ import sitemap from "@astrojs/sitemap";
 import tailwindcss from "@tailwindcss/vite";
 import { defineConfig } from "astro/config";
 
+import { checkSeo } from "./scripts/check-seo.mjs";
 import {
   enabledLocales,
   loadProductConfig,
@@ -37,6 +38,21 @@ export default defineConfig({
     routing: { prefixDefaultLocale: false },
   },
 
+  markdown: {
+    shikiConfig: {
+      // Pinned rather than left to Astro's default, so an upgrade cannot
+      // silently restyle every fenced block in T-301's guides.
+      //
+      // A code theme is deliberately *not* part of the token layer that
+      // @forge/ui owns. Token colours describe the product's surfaces --
+      // background, foreground, primary, border -- and a syntax highlighter
+      // needs a dozen semantic colours that have nothing to do with a brand.
+      // Inline `code` inside prose does follow the tokens (see the .prose
+      // block in src/styles/global.css); the fenced blocks carry this theme.
+      theme: "github-dark",
+    },
+  },
+
   integrations: [
     // Constraint 1, and the reason Astro won: pages are static HTML and a
     // React component is hydrated only where it is asked for, so @forge/ui --
@@ -48,6 +64,10 @@ export default defineConfig({
     // T-304 replaces the defaults here with the filter that drops noindex
     // pages, drafts, and routes belonging to a disabled module.
     sitemap(),
+    // T-302, and last on purpose: it reads what every integration before it
+    // wrote. `astro:build:done` throwing is what turns "a page has no
+    // description" into a failed build rather than a deploy nobody inspects.
+    checkSeo(),
   ],
 
   vite: {

@@ -21,6 +21,23 @@ export const modules = config.modules;
 export const defaultLocale = config.locales.default;
 
 /**
+ * The locales this product actually exposes, in the order product.config.ts
+ * lists them.
+ *
+ * `locales` there is a per-locale toggle map with a `default` key mixed into
+ * it, so the split has to happen somewhere; doing it here means a page asks
+ * for a list rather than re-deriving one. scripts/product-config.mjs carries
+ * the same split for the callers that run before Vite exists (astro.config.mjs
+ * and the build guard) -- two implementations of one rule, because they are on
+ * opposite sides of the TypeScript boundary. If this ever disagrees with that,
+ * the locale list in astro.config.mjs's `i18n` block stops matching the pages
+ * that get built, so tests/routes.test.ts asserts them equal.
+ */
+export const enabledLocales = Object.entries(config.locales)
+  .filter(([code, enabled]) => code !== "default" && enabled === true)
+  .map(([code]) => code);
+
+/**
  * Where apps/web is served. T-307 settles the real hosts (marketing at the
  * apex, the app at app.example.com; locally `localhost` stays the app and
  * marketing gets marketing.localhost), which is why the fallback below is

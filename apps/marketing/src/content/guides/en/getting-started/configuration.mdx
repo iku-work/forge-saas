@@ -1,0 +1,53 @@
+---
+title: Configuring your product
+description: The one file that decides what your product is called, what colour it is, which languages it speaks and which modules it has.
+section: Getting started
+order: 2
+---
+
+`product.config.ts` at the repository root is the file a product edits. The
+template never modifies it, which is what makes it safe to pull template
+changes in later.
+
+```ts
+export const config = {
+  name: "ForgeSaaS",
+  primaryColor: "#7c6ff7",
+  supportEmail: "support@example.com",
+  modules: {
+    billing: true,
+    marketing: true,
+    // ...
+  },
+  locales: { en: true, de: true, default: "en" },
+} satisfies ProductConfig;
+```
+
+## What each part reaches
+
+**`name`, `primaryColor`, `supportEmail`** are read everywhere: the app shell,
+the transactional emails, this site's header and its favicon. The brand colour
+in particular is written down exactly once — there is no stylesheet with a
+second copy of it, and a test fails the build if one appears.
+
+**`modules`** switch features off. A disabled module takes its API routes, its
+database tables, its interface and its pages with it. Continuous integration
+builds several combinations, so "it works with everything enabled" is not the
+only thing that has been checked.
+
+**`locales`** is the set of languages the product exposes. Turning one on adds
+its URLs across the app and this site; turning one off removes them, along with
+the alternate-language annotations that pointed at them.
+
+## The mirror on the backend
+
+`backend/product/config.py` carries the same values for the Python side, and a
+test asserts the two agree. When you change one, change both — the test will
+tell you if you forget, but it is quicker to remember.
+
+## After a change
+
+Module toggles affect the *build*, not just a running process, so a changed
+toggle needs a rebuild rather than a restart. The build cache knows about this
+file, so a rebuild after editing it will not be served from a cache made before
+the edit.

@@ -23,3 +23,22 @@ export type Translate = (
 export function translator(locale: string): Translate {
   return (key, params = {}) => translate(key, params, locale);
 }
+
+/**
+ * A date as prose, in the page's locale: "22 August 2026", "22. August 2026",
+ * "٢٢ أغسطس ٢٠٢٦".
+ *
+ * Not an ICU argument in the locale JSON. `{date, date, long}` would work, but
+ * it would put the *format* in the translators' hands, and a translator
+ * changing a date pattern is a much likelier accident than a useful choice.
+ * The message keys take a finished string (`published_on` is "Published
+ * {date}"), so word order stays translatable and the format does not.
+ */
+export function formatDate(date: Date, locale: string): string {
+  return new Intl.DateTimeFormat(locale, { dateStyle: "long" }).format(date);
+}
+
+/** The machine-readable half of a `<time>` element: always ISO, never localised. */
+export function isoDate(date: Date): string {
+  return date.toISOString().slice(0, 10);
+}

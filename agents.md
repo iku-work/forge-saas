@@ -6570,13 +6570,14 @@ For each of `packages/{ui,api-client,types,hooks,validation,utils}`:
       `no_billing` and `minimal`, naming all seven surviving
       `/api/v1/billing/*` paths. That file is deliberately *not*
       `module_dependent`, which is what carries the check into the matrix job
-- [ ] Deliberately removing the `marketing` guard script turns combination B red too —
-      not verifiable until T-300: `apps/marketing` does not exist yet. The
-      job's step is wired and self-activating — today it prints
-      `does not exist yet (T-300)` and exits 0; once the app appears it fails
-      B if `marketing` is off and a `dist` was produced anyway. It reads the
-      toggle from `product.config.MODULES` rather than grepping the `.ts`, so
-      a comment cannot satisfy it
+- [x] Deliberately removing the `marketing` guard script turns combination B red too —
+      verified 2026-08-22, once T-300 had made `apps/marketing` real. With
+      `marketing` off in both configs and `apps/marketing/package.json`'s
+      `build` reduced to a bare `astro build`, the build produces a `dist/`
+      and the step's `enabled=false && -d dist` branch fires. Restoring the
+      guard leaves no `dist` and exits 0. It reads the toggle from
+      `product.config.MODULES` rather than grepping the `.ts`, so a comment
+      cannot satisfy it
 
 ---
 
@@ -6619,9 +6620,24 @@ For each of `packages/{ui,api-client,types,hooks,validation,utils}`:
 
 **Done when**
 
-- [ ] ADR-0004 is `Accepted` and answers all four constraints
-- [ ] A `@forge/ui` button renders on a marketing page as an island, with `apps/web` and `packages/ui` unmodified
-- [ ] Root `pnpm build`, `pnpm lint`, `pnpm type-check` clean with the module both on and off
+- [x] ADR-0004 is `Accepted` and answers all four constraints —
+      `docs/adr/0004-marketing-framework.md` names Astro, answers all four,
+      and records both the revisit trigger (per-request personalisation or
+      ISR) and the cost (a second component model, a smaller SEO/analytics
+      ecosystem)
+- [x] A `@forge/ui` component renders on a marketing page as an island, with
+      `apps/web` and `packages/ui` unmodified — no `"use client"` directives
+      added and no wrapper layer. T-300 proved it on a diagnostic page
+      (`island-check.astro`) because `/` ships zero script bytes; T-301
+      deleted that page and moved the assertion onto the real island, the
+      pricing period toggle (`tests/pricing.test.ts`). The token layer *did*
+      move into `packages/ui` — that is this task's own instruction, and a
+      separate thing from the island boundary this box is about
+- [x] Root `pnpm build`, `pnpm lint`, `pnpm type-check` clean with the module
+      both on and off — re-verified 2026-08-22 after T-301. With it off,
+      `turbo` prints `no output files found for task marketing#build`, which
+      is correct: there is no site. The one lint warning is the pre-existing
+      `VirtualList` / `react-hooks` one from T-241
 
 ---
 
@@ -6654,8 +6670,26 @@ For each of `packages/{ui,api-client,types,hooks,validation,utils}`:
 
 **Done when**
 
-- [ ] Every route builds in every enabled locale
-- [ ] No `/docs` path collision with the backend's Swagger UI
+- [x] Every route builds in every enabled locale — 50 pages: seven routes
+      (`/`, `features`, `pricing`, `blog`, `guides`, `privacy`, `terms`)
+      across six locales, plus the content routes and a single `404.html`.
+      `tests/routes.test.ts` reads every one of them out of `dist/`, checks
+      every internal link on every landing page resolves to a page that was
+      actually built *and* stays inside that page's locale, and holds the
+      locale list `astro.config.mjs` derives in plain Node to the one
+      `src/lib/product.ts` derives in TypeScript
+- [x] No `/docs` path collision with the backend's Swagger UI — the route is
+      `/guides` and so is the collection, so the two cannot drift apart
+      later. The `legal` collection is the one deliberate exception to
+      T-305's no-fallback rule, documented in `legalDocument()`
+- [x] Frontmatter is validated at build time, not discovered wrong in
+      production — a post with no `publishedAt` fails the build naming the
+      file, with a message that says what to write rather than
+      `expected date, received object`
+- [x] `/pricing` falls back to committed data when the build-time fetch
+      fails, and disappears entirely when `billing` is off — page, nav link
+      and sitemap entry together, since those are the three places a
+      half-applied toggle survives in
 
 ---
 
@@ -6680,7 +6714,12 @@ For each of `packages/{ui,api-client,types,hooks,validation,utils}`:
 
 **Done when**
 
-- [ ] Every built page passes `check-seo.mjs`
+- [x] Every built page passes `check-seo.mjs` — it runs as an Astro
+      integration on `astro:build:done`, so *every* build runs it, including
+      the ones the tests spawn through `scripts/guard-enabled.mjs`. All 50
+      pages pass; `tests/seo.test.ts` also runs the checker over `dist/` from
+      outside the build, so unwiring the integration is still caught, and over
+      committed fixtures for the three ways a page fails it
 - [ ] A social preview debugger renders the landing page card correctly (verify once by hand)
 
 ---
@@ -6707,8 +6746,26 @@ For each of `packages/{ui,api-client,types,hooks,validation,utils}`:
 
 **Done when**
 
-- [ ] Google's Rich Results Test reports no errors for landing, pricing, and a blog post
-- [ ] No CSP violation on any page
+- [ ] Google's Rich Results Test reports no errors for landing, pricing, and a
+      blog post — **not verifiable from here**: the hosted tool needs a public
+      URL, and this site has no host until T-307. What *is* done is the part of
+      it that can be a build gate: `tests/structured-data.test.ts` carries a
+      table of the properties Google documents as *required* per type and walks
+      every node on every built page against it, naming the page and the
+      property when one is missing (mutation-checked). That is why the landing
+      page's `SoftwareApplication` carries an `AggregateOffer` — the Software
+      App result requires one of `offers`, `aggregateRating` or `review`, and
+      this template has no honest ratings to give. Run the hosted tool once
+      after T-307 and tick this
+- [ ] No CSP violation on any page — **not verifiable from here** for the same
+      reason: marketing has no served host and therefore no CSP header yet
+      (the app's `default-src 'self'` lives in
+      `backend/app/middleware/security_headers.py` and covers API responses
+      only). Worth knowing before T-307 writes one, because the plan's premise
+      above is wrong: a `<script>` whose `type` is not a JavaScript MIME type
+      is a *data block* in the HTML spec — never prepared, never executed — so
+      `script-src` does not gate these blocks and they need no nonce or hash.
+      What would break them is a header forbidding inline markup wholesale
 
 ---
 

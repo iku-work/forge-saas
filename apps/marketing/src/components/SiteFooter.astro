@@ -1,6 +1,13 @@
 ---
+/**
+ * Two link columns and a rights line. Same source as the header
+ * (src/lib/nav.ts), so a disabled module cannot survive in the footer after
+ * disappearing from the nav.
+ */
+import { site } from "../config/site";
 import { translator } from "../lib/i18n";
-import { defaultLocale, product } from "../lib/product";
+import { legalLinks, siteLinks } from "../lib/nav";
+import { defaultLocale, localePath } from "../lib/routing";
 
 interface Props {
   locale?: string;
@@ -12,15 +19,50 @@ const t = translator(locale);
 // A string, not a number: ICU formats a numeric argument for the locale, so
 // `{year}` would render as "2 026" in fr and "٢٠٢٦" in ar.
 const year = String(new Date().getFullYear());
+
+const columns = [
+  { headingKey: "marketing.footer.product_heading", links: siteLinks() },
+  { headingKey: "marketing.footer.legal_heading", links: legalLinks() },
+];
 ---
 
 <footer class="mt-16 border-t border-border">
-  <div
-    class="mx-auto flex max-w-5xl flex-col gap-2 px-6 py-8 text-sm text-muted-foreground sm:flex-row sm:items-center sm:justify-between"
-  >
-    <p>{t("marketing.footer.rights", { year, name: product.name })}</p>
-    <a class="underline underline-offset-4" href={`mailto:${product.supportEmail}`}>
-      {t("marketing.footer.support")}
-    </a>
+  <div class="mx-auto max-w-5xl px-6 py-10">
+    <div class="grid gap-8 sm:grid-cols-3">
+      {
+        columns.map((column) => (
+          <div>
+            <h2 class="text-sm font-semibold tracking-tight">{t(column.headingKey)}</h2>
+            <ul class="mt-3 space-y-2 text-sm text-muted-foreground">
+              {column.links.map((link) => (
+                <li>
+                  <a
+                    class="underline-offset-4 hover:underline"
+                    href={localePath(locale, link.path)}
+                  >
+                    {t(link.labelKey)}
+                  </a>
+                </li>
+              ))}
+            </ul>
+          </div>
+        ))
+      }
+      <div>
+        <h2 class="text-sm font-semibold tracking-tight">
+          {t("marketing.footer.resources_heading")}
+        </h2>
+        <ul class="mt-3 space-y-2 text-sm text-muted-foreground">
+          <li>
+            <a class="underline-offset-4 hover:underline" href={`mailto:${site.supportEmail}`}>
+              {t("marketing.footer.support")}
+            </a>
+          </li>
+        </ul>
+      </div>
+    </div>
+    <p class="mt-10 border-t border-border pt-6 text-sm text-muted-foreground">
+      {t("marketing.footer.rights", { year, name: site.name })}
+    </p>
   </div>
 </footer>

@@ -1,0 +1,59 @@
+---
+title: Installation
+description: Was zu installieren ist, was auszuführen ist, und wie ein funktionierender Checkout aussieht, bevor Sie etwas ändern.
+section: Erste Schritte
+order: 1
+---
+
+Sie brauchen Node 22.13 oder neuer, pnpm, Python 3.12 und Docker. Alles Übrige
+installieren die Befehle unten.
+
+## Klonen und installieren
+
+```bash
+git clone https://github.com/your-org/your-product.git
+cd your-product
+pnpm install
+```
+
+`pnpm install` richtet alle Workspaces auf einmal ein — die Web-Anwendung, die
+Marketing-Website, die gemeinsamen Pakete und das Werkzeug. Die
+Python-Abhängigkeiten des Backends werden getrennt installiert, in einer
+eigenen virtuellen Umgebung:
+
+```bash
+cd backend
+python -m venv .venv
+. .venv/bin/activate
+pip install -e ".[dev]"
+```
+
+## Dienste starten
+
+Postgres, Redis und der Objektspeicher laufen in Docker. Mehr nicht:
+
+```bash
+docker compose up -d
+make migrate
+make seed
+```
+
+`make seed` legt die Demo-Organisation und den Tarifkatalog an. Der Befehl ist
+idempotent: ihn zweimal auszuführen ist unbedenklich, und gegen eine Datenbank
+mit vorhandenen Daten dupliziert er nichts.
+
+## Prüfen, ob es geklappt hat
+
+```bash
+pnpm dev
+```
+
+Die Web-Anwendung erscheint unter `https://localhost`, die API-Dokumentation
+unter `https://localhost/docs` und diese Marketing-Website — sofern das Modul
+`marketing` aktiviert ist — unter `http://localhost:4321`. Wenn die erste davon
+lädt und Sie sich mit dem angelegten Konto anmelden können, funktioniert der
+Checkout und Sie können anfangen, Dinge zu ändern.
+
+Falls nicht, liegt es meistens am Zertifikat: der lokale Stack verwendet die
+interne Zertifizierungsstelle von Caddy, und Ihrem Browser muss einmal gesagt
+werden, dass er ihr vertraut.

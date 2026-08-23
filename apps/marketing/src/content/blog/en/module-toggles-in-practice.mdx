@@ -1,0 +1,66 @@
+---
+title: A module toggle has to remove the marketing page too
+description: Turning a feature off in a config file is easy. Making sure nothing anywhere still advertises it is the part that needs a test.
+publishedAt: 2026-08-14
+updatedAt: 2026-08-21
+author: The ForgeSaaS team
+tags:
+  - engineering
+  - architecture
+draft: false
+---
+
+A module toggle is a single boolean:
+
+```ts
+// product.config.ts
+export const config = {
+  modules: {
+    billing: false,
+    // ...
+  },
+} satisfies ProductConfig;
+```
+
+Setting it to `false` is the easy half. The hard half is everything that
+quietly assumed it was `true`.
+
+## The half-applied toggle
+
+The obvious things happen straight away: the billing router is not mounted, the
+Stripe webhook endpoint returns 404, the billing section of the settings page is
+gone. A test suite that only checks those will pass, and the product will still
+be broken — because the pricing page is still in the sitemap, the navigation
+still links to it, and the landing page still promises subscriptions the
+software no longer has.
+
+That is a *half-applied* toggle, and it is worse than no toggle at all. A 404
+from an API is a bug someone reports. A marketing page advertising a feature
+that does not exist is a support conversation that starts with a refund.
+
+## What we do about it
+
+Three rules, each enforced by something that fails a build rather than by
+somebody remembering.
+
+**One list of links.** The header, the footer and the sitemap read the same
+array. A page that a module removed cannot survive in one of them and disappear
+from the other two.
+
+**The build is part of the toggle.** For the marketing site the module does not
+switch off a router, it switches off the whole build. With `marketing: false`
+there is no `dist/` at all, and a stale one left over from before the flip gets
+deleted — because a static site that nobody rebuilds is a site that keeps
+serving yesterday's promises.
+
+**A matrix, not a spot check.** Continuous integration builds the product with
+several module combinations, not just the default one. The interesting failures
+are never in the combination the developer had checked out.
+
+## The part that still needs a person
+
+None of this catches prose. A sentence on a features page that mentions
+subscriptions inside a paragraph about something else will survive every check
+here, because it is a claim in a string rather than a link in an array. The
+copy on this site is short partly for that reason: the less of it there is, the
+fewer places a promise can hide.

@@ -1,0 +1,69 @@
+---
+title: Ein Modulschalter muss auch die Marketingseite entfernen
+description: Eine Funktion in einer Konfigurationsdatei abzuschalten ist einfach. Sicherzustellen, dass sie nirgends mehr beworben wird, ist der Teil, der einen Test braucht.
+publishedAt: 2026-08-14
+updatedAt: 2026-08-21
+author: Das ForgeSaaS-Team
+tags:
+  - engineering
+  - architektur
+draft: false
+---
+
+Ein Modulschalter ist ein einziger Boolescher Wert:
+
+```ts
+// product.config.ts
+export const config = {
+  modules: {
+    billing: false,
+    // ...
+  },
+} satisfies ProductConfig;
+```
+
+Ihn auf `false` zu setzen ist die leichte Hälfte. Die schwere Hälfte ist alles,
+was stillschweigend `true` angenommen hat.
+
+## Der halb angewendete Schalter
+
+Das Offensichtliche passiert sofort: der Abrechnungs-Router wird nicht
+eingehängt, der Stripe-Webhook antwortet mit 404, der Abrechnungsbereich in den
+Einstellungen ist verschwunden. Eine Testsuite, die nur das prüft, läuft grün
+durch — und das Produkt ist trotzdem kaputt: die Preisseite steht weiterhin in
+der Sitemap, die Navigation verlinkt sie weiterhin, und die Startseite
+verspricht weiterhin Abonnements, die es in dieser Software nicht mehr gibt.
+
+Das ist ein *halb angewendeter* Schalter, und er ist schlimmer als gar keiner.
+Ein 404 aus einer API ist ein Fehler, den jemand meldet. Eine Marketingseite,
+die eine nicht vorhandene Funktion bewirbt, ist ein Supportgespräch, das mit
+einer Rückerstattung beginnt.
+
+## Was wir dagegen tun
+
+Drei Regeln, jede davon durchgesetzt von etwas, das den Build scheitern lässt,
+statt davon, dass sich jemand erinnert.
+
+**Eine Liste von Links.** Kopfzeile, Fußzeile und Sitemap lesen dasselbe Array.
+Eine Seite, die ein Modul entfernt hat, kann nicht in einer davon überleben und
+aus den anderen beiden verschwinden.
+
+**Der Build gehört zum Schalter.** Bei der Marketing-Website schaltet das Modul
+keinen Router ab, sondern den gesamten Build. Mit `marketing: false` gibt es gar
+kein `dist/`, und ein von vor dem Umlegen übrig gebliebenes wird gelöscht —
+denn eine statische Website, die niemand neu baut, liefert weiter die
+Versprechen von gestern aus.
+
+**Eine Matrix statt einer Stichprobe.** Die Continuous Integration baut das
+Produkt in mehreren Modulkombinationen, nicht nur in der Standardkombination.
+Die interessanten Fehler stecken nie in der Kombination, die gerade ausgecheckt
+war.
+
+## Was weiterhin einen Menschen braucht
+
+Nichts davon erfasst Fließtext. Ein Satz auf einer Funktionsseite, der
+Abonnements innerhalb eines Absatzes über etwas anderes erwähnt, übersteht jede
+dieser Prüfungen, weil er eine Aussage in einer Zeichenkette ist und kein Link
+in einem Array. Die Texte auf dieser Website sind auch deshalb kurz: je weniger
+davon es gibt, desto weniger Stellen gibt es, an denen sich ein Versprechen
+verstecken kann.

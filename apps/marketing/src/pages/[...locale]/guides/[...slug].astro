@@ -1,0 +1,66 @@
+---
+/**
+ * One guide. `[...slug]` rather than `[slug]` so a guide can live in a
+ * sub-directory (`getting-started/installation`) without a route change --
+ * documentation grows a hierarchy sooner than a blog does.
+ */
+import { render } from "astro:content";
+
+import Breadcrumbs from "../../../components/Breadcrumbs.astro";
+import BaseLayout from "../../../layouts/BaseLayout.astro";
+import { entryLocales, guides } from "../../../lib/content";
+import { translator } from "../../../lib/i18n";
+import { enabledLocales, localePath, localeSegment } from "../../../lib/routing";
+
+export async function getStaticPaths() {
+  const paths = [];
+  for (const locale of enabledLocales) {
+    for (const guide of await guides(locale)) {
+      paths.push({
+        params: { locale: localeSegment(locale), slug: guide.slug },
+        props: { locale, slug: guide.slug, entry: guide.entry },
+      });
+    }
+  }
+  return paths;
+}
+
+const { locale, slug, entry } = Astro.props;
+const t = translator(locale);
+const { Content } = await render(entry);
+
+// As on a blog post: the locales this guide exists in, so its card does not
+// advertise translations nobody has written.
+const translations = await entryLocales("guides", slug);
+
+// Home, the index, this page. The `section` field is not a crumb: it groups
+// guides in the index but has no page of its own, and a BreadcrumbList step
+// that leads nowhere is worse than a shorter trail.
+const crumbs = [
+  { name: t("marketing.nav.home"), path: localePath(locale) },
+  { name: t("marketing.guides.title"), path: localePath(locale, "guides") },
+  { name: entry.data.title },
+];
+---
+
+<BaseLayout
+  title={entry.data.title}
+  description={entry.data.description}
+  locale={locale}
+  image={entry.data.ogImage}
+  alternateLocales={translations}
+>
+  <article class="mx-auto max-w-3xl px-6 py-16">
+    <Breadcrumbs crumbs={crumbs} label={t("marketing.nav.breadcrumb_label")} />
+
+    <p class="mt-6 text-sm font-semibold uppercase tracking-wide text-muted-foreground">
+      {entry.data.section}
+    </p>
+    <h1 class="mt-2 text-balance text-4xl font-semibold tracking-tight">{entry.data.title}</h1>
+    <p class="mt-4 text-pretty text-lg text-muted-foreground">{entry.data.description}</p>
+
+    <div class="prose mt-10 max-w-none">
+      <Content />
+    </div>
+  </article>
+</BaseLayout>

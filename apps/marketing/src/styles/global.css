@@ -13,3 +13,47 @@
  * package's src/ for consumers inside this workspace; this covers the built
  * artifact that is what an island actually imports. */
 @source "../../../../packages/ui/dist";
+
+/* Prose styling for the MDX in src/content (T-301).
+ *
+ * @tailwindcss/typography rather than a hand-rolled type scale, and the
+ * justification §7 asks for is that the alternative is worse: a heading
+ * rhythm, list spacing, code-block treatment and link styling written out
+ * here would be a second type system in the repo, drifting from @forge/ui's
+ * the first time either changes. The plugin is types-and-CSS only -- no
+ * runtime bytes reach a visitor.
+ *
+ * What it does *not* get to bring is its own palette. The variables below
+ * point every colour the plugin uses at the shared token layer, so prose on a
+ * guide is the same ink as a <Card> beside it and `primaryColor` in
+ * product.config.ts still governs the brand. Without this the plugin quietly
+ * paints the content area in Tailwind's default grays, which is exactly the
+ * drift the tokens exist to prevent. */
+@plugin "@tailwindcss/typography";
+
+.prose {
+  --tw-prose-body: var(--foreground);
+  --tw-prose-headings: var(--foreground);
+  --tw-prose-lead: var(--muted-foreground);
+  --tw-prose-links: var(--primary);
+  --tw-prose-bold: var(--foreground);
+  --tw-prose-counters: var(--muted-foreground);
+  --tw-prose-bullets: var(--border);
+  --tw-prose-hr: var(--border);
+  --tw-prose-quotes: var(--foreground);
+  --tw-prose-quote-borders: var(--border);
+  --tw-prose-captions: var(--muted-foreground);
+  --tw-prose-code: var(--foreground);
+  --tw-prose-pre-code: var(--card-foreground);
+  --tw-prose-pre-bg: var(--muted);
+  --tw-prose-th-borders: var(--border);
+  --tw-prose-td-borders: var(--border);
+}
+
+/* A fenced code block is the one piece of prose that has a minimum width, and
+ * on a phone it is wider than the page. Scrolling it inside its own box keeps
+ * the document from scrolling sideways -- and keeps T-306's CLS budget out of
+ * trouble. */
+.prose pre {
+  overflow-x: auto;
+}

@@ -1,0 +1,11 @@
+---
+/** The terms of service. Everything shared with /privacy is in <LegalDocument>. */
+import LegalDocument from "../../components/LegalDocument.astro";
+import { localeStaticPaths } from "../../lib/routing";
+
+export const getStaticPaths = localeStaticPaths;
+
+const { locale } = Astro.props;
+---
+
+<LegalDocument locale={locale} slug="terms" />

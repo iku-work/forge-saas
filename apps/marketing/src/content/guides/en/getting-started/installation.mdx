@@ -1,0 +1,58 @@
+---
+title: Installation
+description: What to install, what to run, and what a working checkout looks like before you change anything.
+section: Getting started
+order: 1
+---
+
+You need Node 22.13 or later, pnpm, Python 3.12 and Docker. Everything else is
+installed by the commands below.
+
+## Clone and install
+
+```bash
+git clone https://github.com/your-org/your-product.git
+cd your-product
+pnpm install
+```
+
+`pnpm install` sets up every workspace at once — the web app, the marketing
+site, the shared packages and the tooling. The backend's Python dependencies
+are installed separately, inside its own virtual environment:
+
+```bash
+cd backend
+python -m venv .venv
+. .venv/bin/activate
+pip install -e ".[dev]"
+```
+
+## Bring up the services
+
+Postgres, Redis and the object store run in Docker. Nothing else needs to:
+
+```bash
+docker compose up -d
+make migrate
+make seed
+```
+
+`make seed` creates the demo organization and the plan catalogue. It is
+idempotent, so running it twice is safe and running it against a database that
+already has data will not duplicate anything.
+
+## Check it worked
+
+```bash
+pnpm dev
+```
+
+The web app comes up on `https://localhost`, the API docs on
+`https://localhost/docs`, and this marketing site — if the `marketing` module
+is enabled — on `http://localhost:4321`. If the first of those loads and lets
+you sign in with the seeded account, the checkout is working and you can start
+changing things.
+
+If it does not, the most common cause is the certificate: the local stack uses
+Caddy's internal certificate authority, and your browser has to be told once
+that it trusts it.

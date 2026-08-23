@@ -2,7 +2,13 @@
   "nav": {
     "skip_to_content": "Ir al contenido",
     "primary_label": "Navegación principal",
-    "sign_in": "Iniciar sesión"
+    "sign_in": "Iniciar sesión",
+    "features": "Funciones",
+    "pricing": "Precios",
+    "blog": "Blog",
+    "guides": "Guías",
+    "home": "Inicio",
+    "breadcrumb_label": "Ruta de navegación"
   },
   "hero": {
     "title": "Lanza el producto, no la fontanería",
@@ -19,8 +25,119 @@
     "operations_title": "Operable desde el primer día",
     "operations_body": "Registros estructurados, métricas, pistas de auditoría y runbooks, para que el primer incidente sea algo que se lee y no algo que se adivina."
   },
+  "features": {
+    "title": "Funciones",
+    "subtitle": "Todo lo que aparece aquí está implementado, probado y se puede desactivar. Apaga un módulo y con él se van sus rutas, sus tablas y su interfaz.",
+    "accounts_title": "Autenticación que ya ha visto producción",
+    "accounts_body": "Inicio de sesión con contraseña y con OAuth, verificación de correo, revocación de sesiones, códigos de recuperación y reautenticación para las acciones que lo merecen.",
+    "teams_title": "Organizaciones y roles",
+    "teams_body": "Pertenencia a varias organizaciones, invitaciones, permisos por organización y aislamiento entre inquilinos aplicado en la capa de consultas, no recordado por cada endpoint.",
+    "billing_title": "Facturación que aguanta una tormenta de webhooks",
+    "billing_body": "Checkout de Stripe, portal del cliente, límites de plan, periodos de prueba y una secuencia de reclamación de pagos, todo idempotente, porque el mismo evento llegará dos veces.",
+    "files_title": "Almacenamiento de archivos",
+    "files_body": "Subidas compatibles con S3 mediante URLs firmadas, analizadas y con límite de tamaño, conectadas al mismo modelo de permisos que todo lo demás.",
+    "i18n_title": "Seis idiomas, una única fuente",
+    "i18n_body": "El producto, los correos y este sitio de marketing leen los mismos archivos de traducción, así que un término no puede significar una cosa en la aplicación y otra en la página de precios.",
+    "operations_title": "Operaciones que no tienes que inventar",
+    "operations_body": "Registro estructurado, métricas de Prometheus, pistas de auditoría, runbooks de copias de seguridad y rotación de claves, pruebas de carga y un control de accesibilidad en el pipeline."
+  },
+  "pricing": {
+    "title": "Precios",
+    "subtitle": "Todos los planes incluyen la plataforma completa. Lo que cambia es cuánto usas de ella.",
+    "period_label": "Periodo de facturación",
+    "monthly": "Mensual",
+    "yearly": "Anual",
+    "per_month": "al mes",
+    "per_year": "al año",
+    "free": "Gratis",
+    "yearly_saving": "Ahorra un {percent} %",
+    "cta": "Empezar con {plan}",
+    "includes": "Incluye",
+    "empty": "Todavía no hay planes configurados.",
+    "committed_notice": "Estos precios se publicaron junto con el sitio y cambian en el siguiente despliegue, no en la siguiente actualización de la base de datos.",
+    "feature_labels": {
+      "seats": "{count, number} miembros del equipo",
+      "storage_gb": "{count, number} GB de almacenamiento",
+      "api_calls": "{count, number} llamadas a la API al mes"
+    },
+    "feature_flags": {
+      "advanced_reports": "Informes avanzados",
+      "file_storage": "Almacenamiento de archivos"
+    },
+    "feature_unknown": "{name}: {value}"
+  },
+  "faq": {
+    "heading": "Preguntas frecuentes",
+    "product": {
+      "starting_point": {
+        "question": "¿Es un framework o un punto de partida?",
+        "answer": "Un punto de partida. Te llevas el repositorio y cada línea que hay en él: los módulos son código normal que puedes leer, cambiar o borrar, y nada nos llama en tiempo de ejecución."
+      },
+      "modules": {
+        "question": "¿Puedo quitar lo que no necesito?",
+        "answer": "Sí. Cada módulo opcional es un interruptor en un único archivo de configuración, y apagarlo se lleva sus rutas, sus tablas y su interfaz, no solo la entrada de menú que llevaba hasta allí."
+      },
+      "stack": {
+        "question": "¿Sobre qué está construido?",
+        "answer": "Un backend de FastAPI y PostgreSQL, una aplicación web de React y TypeScript, y una capa compartida de componentes y traducciones de la que leen ambos. Ninguna envoltura que no puedas abrir."
+      },
+      "no_card": {
+        "question": "¿Necesito una tarjeta para empezar?",
+        "answer": "No. El plan gratuito no pide datos de pago, y solo verás una pasarela cuando elijas un plan de pago."
+      }
+    },
+    "pricing": {
+      "change_plan": {
+        "question": "¿Puedo cambiar de plan más adelante?",
+        "answer": "Cuando quieras, desde el portal de facturación. Una mejora se aplica de inmediato y lo que ya has pagado se prorratea."
+      },
+      "trial": {
+        "question": "¿Hay periodo de prueba?",
+        "answer": "Un plan de pago puede incluir una prueba: tienes el plan completo, no se te cobra mientras dura y recibes un correo antes de que termine, no después."
+      },
+      "payment": {
+        "question": "¿Cómo se gestiona el pago?",
+        "answer": "Con Stripe. La pasarela y el portal de facturación son suyos, así que los datos de la tarjeta nunca llegan a nuestros servidores: lo que nos llega es un webhook."
+      },
+      "limits": {
+        "question": "¿Qué pasa cuando alcanzo el límite de un plan?",
+        "answer": "La acción que lo superaría se rechaza y el mensaje nombra el límite alcanzado. No se borra nada ni se descarta nada en silencio; mejorar el plan sube el límite al instante."
+      }
+    }
+  },
+  "blog": {
+    "title": "Blog",
+    "subtitle": "Qué cambiamos, por qué y cuánto costó.",
+    "empty": "Todavía no se ha publicado nada en este idioma.",
+    "read_more": "Leer la entrada",
+    "published_on": "Publicado el {date}",
+    "updated_on": "Actualizado el {date}",
+    "by_author": "por {author}",
+    "tags_label": "Etiquetas",
+    "draft_badge": "Borrador",
+    "back": "Todas las entradas"
+  },
+  "guides": {
+    "title": "Guías",
+    "subtitle": "Cómo poner esto en marcha: instalación, configuración y las decisiones que conviene tomar pronto.",
+    "empty": "Todavía no se ha traducido ninguna guía a este idioma."
+  },
+  "legal": {
+    "effective_date": "En vigor desde el {date}",
+    "untranslated_notice": "Este documento todavía no está traducido. El texto que aparece a continuación es el original y es la versión que se aplica."
+  },
+  "not_found": {
+    "title": "Esa página no existe",
+    "body": "Puede que el enlace esté desactualizado o que la página se haya movido. El resto del sitio sigue aquí.",
+    "cta": "Volver a la página de inicio"
+  },
   "footer": {
     "support": "Contactar con soporte",
-    "rights": "© {year} {name}. Todos los derechos reservados."
+    "rights": "© {year} {name}. Todos los derechos reservados.",
+    "product_heading": "Producto",
+    "resources_heading": "Recursos",
+    "legal_heading": "Legal",
+    "privacy": "Política de privacidad",
+    "terms": "Términos del servicio"
   }
 }

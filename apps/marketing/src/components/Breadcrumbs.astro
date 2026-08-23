@@ -1,0 +1,58 @@
+---
+/**
+ * A breadcrumb trail, rendered and described at once (T-303).
+ *
+ * Same arrangement as FaqSection.astro, for the same reason: the visible
+ * `<nav>` and the `BreadcrumbList` JSON-LD come from one array, so the trail a
+ * crawler is told about is by construction the trail a visitor can click.
+ *
+ * This replaced the plain "All guides" back-link a guide used to carry. The
+ * link is still there -- it is the middle crumb -- but the page now also says
+ * where it sits, which is what a `BreadcrumbList` claims and what a search
+ * result shows instead of a bare URL.
+ */
+import { breadcrumbListSchema, type Crumb } from "../lib/structured-data";
+import { absoluteUrl } from "../lib/site-url";
+import JsonLd from "./JsonLd.astro";
+
+interface Props {
+  /** Ancestors first, this page last. Every crumb but the last is a link. */
+  crumbs: { name: string; path?: string | undefined }[];
+  /** Accessible name for the nav landmark, in the page's locale. */
+  label: string;
+}
+
+const { crumbs, label } = Astro.props;
+
+// Site paths for the markup, absolute URLs for the JSON-LD -- a crawler has
+// no base to resolve "/guides/" against, and a visitor gains nothing from a
+// link that names its own host.
+const described: Crumb[] = crumbs.map((crumb) => ({
+  name: crumb.name,
+  url: crumb.path ? absoluteUrl(crumb.path, Astro.site) : undefined,
+}));
+---
+
+<nav aria-label={label} class="text-sm text-muted-foreground">
+  <ol class="flex flex-wrap items-center gap-2">
+    {
+      crumbs.map((crumb, index) => (
+        <li class="flex items-center gap-2">
+          {index > 0 && (
+            <span aria-hidden="true" class="text-muted-foreground/60">
+              /
+            </span>
+          )}
+          {crumb.path ? (
+            <a class="underline-offset-4 hover:underline" href={crumb.path}>
+              {crumb.name}
+            </a>
+          ) : (
+            <span aria-current="page">{crumb.name}</span>
+          )}
+        </li>
+      ))
+    }
+  </ol>
+</nav>
+<JsonLd schema={breadcrumbListSchema(described)} />

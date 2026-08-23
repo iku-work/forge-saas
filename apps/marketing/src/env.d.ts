@@ -8,6 +8,12 @@ interface ImportMetaEnv {
   readonly PUBLIC_SITE_URL?: string;
   /** Absolute origin of apps/web, for sign-in and sign-up links. */
   readonly PUBLIC_APP_URL?: string;
+  /**
+   * Absolute origin of the backend, read once at *build* time to fetch the
+   * plan catalogue (T-301). Unset means "use the committed catalogue", which
+   * is what a fresh checkout and every CI frontend build do.
+   */
+  readonly PUBLIC_API_URL?: string;
 }
 
 interface ImportMeta {

@@ -3,14 +3,27 @@
  * The landing page. Zero script bytes, asserted by tests/build.test.ts --
  * @forge/ui's Card and its button classes render here as HTML, with no React
  * in the output at all.
+ *
+ * Under `[...locale]` since T-301: one file, one copy of the markup, built
+ * once per enabled locale. See src/lib/routing.ts for where the locale sits
+ * in the URL and who owns that decision.
  */
 import { Card, CardContent, CardHeader, CardTitle, buttonVariants } from "@forge/ui";
 
-import BaseLayout from "../layouts/BaseLayout.astro";
-import { translator } from "../lib/i18n";
-import { appLink, defaultLocale, modules, product } from "../lib/product";
+import FaqSection from "../../components/FaqSection.astro";
+import { site } from "../../config/site";
+import BaseLayout from "../../layouts/BaseLayout.astro";
+import { productFaq } from "../../lib/faq";
+import { translator } from "../../lib/i18n";
+import { loadPlans } from "../../lib/plans";
+import { appLink, modules } from "../../lib/product";
+import { localePath, localeStaticPaths } from "../../lib/routing";
+import { absoluteUrl } from "../../lib/site-url";
+import { softwareApplicationSchema } from "../../lib/structured-data";
 
-const locale = defaultLocale;
+export const getStaticPaths = localeStaticPaths;
+
+const { locale } = Astro.props;
 const t = translator(locale);
 
 // The billing highlight is a claim about the product, so it follows the
@@ -34,12 +47,36 @@ const highlights = [
     enabled: true,
   },
 ].filter((highlight) => highlight.enabled);
+
+// The product, described to a crawler in the same sentence the hero shows a
+// reader (T-303). The price range comes from the same catalogue /pricing
+// renders -- `loadPlans` fetches it once per build, not once per page -- and
+// with `billing` off there is no catalogue and the node carries no offer.
+const { plans } = modules.billing
+  ? await loadPlans()
+  : { plans: [] as Awaited<ReturnType<typeof loadPlans>>["plans"] };
+
+const schema = softwareApplicationSchema({
+  astroSite: Astro.site,
+  url: absoluteUrl(Astro.url.pathname, Astro.site),
+  description: t("marketing.hero.subtitle"),
+  locale,
+  plans,
+  pricingUrl: modules.billing
+    ? absoluteUrl(localePath(locale, "pricing"), Astro.site)
+    : undefined,
+});
 ---
 
-<BaseLayout title={product.name} description={t("marketing.hero.subtitle")} locale={locale}>
+<BaseLayout
+  title={site.name}
+  description={t("marketing.hero.subtitle")}
+  locale={locale}
+  schema={schema}
+>
   <section class="mx-auto max-w-5xl px-6 py-20">
-    {/* primaryColor from product.config.ts, the one place the brand colour is
-        set -- an inline custom property, not a second copy of the value in a
+    {/* The brand colour from src/config/site.ts, which reads product.config.ts --
+        an inline custom property, not a second copy of the value in a
         stylesheet. */}
     <div class="brand-rule mb-8 h-1 w-16 rounded-full"></div>
     <h1 class="max-w-3xl text-balance text-4xl font-semibold tracking-tight sm:text-5xl">
@@ -73,9 +110,11 @@ const highlights = [
       }
     </div>
   </section>
+
+  <FaqSection questions={productFaq()} t={t} />
 </BaseLayout>
 
-<style define:vars={{ brandColor: product.primaryColor }}>
+<style define:vars={{ brandColor: site.brandColor }}>
   .brand-rule {
     background-color: var(--brandColor);
   }

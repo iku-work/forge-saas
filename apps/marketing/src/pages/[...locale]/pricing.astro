@@ -1,0 +1,94 @@
+---
+/**
+ * The pricing page (T-301).
+ *
+ * Two things make this page different from every other one here.
+ *
+ * **It is the only page with an island.** Monthly-versus-yearly has to swap
+ * in place, which is the one thing on this site that markup cannot do -- see
+ * src/components/PricingPlans.tsx.
+ *
+ * **Its data comes from outside the repo.** Plans live in the billing
+ * module's database, and a static site cannot query at request time, so
+ * src/lib/plans.ts fetches the catalogue once during the build and falls back
+ * to the committed one in src/content/pricing.ts. The staleness that buys is
+ * written down in that file; the page shows a note when it is what rendered,
+ * so a wrong price on a live site can be diagnosed from the page itself.
+ *
+ * With `billing` off there is no plan catalogue and no checkout, so
+ * getStaticPaths returns nothing: the page is not built, src/lib/nav.ts does
+ * not link it, and it cannot appear in T-304's sitemap.
+ */
+import BaseLayout from "../../layouts/BaseLayout.astro";
+import FaqSection from "../../components/FaqSection.astro";
+import { PricingPlans } from "../../components/PricingPlans";
+import { pricingFaq } from "../../lib/faq";
+import { translator } from "../../lib/i18n";
+import { toPricingPlanView } from "../../lib/plan-view";
+import { loadPlans } from "../../lib/plans";
+import { appLink, modules } from "../../lib/product";
+import { localeStaticPaths } from "../../lib/routing";
+import { absoluteUrl } from "../../lib/site-url";
+import { planProductSchemas } from "../../lib/structured-data";
+
+export function getStaticPaths() {
+  return modules.billing ? localeStaticPaths() : [];
+}
+
+const { locale } = Astro.props;
+const t = translator(locale);
+
+const { plans, source } = await loadPlans();
+const views = plans.map((plan) =>
+  toPricingPlanView(plan, { locale, t, ctaHref: appLink("register") }),
+);
+
+// One Product per plan, offering the same cents the cards above format into
+// prose (T-303). Both start from `plans`, so an offer cannot quote a number
+// this page does not show -- tests/structured-data.test.ts asserts over both.
+const schema = planProductSchemas(plans, {
+  astroSite: Astro.site,
+  url: absoluteUrl(Astro.url.pathname, Astro.site),
+});
+---
+
+<BaseLayout
+  title={t("marketing.pricing.title")}
+  description={t("marketing.pricing.subtitle")}
+  locale={locale}
+  schema={schema}
+>
+  <section class="mx-auto max-w-5xl px-6 py-16">
+    <h1 class="text-4xl font-semibold tracking-tight">{t("marketing.pricing.title")}</h1>
+    <p class="mt-4 max-w-2xl text-pretty text-lg text-muted-foreground">
+      {t("marketing.pricing.subtitle")}
+    </p>
+
+    {
+      views.length === 0 ? (
+        <p class="mt-10 text-muted-foreground">{t("marketing.pricing.empty")}</p>
+      ) : (
+        <PricingPlans
+          client:load
+          plans={views}
+          labels={{
+            periodLabel: t("marketing.pricing.period_label"),
+            monthly: t("marketing.pricing.monthly"),
+            yearly: t("marketing.pricing.yearly"),
+            includes: t("marketing.pricing.includes"),
+          }}
+        />
+      )
+    }
+
+    {
+      source === "committed" && views.length > 0 && (
+        <p class="mt-8 text-sm text-muted-foreground" data-testid="pricing-source">
+          {t("marketing.pricing.committed_notice")}
+        </p>
+      )
+    }
+  </section>
+
+  <FaqSection questions={pricingFaq()} t={t} />
+</BaseLayout>

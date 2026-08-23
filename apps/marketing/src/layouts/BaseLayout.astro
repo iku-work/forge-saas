@@ -5,13 +5,30 @@
  * `lang`/`dir` follow @forge/i18n's locale registry -- the same rule
  * apps/web's shell applies in src/i18n.ts, so `ar` is right-to-left on both
  * sides of the product rather than only inside the login.
+ *
+ * The head is <Seo>'s, entirely (T-302). This layout owns no meta tag that
+ * component could also emit, which is what makes "exactly one <title> per
+ * page" a property of the code rather than a thing reviewers check. Extra
+ * meta a page needs -- an article's date, its own card image -- travels
+ * through the props below rather than through a second head block.
+ *
+ * The same arrangement covers structured data (T-303): the site-wide
+ * Organization node is emitted here, on every page, and a page that *is*
+ * something in its own right (the landing page is a SoftwareApplication, a
+ * post is a BlogPosting) passes that through `schema` rather than importing
+ * <JsonLd> itself. Structured data belonging to a block of markup -- the FAQ,
+ * a breadcrumb trail -- stays with the component that renders the markup, so
+ * the two cannot disagree.
  */
 import { localeMeta } from "@forge/i18n";
 
+import JsonLd from "../components/JsonLd.astro";
+import Seo from "../components/Seo.astro";
 import SiteFooter from "../components/SiteFooter.astro";
 import SiteHeader from "../components/SiteHeader.astro";
 import { translator } from "../lib/i18n";
 import { defaultLocale } from "../lib/product";
+import { organizationSchema, type SchemaNode } from "../lib/structured-data";
 import "../styles/global.css";
 
 interface Props {
@@ -19,18 +36,34 @@ interface Props {
   description: string;
   locale?: string;
   noindex?: boolean;
+  /** Forwarded to <Seo>; see that component for what each one means. */
+  image?: string | undefined;
+  type?: "website" | "article" | undefined;
+  publishedAt?: Date | undefined;
+  alternateLocales?: string[] | undefined;
+  /** JSON-LD describing this page. The Organization node is added below. */
+  schema?: SchemaNode | SchemaNode[] | undefined;
 }
 
-const { title, description, locale = defaultLocale, noindex = false } = Astro.props;
+const {
+  title,
+  description,
+  locale = defaultLocale,
+  noindex = false,
+  image,
+  type,
+  publishedAt,
+  alternateLocales,
+  schema,
+} = Astro.props;
 const t = translator(locale);
 const dir = localeMeta(locale)?.dir ?? "ltr";
 
-// T-302 introduces <Seo>, which owns the whole meta block: title, canonical,
-// Open Graph, Twitter card. Until it exists this layout emits the minimum a
-// page must never ship without -- but it steps aside the moment a page fills
-// the slot, so the two can never both emit a <title> and trip T-302's
-// check-seo.mjs "more than one of any of them" rule.
-const ownsHead = !Astro.slots.has("seo");
+// One block rather than one per node: a crawler reads a JSON array the same
+// way it reads several script elements, and the page carries one seam instead
+// of N. Organization comes first because everything else points at its @id.
+const pageSchema: SchemaNode[] = schema === undefined ? [] : [schema].flat();
+const schemas: SchemaNode[] = [organizationSchema(Astro.site), ...pageSchema];
 ---
 
 <html lang={locale} dir={dir}>
@@ -38,16 +71,17 @@ const ownsHead = !Astro.slots.has("seo");
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
-    {noindex && <meta name="robots" content="noindex, nofollow" />}
-    {
-      ownsHead && (
-        <>
-          <title>{title}</title>
-          <meta name="description" content={description} />
-        </>
-      )
-    }
-    <slot name="seo" />
+    <Seo
+      title={title}
+      description={description}
+      locale={locale}
+      noindex={noindex}
+      image={image}
+      type={type}
+      publishedAt={publishedAt}
+      alternateLocales={alternateLocales}
+    />
+    <JsonLd schema={schemas} />
   </head>
   <body class="min-h-screen bg-background text-foreground antialiased">
     <a

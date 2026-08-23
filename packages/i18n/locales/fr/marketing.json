@@ -2,7 +2,13 @@
   "nav": {
     "skip_to_content": "Aller au contenu",
     "primary_label": "Navigation principale",
-    "sign_in": "Se connecter"
+    "sign_in": "Se connecter",
+    "features": "Fonctionnalités",
+    "pricing": "Tarifs",
+    "blog": "Blog",
+    "guides": "Guides",
+    "home": "Accueil",
+    "breadcrumb_label": "Fil d'Ariane"
   },
   "hero": {
     "title": "Livrez le produit, pas la tuyauterie",
@@ -19,8 +25,119 @@
     "operations_title": "Exploitable dès le premier jour",
     "operations_body": "Journaux structurés, métriques, pistes d'audit et runbooks : le premier incident se lit, il ne se devine pas."
   },
+  "features": {
+    "title": "Fonctionnalités",
+    "subtitle": "Tout ce qui suit est implémenté, testé et désactivable. Coupez un module et ses routes, ses tables et son interface partent avec lui.",
+    "accounts_title": "Une authentification qui a déjà vu la production",
+    "accounts_body": "Connexion par mot de passe et par OAuth, vérification de l'adresse e-mail, révocation des sessions, codes de récupération et réauthentification pour les actions qui le méritent.",
+    "teams_title": "Organisations et rôles",
+    "teams_body": "Appartenance à plusieurs organisations, invitations, permissions par organisation et cloisonnement des locataires appliqué dans la couche de requêtes plutôt que mémorisé par chaque point d'entrée.",
+    "billing_title": "Une facturation qui encaisse une tempête de webhooks",
+    "billing_body": "Paiement Stripe, portail client, limites de forfait, essais et séquence de relance — le tout idempotent, car le même événement arrivera deux fois.",
+    "files_title": "Stockage de fichiers",
+    "files_body": "Téléversements compatibles S3 avec URL signées, analysés et limités en taille, branchés sur le même modèle de permissions que le reste.",
+    "i18n_title": "Six langues, une seule source",
+    "i18n_body": "Le produit, les e-mails et ce site vitrine lisent les mêmes fichiers de traduction : un terme ne peut pas vouloir dire une chose dans l'application et une autre sur la page des tarifs.",
+    "operations_title": "Une exploitation que vous n'avez pas à inventer",
+    "operations_body": "Journalisation structurée, métriques Prometheus, pistes d'audit, runbooks de sauvegarde et de rotation des clés, tests de charge et un contrôle d'accessibilité dans le pipeline."
+  },
+  "pricing": {
+    "title": "Tarifs",
+    "subtitle": "Chaque forfait comprend la plateforme entière. Ce qui change, c'est la quantité que vous en utilisez.",
+    "period_label": "Période de facturation",
+    "monthly": "Mensuel",
+    "yearly": "Annuel",
+    "per_month": "par mois",
+    "per_year": "par an",
+    "free": "Gratuit",
+    "yearly_saving": "Économisez {percent} %",
+    "cta": "Commencer avec {plan}",
+    "includes": "Comprend",
+    "empty": "Aucun forfait n'est encore configuré.",
+    "committed_notice": "Ces tarifs ont été publiés avec le site et changent au prochain déploiement, pas à la prochaine mise à jour de la base de données.",
+    "feature_labels": {
+      "seats": "{count, number} membres d'équipe",
+      "storage_gb": "{count, number} Go de stockage",
+      "api_calls": "{count, number} appels d'API par mois"
+    },
+    "feature_flags": {
+      "advanced_reports": "Rapports avancés",
+      "file_storage": "Stockage de fichiers"
+    },
+    "feature_unknown": "{name} : {value}"
+  },
+  "faq": {
+    "heading": "Questions fréquentes",
+    "product": {
+      "starting_point": {
+        "question": "Est-ce un framework ou un point de départ ?",
+        "answer": "Un point de départ. Vous repartez avec le dépôt et chacune de ses lignes : les modules sont du code ordinaire, à lire, à modifier ou à supprimer, et rien ne nous contacte à l'exécution."
+      },
+      "modules": {
+        "question": "Puis-je retirer ce dont je n'ai pas besoin ?",
+        "answer": "Oui. Chaque module optionnel tient dans un interrupteur d'un seul fichier de configuration, et l'éteindre emporte ses routes, ses tables et son interface — pas seulement l'entrée de menu qui y menait."
+      },
+      "stack": {
+        "question": "Sur quoi est-ce construit ?",
+        "answer": "Un backend FastAPI et PostgreSQL, une application web React et TypeScript, et une couche partagée de composants et de traductions que les deux lisent. Aucun emballage que vous ne puissiez ouvrir."
+      },
+      "no_card": {
+        "question": "Faut-il une carte pour commencer ?",
+        "answer": "Non. L'offre gratuite ne demande aucune coordonnée bancaire, et vous ne voyez un paiement qu'au moment où vous choisissez une offre payante."
+      }
+    },
+    "pricing": {
+      "change_plan": {
+        "question": "Puis-je changer d'offre plus tard ?",
+        "answer": "À tout moment, depuis le portail de facturation. Une montée en gamme s'applique immédiatement et ce que vous avez déjà payé est calculé au prorata."
+      },
+      "trial": {
+        "question": "Existe-t-il une période d'essai ?",
+        "answer": "Une offre payante peut comporter un essai : vous avez l'offre entière, rien ne vous est facturé pendant sa durée, et vous recevez un courriel avant sa fin, pas après."
+      },
+      "payment": {
+        "question": "Comment se passe le paiement ?",
+        "answer": "Par Stripe. Le paiement et le portail de facturation sont les leurs, si bien que les données de carte n'atteignent jamais nos serveurs — ce qui nous revient, c'est un webhook."
+      },
+      "limits": {
+        "question": "Que se passe-t-il quand j'atteins la limite d'une offre ?",
+        "answer": "L'action qui la dépasserait est refusée, et le message nomme la limite atteinte. Rien n'est supprimé ni abandonné en silence ; passer à l'offre supérieure relève la limite aussitôt."
+      }
+    }
+  },
+  "blog": {
+    "title": "Blog",
+    "subtitle": "Ce que nous avons changé, pourquoi, et ce que cela a coûté.",
+    "empty": "Rien n'a encore été publié dans cette langue.",
+    "read_more": "Lire l'article",
+    "published_on": "Publié le {date}",
+    "updated_on": "Mis à jour le {date}",
+    "by_author": "par {author}",
+    "tags_label": "Étiquettes",
+    "draft_badge": "Brouillon",
+    "back": "Tous les articles"
+  },
+  "guides": {
+    "title": "Guides",
+    "subtitle": "Comment faire tourner tout cela : installation, configuration et les décisions qu'il vaut mieux prendre tôt.",
+    "empty": "Aucun guide n'a encore été traduit dans cette langue."
+  },
+  "legal": {
+    "effective_date": "En vigueur depuis le {date}",
+    "untranslated_notice": "Ce document n'est pas encore traduit. Le texte ci-dessous est l'original et c'est la version qui fait foi."
+  },
+  "not_found": {
+    "title": "Cette page n'existe pas",
+    "body": "Le lien est peut-être périmé, ou la page a été déplacée. Le reste du site est toujours là.",
+    "cta": "Retour à l'accueil"
+  },
   "footer": {
     "support": "Contacter le support",
-    "rights": "© {year} {name}. Tous droits réservés."
+    "rights": "© {year} {name}. Tous droits réservés.",
+    "product_heading": "Produit",
+    "resources_heading": "Ressources",
+    "legal_heading": "Mentions légales",
+    "privacy": "Politique de confidentialité",
+    "terms": "Conditions d'utilisation"
   }
 }

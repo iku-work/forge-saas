@@ -1,0 +1,127 @@
+---
+/**
+ * One blog post.
+ *
+ * `getStaticPaths` builds a route per (locale, post) pair rather than per
+ * post, so a post that exists only in `en` produces exactly one URL. That is
+ * the shape T-305's hreflang needs: the alternates for a page are the locales
+ * the post was actually translated into, and nothing here can point at a URL
+ * that was never generated.
+ *
+ * Drafts are in this list during `astro dev` and absent from a production
+ * build -- see `isPublished` in src/lib/content.ts. The badge below is what
+ * makes that visible while writing, so nobody wonders why a post is missing
+ * after a deploy.
+ */
+import { render } from "astro:content";
+
+import BaseLayout from "../../../layouts/BaseLayout.astro";
+import { blogPosts, entryLocales } from "../../../lib/content";
+import { formatDate, isoDate, translator } from "../../../lib/i18n";
+import { enabledLocales, localePath, localeSegment } from "../../../lib/routing";
+import { absoluteUrl } from "../../../lib/site-url";
+import { blogPostingSchema } from "../../../lib/structured-data";
+
+export async function getStaticPaths() {
+  const paths = [];
+  for (const locale of enabledLocales) {
+    for (const post of await blogPosts(locale)) {
+      paths.push({
+        params: { locale: localeSegment(locale), slug: post.slug },
+        props: { locale, slug: post.slug, entry: post.entry },
+      });
+    }
+  }
+  return paths;
+}
+
+const { locale, slug, entry } = Astro.props;
+const t = translator(locale);
+const { Content } = await render(entry);
+
+// The locales this post was actually written in -- not every enabled locale.
+// <Seo> turns them into og:alternate_locale, and claiming a translation that
+// does not exist is the metadata form of the dead link T-220 fixed once.
+const translations = await entryLocales("blog", slug);
+
+// The same frontmatter the article below renders, in the form a crawler reads
+// it (T-303). Nothing here is written twice: change the date in the .mdx and
+// both the <time> element and `datePublished` move together.
+const schema = blogPostingSchema({
+  astroSite: Astro.site,
+  url: absoluteUrl(Astro.url.pathname, Astro.site),
+  title: entry.data.title,
+  description: entry.data.description,
+  author: entry.data.author,
+  publishedAt: entry.data.publishedAt,
+  updatedAt: entry.data.updatedAt,
+  image: entry.data.ogImage,
+  tags: entry.data.tags,
+  locale,
+});
+---
+
+<BaseLayout
+  title={entry.data.title}
+  description={entry.data.description}
+  locale={locale}
+  type="article"
+  publishedAt={entry.data.publishedAt}
+  image={entry.data.ogImage}
+  alternateLocales={translations}
+  schema={schema}
+>
+  <article class="mx-auto max-w-3xl px-6 py-16">
+    <a
+      class="text-sm text-muted-foreground underline-offset-4 hover:underline"
+      href={localePath(locale, "blog")}
+    >
+      {t("marketing.blog.back")}
+    </a>
+
+    <h1 class="mt-6 text-balance text-4xl font-semibold tracking-tight">{entry.data.title}</h1>
+
+    <p class="mt-4 text-sm text-muted-foreground">
+      <time datetime={isoDate(entry.data.publishedAt)}>
+        {t("marketing.blog.published_on", { date: formatDate(entry.data.publishedAt, locale) })}
+      </time>
+      {" · "}
+      {t("marketing.blog.by_author", { author: entry.data.author })}
+      {
+        entry.data.updatedAt && (
+          <>
+            {" · "}
+            <time datetime={isoDate(entry.data.updatedAt)}>
+              {t("marketing.blog.updated_on", {
+                date: formatDate(entry.data.updatedAt, locale),
+              })}
+            </time>
+          </>
+        )
+      }
+      {
+        entry.data.draft && (
+          <>
+            {" · "}
+            <span class="rounded-md bg-muted px-2 py-0.5 font-medium text-foreground">
+              {t("marketing.blog.draft_badge")}
+            </span>
+          </>
+        )
+      }
+    </p>
+
+    {
+      entry.data.tags.length > 0 && (
+        <p class="mt-3 text-sm text-muted-foreground">
+          <span class="sr-only">{t("marketing.blog.tags_label")}: </span>
+          {entry.data.tags.join(", ")}
+        </p>
+      )
+    }
+
+    <div class="prose mt-10 max-w-none">
+      <Content />
+    </div>
+  </article>
+</BaseLayout>
