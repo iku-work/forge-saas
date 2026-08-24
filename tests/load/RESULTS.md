@@ -175,3 +175,7 @@ instead of per-PR.
 | 2026-08-23 | 0771cc9 | browse | - | - | PASS |
 | 2026-08-23 | 0771cc9 | presign | - | - | PASS |
 | 2026-08-23 | 0771cc9 | mixed | - | - | FAIL |
+| 2026-08-24 | 1a0375a | login-burst | - | - | FAIL |
+| 2026-08-24 | 1a0375a | browse | - | - | PASS |
+| 2026-08-24 | 1a0375a | presign | - | - | PASS |
+| 2026-08-24 | 1a0375a | mixed | - | - | FAIL |
