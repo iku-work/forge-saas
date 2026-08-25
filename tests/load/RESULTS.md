@@ -179,3 +179,7 @@ instead of per-PR.
 | 2026-08-24 | 1a0375a | browse | - | - | PASS |
 | 2026-08-24 | 1a0375a | presign | - | - | PASS |
 | 2026-08-24 | 1a0375a | mixed | - | - | FAIL |
+| 2026-08-25 | b56fdd1 | login-burst | - | - | FAIL |
+| 2026-08-25 | b56fdd1 | browse | - | - | PASS |
+| 2026-08-25 | b56fdd1 | presign | - | - | PASS |
+| 2026-08-25 | b56fdd1 | mixed | - | - | FAIL |
