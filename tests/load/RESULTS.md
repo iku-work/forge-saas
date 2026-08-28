@@ -191,3 +191,7 @@ instead of per-PR.
 | 2026-08-27 | 41553f8 | browse | - | - | PASS |
 | 2026-08-27 | 41553f8 | presign | - | - | PASS |
 | 2026-08-27 | 41553f8 | mixed | - | - | FAIL |
+| 2026-08-28 | 040221f | login-burst | - | - | FAIL |
+| 2026-08-28 | 040221f | browse | - | - | PASS |
+| 2026-08-28 | 040221f | presign | - | - | PASS |
+| 2026-08-28 | 040221f | mixed | - | - | FAIL |
