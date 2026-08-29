@@ -195,3 +195,7 @@ instead of per-PR.
 | 2026-08-28 | 040221f | browse | - | - | PASS |
 | 2026-08-28 | 040221f | presign | - | - | PASS |
 | 2026-08-28 | 040221f | mixed | - | - | FAIL |
+| 2026-08-29 | ea80acd | login-burst | - | - | FAIL |
+| 2026-08-29 | ea80acd | browse | - | - | PASS |
+| 2026-08-29 | ea80acd | presign | - | - | PASS |
+| 2026-08-29 | ea80acd | mixed | - | - | FAIL |
