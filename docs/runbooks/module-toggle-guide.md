@@ -34,9 +34,11 @@ removes today:
   `billing` removes `/pricing` from the marketing site as well as the billing
   router — the page is not built, the header and footer do not link it, and it
   is not in the sitemap. That is the general rule rather than a special case:
-  a marketing page that advertises a module is part of that module's surface,
-  and `apps/marketing/src/lib/nav.ts` is the one list the header, the footer
-  and the sitemap all read so the three cannot disagree.
+  a marketing page that advertises a module is part of that module's surface.
+  The three follow from two independent gates rather than from one list:
+  `apps/marketing/src/lib/nav.ts` is what the header and the footer read, and
+  the page's own `getStaticPaths` is gated on the same toggle, so the sitemap
+  (which lists what was *built*) loses the entry without being told.
 - **Nothing yet.** `oauth` and `totp_2fa` ship routers in `build_router()`'s
   always-on block, so their toggles do not currently remove anything;
   `usage_metering` and `outbound_webhooks` are Phase-2 slots; and T-290's

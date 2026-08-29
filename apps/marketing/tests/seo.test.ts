@@ -8,8 +8,8 @@
  * indistinguishable from the localhost fallback.
  */
 import { execFileSync } from "node:child_process";
-import { readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
-import { join, sep } from "node:path";
+import { readFileSync, rmSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
 
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
@@ -19,6 +19,7 @@ import {
   APP_ROOT,
   DIST,
   build,
+  builtPages,
   buildExpectingFailure,
   read,
   readPath,
@@ -65,13 +66,6 @@ function countOf(html: string, pattern: RegExp): number {
 }
 
 /** Every built page, as a path inside dist/ with forward slashes. */
-function builtPages(): string[] {
-  return readdirSync(DIST, { recursive: true })
-    .map((entry) => String(entry).split(sep).join("/"))
-    .filter((entry) => entry.endsWith(".html"))
-    .sort();
-}
-
 /** The check-seo CLI over a directory: what it printed, and whether it passed. */
 function runCheckSeo(dir: string): { passed: boolean; output: string } {
   try {

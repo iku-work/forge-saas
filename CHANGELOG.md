@@ -85,6 +85,54 @@ template keep their own changes in `CHANGELOG.product.md` (see
     in their schema; they had been reusing their own title, which is the
     degenerate form of having none.
 
+- **`robots.txt` and a sitemap that cannot disagree with it (T-304).**
+  `robots.txt` is now an endpoint (`apps/marketing/src/pages/robots.txt.ts`)
+  rather than a file in `public/`, because the one thing it exists to decide —
+  is *this* build the production site? — is not knowable until a build has an
+  origin. `src/config/indexing.ts` holds that decision and the paths no
+  crawler may follow.
+  - **Indexing is opt-in.** A build is offered to crawlers only when
+    `PUBLIC_SITE_URL` matches the `PRODUCTION_ORIGIN` declared in
+    `src/config/indexing.ts`, which ships as the template's placeholder
+    domain. Every other build — a fresh checkout on `http://localhost:4321`, a
+    preview deploy, a staging host — serves `User-agent: *` / `Disallow: /`,
+    offers no sitemap, and says so loudly in the build log. An un-indexed
+    launch is one line away from being fixed; a staging site that outranks
+    production is a reconsideration request and a month of waiting, so that is
+    the direction to be wrong in. The other half of the staging rule, an
+    `X-Robots-Tag: noindex` response header, belongs to T-307 — marketing has
+    no served host yet.
+  - **The disallow list covers paths this host does not serve.** The API's
+    surface and every private `apps/web` route are listed even though T-307
+    puts marketing on its own origin, because `robots.txt` is per-origin *and*
+    per-deployment: a fork that ever serves the app under this domain gets the
+    right rules without having to remember the file exists. Each prefix
+    becomes two patterns (`/api$` and `/api/`), so `Disallow: /api` cannot
+    quietly swallow a blog post about an API, and the app's routes carry a
+    `/*/` because T-233 gives every one of them a locale segment.
+  - **The sitemap filter reads the built HTML.** A page leaves the sitemap
+    because its own markup carries `noindex`, not because it is named in a
+    list somebody has to maintain. Drafts and a disabled module's routes need
+    no filtering at all — they are never built, and the sitemap only ever sees
+    pages that were.
+  - **`scripts/check-indexing.mjs` fails the build on a disagreement.** A
+    filter can only ever *remove*, so the check beside it catches what one
+    cannot: a sitemap URL that resolves to no built page, a listed page that
+    asks not to be indexed, a built and indexable page that is in no sitemap,
+    a sitemap URL `robots.txt` disallows, a URL on an origin other than the
+    one the build was given (the shape of a deploy that forgot
+    `PUBLIC_SITE_URL`), and a `Sitemap:` line naming a file that was not
+    written. "Every URL in the sitemap resolves" is now a build gate rather
+    than something checked once by hand.
+  - **The `Sitemap:` line points at `/sitemap-index.xml`.**
+    `@astrojs/sitemap` always writes an index plus numbered chunks and never a
+    `sitemap.xml`; a sitemap index is a first-class thing to submit, and a
+    `Sitemap:` line naming a 404 is not. The check asserts the file it names
+    exists.
+  - `scripts/html.mjs` now holds the quote-aware tag reading both build gates
+    do, so `check-seo` and `check-indexing` share one parser — and one set of
+    the escaping mistakes T-303 already found once.
+
 - **JSON-LD, built from the data the pages already render (T-303).**
   `src/components/JsonLd.astro` is the only place this site serialises
   structured data, and `src/lib/structured-data.ts` the only place it builds

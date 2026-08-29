@@ -1,10 +1,10 @@
 // @ts-check
 import mdx from "@astrojs/mdx";
 import react from "@astrojs/react";
-import sitemap from "@astrojs/sitemap";
 import tailwindcss from "@tailwindcss/vite";
 import { defineConfig } from "astro/config";
 
+import { indexing } from "./scripts/check-indexing.mjs";
 import { checkSeo } from "./scripts/check-seo.mjs";
 import {
   enabledLocales,
@@ -22,10 +22,11 @@ export default defineConfig({
   // second deployment topology. T-307 wires the host.
   output: "static",
 
-  // T-304 makes robots.txt and the sitemap depend on this, including the
-  // "staging must not be indexed" rule. The fallback keeps `astro build`
-  // deterministic without an env file -- it is not a production value, and
-  // T-304's check is what stops it reaching production.
+  // robots.txt and the sitemap both depend on this (T-304), including the
+  // "staging must not be indexed" rule: a build whose origin is not the
+  // PRODUCTION_ORIGIN in src/config/indexing.ts serves `Disallow: /`. The
+  // fallback keeps `astro build` deterministic without an env file, and is
+  // deliberately not a production value -- a fresh checkout indexes nothing.
   site: process.env["PUBLIC_SITE_URL"] ?? "http://localhost:4321",
 
   i18n: {
@@ -61,9 +62,10 @@ export default defineConfig({
     react(),
     // Constraint 3. T-301 adds the content collections that use it.
     mdx(),
-    // T-304 replaces the defaults here with the filter that drops noindex
-    // pages, drafts, and routes belonging to a disabled module.
-    sitemap(),
+    // T-304: @astrojs/sitemap with the filter that drops noindex pages, and
+    // the check that holds the sitemap, robots.txt and dist/ to each other.
+    // Spread as a pair because they are one decision -- see indexing().
+    ...indexing(),
     // T-302, and last on purpose: it reads what every integration before it
     // wrote. `astro:build:done` throwing is what turns "a page has no
     // description" into a failed build rather than a deploy nobody inspects.

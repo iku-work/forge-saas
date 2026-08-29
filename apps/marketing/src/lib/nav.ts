@@ -1,12 +1,17 @@
 /**
  * Which pages this product actually has, in one list (T-301).
  *
- * The header, the footer and — once T-304 lands — the sitemap all read from
- * here, because a module toggle has to remove a page from *every* one of them
- * at once. `/pricing` with `billing` off is the worked example: the page is
- * not built, so a nav link to it would be a 404 in the primary navigation
- * (the dead-link class of bug T-220 already fixed once), and a sitemap entry
- * for it would be a 404 handed to a crawler.
+ * The header and the footer both read from here, because a module toggle has
+ * to remove a page from both at once. `/pricing` with `billing` off is the
+ * worked example: the page is not built, so a nav link to it would be a 404 in
+ * the primary navigation -- the dead-link class of bug T-220 already fixed
+ * once.
+ *
+ * The sitemap does *not* read this list, and should not: it lists what was
+ * built, which is the stronger answer. `pricing.astro` gates its own
+ * `getStaticPaths` on the same toggle, so the page, the link and the sitemap
+ * entry go together without any of the three trusting the other two.
+ * tests/routes.test.ts asserts all three.
  *
  * Paths here are locale-less; `localePath()` in ./routing puts the locale on
  * the front.

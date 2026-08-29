@@ -149,3 +149,14 @@ split across two deploys, not a rollback plan. Data-level recovery is
   push) — a GitHub repo setting, not code; configure manually via
   Settings → Branches, or `gh api repos/<owner>/<repo>/branches/main/protection`,
   once this repo has a remote.
+- Serving `apps/marketing` — its own host, Caddy block and security headers
+  land in T-307. **Two things have to be set before that host is indexable**,
+  and both fail silently rather than loudly:
+  - `PRODUCTION_ORIGIN` in `apps/marketing/src/config/indexing.ts` ships as
+    the placeholder `https://example.com`. Change it to the real domain.
+  - The environment that builds the site must set `PUBLIC_SITE_URL` to exactly
+    that origin. Any other value — including leaving it unset — is treated as
+    a staging build: `robots.txt` disallows every crawler and offers no
+    sitemap. That is deliberate (a staging copy outranking production is
+    expensive to undo), and every build prints which way it decided, so the
+    build log is where to check.

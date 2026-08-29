@@ -4,7 +4,14 @@
 // astro.config.mjs and src/lib/product.ts each carry a documented local
 // default so `astro build` works in a fresh checkout with no env file.
 interface ImportMetaEnv {
-  /** Absolute origin this site is served from. T-304 keys robots/sitemap off it. */
+  /**
+   * Absolute origin this site is served from.
+   *
+   * Everything a crawler is told keys off it (T-304): the sitemap's URLs, the
+   * `Sitemap:` line, and whether robots.txt allows anything at all -- a build
+   * whose origin is not the `PRODUCTION_ORIGIN` in src/config/indexing.ts
+   * serves `Disallow: /`.
+   */
   readonly PUBLIC_SITE_URL?: string;
   /** Absolute origin of apps/web, for sign-in and sign-up links. */
   readonly PUBLIC_APP_URL?: string;

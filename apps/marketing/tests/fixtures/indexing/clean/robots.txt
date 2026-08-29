@@ -1,0 +1,9 @@
+# A fixture in the production form: crawling allowed, one path kept back, a
+# sitemap offered. tests/indexing.test.ts breaks one thing about it at a time.
+
+User-agent: *
+Allow: /
+Disallow: /api$
+Disallow: /api/
+
+Sitemap: https://example.com/sitemap-index.xml

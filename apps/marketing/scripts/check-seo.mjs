@@ -19,61 +19,11 @@
  *
  *     node scripts/check-seo.mjs [dir]     # defaults to ./dist
  */
-import { readdir, readFile } from "node:fs/promises";
-import { join, relative, resolve, sep } from "node:path";
+import { readFile } from "node:fs/promises";
+import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
-/**
- * Only the head is scanned.
- *
- * A `<title>` inside an inline SVG icon, or `<link rel="canonical">` quoted
- * inside a guide's fenced code block, is not a second canonical -- and a
- * checker that fails on prose about SEO in an article about SEO would be
- * turned off within a week. The head is where the tags mean what they say.
- */
-const HEAD = /<head[^>]*>([\s\S]*?)<\/head>/i;
-
-/**
- * The value of an attribute on a single tag, or "" when it has none.
- *
- * Every attribute is read and compared by name rather than a regex built
- * around the name: a pattern assembled from a string is one escaping mistake
- * away from matching nothing, and a checker that silently matches nothing
- * reports every page as broken (or, worse, none).
- */
-const ATTRIBUTE = /([a-z][a-z0-9:-]*)\s*=\s*"([^"]*)"/gi;
-
-function attribute(tag, name) {
-  for (const [, key, value] of tag.matchAll(ATTRIBUTE)) {
-    if (key.toLowerCase() === name) {
-      return value ?? "";
-    }
-  }
-  return "";
-}
-
-/**
- * Every start tag in a fragment, as its full text.
- *
- * The alternation is what makes this quote-aware, and it is not decoration.
- * Inside a double-quoted attribute value only `&` and `"` have to be
- * escaped -- `<` and `>` are ordinary characters there, and Astro
- * (correctly) leaves them alone. So a page whose description reads "faster
- * than the alternative -> by a lot" emits a perfectly valid
- * `<meta name="description" content="... -> by a lot">`, and the obvious
- * `<meta[^>]*>` ends the tag at that `>`: the `content` attribute then
- * looks unterminated, reads as empty, and this checker fails the build over a
- * description that is fine. T-303's JSON-LD found it -- a post about ending a
- * script block has exactly that shape.
- */
-const TAG = /<([a-z][a-z0-9-]*)((?:[^>"]|"[^"]*")*)>/gi;
-
-/** Every `<name ...>` start tag in a fragment. */
-function tagsNamed(fragment, name) {
-  return [...fragment.matchAll(TAG)]
-    .filter((match) => match[1]?.toLowerCase() === name)
-    .map((match) => match[0]);
-}
+import { attribute, headOf, htmlFiles, tagsNamed } from "./html.mjs";
 
 /**
  * The three tags, and how to read the value each one must not be missing.
@@ -81,18 +31,17 @@ function tagsNamed(fragment, name) {
  * `find` returns one entry per occurrence, already reduced to the value that
  * has to be non-empty -- the text of a title, the `content` of a description,
  * the `href` of a canonical. Rules that read an attribute go through
- * `tagsNamed` and `attribute` rather than a pattern assembled around the
- * attribute name: a regex built from a string is one escaping mistake away
- * from matching nothing, and a checker that silently matches nothing reports
- * every page as broken (or, worse, none).
+ * `tagsNamed` and `attribute` from ./html.mjs rather than a pattern assembled
+ * around the attribute name; that file says why.
  */
 const RULES = [
   {
     label: "<title>",
     // Element content rather than an attribute, so this one is read by
     // hand rather than by a pattern. <title> carries no attributes on any
-    // page here, and scanning for its delimiters directly keeps TAG above
-    // the only regex in this file anybody has to check twice.
+    // page here, and scanning for its delimiters directly means this file
+    // holds no regex of its own -- the quote-aware ones all live in
+    // ./html.mjs, checked once for both build gates.
     find: (head) => {
       const values = [];
       let cursor = 0;
@@ -133,18 +82,6 @@ const RULES = [
   },
 ];
 
-/** Every `.html` file under `dir`, as paths relative to it, in a stable order. */
-async function htmlFiles(dir) {
-  const entries = await readdir(dir, { recursive: true, withFileTypes: true });
-  return entries
-    .filter((entry) => entry.isFile() && entry.name.endsWith(".html"))
-    // parentPath is absolute; relative() plus a forward-slash join keeps the
-    // messages identical on Windows and Linux, which matters because tests
-    // assert on them.
-    .map((entry) => relative(dir, join(entry.parentPath, entry.name)).split(sep).join("/"))
-    .sort();
-}
-
 /**
  * Every SEO problem in a directory of built HTML, as printable lines.
  *
@@ -156,7 +93,7 @@ export async function findSeoProblems(dir) {
 
   for (const file of await htmlFiles(dir)) {
     const html = await readFile(join(dir, file), "utf-8");
-    const head = html.match(HEAD)?.[1];
+    const head = headOf(html);
     if (head === undefined) {
       problems.push(`${file}: has no <head> — nothing about this page is described to a crawler`);
       continue;

@@ -6787,8 +6787,32 @@ For each of `packages/{ui,api-client,types,hooks,validation,utils}`:
 
 **Done when**
 
-- [ ] Sitemap validates and every URL in it resolves
-- [ ] Staging serves `noindex` from both the header and robots.txt
+- [x] Sitemap validates and every URL in it resolves — as a build gate, not as
+      a thing somebody checked once. `scripts/check-indexing.mjs` runs on
+      `astro:build:done` after `@astrojs/sitemap` and fails the build on a
+      `<loc>` that resolves to no built page, one on an origin other than the
+      build's own, a missing sitemap namespace, or a `Sitemap:` line naming a
+      file that was not written. It also checks the converse a filter can never
+      catch — a page that was built, wants to be indexed and is in no sitemap.
+      `tests/indexing.test.ts` runs it over `dist/` from outside the build, so
+      unwiring the integration is still caught, and over a clean fixture
+      directory with one thing broken in it at a time (mutation-checked). The
+      `Sitemap:` line points at `/sitemap-index.xml`: `@astrojs/sitemap` always
+      writes an index plus numbered chunks and never a `sitemap.xml`
+- [ ] Staging serves `noindex` from both the header and robots.txt — **the
+      robots.txt half is done and the header half is T-307's**, which is where
+      the requirement is already written down. Indexing is opt-in: a build is
+      offered to crawlers only when `PUBLIC_SITE_URL` matches the
+      `PRODUCTION_ORIGIN` declared in `src/config/indexing.ts`, and every other
+      build serves `Disallow: /`, offers no sitemap, and says so in the build
+      log. The header cannot be delivered here for the same reason T-303's CSP
+      box could not be — marketing has no served host and therefore no response
+      headers until T-307. Tick this once that host sets `X-Robots-Tag` on the
+      same condition. Note also that a page-level `noindex` meta was
+      *deliberately* not added on staging builds: it is redundant behind
+      `Disallow: /` (a crawler forbidden to fetch the page never reads its
+      meta), and it would make T-306's Lighthouse SEO assertion fail on every
+      local run
 
 ---
 

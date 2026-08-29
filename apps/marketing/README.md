@@ -7,8 +7,9 @@ of static files. Astro, `output: "static"` — the reasoning is in
 before changing anything structural here.
 
 Built by T-300, with the content surface added by T-301, the meta block by
-T-302 and the structured data by T-303. T-304–T-307 add the sitemap filter, the
-locale prefix policy, the Lighthouse budget, and the Caddy host.
+T-302, the structured data by T-303 and `robots.txt` plus the sitemap filter by
+T-304. T-305–T-307 add the locale prefix policy, the Lighthouse budget, and the
+Caddy host.
 
 ## Dependencies, and why each one is here
 
@@ -21,7 +22,7 @@ cannot carry comments — so they live here.
 | `@astrojs/react`                           | Mounts `@forge/ui`'s React 18 components — as static HTML by default, hydrated only where a page writes a `client:*` directive. Without it the product's component library could not be shared at all, which is constraint 1 of the ADR. |
 | `@astrojs/mdx`                             | The blog and guides are MDX. First-party, and pairs with content collections so a frontmatter violation fails the build instead of shipping.                                                                                             |
 | `@tailwindcss/typography`                  | Prose styling for that MDX. The alternative is a hand-rolled type scale that drifts from `@forge/ui`'s the first time either changes; its colour variables are pointed at the shared tokens in `src/styles/global.css`. CSS only.        |
-| `@astrojs/sitemap`                         | `sitemap.xml`. T-304 replaces its defaults with the filter that drops `noindex` pages and disabled-module routes; until then it indexes what gets built, which is already the right set.                                                 |
+| `@astrojs/sitemap`                         | The sitemap. T-304 gives it a filter that reads each built page's robots directive, and a check beside it that holds the sitemap, `robots.txt` and `dist/` to each other.                                                                |
 | `@tailwindcss/vite` + `tailwindcss`        | The same Tailwind v4 plugin `apps/web` and `@forge/ui`'s Storybook run. A different CSS pipeline here would mean the shared token layer is interpreted two ways.                                                                         |
 | `react`, `react-dom`                       | Peer dependencies of `@forge/ui`, pinned to the 18.x the rest of the workspace is on.                                                                                                                                                    |
 | `@forge/ui`, `@forge/i18n`, `@forge/types` | The shared component library, the locale JSON, and `ProductConfig`'s type.                                                                                                                                                               |
@@ -95,11 +96,12 @@ pnpm --filter marketing test         # build-output assertions (runs real builds
 pnpm --filter marketing og-image     # redraw public/og-default.png from primaryColor
 ```
 
-`PUBLIC_SITE_URL` sets the absolute origin the site is served from (T-304 keys
-`robots.txt` and the sitemap off it); `PUBLIC_APP_URL` is where `apps/web`
-lives, for the sign-in and sign-up links; `PUBLIC_API_URL` is the backend the
-build fetches the plan catalogue from. All three have documented defaults or a
-documented fallback, so a fresh checkout builds without an env file.
+`PUBLIC_SITE_URL` sets the absolute origin the site is served from — every URL
+a crawler is given resolves against it, and whether `robots.txt` allows
+anything at all depends on it; `PUBLIC_APP_URL` is where `apps/web` lives, for
+the sign-in and sign-up links; `PUBLIC_API_URL` is the backend the build fetches
+the plan catalogue from. All three have documented defaults or a documented
+fallback, so a fresh checkout builds without an env file.
 
 `pnpm --filter marketing test` runs several real builds and one real dev
 server, so it takes about a minute. That is the cost of asserting over `dist/`
@@ -121,6 +123,8 @@ duplicated page tree (`src/pages/pricing.astro` plus
 | `/guides/**`       | the `guides` collection, `[...slug]`             |
 | `/privacy`, `/terms` | the `legal` collection                         |
 | `404.html`         | `src/pages/404.astro`, default locale, noindex   |
+| `/robots.txt`      | `src/pages/robots.txt.ts`, an endpoint           |
+| `/favicon.svg`     | `src/pages/favicon.svg.ts`, drawn from `primaryColor` |
 
 **Where the locale lives in a URL is `src/lib/routing.ts`, and one line of
 `astro.config.mjs`.** Today the default locale is unprefixed (`/pricing` is
@@ -146,9 +150,77 @@ from `NODE_ENV`, and anything that sets `NODE_ENV` to something other than
 `production` — `vitest` does, and so do plenty of CI images — would otherwise
 publish them.
 
-**Adding a page** means adding it to `src/lib/nav.ts` too. The header, the
-footer and the sitemap read that one list, which is what makes a module toggle
-remove a page from all three at once instead of leaving a link to a 404.
+**Adding a page** means adding it to `src/lib/nav.ts` too — the header and the
+footer both read that one list, so a module toggle takes a link out of both at
+once instead of leaving one pointing at a 404. The sitemap is the other half of
+the same rule and works the other way round: it lists what was *built*, so a
+page whose `getStaticPaths` is gated on a module leaves the sitemap by itself.
+`/pricing` with `billing` off is the worked example, and `tests/routes.test.ts`
+asserts all three places together.
+
+## The sitemap and `robots.txt`
+
+**Nothing is indexable until a product says where production is.**
+`PRODUCTION_ORIGIN` in `src/config/indexing.ts` is that one line, and it ships
+as the placeholder `https://example.com`. A build whose `PUBLIC_SITE_URL` is
+anything else — a fresh checkout on `http://localhost:4321`, a preview deploy,
+a staging host — serves a `robots.txt` that disallows every crawler from
+everything and offers no sitemap. That is the safe direction to be wrong in: an
+un-indexed launch is one line away from being fixed, while a staging site that
+outranks production is a reconsideration request and a month of waiting. Every
+build says which way it decided, in the build log.
+
+`robots.txt` is an **endpoint** (`src/pages/robots.txt.ts`), not a file in
+`public/`, because that decision is not knowable until a build has an origin.
+A committed `public/robots.txt` would also win over the route and then rot.
+
+**The disallow list covers paths this host does not serve**, and that is
+deliberate — the API's own surface and every private `apps/web` route. T-307
+gives marketing its own origin, so a crawler here will never see an `/api/`;
+the rules are there because `robots.txt` is per-origin *and per-deployment*, and
+a fork that ever puts the app under this domain gets them for free. The build
+gate is what keeps that free: it fails if any of those patterns ever matches a
+page this site actually built.
+
+**The `Sitemap:` line points at `/sitemap-index.xml`**, not `/sitemap.xml`.
+`@astrojs/sitemap` always writes an index plus numbered chunks, and there is no
+`sitemap.xml` here to point at; a sitemap index is a first-class thing to
+submit, and a `Sitemap:` line naming a file that 404s is not.
+
+**`scripts/check-indexing.mjs` is two things wired together in
+`astro.config.mjs`.** The filter drops a page from the sitemap when the page's
+own built HTML carries a `noindex` — read from the markup rather than from a
+list kept beside it, because a list is a second place to remember. The check
+that follows it fails the build on anything a filter cannot catch, because a
+filter can only ever *remove*:
+
+- a sitemap URL that resolves to no built page (this is "every URL in it
+  resolves", as a gate rather than a thing somebody checked once);
+- a page listed in the sitemap that asks not to be indexed;
+- a page that was built, wants to be indexed, and is in no sitemap;
+- a sitemap URL that `robots.txt` disallows;
+- a URL on an origin other than the one the build was given — the shape of a
+  deploy that forgot `PUBLIC_SITE_URL`;
+- a `Sitemap:` line naming a file that was not written, or a staging build
+  offering one at all.
+
+Runnable by hand over any built output:
+`node scripts/check-indexing.mjs [dir] [origin]`.
+
+**Drafts and a disabled module's routes need no filtering.** They are never
+*built* — `isPublished()` in `src/lib/content.ts` drops a draft from the
+collection, and a module-gated page returns no paths from its own
+`getStaticPaths` — and the sitemap only ever sees pages that were.
+
+**Per-locale `<xhtml:link rel="alternate">` entries are T-305's**, along with
+the `hreflang` tags in the head they have to agree with. Half of that question
+would be settled in the wrong task by configuring this integration's `i18n`
+option here.
+
+**The half T-304 cannot do:** `X-Robots-Tag: noindex` on non-production hosts.
+It is a response header, marketing has no served host until T-307, and T-307's
+task carries the requirement. `robots.txt` is the half that needs no server
+configuration, and it is done.
 
 ## The meta block
 

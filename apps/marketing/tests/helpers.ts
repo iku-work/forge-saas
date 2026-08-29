@@ -10,8 +10,8 @@
  * always has: every file here writes the same `dist/`.
  */
 import { execFile, execFileSync } from "node:child_process";
-import { readFileSync } from "node:fs";
-import { dirname, join, resolve } from "node:path";
+import { readFileSync, readdirSync } from "node:fs";
+import { dirname, join, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 
 export const APP_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
@@ -116,6 +116,19 @@ export function buildExpectingFailure(options: BuildOptions = {}): string {
 /** A built page, by its path inside dist/ ("index.html", "fr/pricing/index.html"). */
 export function read(page: string): string {
   return readFileSync(join(DIST, page), "utf-8");
+}
+
+/**
+ * Every HTML file in the build, as paths inside dist/, in a stable order.
+ *
+ * Read off disk rather than listed here, so a claim made about "every page"
+ * covers a page added tomorrow without anyone editing the test that makes it.
+ */
+export function builtPages(): string[] {
+  return readdirSync(DIST, { recursive: true })
+    .map((entry) => String(entry).split(sep).join("/"))
+    .filter((entry) => entry.endsWith(".html"))
+    .sort();
 }
 
 /** The built page for a site path: "/" -> index.html, "/fr/blog/" -> fr/blog/index.html. */
@@ -258,9 +271,10 @@ export function normalizeSpaces(text: string): string {
  * Every URL in the sitemap, as site-relative paths.
  *
  * @astrojs/sitemap emits an index plus numbered chunks, so this reads the
- * chunks rather than assuming a single `sitemap.xml`. T-304 takes ownership of
- * the filtering; what these tests need from it now is only "does this route
- * appear at all".
+ * chunks rather than assuming a single `sitemap.xml` -- there is no file by
+ * that name here, which is why T-304's robots.txt points at the index.
+ * Whether a URL *should* be listed is checked by scripts/check-indexing.mjs,
+ * on every build; what callers here want is "does this route appear at all".
  */
 export function sitemapPaths(): string[] {
   const index = read("sitemap-index.xml");
