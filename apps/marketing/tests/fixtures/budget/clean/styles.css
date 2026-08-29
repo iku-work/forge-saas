@@ -1,0 +1,7 @@
+/* A self-hosted face that never hides text: `swap` paints in the fallback
+   immediately and repaints when the webfont arrives. */
+@font-face {
+  font-family: Inter;
+  font-display: swap;
+  src: url(/fonts/inter.woff2) format("woff2");
+}

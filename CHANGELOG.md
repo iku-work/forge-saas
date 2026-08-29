@@ -85,6 +85,54 @@ template keep their own changes in `CHANGELOG.product.md` (see
     in their schema; they had been reusing their own title, which is the
     degenerate form of having none.
 
+- **The marketing performance budget is enforced by CI (T-306).** A new
+  `lighthouse` job runs `@lhci/cli` against the built static output served by
+  `http-server` — no Docker, no backend, no database, because the site is a
+  directory of files. Four real pages (`/en/`, `/en/pricing/`, a blog post, a
+  guide), three runs each, asserted at the median: performance >= 0.9,
+  accessibility >= 1.0 (the bar T-221 already holds `apps/web` to),
+  best-practices >= 0.9, SEO >= 0.95, LCP < 2.5 s, CLS < 0.1. The job is
+  skipped outright when `modules.marketing` is off. All four pages currently
+  measure LCP 1.1 s, CLS 0 and TBT 0 ms, at 1.0 in every category.
+  - **The plan's "INP < 200 ms" is asserted as TBT < 200 ms, and
+    `lighthouserc.cjs` says why where the thresholds are.** INP is a field
+    metric — the latency of interactions real people performed — and a lab run
+    performs none. Total Blocking Time is the lab proxy, and 200 ms is the
+    threshold that keeps a page's long tasks short enough for an interaction to
+    land inside INP's own "good" bucket. Real INP needs CrUX or RUM, which is a
+    post-launch measurement rather than a gate. A test asserts the paragraph is
+    still there, so the discrepancy cannot be closed by lowering a number.
+  - **The gate has a demonstrated failure.** `pnpm --filter marketing
+    lighthouse:fixture` injects one page that hydrates an island for no reason,
+    asserts the same budget against it *by reference*, and fails if the budget
+    does **not** catch it on `total-blocking-time` and the performance score.
+    Naming the assertions matters: the fixture page is `noindex`, so LHCI exits
+    non-zero on the SEO category whatever else is true, and an exit-code check
+    would stay green with the whole performance budget deleted.
+  - **The pricing island now hydrates on `client:visible`, not `client:load`.**
+    It is React plus every Radix primitive `@forge/ui` re-exports — 367 kB
+    uncompressed — and fetching that immediately pushed the page's first paint
+    from 1.1 s to 2.2 s and its LCP to 3.4 s, over budget. Nothing is lost: both
+    price sets, the plan cards and the CTA are in the HTML before anything
+    hydrates. The other three pages ship no JavaScript at all.
+  - **`scripts/check-budget.mjs` refuses the three budget killers on every
+    build**, in seconds rather than from a twelve-run job: a `@font-face`
+    without `font-display: swap` or served from another origin, a webfont with
+    no `<link rel="preload" as="font">` anywhere, an `<img>` missing width or
+    height, and any subresource from a host that is not this one. The
+    third-party allowlist is empty and adding to it is the
+    [ADR-0004](docs/adr/0004-marketing-framework.md) §7 conversation, plus a CSP
+    entry (T-307) and a look at consent (T-308). All four rules are vacuously
+    satisfied today — the site has no webfonts, no images and no third parties —
+    which is the state they exist to keep it in.
+  - **`CardTitle` takes an `as` prop** (`packages/ui`), defaulting to the
+    `<div>` it has always rendered. The pricing page's plan names are now
+    `<h2>`s, which is what the first Lighthouse run caught: three cards under an
+    `<h1>`, each containing an `<h3>`, is a skipped heading level and scored
+    0.99 on accessibility. A build-time test now checks every one of the site's
+    51 pages for skipped levels, so the two-minute job is not the only thing
+    standing between that and a release.
+
 - **The locale is in every marketing URL, and `hreflang` says so (T-305).**
   `apps/marketing` now prefixes every page with a locale segment, the default
   locale's included — `/en/pricing`, not `/pricing` — which is `apps/web`'s

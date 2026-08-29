@@ -64,12 +64,26 @@ const schema = planProductSchemas(plans, {
       {t("marketing.pricing.subtitle")}
     </p>
 
+    {/* `client:visible`, not `client:load` (T-306). Astro fetches an island's
+        JavaScript when its directive fires, and this island is React plus
+        every Radix primitive @forge/ui re-exports -- 367 kB uncompressed,
+        measured. On `client:load` that download starts immediately and
+        competes with the stylesheet for the connection, which pushed this
+        page's first paint from 1.1 s to 2.2 s and its Largest Contentful
+        Paint to 3.4 s against a 2.5 s budget. The other three pages in that
+        run measured 1.1 s and shipped no JavaScript at all.
+
+        Nothing is lost. The plan cards, both price sets and the CTA are all
+        in the HTML before anything hydrates -- tests/pricing.test.ts asserts
+        exactly that -- so the page is complete and readable without the
+        island. What the island adds is the ability to swap between the two
+        price sets, which nobody does to a control that is not on screen. */}
     {
       views.length === 0 ? (
         <p class="mt-10 text-muted-foreground">{t("marketing.pricing.empty")}</p>
       ) : (
         <PricingPlans
-          client:load
+          client:visible
           plans={views}
           labels={{
             periodLabel: t("marketing.pricing.period_label"),

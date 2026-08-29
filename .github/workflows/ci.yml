@@ -7,6 +7,16 @@ on:
 jobs:
   lint:
     runs-on: ubuntu-latest
+
+    # Read once here and consumed by `lighthouse` below as a job-level `if:`.
+    # A job condition cannot run code, so the value has to come from a job
+    # that already ran -- and this is the first one, already installs the
+    # frontend dependencies jiti needs to read a TypeScript config, and is a
+    # `needs:` of everything downstream anyway. The alternative was a whole
+    # extra runner whose only output is one boolean.
+    outputs:
+      marketing: ${{ steps.marketing-toggle.outputs.enabled }}
+
     steps:
       - uses: actions/checkout@v4
 
@@ -51,6 +61,23 @@ jobs:
 
       - name: Install frontend dependencies
         run: pnpm install --frozen-lockfile
+
+      # Through apps/marketing's own reader rather than by grepping
+      # product.config.ts: the same function `astro build` consults to decide
+      # whether there is a marketing site at all decides whether there is one
+      # to measure. A regex could not tell `marketing: true` in the modules
+      # block from the same string in a comment -- the argument the
+      # module-matrix job below already makes for reading a config instead of
+      # matching text in one.
+      - name: Read the marketing module toggle (T-306)
+        id: marketing-toggle
+        run: |
+          enabled=$(node --input-type=module -e '
+            import { readMarketingEnabled } from "./apps/marketing/scripts/guard-enabled.mjs";
+            console.log(await readMarketingEnabled());
+          ')
+          echo "marketing enabled: $enabled"
+          echo "enabled=$enabled" >> "$GITHUB_OUTPUT"
 
       # packages/api-client/src/generated/ is gitignored (it is produced from
       # the live OpenAPI schema), so on a fresh checkout @forge/api-client
@@ -636,6 +663,96 @@ jobs:
           workingDir: packages/ui
           buildScriptName: storybook:build
           exitZeroOnChanges: true
+
+  # T-306: the marketing performance budget, enforced rather than screenshotted.
+  #
+  # Static output served by http-server, four real pages, three runs each,
+  # asserted at the median -- no Docker, no backend, no database, because the
+  # site is a directory of files. See apps/marketing/lighthouserc.cjs for the
+  # thresholds and for why Total Blocking Time stands in for the plan's INP.
+  #
+  # Skipped as a *job* when the module is off: a product with
+  # `modules.marketing: false` builds no dist/, and a Lighthouse run against an
+  # empty directory is a red job about nothing. The condition reads the toggle
+  # `lint` published; scripts/lighthouse.mjs checks the same thing again for
+  # anyone running it by hand.
+  #
+  # The browser is the runner image's own Google Chrome -- pinning one here
+  # would mean measuring whatever version happened to be vendored rather than
+  # the one Lighthouse expects. `lhci` prints "Chrome installation found" in
+  # its healthcheck, so a runner image that ever drops it says so by name.
+  lighthouse:
+    needs: lint
+    if: needs.lint.outputs.marketing == 'true'
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: backend/pyproject.toml
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: pnpm
+
+      - name: Install frontend dependencies
+        run: pnpm install --frozen-lockfile
+
+      # Same host-side boot as the `build` and `storybook` jobs: @forge/ui
+      # depends on @forge/api-client, whose source is generated from the live
+      # OpenAPI schema, and apps/marketing renders @forge/ui. Nothing here
+      # touches the database -- .env.test's dummy credentials are enough to
+      # serve /openapi.json.
+      - name: Start backend for OpenAPI schema
+        working-directory: backend
+        run: |
+          pip install -e .
+          cp .env.test .env
+          nohup uvicorn app.main:app --host 0.0.0.0 --port 8000 > uvicorn.log 2>&1 &
+          for i in $(seq 1 30); do
+            curl -sf http://localhost:8000/health && exit 0
+            sleep 1
+          done
+          echo "backend did not become ready" >&2
+          cat uvicorn.log
+          exit 1
+
+      - name: Generate API client from live OpenAPI schema
+        run: pnpm --filter @forge/api-client generate
+
+      - name: Build workspace packages
+        run: pnpm build
+
+      # Rebuilds apps/marketing itself, with PUBLIC_SITE_URL pinned to the
+      # PRODUCTION_ORIGIN in src/config/indexing.ts -- without that the site
+      # serves `Disallow: /` (T-304), Lighthouse's is-crawlable audit reads
+      # robots.txt, and the SEO category scores 0.66 against a 0.95 assertion
+      # on a build that is perfectly fine. The script owns that; see its
+      # header.
+      - name: Lighthouse budget (4 pages x 3 runs, median)
+        run: pnpm --filter marketing lighthouse
+
+      # The gate's own test. Injects one page that hydrates an island for no
+      # reason, asserts the same budget against it, and fails if the budget
+      # does *not* catch it on total-blocking-time and the performance score.
+      # Without this the job goes green the day somebody stops asserting.
+      - name: Lighthouse budget has teeth (regression fixture)
+        run: pnpm --filter marketing lighthouse:fixture
+
+      - name: Upload Lighthouse reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: lighthouse-reports
+          path: apps/marketing/.lighthouseci
+          retention-days: 30
 
   # T-244: docker-compose.prod.yml is the only stack where application traffic
   # actually goes through pgbouncer -- the dev stack and the testcontainers

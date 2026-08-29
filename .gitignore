@@ -33,6 +33,10 @@ coverage/storybook/
 # Playwright (T-220)
 playwright-report/
 
+# Lighthouse CI (T-306) -- collected runs and the HTML/JSON reports the
+# marketing budget job uploads as a build artifact.
+.lighthouseci/
+
 # Expo
 .expo/
 web-build/

@@ -6903,8 +6903,8 @@ For each of `packages/{ui,api-client,types,hooks,validation,utils}`:
 
 **Done when**
 
-- [ ] Four pages pass every assertion in CI
-- [ ] The INP-vs-TBT substitution is documented where the thresholds live
+- [x] Four pages pass every assertion in CI
+- [x] The INP-vs-TBT substitution is documented where the thresholds live
 
 ---
 

@@ -1,0 +1,62 @@
+---
+/**
+ * The page that proves T-306's budget has teeth. Never shipped.
+ *
+ * `scripts/lighthouse.mjs --fixture` sets FORGE_LIGHTHOUSE_FIXTURE, rebuilds,
+ * and runs lighthouserc.fixture.cjs against the one route that then exists.
+ * `scripts/lighthouse-fixture.mjs` is what injects it, and it injects nothing
+ * unless that variable is set -- which is every other build, including every
+ * build the test suite and CI's `pnpm build` run.
+ *
+ * **Why it lives here rather than under src/pages/.** It was under src/pages/
+ * first, as a dynamic route whose `getStaticPaths()` returned an empty array
+ * by default. That produced no HTML, as intended -- and shipped
+ * `dist/_astro/_UnnecessaryIsland.<hash>.js` anyway, because Vite bundles the
+ * island graph a page *imports*, not the one a page *renders*. A fixture that
+ * ships a JavaScript chunk to production is a worse bug than the one it was
+ * written to catch. Outside src/pages/ nothing imports it until the
+ * integration injects the route, so nothing bundles it either.
+ *
+ * **Why it is `noindex`.** The fixture build is a real build and runs the same
+ * four gates as any other, and a page with no hreflang cluster has to be
+ * `noindex` to satisfy T-305's. Self-canonical, like every other noindex page
+ * here: never pair `noindex` with a canonical pointing elsewhere, or Google
+ * applies the directive to the target.
+ */
+import BaseLayout from "../../../src/layouts/BaseLayout.astro";
+import { translator } from "../../../src/lib/i18n";
+import { defaultLocale } from "../../../src/lib/routing";
+import UnnecessaryIsland from "./UnnecessaryIsland";
+
+const locale = defaultLocale;
+const t = translator(locale);
+
+// The copy is the landing page's, on purpose: the fixture differs from a real
+// page in exactly one way -- how it is rendered -- so that when it fails the
+// budget there is nothing else to blame it on.
+const items = [
+  t("marketing.highlights.accounts_title"),
+  t("marketing.highlights.operations_title"),
+  t("marketing.highlights.billing_title"),
+];
+---
+
+<BaseLayout
+  title="Lighthouse fixture — unnecessary island"
+  description="A page that hydrates markup for no reason, so that T-306's budget has something to fail on."
+  locale={locale}
+  noindex={true}
+>
+  <h1 class="mx-auto max-w-3xl px-6 pt-16 text-4xl font-semibold tracking-tight">
+    {t("marketing.highlights.heading")}
+  </h1>
+
+  {/* `client:load` is the violation. Everything this component renders is
+      static markup -- a heading, a list, a paragraph -- and on any real page
+      here it would be written in this file and cost nothing. */}
+  <UnnecessaryIsland
+    client:load
+    heading={t("marketing.highlights.heading")}
+    items={items}
+  />
+</BaseLayout>

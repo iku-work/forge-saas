@@ -8,6 +8,8 @@
     "build": "node scripts/guard-enabled.mjs astro build",
     "preview": "astro preview",
     "og-image": "node scripts/make-og-image.mjs",
+    "lighthouse": "node scripts/lighthouse.mjs",
+    "lighthouse:fixture": "node scripts/lighthouse.mjs --fixture",
     "type-check": "astro check",
     "test": "vitest run"
   },
@@ -27,8 +29,10 @@
   },
   "devDependencies": {
     "@astrojs/check": "^0.9.10",
+    "@lhci/cli": "^0.15.1",
     "@types/react": "^18.3.31",
     "@types/react-dom": "^18.3.7",
+    "http-server": "^14.1.1",
     "jiti": "^2.7.0",
     "schema-dts": "^2.0.0",
     "typescript": "^5.7.2",

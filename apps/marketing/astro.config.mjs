@@ -4,9 +4,11 @@ import react from "@astrojs/react";
 import tailwindcss from "@tailwindcss/vite";
 import { defineConfig } from "astro/config";
 
+import { checkBudget } from "./scripts/check-budget.mjs";
 import { checkHreflang } from "./scripts/check-hreflang.mjs";
 import { indexing } from "./scripts/check-indexing.mjs";
 import { checkSeo } from "./scripts/check-seo.mjs";
+import { lighthouseFixture } from "./scripts/lighthouse-fixture.mjs";
 import {
   enabledLocales,
   loadProductConfig,
@@ -85,6 +87,17 @@ export default defineConfig({
     // *different* page, so it is the only one that cannot be checked until
     // every page exists.
     checkHreflang(),
+    // T-306. Not a metric -- a metric needs a browser, and that is the
+    // Lighthouse job -- but the three things that reliably cost one: a
+    // webfont that hides text while it loads, an image with no dimensions,
+    // a script from somebody else's server. Cheap enough to run on every
+    // build, which is the point: the alternative is finding out from a
+    // twelve-run Lighthouse job in CI.
+    checkBudget(),
+    // T-306's regression fixture, and nothing at all in any other build --
+    // see that file for why the page it injects lives under tests/fixtures/
+    // rather than under src/pages/.
+    ...lighthouseFixture(),
   ],
 
   vite: {

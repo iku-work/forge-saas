@@ -72,7 +72,14 @@ function PlanGrid({
       {plans.map((plan) => (
         <Card key={plan.slug} className="flex h-full flex-col">
           <CardHeader>
-            <CardTitle>{plan.name}</CardTitle>
+            {/* A heading, not the div CardTitle renders by default: each
+                plan is a section of this page, and the "what you get" list
+                below is an <h3> underneath it. Without the <h2> the page runs
+                <h1> straight to <h3>, which is a skipped level -- T-306's
+                Lighthouse run scores it 0.99 on accessibility and fails the
+                gate, and a screen-reader user hears the list heading with no
+                plan heading above it. */}
+            <CardTitle as="h2">{plan.name}</CardTitle>
             <p className="mt-4 flex flex-wrap items-baseline gap-x-2">
               <span className="text-3xl font-semibold tracking-tight">
                 {plan.price[period]}

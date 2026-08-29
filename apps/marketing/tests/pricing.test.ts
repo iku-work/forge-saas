@@ -55,9 +55,18 @@ describe("the pricing page, built from committed data", () => {
     // This assertion used to live on T-300's island-check.astro; the pricing
     // toggle is the real island that replaced it.
     expect(html).toContain("<astro-island");
-    expect(html).toContain('client="load"');
     expect(html).toMatch(/component-export="PricingPlans"/);
     expect(scriptTagsOf(html).length).toBeGreaterThan(0);
+  });
+
+  it("defers that hydration until the island is on screen (T-306)", () => {
+    // `client="visible"`, not `client="load"`, and the directive is worth
+    // pinning: this island is React plus every Radix primitive @forge/ui
+    // re-exports, 367 kB of it, and on `client:load` that download starts
+    // immediately and competes with the stylesheet. Measured, on this page:
+    // first paint 1.1 s -> 2.2 s and Largest Contentful Paint 3.4 s, against
+    // a 2.5 s budget the other three pages clear at 1.1 s.
+    expect(readPath("/en/pricing/")).toContain('client="visible"');
   });
 
   it("renders both billing periods into the HTML before anything hydrates", () => {
