@@ -4,6 +4,7 @@ import react from "@astrojs/react";
 import tailwindcss from "@tailwindcss/vite";
 import { defineConfig } from "astro/config";
 
+import { checkHreflang } from "./scripts/check-hreflang.mjs";
 import { indexing } from "./scripts/check-indexing.mjs";
 import { checkSeo } from "./scripts/check-seo.mjs";
 import {
@@ -32,11 +33,13 @@ export default defineConfig({
   i18n: {
     defaultLocale,
     locales,
-    // Left at Astro's default (the default locale is not prefixed) *for now*.
-    // T-305 owns this: its job is to match apps/web's T-233 prefix policy
-    // exactly, so a user crossing from marketing to the app keeps their
-    // locale. Do not settle it here by guessing.
-    routing: { prefixDefaultLocale: false },
+    // T-305: every URL carries a locale segment, the default locale's
+    // included -- `/en/pricing`, not `/pricing`. This is apps/web's T-233
+    // policy, and it is the same decision as DEFAULT_LOCALE_IS_PREFIXED in
+    // src/lib/routing.ts; tests/routes.test.ts fails if only one of the two
+    // ever moves. A user who crosses from `/fi/pricing` to the app's
+    // `/fi/register` must not watch their language disappear on the way.
+    routing: { prefixDefaultLocale: true },
   },
 
   markdown: {
@@ -65,11 +68,23 @@ export default defineConfig({
     // T-304: @astrojs/sitemap with the filter that drops noindex pages, and
     // the check that holds the sitemap, robots.txt and dist/ to each other.
     // Spread as a pair because they are one decision -- see indexing().
-    ...indexing(),
-    // T-302, and last on purpose: it reads what every integration before it
-    // wrote. `astro:build:done` throwing is what turns "a page has no
-    // description" into a failed build rather than a deploy nobody inspects.
+    //
+    // The `i18n` block is T-305's half: it is what makes each entry carry an
+    // `<xhtml:link rel="alternate">` for the same page in every other locale.
+    // The map is a locale to the `hreflang` value announced for it, which
+    // here is the locale code itself -- these are language codes with no
+    // region, and inventing one (`en-US`) would tell a crawler this site is
+    // for one country when it is not.
+    ...indexing({ i18n: { defaultLocale, locales: Object.fromEntries(locales.map((code) => [code, code])) } }),
+    // T-302, and after the sitemap on purpose: these read what every
+    // integration before them wrote. `astro:build:done` throwing is what
+    // turns "a page has no description" into a failed build rather than a
+    // deploy nobody inspects.
     checkSeo(),
+    // T-305, and last: hreflang is the only claim on a page that is about a
+    // *different* page, so it is the only one that cannot be checked until
+    // every page exists.
+    checkHreflang(),
   ],
 
   vite: {

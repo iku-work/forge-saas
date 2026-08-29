@@ -184,7 +184,7 @@ describe("the production site", () => {
     // Both for the same reason as the fixture page above, by two different
     // mechanisms: a draft is never built (src/lib/content.ts), and the 404 is
     // dropped by @astrojs/sitemap's own status-code rule.
-    expect(sitemapPaths()).not.toContain("/blog/the-next-release/");
+    expect(sitemapPaths()).not.toContain("/en/blog/the-next-release/");
     expect(sitemapPaths().some((path) => path.includes("404"))).toBe(false);
   });
 });
@@ -204,7 +204,7 @@ describe("a build that is not the production site", () => {
     expect(blocksEverything(robots)).toBe(true);
     // Not "the landing page is disallowed" — every path is, including the
     // ones no rule mentions.
-    for (const path of ["/", "/pricing/", "/fr/blog/why-a-template/", "/og-default.png"]) {
+    for (const path of ["/", "/en/pricing/", "/fr/blog/why-a-template/", "/og-default.png"]) {
       expect(isAllowedByRobots(path, robots), path).toBe(false);
     }
   });
@@ -223,7 +223,7 @@ describe("a build that is not the production site", () => {
     // production has to be a change of environment rather than a different
     // build.
     expect(parseRobots(read("robots.txt")).sitemaps).toEqual([]);
-    expect(sitemapPaths().length).toBeGreaterThan(40);
+    expect(sitemapPaths().length).toBeGreaterThan(30);
   });
 
   it("is what a fresh checkout with no environment at all gets", () => {

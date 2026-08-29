@@ -8,7 +8,8 @@
     "blog": "Blog",
     "guides": "Guides",
     "home": "Home",
-    "breadcrumb_label": "Breadcrumb"
+    "breadcrumb_label": "Breadcrumb",
+    "language": "Language"
   },
   "hero": {
     "title": "Ship the product, not the plumbing",
@@ -130,6 +131,10 @@
     "title": "That page does not exist",
     "body": "The link may be out of date, or the page may have moved. The rest of the site is still here.",
     "cta": "Back to the home page"
+  },
+  "redirect": {
+    "heading": "Choose your language",
+    "body": "You are being taken to your own language. If nothing happens, choose one below."
   },
   "footer": {
     "support": "Contact support",

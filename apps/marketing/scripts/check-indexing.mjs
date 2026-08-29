@@ -365,12 +365,14 @@ export async function findIndexingProblems(dir, origin) {
  * `astro:build:done` hooks in integration order, so the sitemap is written
  * before anything reads it back.
  *
- * **Per-locale `<xhtml:link rel="alternate">` entries are T-305's**, along
- * with the `hreflang` tags in the head they have to agree with. Configuring
- * this integration's `i18n` option here would settle half of that question in
- * the wrong task.
+ * `options.i18n` is passed straight through to `@astrojs/sitemap`, which is
+ * what makes each entry carry an `<xhtml:link rel="alternate">` for the same
+ * page in every other locale (T-305). Those are built from the URLs actually
+ * in the sitemap, so they cannot advertise a translation nobody wrote -- the
+ * same rule the `hreflang` tags in the head follow, arrived at from the other
+ * end. `scripts/check-hreflang.mjs` is where the head's half is checked.
  */
-export function indexing() {
+export function indexing(options = {}) {
   // Set from astro:config:done, which runs for every integration before any
   // build hook does, and read by the filter during the sitemap's
   // astro:build:done. The two are in one closure so the ordering is a
@@ -395,7 +397,7 @@ export function indexing() {
   };
 
   return [
-    sitemap({ filter }),
+    sitemap({ filter, ...options }),
     {
       name: "forge:check-indexing",
       hooks: {

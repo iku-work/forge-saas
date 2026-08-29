@@ -62,7 +62,7 @@ describe("MDX", () => {
   });
 
   it("renders a guide including its fenced code block", () => {
-    const html = readPath("/guides/getting-started/installation/");
+    const html = readPath("/en/guides/getting-started/installation/");
 
     expect(html).toContain("Installation");
     // Highlighted, in a <pre> -- not an escaped blob of backticks, which is
@@ -74,13 +74,13 @@ describe("MDX", () => {
   it("routes a nested guide slug without a route per level", () => {
     // `[...slug]`, so `deploying/production` is one route file rather than a
     // directory of them -- documentation grows a hierarchy sooner than a blog.
-    expect(readPath("/guides/deploying/production/")).toContain(
+    expect(readPath("/en/guides/deploying/production/")).toContain(
       "Going to production",
     );
   });
 
   it("groups the guides index by section, in `order`", () => {
-    const html = readPath("/guides/");
+    const html = readPath("/en/guides/");
     const installation = html.indexOf("Installation");
     const configuration = html.indexOf("Configuring your product");
     const production = html.indexOf("Going to production");
@@ -93,7 +93,7 @@ describe("MDX", () => {
   });
 
   it("styles prose from the shared token layer rather than its own palette", () => {
-    const html = readPath("/guides/getting-started/installation/");
+    const html = readPath("/en/guides/getting-started/installation/");
     expect(html).toMatch(/class="prose[^"]*"/);
   });
 });
@@ -130,12 +130,12 @@ describe("per-locale content", () => {
   });
 
   it("does not show that notice on the original", () => {
-    expect(readPath("/privacy/")).not.toContain("has not been translated yet");
+    expect(readPath("/en/privacy/")).not.toContain("has not been translated yet");
   });
 });
 
 describe("drafts", () => {
-  const DRAFT_PATH = "/blog/the-next-release/";
+  const DRAFT_PATH = "/en/blog/the-next-release/";
 
   beforeAll(() => {
     build();
@@ -143,7 +143,7 @@ describe("drafts", () => {
 
   it("are absent from a production build, and from its blog index", () => {
     expect(() => readPath(DRAFT_PATH)).toThrow();
-    expect(readPath("/blog/")).not.toContain(
+    expect(readPath("/en/blog/")).not.toContain(
       "What is coming in the next release",
     );
     expect(read("sitemap-0.xml")).not.toContain("the-next-release");
@@ -157,7 +157,7 @@ describe("drafts", () => {
       expect(page).toContain("What is coming in the next release");
       expect(page).toContain("Draft");
 
-      const index = await fetchText(`${server.origin}/blog/`);
+      const index = await fetchText(`${server.origin}/en/blog/`);
       expect(index).toContain("What is coming in the next release");
     } finally {
       server.stop();

@@ -6839,8 +6839,48 @@ For each of `packages/{ui,api-client,types,hooks,validation,utils}`:
 
 **Done when**
 
-- [ ] Locale prefix policy is byte-identical to T-233's
-- [ ] No `hreflang` anywhere points at a URL that 404s or serves another language
+- [x] Locale prefix policy is byte-identical to T-233's — every URL carries a
+      locale segment, the default locale's included (`/en/pricing`, not
+      `/pricing`), and a locale-less URL resolves one and redirects.
+      `DEFAULT_LOCALE_IS_PREFIXED` in `src/lib/routing.ts` and
+      `prefixDefaultLocale` in `astro.config.mjs` are the two halves of the one
+      decision, and `tests/routes.test.ts` fails if only one of them moves.
+      `appLink(path, locale)` takes the locale as a required argument, so the
+      "Sign in" case the task names cannot regress silently.
+      **One half of T-233 cannot be copied and is not:** the app resolves a
+      locale-less URL from three inputs — the signed-in user's stored
+      preference, an in-session choice, the browser's languages — and a static,
+      session-less origin that (T-307) is not even the same origin as the app
+      has only the last of those. `src/components/LocaleRedirect.astro` applies
+      the same order minus the tiers that do not exist, on `/` and on the 404,
+      which is the one file a static host can fall back to for `/pricing`. It
+      is a 200 plus a client-side rewrite rather than a 301; **T-307's Caddy
+      block should issue the 301 on the same rule**, exactly as T-233 leaves
+      the same note for an SSR layer
+- [x] No `hreflang` anywhere points at a URL that 404s or serves another
+      language — as a build gate rather than a review item.
+      `scripts/check-hreflang.mjs` runs on `astro:build:done` and fails on an
+      annotation whose target was never built, is on another origin, or is
+      written in a different language; on a cluster that is not confirmed both
+      ways (which a crawler discards whole); on a page that annotates every
+      locale but its own; on an annotation for a locale `product.config.ts`
+      does not enable; and on `lang`/`dir` disagreeing with `@forge/i18n`'s
+      registry or with the locale in the URL — which is where `ar` is held to
+      `dir="rtl"` on every page rather than by the visual test this task rules
+      out. `tests/hreflang.test.ts` runs it over `dist/` from outside the
+      build, so unwiring the integration is still caught, and over a fixture
+      directory with one thing broken at a time (mutation-checked both ways:
+      dropping the annotations and announcing every locale regardless of
+      translation each fail the build).
+      Three kinds of page carry no annotation, and all three are `noindex`: the
+      404, the locale-resolving `/`, and a legal document in a locale it has
+      not been translated into. That last one is the exception T-301 documented
+      paid for — the collection falls back rather than 404ing because a policy
+      is linked from every footer, and the copy is therefore kept out of the
+      index and out of the cluster instead of being annotated as a translation
+      it is not. None of the three combines `noindex` with a canonical pointing
+      elsewhere: Google applies the directive to whatever a page canonicalises
+      to, which is how a site deindexes its own home page
 
 ---
 

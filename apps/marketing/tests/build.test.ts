@@ -18,8 +18,19 @@ import {
   MINIMAL_FIXTURE,
   build,
   read,
+  readPath,
   scriptTagsOf,
 } from "./helpers";
+
+/**
+ * The landing page, which T-305 moved from `/` to `/en/`.
+ *
+ * Every URL carries a locale segment now, the default locale's included, and
+ * the file at the root is the locale-less door in front of the six home pages
+ * (see tests/routes.test.ts). Spelled once here so the claims below are about
+ * the landing page rather than about whichever page happens to be at `/`.
+ */
+const LANDING = "/en/";
 
 describe("the marketing module toggle", () => {
   // Leaves dist/ matching the committed config, whatever order vitest runs
@@ -48,7 +59,7 @@ describe("the marketing module toggle", () => {
 
   it("removes a dist/ left behind from before the toggle flipped", () => {
     build();
-    expect(existsSync(join(DIST, "index.html"))).toBe(true);
+    expect(existsSync(join(DIST, "en", "index.html"))).toBe(true);
 
     build({ productConfig: MINIMAL_FIXTURE });
 
@@ -60,7 +71,7 @@ describe("the marketing module toggle", () => {
 
   it("drops the billing highlight from the landing page when billing is off", () => {
     build({ productConfig: BILLING_DISABLED_FIXTURE });
-    const html = read("index.html");
+    const html = readPath(LANDING);
 
     expect(html).toContain("Accounts and teams");
     expect(html).not.toContain("Subscriptions that reconcile");
@@ -74,7 +85,7 @@ describe("the built marketing site", () => {
   });
 
   it("renders the landing copy into the HTML rather than an empty shell", () => {
-    const html = read("index.html");
+    const html = readPath(LANDING);
 
     // The strings, not a root div: a SPA shell would pass any "the file
     // exists" check while being exactly what P4-A exists to avoid.
@@ -84,15 +95,19 @@ describe("the built marketing site", () => {
   });
 
   it("declares the default locale and its direction on <html>", () => {
-    expect(read("index.html")).toContain('<html lang="en" dir="ltr"');
+    expect(readPath(LANDING)).toContain('<html lang="en" dir="ltr"');
   });
 
-  it("costs the visitor zero bytes of JavaScript on /", () => {
-    expect(scriptTagsOf(read("index.html"))).toEqual([]);
+  it("costs the visitor zero bytes of JavaScript on the landing page", () => {
+    // Held to /en/ rather than to "whatever is at /" since T-305: the root is
+    // a redirect, and a redirect legitimately costs a few hundred bytes of
+    // script. Pointing this at / would have made T-300's strictest claim pass
+    // on a page that was never the landing page.
+    expect(scriptTagsOf(readPath(LANDING))).toEqual([]);
   });
 
-  it("renders @forge/ui's button classes as static markup on /", () => {
-    const html = read("index.html");
+  it("renders @forge/ui's button classes as static markup on the landing page", () => {
+    const html = readPath(LANDING);
 
     // buttonVariants() on an <a>: the same classes the React component would
     // emit, with none of the React. This is the island rule's other half --

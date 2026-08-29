@@ -8,8 +8,8 @@ before changing anything structural here.
 
 Built by T-300, with the content surface added by T-301, the meta block by
 T-302, the structured data by T-303 and `robots.txt` plus the sitemap filter by
-T-304. T-305–T-307 add the locale prefix policy, the Lighthouse budget, and the
-Caddy host.
+T-304, and the locale prefix policy plus its `hreflang` annotations by T-305.
+T-306 and T-307 add the Lighthouse budget and the Caddy host.
 
 ## Dependencies, and why each one is here
 
@@ -114,24 +114,41 @@ locale. One file, one copy of the markup — not the usual Astro shape of a
 duplicated page tree (`src/pages/pricing.astro` plus
 `src/pages/[locale]/pricing.astro`) where the two copies drift.
 
-| Route              | Source                                          |
-| ------------------ | ----------------------------------------------- |
-| `/`                | `index.astro`                                    |
-| `/features`        | `features.astro`, module-aware                   |
-| `/pricing`         | `pricing.astro` — only when `billing` is enabled |
-| `/blog`, `/blog/*` | the `blog` collection                            |
-| `/guides/**`       | the `guides` collection, `[...slug]`             |
-| `/privacy`, `/terms` | the `legal` collection                         |
-| `404.html`         | `src/pages/404.astro`, default locale, noindex   |
-| `/robots.txt`      | `src/pages/robots.txt.ts`, an endpoint           |
-| `/favicon.svg`     | `src/pages/favicon.svg.ts`, drawn from `primaryColor` |
+| Route                       | Source                                                |
+| --------------------------- | ----------------------------------------------------- |
+| `/<locale>/`                | `index.astro`                                          |
+| `/<locale>/features`        | `features.astro`, module-aware                         |
+| `/<locale>/pricing`         | `pricing.astro` — only when `billing` is enabled       |
+| `/<locale>/blog`, `/blog/*` | the `blog` collection                                  |
+| `/<locale>/guides/**`       | the `guides` collection, `[...slug]`                   |
+| `/<locale>/privacy`, `/terms` | the `legal` collection                               |
+| `/`                         | `src/pages/index.astro` — resolves a locale, noindex   |
+| `404.html`                  | `src/pages/404.astro`, default locale, noindex         |
+| `/robots.txt`               | `src/pages/robots.txt.ts`, an endpoint                 |
+| `/favicon.svg`              | `src/pages/favicon.svg.ts`, drawn from `primaryColor`  |
 
-**Where the locale lives in a URL is `src/lib/routing.ts`, and one line of
-`astro.config.mjs`.** Today the default locale is unprefixed (`/pricing` is
-English, `/fr/pricing` is French). That is *not* what `apps/web` does — T-233
-prefixes every URL including `en` — and making the two identical is T-305's
-job, which means flipping `DEFAULT_LOCALE_IS_PREFIXED` and
-`prefixDefaultLocale` together. Read T-233 before touching either.
+**Every URL carries a locale segment, the default locale's included** —
+`/en/pricing`, not `/pricing`. That is `apps/web`'s policy (T-233), and T-305
+made the two identical so that a visitor crossing from `/fi/pricing` to the
+app's `/fi/register` never watches their language disappear. It is one decision
+expressed in two places, `DEFAULT_LOCALE_IS_PREFIXED` in `src/lib/routing.ts`
+and `prefixDefaultLocale` in `astro.config.mjs`, and `tests/routes.test.ts`
+fails if only one of them moves.
+
+**A locale-less URL resolves one and redirects**, which is what `index.tsx` and
+`$.tsx` do in the app. `src/components/LocaleRedirect.astro` is both halves: on
+`/`, where the apex domain lands, and on the 404, which is the one file a
+static host can fall back to for `/pricing`. It matches the browser's languages
+against the enabled ones and falls back to the default; the app's other two
+inputs — a signed-in user's stored preference and an in-session choice — do not
+exist on a static, session-less origin that (T-307) is not even the same origin
+as the app. `/` also renders a language chooser, so the page works without
+JavaScript. **T-307 should promote this to a 301 at the edge.**
+
+**Sign-in and sign-up links carry the locale.** `appLink(path, locale)` in
+`src/lib/product.ts` takes it as a required argument rather than defaulting,
+because the failure it prevents is silent: a locale-less `/login` hands the
+decision back to the app, which answers it from inputs this site cannot see.
 
 **Content is keyed by locale in its path**: `src/content/blog/<locale>/<slug>.mdx`,
 `src/content/guides/<locale>/<section>/<slug>.mdx`,
@@ -212,10 +229,11 @@ Runnable by hand over any built output:
 collection, and a module-gated page returns no paths from its own
 `getStaticPaths` — and the sitemap only ever sees pages that were.
 
-**Per-locale `<xhtml:link rel="alternate">` entries are T-305's**, along with
-the `hreflang` tags in the head they have to agree with. Half of that question
-would be settled in the wrong task by configuring this integration's `i18n`
-option here.
+**Per-locale `<xhtml:link rel="alternate">` entries** come from the `i18n`
+option passed through `indexing()`. `@astrojs/sitemap` builds them from the
+URLs that are actually in the sitemap, so they cannot advertise a translation
+nobody wrote — the same rule the `hreflang` tags in the head follow, arrived at
+from the other end.
 
 **The half T-304 cannot do:** `X-Robots-Tag: noindex` on non-production hosts.
 It is a response header, marketing has no served host until T-307, and T-307's
@@ -258,7 +276,44 @@ which a test in `tests/seo.test.ts` will remind it to do.
 Individual entries override the card with `ogImage` in their frontmatter, and
 `og:alternate_locale` lists the locales an entry was **actually** translated
 into (`entryLocales()` in `src/lib/content.ts`) rather than every enabled one.
-T-305's `hreflang` links need that same list and should read it from there.
+The `hreflang` links below are built from that same list.
+
+## Locale annotations
+
+Every indexable page carries `<link rel="alternate" hreflang="…">` for each
+locale it exists in — **its own included**, because a cluster Google will act
+on is one where every member points at every member — plus `x-default` for the
+default locale's version. `<Seo>` derives all of it from `alternateLocales`,
+the one answer to "where does this page exist", which is also what the footer's
+language switcher renders. A reader and a crawler are offered the same set by
+construction.
+
+Three kinds of page carry none of it, and all three are `noindex`: the 404, the
+locale-resolving `/`, and a legal document in a locale it has not been
+translated into. A copy is not the canonical anything, and putting one into a
+cluster is how a duplicate ends up outranking the page it copied. (`noindex`
+with a canonical pointing *elsewhere* is deliberately avoided — Google applies
+the directive to whatever a page canonicalises to, which is how a site
+accidentally deindexes its own home page. Every one of these is
+self-canonical.)
+
+`scripts/check-hreflang.mjs` fails the build on:
+
+- an annotation pointing at a URL that was not built, or is on another origin;
+- an annotation pointing at a page written in a different language — the exact
+  claim `hreflang` exists to prevent;
+- a cluster that is not confirmed both ways, which a crawler discards whole;
+- a page that annotates every locale but its own;
+- an annotation for a locale `product.config.ts` does not enable;
+- an indexable page under a locale that annotates nothing, or a `noindex` page
+  that still does;
+- `lang` or `dir` on any page disagreeing with `@forge/i18n`'s registry or with
+  the locale in the URL. This is where `ar` is held to `dir="rtl"`, on every
+  page — T-305 rules out a visual regression test for it, since T-262's is
+  known unpassable.
+
+Runnable by hand over any built output:
+`node scripts/check-hreflang.mjs [dir] [origin]`.
 
 ## Structured data
 

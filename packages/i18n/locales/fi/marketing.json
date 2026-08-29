@@ -8,7 +8,8 @@
     "blog": "Blogi",
     "guides": "Oppaat",
     "home": "Etusivu",
-    "breadcrumb_label": "Murupolku"
+    "breadcrumb_label": "Murupolku",
+    "language": "Kieli"
   },
   "hero": {
     "title": "Julkaise tuote, älä putkitusta",
@@ -130,6 +131,10 @@
     "title": "Sivua ei ole olemassa",
     "body": "Linkki voi olla vanhentunut tai sivu on siirretty. Muu sivusto on yhä tallella.",
     "cta": "Takaisin etusivulle"
+  },
+  "redirect": {
+    "heading": "Valitse kielesi",
+    "body": "Sinut ohjataan omalle kielellesi. Jos mitään ei tapahdu, valitse kieli alta."
   },
   "footer": {
     "support": "Ota yhteyttä tukeen",

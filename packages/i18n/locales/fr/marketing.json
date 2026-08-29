@@ -8,7 +8,8 @@
     "blog": "Blog",
     "guides": "Guides",
     "home": "Accueil",
-    "breadcrumb_label": "Fil d'Ariane"
+    "breadcrumb_label": "Fil d'Ariane",
+    "language": "Langue"
   },
   "hero": {
     "title": "Livrez le produit, pas la tuyauterie",
@@ -130,6 +131,10 @@
     "title": "Cette page n'existe pas",
     "body": "Le lien est peut-être périmé, ou la page a été déplacée. Le reste du site est toujours là.",
     "cta": "Retour à l'accueil"
+  },
+  "redirect": {
+    "heading": "Choisissez votre langue",
+    "body": "Nous vous emmenons vers votre propre langue. Si rien ne se passe, choisissez-en une ci-dessous."
   },
   "footer": {
     "support": "Contacter le support",

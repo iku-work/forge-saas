@@ -104,8 +104,9 @@ export async function guideSections(
  * link. Drafts are already gone from `blogPosts`, so a post that is published
  * in `en` and still a draft in `de` correctly reports `["en"]`.
  *
- * T-305's `hreflang` links need this same list and should call this rather
- * than deriving a second one.
+ * T-305's `hreflang` links are built from this same list, through <Seo>'s
+ * `alternateLocales` -- one answer to "where does this page exist", rather
+ * than two that can disagree.
  */
 export async function entryLocales(
   collection: "blog" | "guides",
@@ -123,6 +124,22 @@ export async function entryLocales(
 }
 
 /**
+ * The locales a legal document has actually been translated into.
+ *
+ * Not "the locales it is reachable in", which is every enabled one -- see
+ * `legalDocument` below for why this is the collection that falls back. The
+ * distinction is exactly what T-305's hreflang cluster needs: `/fi/privacy/`
+ * exists, and it is not the Finnish privacy policy, so nothing may annotate
+ * it as one.
+ */
+export async function legalLocales(slug: string): Promise<string[]> {
+  const all = await getCollection("legal");
+  return enabledLocales.filter((locale) =>
+    all.some((entry) => entry.id === `${locale}/${slug}`),
+  );
+}
+
+/**
  * A legal document for a locale, falling back to the default locale's copy.
  *
  * This is the deliberate exception to T-305's "an untranslated document is not
@@ -135,6 +152,11 @@ export async function entryLocales(
  * translated the terms yet is a worse answer than showing the authoritative
  * English text with a notice saying so, which is what the page does with the
  * `translated` flag below.
+ *
+ * The exception is to the *routing* rule only, and T-305 pays for it where
+ * crawlers are concerned: a fallback copy is `noindex` and carries no
+ * hreflang, so six URLs of the same English text are one indexable document
+ * with five reachable translations-in-waiting behind it.
  *
  * `undefined` means the document does not exist in the default locale either,
  * which is a content bug, not a translation gap -- the page turns that into a

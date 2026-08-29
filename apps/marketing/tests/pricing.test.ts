@@ -47,7 +47,7 @@ describe("the pricing page, built from committed data", () => {
   });
 
   it("hydrates a @forge/ui component as an island", () => {
-    const html = readPath("/pricing/");
+    const html = readPath("/en/pricing/");
 
     // ADR-0004's constraint 1, checked rather than asserted in prose: Radix
     // tabs, imported straight from @forge/ui, hydrating with the package
@@ -61,7 +61,7 @@ describe("the pricing page, built from committed data", () => {
   });
 
   it("renders both billing periods into the HTML before anything hydrates", () => {
-    const html = readPath("/pricing/");
+    const html = readPath("/en/pricing/");
 
     // A visitor whose JavaScript never arrives still sees prices. The yearly
     // panel is in the document too -- Radix hides it, it is not absent.
@@ -71,7 +71,7 @@ describe("the pricing page, built from committed data", () => {
   });
 
   it("lists a plan's features from its own data, in a fixed order", () => {
-    const html = readPath("/pricing/");
+    const html = readPath("/en/pricing/");
     const seats = html.indexOf("25 team members");
     const storage = html.indexOf("50 GB of storage");
     const calls = html.indexOf("100,000 API calls per month");
@@ -91,14 +91,14 @@ describe("the pricing page, built from committed data", () => {
     expect(normalizeSpaces(readPath("/fr/pricing/"))).toContain("49 $US");
     expect(normalizeSpaces(readPath("/de/pricing/"))).toContain("49 $");
     expect(readPath("/ar/pricing/")).toContain("مجاني");
-    expect(readPath("/pricing/")).toContain("Free");
+    expect(readPath("/en/pricing/")).toContain("Free");
   });
 
   it("says on the page that the prices came from the repository", () => {
     // An operator looking at a wrong price can tell "the build could not
     // reach the API" from "the database says this" without a build log that
     // has long since scrolled away.
-    expect(readPath("/pricing/")).toContain(
+    expect(readPath("/en/pricing/")).toContain(
       "These prices were published with the site",
     );
   });
@@ -133,7 +133,7 @@ describe("the build-time plan fetch", () => {
 
   it("renders the API's catalogue, not the committed one", async () => {
     await buildAsync({ env: { PUBLIC_API_URL: origin } });
-    const html = readPath("/pricing/");
+    const html = readPath("/en/pricing/");
 
     expect(requested).toContain("/api/v1/billing/plans");
     expect(html).toContain("Solo");
@@ -153,7 +153,7 @@ describe("the build-time plan fetch", () => {
   it("labels a feature key it has no translation for rather than dropping it", () => {
     // `features` is open JSON from the plan row. A bullet that silently
     // vanished would let a plan advertise less than it sells.
-    expect(readPath("/pricing/")).toContain("custom_metric: 7");
+    expect(readPath("/en/pricing/")).toContain("custom_metric: 7");
   });
 
   it("falls back to committed data, and still builds, when the API is unreachable", async () => {
@@ -164,7 +164,7 @@ describe("the build-time plan fetch", () => {
     });
 
     expect(output).toContain("could not fetch plans");
-    const html = readPath("/pricing/");
+    const html = readPath("/en/pricing/");
     expect(html).toContain("Pro");
     expect(html).toContain("These prices were published with the site");
   });

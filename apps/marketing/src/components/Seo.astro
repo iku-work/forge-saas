@@ -24,7 +24,7 @@ import {
   pageTitle,
   site,
 } from "../config/site";
-import { enabledLocales } from "../lib/routing";
+import { defaultLocale, enabledLocales, withLocale } from "../lib/routing";
 import { siteOrigin } from "../lib/site-url";
 
 interface Props {
@@ -42,14 +42,15 @@ interface Props {
   /** Only emitted for `type="article"` -- `article:published_time` is meaningless on a landing page. */
   publishedAt?: Date | undefined;
   /**
-   * The locales this page exists in. Its own is dropped here, so a caller
-   * passes "where this exists" and never has to remember to exclude itself.
+   * The locales this page exists in, its own included -- so a caller passes
+   * "where this exists" and never has to remember to exclude itself.
    *
    * Defaults to every enabled locale, which is right for the routes that are
    * built once per locale and wrong for a blog post that was only ever
    * written in English -- so the content pages pass the real list, from
-   * `entryLocales()`. T-305's hreflang links need the same answer and should
-   * read it from the same place.
+   * `entryLocales()`. Both the Open Graph alternates and T-305's hreflang
+   * links are derived from it, which is the point: one answer to "where does
+   * this page exist", used by everything that makes a claim about it.
    */
   alternateLocales?: string[] | undefined;
 }
@@ -89,6 +90,50 @@ const alternates = alternateLocales.filter((code) => code !== locale);
 const canonicalUrl = new URL(canonical ?? Astro.url.pathname, origin);
 const imageUrl = new URL(image ?? site.ogImage, origin);
 
+/**
+ * The `hreflang` cluster this page belongs to (T-305): one entry per locale
+ * the page exists in, this one included, plus `x-default`.
+ *
+ * Three rules, and each of them is a way the annotation can lie:
+ *
+ * - **Self included.** A cluster is only valid if every member points at
+ *   every member, itself among them; a page that omits its own link is one a
+ *   crawler discards the whole cluster over.
+ * - **Only where the page exists.** The URLs come from `alternateLocales`,
+ *   which is the same list the Open Graph alternates use -- so a post written
+ *   only in English cannot announce a Finnish one, and a locale a product
+ *   turned off has no page and therefore no annotation.
+ * - **Nothing at all when the page is noindex.** A 404, the locale-resolving
+ *   root, an untranslated legal document served in the default locale: none
+ *   of those is the canonical anything, and putting a copy into a cluster is
+ *   how a duplicate ends up outranking the page it copied.
+ *
+ * `x-default` points at the default locale's version, which is the
+ * conventional reading of "the page for a visitor whose language we do not
+ * have". It is omitted when that version does not exist -- an entry
+ * translated into German and Spanish but not English has no default to fall
+ * back to, and a fabricated one would 404.
+ */
+const hreflangs = noindex
+  ? []
+  : [
+      ...alternateLocales.map((code) => ({
+        hreflang: code,
+        href: new URL(withLocale(Astro.url.pathname, code), origin).href,
+      })),
+      ...(alternateLocales.includes(defaultLocale)
+        ? [
+            {
+              hreflang: "x-default",
+              href: new URL(
+                withLocale(Astro.url.pathname, defaultLocale),
+                origin,
+              ).href,
+            },
+          ]
+        : []),
+    ];
+
 // The dimensions are only declared for the card this app draws, whose size it
 // knows. An entry's own `ogImage` is a file nothing here has measured, and a
 // crawler told the wrong size lays out the wrong box or drops the image.
@@ -99,6 +144,11 @@ const declaresImageSize = image === undefined;
 <meta name="description" content={description} />
 <link rel="canonical" href={canonicalUrl.href} />
 {noindex && <meta name="robots" content="noindex, nofollow" />}
+{
+  hreflangs.map(({ hreflang, href }) => (
+    <link rel="alternate" hreflang={hreflang} href={href} />
+  ))
+}
 {/* The browser chrome on mobile, from the same value as the favicon and the landing page's rule. */}
 <meta name="theme-color" content={site.brandColor} />
 

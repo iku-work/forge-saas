@@ -94,6 +94,9 @@ const schemas: SchemaNode[] = [organizationSchema(Astro.site), ...pageSchema];
     <main id="main">
       <slot />
     </main>
-    <SiteFooter locale={locale} />
+    {/* The same list <Seo> annotates the head with: the footer's language
+        switcher offers a visitor exactly the pages hreflang offers a crawler,
+        so neither can point somewhere the other would not. */}
+    <SiteFooter locale={locale} alternateLocales={alternateLocales} />
   </body>
 </html>

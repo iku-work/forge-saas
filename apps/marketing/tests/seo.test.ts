@@ -151,9 +151,10 @@ describe("the meta block on every built page", () => {
     // TypeScript, and this is what would catch one appearing.
     for (const [page, path] of [
       ["index.html", "/"],
+      ["en/index.html", "/en/"],
       ["fr/pricing/index.html", "/fr/pricing/"],
       ["ar/blog/index.html", "/ar/blog/"],
-      ["guides/deploying/production/index.html", "/guides/deploying/production/"],
+      ["en/guides/deploying/production/index.html", "/en/guides/deploying/production/"],
     ] as const) {
       const html = read(page);
       const canonical = headOf(html).match(
@@ -168,8 +169,8 @@ describe("the meta block on every built page", () => {
   it("names the product once in the title, and not twice on the landing page", () => {
     // The landing page's own title *is* the product name, and
     // "ForgeSaaS — ForgeSaaS" is the classic way a title template goes wrong.
-    expect(read("index.html")).toContain("<title>ForgeSaaS</title>");
-    expect(readPath("/features/")).toContain("<title>Features — ForgeSaaS</title>");
+    expect(readPath("/en/")).toContain("<title>ForgeSaaS</title>");
+    expect(readPath("/en/features/")).toContain("<title>Features — ForgeSaaS</title>");
   });
 
   it("declares the page's own locale, and the others as alternates", () => {
@@ -190,27 +191,27 @@ describe("the meta block on every built page", () => {
   it("claims a translation only where one was actually written", () => {
     // This post exists in en and de and nowhere else. Announcing five more
     // translations is the metadata form of a dead link.
-    expect(metaContents(readPath("/blog/module-toggles-in-practice/"), "og:alternate_locale")).toEqual([
+    expect(metaContents(readPath("/en/blog/module-toggles-in-practice/"), "og:alternate_locale")).toEqual([
       "de_DE",
     ]);
 
     // ...while a post only ever written in English claims none at all.
-    expect(metaContents(readPath("/blog/why-a-template/"), "og:alternate_locale")).toEqual([]);
+    expect(metaContents(readPath("/en/blog/why-a-template/"), "og:alternate_locale")).toEqual([]);
   });
 
   it("marks a blog post as an article, with its publication date", () => {
-    const post = readPath("/blog/why-a-template/");
+    const post = readPath("/en/blog/why-a-template/");
     expect(metaContent(post, "og:type")).toBe("article");
     expect(metaContent(post, "article:published_time")).toBe("2026-07-02T00:00:00.000Z");
 
     // A landing page is not an article and has no publication date to give.
-    const landing = read("index.html");
+    const landing = readPath("/en/");
     expect(metaContent(landing, "og:type")).toBe("website");
     expect(metaContents(landing, "article:published_time")).toEqual([]);
   });
 
   it("lets an entry override its card without touching the component", () => {
-    const post = readPath("/blog/__seo-fixture/");
+    const post = readPath("/en/blog/__seo-fixture/");
     expect(metaContent(post, "og:image")).toBe(`${SITE_URL}${FIXTURE_POST_IMAGE}`);
     expect(metaContent(post, "twitter:image")).toBe(`${SITE_URL}${FIXTURE_POST_IMAGE}`);
 
@@ -219,7 +220,7 @@ describe("the meta block on every built page", () => {
     expect(metaContents(post, "og:image:width")).toEqual([]);
 
     // Everything else still comes from the committed default, with its size.
-    const landing = read("index.html");
+    const landing = readPath("/en/");
     expect(metaContent(landing, "og:image")).toBe(`${SITE_URL}/og-default.png`);
     expect(metaContent(landing, "og:image:width")).toBe("1200");
   });
@@ -233,9 +234,41 @@ describe("a page that must not be indexed", () => {
     expect(sitemapPaths().some((path) => path.includes("404"))).toBe(false);
   });
 
-  it("is the only page that says it", () => {
-    const noindexed = builtPages().filter((page) => read(page).includes('name="robots"'));
-    expect(noindexed).toEqual(["404.html"]);
+  it("is one of the three kinds of page that may say it, and nothing else", () => {
+    // Stated as a rule rather than as a list of files, because T-305 made the
+    // set open-ended: every locale of every legal document that has not been
+    // translated yet is a copy of the default locale's, and a copy is not
+    // something to index. The rule is what a reviewer can check.
+    //
+    //   404.html    a page that does not exist
+    //   index.html  the locale-less door in front of the six home pages
+    //   <locale>/<legal>  the same English document at a second address
+    //
+    // Anything else with a robots directive is a page that quietly left the
+    // index, which is the failure this assertion exists to catch.
+    const legal = /^[a-z]{2}\/(privacy|terms)\/index\.html$/;
+    const noindexed = builtPages().filter((page) =>
+      read(page).includes('name="robots"'),
+    );
+
+    for (const page of noindexed) {
+      if (page === "404.html" || page === "index.html") {
+        continue;
+      }
+      const match = legal.exec(page);
+      expect(match, `${page} is noindex and is not a legal document`).not.toBe(
+        null,
+      );
+      // ...and only where it really is a copy: the document in the locale it
+      // was written in stays indexable. The notice itself is translated, so
+      // the marker is what is asserted rather than the English sentence.
+      expect(read(page)).toContain('data-testid="legal-untranslated"');
+    }
+
+    expect(noindexed).toContain("404.html");
+    expect(noindexed).toContain("index.html");
+    expect(noindexed).toContain("fi/privacy/index.html");
+    expect(noindexed).not.toContain("en/privacy/index.html");
   });
 });
 
@@ -326,7 +359,7 @@ describe("the committed Open Graph card", () => {
     // than against literals: those two numbers live in src/config/site.ts and
     // the image is drawn by scripts/make-og-image.mjs, and this is the seam
     // where they could drift apart.
-    const html = read("index.html");
+    const html = readPath("/en/");
     expect(String(width)).toBe(metaContent(html, "og:image:width"));
     expect(String(height)).toBe(metaContent(html, "og:image:height"));
     expect(width / height).toBeCloseTo(1.91, 1);

@@ -40,7 +40,7 @@ const t = translator(locale);
 
 const { plans, source } = await loadPlans();
 const views = plans.map((plan) =>
-  toPricingPlanView(plan, { locale, t, ctaHref: appLink("register") }),
+  toPricingPlanView(plan, { locale, t, ctaHref: appLink("register", locale) }),
 );
 
 // One Product per plan, offering the same cents the cards above format into

@@ -160,3 +160,10 @@ split across two deploys, not a rollback plan. Data-level recovery is
     sitemap. That is deliberate (a staging copy outranking production is
     expensive to undo), and every build prints which way it decided, so the
     build log is where to check.
+  - Every marketing URL carries a locale segment (T-305), so the apex `/` and
+    any locale-less link like `/pricing` are answered by a page that resolves
+    the visitor's language in the browser and rewrites the URL. That works on
+    any static host, and it is a 200 followed by a client-side redirect rather
+    than a 301. **T-307's Caddy block should issue the 301 instead**, on the
+    same rule the page applies; until it does, a locale-less deep link is
+    served by `404.html`, so `handle_errors` has to point at that file.

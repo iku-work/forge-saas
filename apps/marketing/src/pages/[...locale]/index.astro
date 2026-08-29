@@ -86,10 +86,10 @@ const schema = softwareApplicationSchema({
       {t("marketing.hero.subtitle")}
     </p>
     <div class="mt-10 flex flex-wrap gap-3">
-      <a href={appLink("register")} class={buttonVariants({ size: "lg" })}>
+      <a href={appLink("register", locale)} class={buttonVariants({ size: "lg" })}>
         {t("marketing.hero.cta_primary")}
       </a>
-      <a href={appLink("login")} class={buttonVariants({ variant: "outline", size: "lg" })}>
+      <a href={appLink("login", locale)} class={buttonVariants({ variant: "outline", size: "lg" })}>
         {t("marketing.hero.cta_secondary")}
       </a>
     </div>

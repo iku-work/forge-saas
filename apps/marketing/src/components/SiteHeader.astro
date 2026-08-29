@@ -58,7 +58,7 @@ const current = Astro.url.pathname;
         }
       </ul>
     </nav>
-    <a href={appLink("login")} class={buttonVariants({ variant: "ghost", size: "sm" })}>
+    <a href={appLink("login", locale)} class={buttonVariants({ variant: "ghost", size: "sm" })}>
       {t("marketing.nav.sign_in")}
     </a>
   </div>

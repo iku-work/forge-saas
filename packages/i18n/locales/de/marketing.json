@@ -8,7 +8,8 @@
     "blog": "Blog",
     "guides": "Anleitungen",
     "home": "Startseite",
-    "breadcrumb_label": "Navigationspfad"
+    "breadcrumb_label": "Navigationspfad",
+    "language": "Sprache"
   },
   "hero": {
     "title": "Bauen Sie das Produkt, nicht das Fundament",
@@ -130,6 +131,10 @@
     "title": "Diese Seite gibt es nicht",
     "body": "Der Link ist vielleicht veraltet, oder die Seite ist umgezogen. Der Rest der Website ist noch da.",
     "cta": "Zurück zur Startseite"
+  },
+  "redirect": {
+    "heading": "Wählen Sie Ihre Sprache",
+    "body": "Sie werden in Ihre eigene Sprache weitergeleitet. Falls nichts geschieht, wählen Sie unten eine aus."
   },
   "footer": {
     "support": "Support kontaktieren",

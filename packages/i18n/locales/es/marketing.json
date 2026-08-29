@@ -8,7 +8,8 @@
     "blog": "Blog",
     "guides": "Guías",
     "home": "Inicio",
-    "breadcrumb_label": "Ruta de navegación"
+    "breadcrumb_label": "Ruta de navegación",
+    "language": "Idioma"
   },
   "hero": {
     "title": "Lanza el producto, no la fontanería",
@@ -130,6 +131,10 @@
     "title": "Esa página no existe",
     "body": "Puede que el enlace esté desactualizado o que la página se haya movido. El resto del sitio sigue aquí.",
     "cta": "Volver a la página de inicio"
+  },
+  "redirect": {
+    "heading": "Elige tu idioma",
+    "body": "Te estamos llevando a tu propio idioma. Si no ocurre nada, elige uno más abajo."
   },
   "footer": {
     "support": "Contactar con soporte",

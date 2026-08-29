@@ -103,7 +103,7 @@ describe("the Organization node", () => {
   });
 
   it("points at a logo the site actually serves", () => {
-    const [organization] = jsonLdOfType(read("index.html"), "Organization");
+    const [organization] = jsonLdOfType(readPath("/en/"), "Organization");
 
     // product.config.ts's `logoUrl` is /logo.svg, which nothing in this
     // repository provides -- the favicon endpoint is the only mark that
@@ -221,7 +221,7 @@ describe("what a rich-results validator would call an error", () => {
     // The table above is only worth having if it can fail. A Product with its
     // offers removed is the shape a hand-maintained JSON-LD block degrades
     // into, and this is what that would look like.
-    const [product] = jsonLdOfType(readPath("/pricing/"), "Product");
+    const [product] = jsonLdOfType(readPath("/en/pricing/"), "Product");
     const { offers, ...withoutOffers } = product ?? {};
 
     expect(offers).toBeDefined();
@@ -231,11 +231,11 @@ describe("what a rich-results validator would call an error", () => {
 
 describe("the landing page", () => {
   it("describes the product, in the words the hero uses", () => {
-    const html = read("index.html");
+    const html = readPath("/en/");
     const [application] = jsonLdOfType(html, "SoftwareApplication");
 
     expect(application?.["name"]).toBe("ForgeSaaS");
-    expect(application?.["url"]).toBe(`${SITE_URL}/`);
+    expect(application?.["url"]).toBe(`${SITE_URL}/en/`);
     expect(application?.["applicationCategory"]).toBe("BusinessApplication");
     expect(application?.["publisher"]).toEqual({ "@id": ORGANIZATION_ID });
 
@@ -246,7 +246,7 @@ describe("the landing page", () => {
   });
 
   it("carries the FAQ, and every answer is on the page", () => {
-    const html = read("index.html");
+    const html = readPath("/en/");
     const [faq] = jsonLdOfType(html, "FAQPage");
     const questions = (faq?.["mainEntity"] ?? []) as {
       name: string;
@@ -283,7 +283,7 @@ describe("the pricing page", () => {
     // own formatter is what ties the two together -- a JSON-LD block fed from
     // anywhere but `plans` stops matching immediately.
     for (const locale of ["en", "de", "fr"]) {
-      const path = locale === "en" ? "/pricing/" : `/${locale}/pricing/`;
+      const path = `/${locale}/pricing/`;
       const html = readPath(path);
       const rendered = normalizeSpaces(decodeEntities(withoutJsonLd(html)));
       const products = jsonLdOfType(html, "Product");
@@ -315,7 +315,7 @@ describe("the pricing page", () => {
   });
 
   it("says which period each offer buys", () => {
-    const [free] = jsonLdOfType(readPath("/pricing/"), "Product");
+    const [free] = jsonLdOfType(readPath("/en/pricing/"), "Product");
     const offers = free?.["offers"] as {
       priceCurrency: string;
       priceSpecification: { referenceQuantity: { unitCode: string } };
@@ -330,7 +330,7 @@ describe("the pricing page", () => {
   });
 
   it("carries its own FAQ, not the landing page's", () => {
-    const [faq] = jsonLdOfType(readPath("/pricing/"), "FAQPage");
+    const [faq] = jsonLdOfType(readPath("/en/pricing/"), "FAQPage");
     const questions = (faq?.["mainEntity"] ?? []) as { name: string }[];
 
     expect(questions.map((question) => question.name)).toContain(
@@ -344,7 +344,7 @@ describe("the pricing page", () => {
 
 describe("a blog post", () => {
   it("carries the frontmatter the article renders", () => {
-    const html = readPath("/blog/why-a-template/");
+    const html = readPath("/en/blog/why-a-template/");
     const [post] = jsonLdOfType(html, "BlogPosting");
 
     expect(post?.["headline"]).toBe("Why start from a template at all");
@@ -355,7 +355,7 @@ describe("a blog post", () => {
     });
     expect(post?.["mainEntityOfPage"]).toEqual({
       "@type": "WebPage",
-      "@id": `${SITE_URL}/blog/why-a-template/`,
+      "@id": `${SITE_URL}/en/blog/why-a-template/`,
     });
     expect(post?.["publisher"]).toEqual({ "@id": ORGANIZATION_ID });
 
@@ -365,20 +365,20 @@ describe("a blog post", () => {
   });
 
   it("reports an untouched post as modified when it was published", () => {
-    const [post] = jsonLdOfType(readPath("/blog/why-a-template/"), "BlogPosting");
+    const [post] = jsonLdOfType(readPath("/en/blog/why-a-template/"), "BlogPosting");
 
     expect(post?.["dateModified"]).toBe(post?.["datePublished"]);
   });
 
   it("is not a BlogPosting anywhere but on a post", () => {
-    expect(jsonLdOfType(read("index.html"), "BlogPosting")).toEqual([]);
-    expect(jsonLdOfType(readPath("/blog/"), "BlogPosting")).toEqual([]);
+    expect(jsonLdOfType(readPath("/en/"), "BlogPosting")).toEqual([]);
+    expect(jsonLdOfType(readPath("/en/blog/"), "BlogPosting")).toEqual([]);
   });
 });
 
 describe("a guide", () => {
   it("places itself with a breadcrumb trail that resolves", () => {
-    const html = readPath("/guides/getting-started/installation/");
+    const html = readPath("/en/guides/getting-started/installation/");
     const [breadcrumbs] = jsonLdOfType(html, "BreadcrumbList");
     const items = (breadcrumbs?.["itemListElement"] ?? []) as {
       position: number;
@@ -405,11 +405,11 @@ describe("a guide", () => {
 
   it("renders the same trail a visitor can click", () => {
     const visible = withoutJsonLd(
-      decodeEntities(readPath("/guides/getting-started/installation/")),
+      decodeEntities(readPath("/en/guides/getting-started/installation/")),
     );
 
     expect(visible).toContain('aria-label="Breadcrumb"');
-    expect(visible).toContain('href="/guides/"');
+    expect(visible).toContain('href="/en/guides/"');
     expect(visible).toContain('aria-current="page"');
   });
 
@@ -430,7 +430,7 @@ describe("a guide", () => {
 
 describe("a payload that would end its own script block", () => {
   it("round-trips instead of breaking the document", () => {
-    const html = readPath(`/blog/${HOSTILE_SLUG}/`);
+    const html = readPath(`/en/blog/${HOSTILE_SLUG}/`);
     const [post] = jsonLdOfType(html, "BlogPosting");
 
     // Parsing at all is most of the assertion: `jsonLdNodes` stops at the
@@ -447,7 +447,7 @@ describe("a payload that would end its own script block", () => {
   });
 
   it("leaves the rest of the page intact behind it", () => {
-    const html = readPath(`/blog/${HOSTILE_SLUG}/`);
+    const html = readPath(`/en/blog/${HOSTILE_SLUG}/`);
 
     // The document still ends properly, and the payload did not become
     // markup: a broken block would have spilled JSON into the body.
@@ -470,7 +470,7 @@ describe("a module that is switched off", () => {
       expect(jsonLdOfType(read(page), "Product"), page).toEqual([]);
     }
 
-    const [faq] = jsonLdOfType(read("index.html"), "FAQPage");
+    const [faq] = jsonLdOfType(readPath("/en/"), "FAQPage");
     const questions = (faq?.["mainEntity"] ?? []) as { name: string }[];
 
     // The other three survive: this is a question about billing, not the

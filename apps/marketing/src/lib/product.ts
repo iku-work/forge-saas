@@ -45,7 +45,21 @@ export const enabledLocales = Object.entries(config.locales)
  */
 export const appUrl = import.meta.env.PUBLIC_APP_URL ?? "https://localhost";
 
-/** A path on the app, joined so a trailing slash on PUBLIC_APP_URL cannot double up. */
-export function appLink(path: string): string {
-  return new URL(path, appUrl.endsWith("/") ? appUrl : `${appUrl}/`).toString();
+/**
+ * A URL on the app, in the locale the visitor is already reading (T-305).
+ *
+ * `locale` is required rather than defaulted, and that is the whole point of
+ * this signature: apps/web prefixes every route with a locale segment
+ * (T-233), so `appLink("login")` would have sent a visitor of `/fi/pricing`
+ * to `/login`, which the app then resolves from *its* inputs -- browser
+ * languages, a stored choice, the signed-in user's profile -- and quite
+ * possibly lands them in English. "A user in `fi` clicking Sign in must land
+ * in `fi`" is T-305's own sentence, and a parameter nobody can forget is how
+ * it stays true when the next call site is written.
+ *
+ * Joined through `URL` so a trailing slash on PUBLIC_APP_URL cannot double up.
+ */
+export function appLink(path: string, locale: string): string {
+  const base = appUrl.endsWith("/") ? appUrl : `${appUrl}/`;
+  return new URL(`${locale}/${path}`, base).toString();
 }

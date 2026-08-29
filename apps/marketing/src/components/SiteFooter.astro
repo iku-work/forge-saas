@@ -1,20 +1,55 @@
 ---
 /**
- * Two link columns and a rights line. Same source as the header
- * (src/lib/nav.ts), so a disabled module cannot survive in the footer after
- * disappearing from the nav.
+ * Two link columns, the language switcher and a rights line. Same source as
+ * the header (src/lib/nav.ts), so a disabled module cannot survive in the
+ * footer after disappearing from the nav.
  */
+import { localeMeta } from "@forge/i18n";
+
 import { site } from "../config/site";
 import { translator } from "../lib/i18n";
 import { legalLinks, siteLinks } from "../lib/nav";
-import { defaultLocale, localePath } from "../lib/routing";
+import {
+  defaultLocale,
+  enabledLocales,
+  localeOf,
+  localePath,
+  withLocale,
+} from "../lib/routing";
 
 interface Props {
   locale?: string;
+  /**
+   * The locales this page exists in, as <Seo> means it -- the switcher and
+   * the hreflang block are the same list seen by a person and by a crawler.
+   */
+  alternateLocales?: string[] | undefined;
 }
 
-const { locale = defaultLocale } = Astro.props;
+const { locale = defaultLocale, alternateLocales = enabledLocales } =
+  Astro.props;
 const t = translator(locale);
+
+/**
+ * The languages this page can be switched into: the ones it exists in, plus
+ * the one being read.
+ *
+ * The union is what keeps every entry a live URL. An untranslated blog post
+ * exists at exactly one address, so it offers no switch at all rather than a
+ * link to a page nobody wrote; a legal document falling back to the default
+ * locale exists at this URL *and* at the original, so it offers both. This is
+ * the same rule tests/routes.test.ts enforces from outside -- no internal
+ * link may leave the locale unless it is this page in another language.
+ *
+ * A page with no locale in its path (`/`, the 404) is not in any language and
+ * gets no switcher: `withLocale` would happily invent `/fr/404/`, and it
+ * would 404.
+ */
+const switchable = localeOf(Astro.url.pathname)
+  ? enabledLocales.filter(
+      (code) => code === locale || alternateLocales.includes(code),
+    )
+  : [];
 
 // A string, not a number: ICU formats a numeric argument for the locale, so
 // `{year}` would render as "2 026" in fr and "٢٠٢٦" in ar.
@@ -61,6 +96,38 @@ const columns = [
         </ul>
       </div>
     </div>
+    {
+      switchable.length > 1 && (
+        <nav aria-labelledby="footer-language" class="mt-10">
+          {/* Labelled *by* the heading rather than carrying an aria-label of
+              its own: the two would be the same word, and a screen reader
+              would read it twice. */}
+          <h2 id="footer-language" class="text-sm font-semibold tracking-tight">
+            {t("marketing.nav.language")}
+          </h2>
+          <ul class="mt-3 flex flex-wrap gap-x-5 gap-y-2 text-sm">
+            {switchable.map((code) => (
+              <li>
+                <a
+                  class:list={[
+                    "underline-offset-4 hover:underline",
+                    code === locale ? "font-medium text-foreground" : "text-muted-foreground",
+                  ]}
+                  href={withLocale(Astro.url.pathname, code)}
+                  hreflang={code}
+                  lang={code}
+                  dir={localeMeta(code)?.dir ?? "ltr"}
+                  aria-current={code === locale ? "true" : undefined}
+                >
+                  {localeMeta(code)?.nativeName ?? code}
+                </a>
+              </li>
+            ))}
+          </ul>
+        </nav>
+      )
+    }
+
     <p class="mt-10 border-t border-border pt-6 text-sm text-muted-foreground">
       {t("marketing.footer.rights", { year, name: site.name })}
     </p>

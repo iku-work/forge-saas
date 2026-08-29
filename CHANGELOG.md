@@ -85,6 +85,48 @@ template keep their own changes in `CHANGELOG.product.md` (see
     in their schema; they had been reusing their own title, which is the
     degenerate form of having none.
 
+- **The locale is in every marketing URL, and `hreflang` says so (T-305).**
+  `apps/marketing` now prefixes every page with a locale segment, the default
+  locale's included — `/en/pricing`, not `/pricing` — which is `apps/web`'s
+  policy since T-233. The point is continuity: a visitor reading `/fi/pricing`
+  who clicks "Sign in" lands on the app's `/fi/register` rather than watching
+  their language disappear and come back. `appLink(path, locale)` takes the
+  locale as a required argument so that cannot regress quietly, and the policy
+  itself is one decision in two places (`DEFAULT_LOCALE_IS_PREFIXED` in
+  `src/lib/routing.ts`, `prefixDefaultLocale` in `astro.config.mjs`) with a
+  test that fails if only one of them moves.
+  - **A locale-less URL resolves one and redirects**, as `index.tsx` and
+    `$.tsx` do in the app. `/` is where the apex domain lands and the 404 is
+    the one file a static host can fall back to for `/pricing`, so
+    `src/components/LocaleRedirect.astro` serves both. It matches the browser's
+    languages against the enabled ones and falls back to the default; the app's
+    other two inputs — a stored preference, an in-session choice — do not exist
+    on a static, session-less origin that is not even the same origin as the
+    app. `/` also renders a language chooser in each locale's own name, so the
+    page works without JavaScript. A 301 at the edge is better and belongs to
+    T-307's Caddy block.
+  - **Every indexable page announces the locales it exists in, its own
+    included**, plus `x-default`. All of it comes from one list — the same one
+    `og:alternate_locale` and the footer's new language switcher read — so a
+    post written only in English cannot advertise a Finnish translation, and a
+    reader is offered exactly what a crawler is.
+  - **`scripts/check-hreflang.mjs` fails the build** on an annotation whose
+    target was never built, is on another origin, or is written in another
+    language; on a cluster that is not confirmed both ways, which a crawler
+    discards whole; on a page that annotates every locale but its own; on an
+    annotation for a locale `product.config.ts` does not enable; and on
+    `lang`/`dir` disagreeing with `@forge/i18n`'s registry or with the locale
+    in the URL — which is where `ar` is held to `dir="rtl"` on every page,
+    rather than by a second copy of a visual test that is known not to pass.
+  - **A page that is a copy or a door carries no annotation and is
+    `noindex`**: the 404, the locale-resolving `/`, and a legal document in a
+    locale nobody has translated it into. That last is the price of T-301's
+    deliberate exception — legal documents fall back rather than 404, because
+    they are linked from every footer — and the copy is now kept out of the
+    index instead of being annotated as a translation it is not. None of the
+    three pairs `noindex` with a canonical pointing elsewhere, which is how a
+    site accidentally deindexes the page it points at.
+
 - **`robots.txt` and a sitemap that cannot disagree with it (T-304).**
   `robots.txt` is now an endpoint (`apps/marketing/src/pages/robots.txt.ts`)
   rather than a file in `public/`, because the one thing it exists to decide —

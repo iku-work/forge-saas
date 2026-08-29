@@ -1,0 +1,77 @@
+---
+/**
+ * `/` -- the apex, and the only page here that is not written in a language.
+ *
+ * Under T-305 every real page carries a locale segment (`/en/`, `/fr/`), so
+ * the bare root is the locale-less URL every visitor who types the domain
+ * arrives at. It resolves their language and sends them on, which is what
+ * `index.tsx` does in the app (T-233).
+ *
+ * It is not a redirect and nothing else, though, because a redirect that
+ * needs JavaScript is a dead end without it. What renders is a language
+ * chooser: every enabled locale, in its own name, linking to that locale's
+ * home page. A visitor with JavaScript never sees it; a crawler, a text
+ * browser and anyone behind a script blocker gets a page that works.
+ *
+ * `noindex`, and therefore carrying no hreflang at all -- see <Seo>. This
+ * page is not the English home page or the French one, it is the door in
+ * front of both, and a door that competes with them in a search result is a
+ * door that wins on brand queries and shows nobody the product. The locale
+ * home pages are what the sitemap lists and what `x-default` points at.
+ *
+ * Deliberately not `noindex` *plus* a canonical pointing at `/en/`: Google
+ * treats a noindex directive as applying to whatever a page canonicalises to,
+ * so that pair is how a site accidentally deindexes its own home page. The
+ * canonical here is this page's own URL, which is what <Seo> emits by
+ * default.
+ */
+import { localeMeta } from "@forge/i18n";
+
+import LocaleRedirect from "../components/LocaleRedirect.astro";
+import BaseLayout from "../layouts/BaseLayout.astro";
+import { translator } from "../lib/i18n";
+import { defaultLocale, enabledLocales, localePath } from "../lib/routing";
+
+// The chooser's prose is in the default locale, because a page reached before
+// any language is known has to be written in *some* language. The choices
+// themselves are not: a locale is labelled with its own endonym, from
+// @forge/i18n's registry, so "suomi" is legible to the person looking for it
+// whatever the surrounding page says.
+const t = translator(defaultLocale);
+---
+
+<BaseLayout
+  title={t("marketing.redirect.heading")}
+  description={t("marketing.redirect.body")}
+  locale={defaultLocale}
+  noindex={true}
+>
+  <LocaleRedirect />
+
+  <section class="mx-auto max-w-3xl px-6 py-24">
+    <h1 class="text-balance text-4xl font-semibold tracking-tight">
+      {t("marketing.redirect.heading")}
+    </h1>
+    <p class="mt-4 text-pretty text-lg text-muted-foreground">
+      {t("marketing.redirect.body")}
+    </p>
+
+    <ul class="mt-10 flex flex-wrap gap-x-8 gap-y-3 text-lg">
+      {
+        enabledLocales.map((code) => (
+          <li>
+            <a
+              class="underline-offset-4 hover:underline"
+              href={localePath(code)}
+              hreflang={code}
+              lang={code}
+              dir={localeMeta(code)?.dir ?? "ltr"}
+            >
+              {localeMeta(code)?.nativeName ?? code}
+            </a>
+          </li>
+        ))
+      }
+    </ul>
+  </section>
+</BaseLayout>
