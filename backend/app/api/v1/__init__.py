@@ -67,11 +67,24 @@ def build_router() -> APIRouter:
 
         router.include_router(admin_router)
 
-    # T-290 added the `public_api` and `enterprise_sso` toggles; their blocks
-    # belong here, in the same shape as billing's, and land with the routers
-    # themselves (T-310 and T-331). Registering them now would mean importing
-    # modules that do not exist, so a product enabling the toggle early gets a
-    # module with no HTTP surface -- not a crash. `marketing` never gets a
-    # block: it gates the apps/marketing build, not a router.
+    if modules.public_api.enabled:
+        from app.modules.api_keys.router import router as api_keys_router  # noqa: PLC0415
+
+        router.include_router(api_keys_router)
+
+    # T-290 added the `enterprise_sso` toggle; its block belongs here, in the
+    # same shape as the one above, and lands with the router itself (T-331).
+    # Registering it now would mean importing a module that does not exist, so
+    # a product enabling the toggle early gets a module with no HTTP surface --
+    # not a crash. `marketing` never gets a block: it gates the apps/marketing
+    # build, not a router.
+    #
+    # Note what the `public_api` block above does *not* register: the two
+    # routes an API key can actually call (T-311) belong to `tenancy` and are
+    # always registered. That is the design -- a key is a second way to
+    # authenticate against endpoints the product already serves, not a
+    # parallel API -- and it is why the key's own auth dependency checks
+    # `is_enabled("public_api")` rather than trusting the routing table (see
+    # app/core/principal.py).
 
     return router

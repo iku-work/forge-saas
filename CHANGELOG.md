@@ -48,6 +48,71 @@ template keep their own changes in `CHANGELOG.product.md` (see
     `docs/runbooks/analytics-and-consent.md` is the decision as a product owner
     has to make it.
 
+- **Org-scoped API keys (T-310), a second kind of principal (T-311), and a
+  per-key rate limit (T-312).** The `public_api` module, off by default,
+  becomes real: `api_key` on its own Alembic branch, a session-only management
+  surface at `/api/v1/api-keys`, and `Authorization: Bearer fk_live_…` as a way
+  for a third party to call the API without a user.
+  - **SHA-256, not argon2, and the comment says why.** The secret is 32 bytes
+    from `secrets.token_urlsafe`: there is no dictionary for a work factor to
+    slow down, and argon2 would put ~100 ms of CPU on the hot path of *every*
+    API request — the exact failure T-223's load test caught on login.
+    Comparison is `hmac.compare_digest`. The full key is returned once, from
+    the create endpoint, and is never stored, logged or put in an error.
+  - **A found bug, kept as a test.** The prefix was `token_urlsafe` output,
+    whose alphabet includes the `_` that separates the prefix from the secret —
+    so roughly one key in six split in the wrong place and could never
+    authenticate. It is hex now, and 200 keys are minted per test run to prove
+    it.
+  - **Opt-in per endpoint, always.** A route accepts a key only by declaring
+    `require_scope(...)`; there is deliberately no blanket swap of
+    `get_current_user`. The whole public surface today is two reads
+    (`GET /orgs/{org_id}` and its members list), it is enumerated from the code
+    by walking the dependency tree, and that enumeration is pinned by a test so
+    widening it is a review conversation rather than a refactor.
+    `require_scope` is dual-principal: a session passes it by holding the
+    Permission the scope maps onto, so opening a route to keys never widened
+    what a *user* may do.
+  - **The toggle is checked on the auth path, not just at the router.** A key
+    minted while `public_api` was on stops authenticating the moment it is
+    turned off — the rows survive the toggle by design (`MODULE_TABLES`), so
+    the routing table alone could not enforce this.
+  - **Revocation takes effect on the next request**, not at the end of the
+    60-second lookup cache: create, update, revoke and delete all bust that
+    entry, and the invalidation matrix in `app/core/cache_keys.py` says so.
+    `last_used_at` deliberately does not, and is throttled through Redis to one
+    write per key per minute — a write per request on a hot key is an N+1
+    wearing a different hat.
+  - **Per-key rate limiting**, keyed on `api_key:{id}` rather than on an IP
+    (proxies collapse to one) or a user (a key has none), reusing T-223's
+    limiter and storage. `X-RateLimit-Limit/Remaining/Reset` on every response
+    including the successful ones, `Retry-After` on the 429, and a nullable
+    per-key override so one integration can be raised without raising everyone.
+    The budget is read through `get_settings()` at request time, with the
+    regression test for the import-time-binding trap that bit T-223 and
+    `test_middleware.py`.
+  - **Lifecycle beyond the happy path**: deleting an organization cascades to
+    its keys at the database level (nothing else can, since no endpoint deletes
+    an org); a GDPR export lists the keys a user minted, through `ApiKeyPublic`
+    so no digest reaches the file; and erasure *nulls* `created_by` rather than
+    deleting an organization's still-active credential.
+    `docs/runbooks/api-keys.md` says out loud that deactivating a member does
+    not revoke their keys, because the natural assumption is the opposite.
+  - `list_members`'s query budget went **down**, from 5 to 4: resolving the
+    principal through `require_scope` reads the membership but not the
+    Organization row the endpoint never used.
+  - **The first default-off migration branch turned up an alembic papercut**
+    every later one will hit too (T-331 next). `alembic check` refuses to
+    compare anything at all while a *script* head is missing from
+    `alembic_version` — `Target database is not up to date` — and a disabled
+    module's branch is a head `make migrate` deliberately never applies. So
+    the drift test was not reporting "no drift", it was reporting that it had
+    declined to look. It now applies every branch before checking, which is
+    also the workaround a product with a module turned off needs; TEMPLATE.md
+    spells it out. The extra tables that leaves behind are excluded by
+    `include_object`, which is the same rule that lets a module be switched
+    off without dropping its data.
+
 - **`apps/marketing` — a pre-rendered marketing site, in Astro (T-300).**
   [ADR-0004](docs/adr/0004-marketing-framework.md) is now `Accepted` and names
   the framework. The deciding constraint was `@forge/ui`: it is React 18 +

@@ -13,12 +13,20 @@ class DomainError(Exception):
         fallback: str = "An error occurred",
         params: dict[str, Any] | None = None,
         details: dict[str, Any] | None = None,
+        headers: dict[str, str] | None = None,
     ) -> None:
         super().__init__(fallback)
         self.message_key = message_key or self.default_message_key
         self.fallback = fallback
         self.params = params or {}
         self.details = details
+        # T-312: response headers that are part of the error's meaning rather
+        # than of its body -- `Retry-After` and the `X-RateLimit-*` trio on a
+        # 429. Everything else about an error is expressible in the envelope;
+        # these are not, because a client's HTTP layer is what reads them.
+        # app.core.handlers attaches them; every other error leaves this None
+        # and the response is unchanged.
+        self.headers = headers
 
 
 class NotFoundError(DomainError):

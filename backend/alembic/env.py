@@ -88,11 +88,13 @@ def load_models_for_migration() -> None:
         import app.modules.notifications.models  # noqa: PLC0415
     if modules.file_storage.enabled:
         import app.modules.storage.models  # noqa: PLC0415
-    # No branch for public_api / enterprise_sso yet: T-290 added the toggles,
-    # but the models they would import (app.modules.api_keys.models,
-    # app.modules.sso.models) arrive with T-310 and T-331. Their MODULE_TABLES
-    # entries above are already in place -- add the import here at the same
-    # time as the model, or autogenerate will not see the new table at all.
+    if modules.public_api.enabled:
+        import app.modules.api_keys.models  # noqa: PLC0415
+    # No branch for enterprise_sso yet: T-290 added the toggle, but the model
+    # it would import (app.modules.sso.models) arrives with T-331. Its
+    # MODULE_TABLES entry above is already in place -- add the import here at
+    # the same time as the model, or autogenerate will not see the new table
+    # at all.
 
 
 load_models_for_migration()

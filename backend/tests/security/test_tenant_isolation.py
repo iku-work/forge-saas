@@ -14,19 +14,27 @@ nothing here needs the bespoke table subsets the router test files build.
 """
 
 from collections.abc import Awaitable, Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import UTC, datetime
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import httpx
 import pytest
-from sqlalchemy.ext.asyncio import AsyncSession
+from redis.asyncio import Redis
+from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
+from sqlmodel import SQLModel
 
+from app.core import module_loader
+from app.core.modules import ModuleConfig
+from app.modules.api_keys.models import ApiKey
+from app.modules.api_keys.schemas import ApiKeyCreateRequest
+from app.modules.api_keys.service import ApiKeyService
 from app.modules.auth.permissions import MemberRole
 from app.modules.auth.repository import UserRepository
 from app.modules.auth.utils import create_access_token, hash_password
 from app.modules.tenancy.models import Membership, Organization
 from app.modules.tenancy.repository import MembershipRepository, OrganizationRepository
+from product import config as product_config
 
 pytestmark = pytest.mark.owasp("A01")
 
@@ -40,6 +48,8 @@ class TenantIsolationContext:
     org_b: Organization
     user_a_headers: dict[str, str]
     org_b_owner_membership: Membership
+    # T-311's sweep mints a key as this user; the session cases never need it.
+    org_a_owner_id: UUID
 
 
 RequestFn = Callable[[TenantIsolationContext], Awaitable[httpx.Response]]
@@ -60,6 +70,57 @@ async def _create_org_with_owner(
     return org, membership
 
 
+@pytest.fixture(autouse=True)
+async def _api_key_table(engine: AsyncEngine) -> None:
+    """Create `api_key` before anything in this file writes a row.
+
+    `public_api` ships off, so `migration_targets()` skipped its branch when
+    the shared `engine` fixture ran and the table does not exist.
+    `create_all` is checkfirst, so this is a no-op in a product that enables
+    the module.
+
+    **Autouse, and depending on `engine` alone, for a reason that cost an
+    afternoon**: `CREATE TABLE api_key ... REFERENCES organization(id)` takes
+    a SHARE ROW EXCLUSIVE lock on `organization`, which conflicts with the
+    ROW EXCLUSIVE the `session` fixture's still-open outer transaction holds
+    once a test has inserted an org. Created from inside `org_a_api_key`,
+    which runs after `isolation_ctx` has seeded two, it blocked forever. An
+    autouse fixture runs before the non-autouse ones at the same scope, so
+    the table exists before the first insert and the lock is uncontended.
+    """
+    async with engine.begin() as conn:
+        await conn.run_sync(SQLModel.metadata.create_all, tables=[ApiKey.__table__])
+
+
+@pytest.fixture
+async def org_a_api_key(
+    isolation_ctx: TenantIsolationContext,
+    session: AsyncSession,
+    _redis_client: Redis,
+    monkeypatch: pytest.MonkeyPatch,
+) -> str:
+    """A live key belonging to org_a, for the sweep below.
+
+    The module has to be switched on as well as the table created -- the auth
+    path refuses a key outright while `public_api` is off, which is
+    app/core/principal.py doing its job rather than something to work around.
+    """
+    monkeypatch.setattr(
+        product_config,
+        "MODULES",
+        replace(product_config.MODULES, public_api=ModuleConfig(enabled=True)),
+    )
+    module_loader.get_modules.cache_clear()
+
+    owner_id = isolation_ctx.org_a_owner_id
+    _, presented = await ApiKeyService(session, isolation_ctx.org_a.id, _redis_client).create_key(
+        owner_id,
+        ApiKeyCreateRequest(name="org a", scopes=["orgs:read", "members:read"]),
+    )
+    await session.commit()
+    return presented
+
+
 @pytest.fixture
 async def isolation_ctx(client: httpx.AsyncClient, session: AsyncSession) -> TenantIsolationContext:
     org_a, owner_a = await _create_org_with_owner(session, name="OrgA")
@@ -73,6 +134,7 @@ async def isolation_ctx(client: httpx.AsyncClient, session: AsyncSession) -> Ten
         org_b=org_b,
         user_a_headers={"Authorization": f"Bearer {token}"},
         org_b_owner_membership=owner_b,
+        org_a_owner_id=owner_a.user_id,
     )
 
 
@@ -219,3 +281,47 @@ async def test_cross_tenant_access_denied(
     assert response.status_code != 200
     assert response.status_code in allowed_statuses
     assert response.json()["data"] is None
+
+
+# --- the second kind of principal (T-311) ------------------------------------
+#
+# Everything above sweeps a *session* across the tenant boundary. T-311 added
+# a second way to authenticate -- an API key -- and §0.2 has to hold for it
+# identically, so the two endpoints a key can call get the same probe with the
+# same shape of credential from the wrong organization.
+#
+# Not folded into _CASES because the parametrization there is built around one
+# set of headers for one caller, and a key is a different credential per case
+# rather than a different URL. The management surface under /api/v1/api-keys is
+# swept in tests/modules/test_api_keys.py's first §0.8 non-negotiable, where
+# the router is stood up regardless of the module toggle.
+
+
+@pytest.mark.module_dependent
+@pytest.mark.parametrize(
+    "path",
+    [
+        pytest.param("", id="GET /orgs/{org_id}"),
+        pytest.param("/members", id="GET /orgs/{org_id}/members"),
+    ],
+)
+async def test_an_api_key_cannot_cross_the_tenant_boundary_either(
+    path: str,
+    isolation_ctx: TenantIsolationContext,
+    org_a_api_key: str,
+) -> None:
+    """org_a's key, org_b's URL. The key is valid, unexpired, unrevoked and
+    holds every scope these routes ask for -- the only thing wrong with it is
+    which organization it belongs to, which is exactly the thing that must be
+    enough."""
+    response = await isolation_ctx.client.get(
+        f"/api/v1/orgs/{isolation_ctx.org_b.id}{path}",
+        headers={
+            "Authorization": f"Bearer {org_a_api_key}",
+            "X-Org-ID": str(isolation_ctx.org_b.id),
+        },
+    )
+
+    assert response.status_code == 403
+    assert response.json()["data"] is None
+    assert response.json()["error"]["message_key"] == "errors.not_org_member"

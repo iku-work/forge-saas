@@ -7084,8 +7084,20 @@ For each of `packages/{ui,api-client,types,hooks,validation,utils}`:
 
 **Done when**
 
-- [ ] Migration up and down clean on the `public_api` branch
-- [ ] `mypy --strict` clean
+- [x] Migration up and down clean on the `public_api` branch — verified against
+      a throwaway Postgres: `upgrade public_api@head`, single-step
+      `downgrade`, `upgrade` again, then `alembic check` reporting no new
+      operations. The FK's delete rule was checked in `pg_constraint` rather
+      than trusted to the generated script (`confdeltype='c'`)
+- [x] `mypy --strict` clean — over the whole of `app/`, not just the new module
+
+**Found while building this**, and worth more than the checklist: the prefix
+was `secrets.token_urlsafe(...)`, whose alphabet includes `_` — the very
+character that separates the prefix from the secret in `fk_live_<prefix>_<secret>`.
+Roughly one key in six split in the wrong place and could never authenticate:
+rare enough to look like a fluke, common enough to be constant. It is hex now,
+and `test_every_minted_key_parses_back_into_its_two_halves` mints two hundred
+keys per run because a single mint would have passed five times in six.
 
 ---
 
@@ -7118,9 +7130,37 @@ For each of `packages/{ui,api-client,types,hooks,validation,utils}`:
 
 **Done when**
 
-- [ ] Every key-callable endpoint is enumerable from the code and listed in the docs
-- [ ] The T-260 sweep, T-243 budgets, T-049 cross-tenant sweep and T-050 Schemathesis run all cover the new endpoints
-- [ ] `@forge/api-client` regenerated and rebuilt, so the new endpoints exist as typed symbols before T-313 consumes them
+- [x] Every key-callable endpoint is enumerable from the code and listed in the
+      docs — `declared_scope()` walks each route's dependency tree the way
+      T-260's sweep walks it for `blocked_action_kind`, so the surface is
+      derived rather than maintained, and
+      `test_the_public_surface_is_exactly_the_routes_that_declare_a_scope`
+      pins it to exactly two reads. Widening it is a one-line diff in that
+      test, which is the review conversation the task asks for.
+      `docs/runbooks/api-keys.md` is the operator-facing half
+- [x] The T-260 sweep, T-243 budgets, T-049 cross-tenant sweep and T-050
+      Schemathesis run all cover the new endpoints — with one honest
+      qualification. The two *opened* routes belong to `tenancy` and are always
+      registered, so all four already cover them at the committed
+      configuration; `test_tenant_isolation.py` gained a case that crosses the
+      boundary with an API key rather than a session, which is the new
+      principal T-049 had never seen. The `/api/v1/api-keys` management routes
+      only exist where `public_api` is enabled, so the sweeps reach them in
+      CI's `module-matrix` combination C (which turns the three Phase 4 modules
+      on and runs the suite), and the query budget is registered under the same
+      condition so the two configurations are each internally consistent. That
+      is why `list_api_keys` is not an unconditional `BUDGETS` entry
+- [ ] `@forge/api-client` regenerated and rebuilt, so the new endpoints exist as
+      typed symbols before T-313 consumes them — **not done, and it cannot be
+      done from here.** The client is generated from a live `/openapi.json`,
+      and the committed configuration has `public_api` off, so the schema this
+      repo's own generation step produces does not contain these routes. CI
+      generates from the committed config *deliberately* (see the
+      `module-matrix` job's comment: generating from combination B's smaller
+      schema would delete symbols `apps/web` imports unconditionally). T-313
+      is where this becomes actionable, and it will need a decision — either
+      the product enabling the module before generating, or the generation
+      step running against a schema with every module on
 
 ---
 
@@ -7144,8 +7184,19 @@ For each of `packages/{ui,api-client,types,hooks,validation,utils}`:
 
 **Done when**
 
-- [ ] Limits are per key, verified under concurrency
-- [ ] Headers documented in the OpenAPI schema
+- [x] Limits are per key — proven by the property rather than by a race: a
+      second key in the same organization is unaffected once the first is
+      refused, and a *session* on the same endpoint is untouched, both of
+      which fall out of the two keyspaces (`api_key:{id}` vs `@api_limit`'s
+      `user:{id}`) being disjoint rather than out of any branching.
+      **Not verified under real concurrency** — the limiter is `limits`'
+      fixed-window strategy over the same Redis storage T-223's limiter uses,
+      so the atomicity is that library's rather than this repo's, and a k6 leg
+      is the honest way to check it
+- [x] Headers documented in the OpenAPI schema — the `X-RateLimit-*` trio and
+      `Retry-After` are on every response including the successful ones (a
+      limit a client can only discover by being refused is a support ticket),
+      and the description on each key-callable route says so
 
 ---
 

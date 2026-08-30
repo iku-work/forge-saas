@@ -66,13 +66,15 @@ class ModuleSurface(NamedTuple):
     note: str = ""
 
 
-# Declared ahead of the code that serves them: T-290 added the toggles, the
-# routers and models land in T-310 (`public_api`) and T-331 (`enterprise_sso`).
-# Writing the surface now means neither task can add a route or a table
-# without a matching toggle assertion -- the day the router appears, the
-# entries below start asserting something and the module comes off this set
+# Declared ahead of the code that serves it: T-290 added the toggle, the
+# router and model land in T-331 (`enterprise_sso`). Writing the surface now
+# means that task cannot add a route or a table without a matching toggle
+# assertion -- the day the router appears, the entry below starts asserting
+# something and the module comes off this set
 # (test_a_pending_surface_is_retired_once_its_module_ships says so, loudly).
-_SURFACE_PENDING: frozenset[ModuleName] = frozenset({"public_api", "enterprise_sso"})
+#
+# `public_api` came off it in T-310, which is what that test is for.
+_SURFACE_PENDING: frozenset[ModuleName] = frozenset({"enterprise_sso"})
 
 MODULE_SURFACE: dict[ModuleName, ModuleSurface] = {
     "billing": ModuleSurface(
@@ -142,6 +144,14 @@ MODULE_SURFACE: dict[ModuleName, ModuleSurface] = {
         ),
     ),
     "public_api": ModuleSurface(
+        # The *management* surface, which is all the toggle removes. The two
+        # routes an API key can call (T-311) belong to `tenancy` and stay
+        # registered -- a key is a second way to authenticate against
+        # endpoints the product already serves, not a parallel API. What the
+        # toggle removes there is the key's ability to authenticate at all,
+        # which app/core/principal.py checks on the auth path and
+        # tests/modules/test_api_key_auth.py asserts; a routing assertion
+        # could not see it.
         routes=("/api/v1/api-keys/*",),
         tables=("api_key",),
     ),
@@ -177,8 +187,10 @@ MODULE_CONFIGS = [
         override=EnabledModules(gdpr=ModuleConfig(enabled=False)),
     ),
     # T-291. Both ship off by default, so these two cases assert an absence
-    # that is already true -- that is the point: they are the guard T-310 and
-    # T-331 will trip if either adds its router or table unconditionally.
+    # that is already true -- that is the point: they are the guard against
+    # either module adding its router or table unconditionally. T-310 landed
+    # `public_api`'s, so this case now asserts a real removal rather than a
+    # vacuous one.
     ModuleConfigCase(
         name="no_public_api",
         override=EnabledModules(public_api=ModuleConfig(enabled=False)),

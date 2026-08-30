@@ -78,5 +78,12 @@
   "maintenance": "El servicio no está disponible temporalmente por mantenimiento. Inténtalo de nuevo en breve.",
   "module_disabled": "{feature} no está disponible temporalmente. Inténtalo de nuevo en breve.",
   "signup_disabled": "El registro de cuentas nuevas está cerrado en este momento.",
-  "invalid_product_setting": "Ese valor de configuración no es válido."
+  "invalid_product_setting": "Ese valor de configuración no es válido.",
+  "invalid_api_key": "Clave de API no válida o caducada.",
+  "missing_scope": "Esta clave de API no tiene el ámbito «{scope}».",
+  "unknown_scope": "Ámbito desconocido: {scope}.",
+  "api_key_limit_reached": "Esta organización tiene un límite de {limit} claves de API.",
+  "api_key_expiry_in_the_past": "La fecha de caducidad debe ser futura.",
+  "api_key_rate_limited": "Esta clave de API ha superado su límite de {limit} solicitudes por minuto.",
+  "invalid_org_header": "X-Org-ID no es un identificador válido."
 }

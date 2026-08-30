@@ -202,8 +202,32 @@ def test_the_migrations_build_exactly_what_the_models_declare(real_config: Confi
     test therefore passed alone and failed in a full run -- which is also
     exactly what a developer gets, since a fresh `alembic` CLI imports only
     app models. Checking the way the CLI does keeps the answer honest.
+
+    **Every branch is applied first, including the disabled modules'** -- and
+    that is a statement about alembic rather than about this product. `alembic
+    check` refuses to compare anything at all while a *script* head is missing
+    from `alembic_version` ("Target database is not up to date"), and a module
+    that ships off (T-310's `public_api`, T-331's `enterprise_sso`) has a head
+    that `migration_runner.upgrade()` deliberately never applies. Without this
+    loop the check does not report drift, it reports that it declined to look.
+
+    The extra tables that leaves in the database are not drift either:
+    `alembic/env.py`'s `include_object` excludes a disabled module's tables
+    from the comparison, which is exactly the situation it was written for --
+    a table physically present from a time the module was enabled. So this
+    test asserts the same property it always did for every enabled module, and
+    now also proves that a disabled module's branch applies cleanly on top of
+    a fully-migrated database.
+
+    Note for anyone running `alembic check` by hand on a product with a module
+    turned off: they will hit the same refusal, and the fix is the same one --
+    apply the disabled branch first. TEMPLATE.md's migration section says so.
     """
     migration_runner.upgrade(real_config)
+    # The branches migration_targets() skipped, so `alembic check` has
+    # something it is willing to compare. See the docstring.
+    for branch in migration_runner.MODULE_BRANCHES.values():
+        command.upgrade(real_config, f"{branch}@head")
 
     # DATABASE_URL is already pointed at this test's container by real_config's
     # monkeypatch.setenv, so the child inherits it.

@@ -205,6 +205,18 @@ class TenancyService:
             )
         return org, membership
 
+    async def get_org(self, org_id: UUID) -> Organization | None:
+        """The organization row on its own, with no membership check.
+
+        T-311: `get_org`'s route now proves membership through
+        `require_scope` (which serves both a session and an API key), so the
+        route needs the row and nothing else. get_membership_or_raise above
+        is still the right call for every route that needs the Membership
+        too -- this is deliberately not a replacement for it, and a caller
+        that skips both has no tenant-isolation check at all.
+        """
+        return await self._orgs.get_by_id(org_id)
+
     async def list_orgs_for_user(self, user_id: UUID) -> list[Organization]:
         return await self._orgs.list_for_user(user_id)
 

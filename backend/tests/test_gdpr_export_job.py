@@ -17,6 +17,7 @@ goes through a brand-new `verify_session` rather than the seeding session
 import json
 import zipfile
 from collections.abc import AsyncGenerator
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from io import BytesIO
 from unittest.mock import AsyncMock, Mock
@@ -32,6 +33,9 @@ from sqlalchemy.ext.asyncio import (
 from sqlmodel import SQLModel
 from testcontainers.postgres import PostgresContainer
 
+from app.core import module_loader
+from app.core.modules import ModuleConfig
+from app.modules.api_keys.models import ApiKey
 from app.modules.audit.models import AuditEvent
 from app.modules.auth.models import OAuthAccount, User
 from app.modules.auth.models import Session as SessionModel
@@ -42,6 +46,7 @@ from app.modules.tenancy.models import Membership, Organization
 from app.workers.jobs import gdpr as gdpr_job_module
 from app.workers.jobs.gdpr import _s3_client as _real_s3_client
 from app.workers.jobs.gdpr import export_user_data
+from product import config as product_config
 
 _DOWNLOAD_URL = "https://minio.local/forge-test/signed-url"
 
@@ -55,6 +60,11 @@ _TABLES = [
     ConsentRecord.__table__,
     DataExportJob.__table__,
     AuditEvent.__table__,
+    # T-310. Created unconditionally even though `public_api` ships off: the
+    # one test that needs it turns the module on, and a table that exists
+    # while the module is disabled is exactly the state MODULE_TABLES
+    # tolerates -- which is what the export's own module check is for.
+    ApiKey.__table__,
 ]
 
 
@@ -197,6 +207,66 @@ async def test_export_user_data_uploads_zip_with_every_expected_key(
     assert len(payload["consent_records"]) == 1
     assert len(payload["audit_events"]) == 1
     assert len(payload["memberships"]) == 1
+
+
+async def test_export_lists_the_api_keys_the_user_minted_without_their_digests(
+    session: AsyncSession,
+    fake_s3_client: Mock,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """T-310/T-037. A user's export lists the keys they minted, because those
+    are a thing they did -- but through `ApiKeyPublic`, so the digest stays
+    out of a file a person downloads and forwards."""
+    monkeypatch.setattr(
+        product_config,
+        "MODULES",
+        replace(product_config.MODULES, public_api=ModuleConfig(enabled=True)),
+    )
+    module_loader.get_modules.cache_clear()
+
+    org = await _make_org(session)
+    user = await _make_user(session, "keys@example.com")
+    session.add(
+        ApiKey(
+            org_id=org.id,
+            name="billing-sync",
+            prefix="abcdef123456",
+            key_hash="f" * 64,
+            scopes=["orgs:read"],
+            created_by=user.id,
+        )
+    )
+    job = DataExportJob(user_id=user.id)
+    session.add(job)
+    await session.commit()
+
+    await export_user_data({}, user_id=user.id, job_id=job.id)
+
+    payload = _read_zip_payload(fake_s3_client.put_object.call_args.kwargs["Body"])
+    assert len(payload["api_keys"]) == 1
+    assert payload["api_keys"][0]["name"] == "billing-sync"
+    assert payload["api_keys"][0]["prefix"] == "abcdef123456"
+    assert "key_hash" not in payload["api_keys"][0]
+    assert "f" * 64 not in str(payload)
+    module_loader.get_modules.cache_clear()
+
+
+async def test_export_omits_api_keys_entirely_when_the_module_is_off(
+    session: AsyncSession, fake_s3_client: Mock
+) -> None:
+    """The default configuration. The table exists in this file's fixture but
+    the module is off, so the export must not query it -- in a real product
+    that never enabled `public_api` the table does not exist at all, and a
+    SELECT against it is an error rather than an empty list."""
+    user = await _make_user(session, "no-keys@example.com")
+    job = DataExportJob(user_id=user.id)
+    session.add(job)
+    await session.commit()
+
+    await export_user_data({}, user_id=user.id, job_id=job.id)
+
+    payload = _read_zip_payload(fake_s3_client.put_object.call_args.kwargs["Body"])
+    assert payload["api_keys"] == []
 
 
 async def test_export_user_data_signs_a_24h_url(

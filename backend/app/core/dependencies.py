@@ -78,7 +78,24 @@ async def get_current_user(
 ) -> User:
     if token is None:
         raise AuthenticationError("errors.missing_bearer_token", fallback="Missing bearer token")
+    return await resolve_user_from_token(token, request, session, redis)
 
+
+async def resolve_user_from_token(
+    token: str,
+    request: Request,
+    session: AsyncSession,
+    redis: Redis,
+) -> User:
+    """get_current_user's body, minus the dependency wiring.
+
+    Split out for T-311: `require_scope` accepts either kind of principal on
+    the same Authorization header, so it has to dispatch on the token itself
+    before FastAPI would have solved anything -- and a second implementation
+    of "resolve, cache, blocklist-check, locale, is_active" is exactly the
+    drift that turns a deactivated account into one that still works down one
+    of the two paths. There is one implementation, and this is it.
+    """
     payload = verify_access_token(token)
     if await is_jti_blocked(redis, payload.jti):
         # T-142: an ended impersonation token (or any future single-token

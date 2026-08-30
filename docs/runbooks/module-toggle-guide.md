@@ -39,12 +39,20 @@ removes today:
   `apps/marketing/src/lib/nav.ts` is what the header and the footer read, and
   the page's own `getStaticPaths` is gated on the same toggle, so the sitemap
   (which lists what was *built*) loses the entry without being told.
+- **A credential's ability to authenticate, rather than a route.**
+  `public_api` (T-310–T-312) removes `/api/v1/api-keys` and the `api_key`
+  table like any other module — but the two endpoints a key can *call* belong
+  to `tenancy` and stay registered, because a key is a second way to
+  authenticate against endpoints the product already serves rather than a
+  parallel API. What the toggle removes there is checked on the auth path
+  (`app/core/principal.py`), not in the routing table, because the rows
+  survive the toggle by design. See the section on re-enabling it below,
+  which is the one flip in this template with a security consequence.
 - **Nothing yet.** `oauth` and `totp_2fa` ship routers in `build_router()`'s
   always-on block, so their toggles do not currently remove anything;
   `usage_metering` and `outbound_webhooks` are Phase-2 slots; and T-290's
-  `public_api` and `enterprise_sso` are Phase-4 slots whose surface arrives
-  with T-310 and T-331 respectively. Toggling any of these today changes only
-  what `/api/v1/config` reports.
+  `enterprise_sso` is a Phase-4 slot whose surface arrives with T-331.
+  Toggling any of these today changes only what `/api/v1/config` reports.
 
 `backend/tests/modules/test_module_toggles.py`'s `MODULE_SURFACE` is the
 machine-readable version of this list, one entry per module, with a note

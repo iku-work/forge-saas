@@ -32,8 +32,10 @@ from app.core.dependencies import (
     require_recent_auth,
 )
 from app.core.envelope import Envelope, Meta
-from app.core.exceptions import PermissionDeniedError
+from app.core.exceptions import NotFoundError, PermissionDeniedError
+from app.core.principal import CurrentPrincipal, require_scope
 from app.middleware.rate_limit import api_limit
+from app.modules.api_keys.scopes import Scope
 from app.modules.auth.models import User
 from app.modules.auth.permissions import ROLE_PERMISSIONS, Permission
 from app.modules.tenancy.models import Membership, Organization
@@ -107,13 +109,49 @@ async def list_my_orgs(
     return Envelope(data=data, meta=Meta(request_id=_request_id(request)))
 
 
-@router.get("/orgs/{org_id}")
+# --- the public surface (T-311) ---------------------------------------------
+#
+# The two routes below are the *only* ones in this module an API key can call,
+# and `require_scope` is the whole of what says so. Every other route here
+# resolves a session through `get_org_membership`, unchanged, and rejects a
+# key outright.
+#
+# `require_scope` is dual-principal rather than key-only: a session passes it
+# by holding the Permission the scope maps onto (app.modules.api_keys.scopes),
+# which for both of these is MEMBERS_READ -- the permission every role already
+# has. So opening these to keys did not widen what any *user* can do, and that
+# is checked from the outside rather than asserted here.
+#
+# One thing did change, and it is worth knowing: these routes used to resolve
+# the organization and the membership together through TenancyService. The
+# membership check now lives in `require_scope`, so `list_members` stopped
+# loading an Organization row it never read -- one query fewer, which is why
+# its entry in tests/test_query_budgets.py went from 5 to 4.
+
+
+@router.get(
+    "/orgs/{org_id}",
+    description=(
+        "The organization record. Callable with an API key holding the "
+        "`orgs:read` scope, or with a session belonging to the organization."
+    ),
+)
 @api_limit
 async def get_org(
     request: Request,
-    org_and_membership: Annotated[tuple[Organization, Membership], Depends(get_org_membership)],
+    org_id: UUID,
+    principal: Annotated[  # noqa: ARG001 -- gates the route and proves org membership; the org comes from the path
+        CurrentPrincipal, Depends(require_scope(Scope.ORGS_READ))
+    ],
+    session: Annotated[AsyncSession, Depends(get_session)],
 ) -> Envelope[OrganizationPublic]:
-    org, _ = org_and_membership
+    org = await TenancyService(session).get_org(org_id)
+    if org is None:
+        # Not reachable through require_scope for a live membership or key --
+        # both are rows whose org_id points here -- but an organization
+        # soft-deleted between the two reads lands exactly here, and a 404 is
+        # the honest answer to "this organization is gone".
+        raise NotFoundError("errors.org_not_found", fallback="Organization not found")
     return Envelope(
         data=OrganizationPublic.model_validate(org), meta=Meta(request_id=_request_id(request))
     )
@@ -141,13 +179,20 @@ async def update_org(  # noqa: PLR0913 — redis (cache invalidation, T-240) on 
     )
 
 
-@router.get("/orgs/{org_id}/members")
+@router.get(
+    "/orgs/{org_id}/members",
+    description=(
+        "The organization's members, cursor-paginated. Callable with an API key "
+        "holding the `members:read` scope, or with a session belonging to the "
+        "organization."
+    ),
+)
 @api_limit
 async def list_members(  # noqa: PLR0913 — cursor pagination (§0.3) needs after+limit on top of the usual params
     request: Request,
     org_id: UUID,
-    membership: Annotated[  # noqa: ARG001 — required to gate on MEMBERS_READ; org comes from path
-        Membership, Depends(require_org_permission(Permission.MEMBERS_READ))
+    principal: Annotated[  # noqa: ARG001 — gates the route and proves org membership; org comes from path
+        CurrentPrincipal, Depends(require_scope(Scope.MEMBERS_READ))
     ],
     session: Annotated[AsyncSession, Depends(get_session)],
     after: Annotated[UUID | None, Query()] = None,

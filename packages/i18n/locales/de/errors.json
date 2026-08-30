@@ -78,5 +78,12 @@
   "maintenance": "Der Dienst ist vorübergehend wegen Wartungsarbeiten nicht verfügbar. Bitte versuchen Sie es in Kürze erneut.",
   "module_disabled": "{feature} ist vorübergehend nicht verfügbar. Bitte versuchen Sie es in Kürze erneut.",
   "signup_disabled": "Die Registrierung neuer Konten ist derzeit geschlossen.",
-  "invalid_product_setting": "Dieser Einstellungswert ist ungültig."
+  "invalid_product_setting": "Dieser Einstellungswert ist ungültig.",
+  "invalid_api_key": "Ungültiger oder abgelaufener API-Schlüssel.",
+  "missing_scope": "Dieser API-Schlüssel hat den Bereich „{scope}“ nicht.",
+  "unknown_scope": "Unbekannter Bereich: {scope}.",
+  "api_key_limit_reached": "Diese Organisation ist auf {limit} API-Schlüssel begrenzt.",
+  "api_key_expiry_in_the_past": "Das Ablaufdatum muss in der Zukunft liegen.",
+  "api_key_rate_limited": "Dieser API-Schlüssel hat sein Limit von {limit} Anfragen pro Minute überschritten.",
+  "invalid_org_header": "X-Org-ID ist keine gültige Kennung."
 }

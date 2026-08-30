@@ -48,8 +48,18 @@ at boot, whether or not you spelled the `requires` out yourself.
 | `usage_metering` | off | `billing` | Usage records and metered/reported quantities |
 | `outbound_webhooks` | off | `billing` | Customer-facing webhook endpoints and deliveries |
 | `marketing` | on | — | The `apps/marketing` build, and the generated Caddy block that serves it on its own host (T-290, T-307) |
-| `public_api` | off | — | API keys as a second kind of principal, `/api/v1/api-keys`, `api_key` (T-290) |
+| `public_api` | off | — | Org-scoped API keys, their management surface at `/api/v1/api-keys`, the `api_key` table, and the ability of a key to authenticate at all (T-290, T-310–T-312) |
 | `enterprise_sso` | off | `oauth` | Per-org OIDC/SAML sign-in, and `python3-saml`'s native `libxmlsec1` from the image (T-290) |
+
+`public_api` is the one whose toggle does something a routing table cannot
+show. Turning it off removes `/api/v1/api-keys` like any other module — but
+the two endpoints a key can *call* (`GET /api/v1/orgs/{org_id}` and its
+members list) belong to `tenancy` and stay registered, because a key is a
+second way to authenticate against endpoints the product already serves
+rather than a parallel API. What the toggle removes there is the key's ability
+to authenticate: `app/core/principal.py` checks it on the auth path, so a key
+minted while the module was on stops working the moment it is turned off, even
+though its row is still in a table that still exists.
 
 `marketing` is the only one that gates a *build* rather than a router:
 `apps/marketing`'s `build` script exits 0 without producing a `dist`, so a
@@ -86,7 +96,7 @@ later. Branch per module:
 |---|---|---|
 | `core` | always applied | auth, tenancy, audit, job records, product settings |
 | `billing` / `gdpr` / `notifications` / `file_storage` | the matching module | shipped |
-| `public_api` | `public_api` | arrives with the `api_key` table (T-310) |
+| `public_api` | `public_api` | shipped (T-310, the `api_key` table) |
 | `enterprise_sso` | `enterprise_sso` | arrives with the `sso_connection` table (T-331) |
 | `product` | yours | use your prefix range from the table above |
 
@@ -95,6 +105,24 @@ A new branch needs three edits together: the directory listed in
 `backend/app/core/migrations.py`'s `MODULE_BRANCHES`, and the module's tables
 in `backend/alembic/env.py`'s `MODULE_TABLES`. `marketing` gets none of them —
 it owns no tables.
+
+**`alembic check` on a product with a module turned off.** It will refuse:
+`Target database is not up to date`. That is not drift — it is alembic
+declining to compare anything while a *script* head is missing from
+`alembic_version`, and a disabled module's branch is a head `make migrate`
+deliberately never applies. Apply the disabled branches first, then check:
+
+```bash
+cd backend
+python -m alembic upgrade public_api@head   # each branch your product has off
+python -m alembic check
+```
+
+The extra tables that leaves behind are not drift either — `alembic/env.py`'s
+`include_object` excludes a disabled module's tables from the comparison,
+which is the same rule that lets you turn a module off without dropping its
+data. `backend/tests/test_conditional_migrations.py` does exactly this, for
+exactly this reason.
 
 Products: assign yourself a prefix block and document it here when you fork:
 

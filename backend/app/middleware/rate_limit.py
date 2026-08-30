@@ -1,6 +1,7 @@
 from uuid import uuid4
 
 from fastapi import FastAPI
+from limits.strategies import RateLimiter
 from slowapi import Limiter
 from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
@@ -53,6 +54,26 @@ limiter = Limiter(key_func=_key_func, storage_uri=str(_settings.REDIS_URL))
 auth_limit = limiter.limit(lambda: get_settings().AUTH_RATE_LIMIT)
 sensitive_limit = limiter.limit(lambda: get_settings().SENSITIVE_RATE_LIMIT)
 api_limit = limiter.limit(lambda: get_settings().API_RATE_LIMIT)
+
+
+def current_strategy() -> RateLimiter:
+    """The limiter's configured strategy, as one accessor rather than N
+    reaches into a private attribute.
+
+    T-312 needs the strategy itself, not the decorator: a per-key budget is
+    consumed inside a dependency that already knows which key it is, so it
+    calls `hit()`/`get_window_stats()` directly instead of asking slowapi to
+    derive an identity from the request. Everything else about the limiter --
+    the storage, the Redis URI, the fixed-window strategy -- is shared, which
+    is also what makes tests/conftest.py's `_rate_limit_storage` fixture (it
+    swaps `_storage` and `_limiter` on this singleton) cover both kinds of
+    limit with one swap.
+
+    The attribute is private in slowapi and there is no public alternative;
+    reading it in exactly one place is the containment.
+    """
+    strategy: RateLimiter = limiter._limiter  # noqa: SLF001 -- see the docstring
+    return strategy
 
 
 def register_rate_limiting(app: FastAPI) -> None:

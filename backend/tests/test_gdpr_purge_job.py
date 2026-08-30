@@ -18,6 +18,7 @@ of rows it created itself.
 """
 
 from collections.abc import AsyncGenerator
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from uuid import uuid4
 
@@ -32,6 +33,9 @@ from sqlalchemy.ext.asyncio import (
 from sqlmodel import SQLModel
 from testcontainers.postgres import PostgresContainer
 
+from app.core import module_loader
+from app.core.modules import ModuleConfig
+from app.modules.api_keys.models import ApiKey
 from app.modules.audit.models import AuditEvent
 from app.modules.auth.models import (
     EmailVerificationToken,
@@ -48,6 +52,7 @@ from app.modules.gdpr.models import ConsentRecord, DataExportJob
 from app.modules.tenancy.models import Membership, Organization
 from app.workers.jobs import gdpr as gdpr_job_module
 from app.workers.jobs.gdpr import purge_user_data
+from product import config as product_config
 
 _TABLES = [
     User.__table__,
@@ -63,6 +68,10 @@ _TABLES = [
     ConsentRecord.__table__,
     DataExportJob.__table__,
     AuditEvent.__table__,
+    # T-310. Created here even though `public_api` ships off -- the one test
+    # that needs it turns the module on, and the purge's own module check is
+    # what keeps the default configuration from touching it.
+    ApiKey.__table__,
 ]
 
 _DELETED_BY_USER_ID = (
@@ -277,6 +286,53 @@ async def test_purge_user_data_nulls_invited_by_on_other_memberships(
 
 
 # --- Stripe customer detachment ----------------------------------------------
+
+
+async def test_purge_user_data_nulls_created_by_and_keeps_the_organizations_keys(
+    session: AsyncSession, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """T-310. An API key belongs to the *organization*, not to the person who
+    minted it, so erasure nulls `created_by` and leaves the credential alive.
+
+    Deleting it would take an integration down because a colleague exercised
+    a right that has nothing to do with it -- which is also why
+    docs/runbooks/api-keys.md makes reviewing a leaver's keys an explicit
+    step rather than something the purge is assumed to have done.
+    """
+    monkeypatch.setattr(
+        product_config,
+        "MODULES",
+        replace(product_config.MODULES, public_api=ModuleConfig(enabled=True)),
+    )
+    module_loader.get_modules.cache_clear()
+
+    org = await _make_org(session)
+    user = await _make_user(session, "leaver@example.com")
+    key = ApiKey(
+        org_id=org.id,
+        name="billing-sync",
+        prefix="abcdef123456",
+        key_hash="f" * 64,
+        scopes=["orgs:read"],
+        created_by=user.id,
+    )
+    session.add(key)
+    await session.commit()
+    # Read the ids out before the purge: `expire_all()` below detaches every
+    # attribute, and touching one afterwards would emit a lazy load from sync
+    # context on an async session.
+    key_id, user_id = key.id, user.id
+
+    await purge_user_data({}, user_id=user_id)
+
+    session.expire_all()
+    surviving = await session.get(ApiKey, key_id)
+    assert surviving is not None, "erasing a member must not delete their org's credentials"
+    assert surviving.created_by is None
+    # ...and the user really is gone, so this is not a purge that silently
+    # did nothing.
+    assert await session.get(User, user_id) is None
+    module_loader.get_modules.cache_clear()
 
 
 async def test_purge_user_data_clears_stripe_customer_when_org_has_no_members_left(

@@ -29,8 +29,13 @@ MODULES = EnabledModules(
     # back to the app root.
     marketing=ModuleConfig(enabled=True),
     # Off removes the API-key surface entirely: no /api/v1/api-keys routes, no
-    # `api_key` table, no second kind of principal that can authenticate. Turn
-    # it on only when third parties actually need to call you.
+    # `api_key` table, and -- checked on the auth path rather than in the
+    # routing table -- no key can authenticate, even one minted while the
+    # module was on and whose row is still there. Turn it on only when third
+    # parties actually need to call you, and read
+    # docs/runbooks/module-toggle-guide.md before turning it back on for a
+    # second time: every previously issued key becomes live again the moment
+    # you do.
     public_api=ModuleConfig(enabled=False),
     # Off removes per-org OIDC/SAML sign-in (and keeps python3-saml's native
     # libxmlsec1 dependency out of the backend image). Requires oauth -- see

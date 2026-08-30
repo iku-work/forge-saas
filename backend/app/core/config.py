@@ -66,6 +66,18 @@ class Settings(BaseSettings):
     AUTH_RATE_LIMIT: str = "5/minute"
     SENSITIVE_RATE_LIMIT: str = "3/minute"
     API_RATE_LIMIT: str = "100/minute"
+    # T-312: the per-minute budget an API key gets, before any per-key
+    # override (ApiKey.rate_limit_per_minute). An integer rather than a
+    # slowapi limit string because this limit is not applied by slowapi's
+    # decorator -- app.modules.api_keys.rate_limit consumes it directly, from
+    # a dependency that already knows which key is calling. Read through
+    # get_settings() at request time, never bound at import: see that
+    # module's docstring, and app/middleware/rate_limit.py's, for the trap.
+    #
+    # 600/minute rather than API_RATE_LIMIT's 100: a server-to-server
+    # integration is not a browser, and a limit tuned for one person clicking
+    # is the limit an integration hits on its first backfill.
+    API_KEY_RATE_LIMIT_PER_MINUTE: int = 600
 
     # App
     ENVIRONMENT: Literal["dev", "staging", "prod"] = "dev"

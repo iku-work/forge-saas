@@ -38,8 +38,10 @@ from redis.asyncio import Redis
 from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.routing import BaseRoute
 
+from app.core.module_loader import is_enabled
 from app.main import app
 from app.models._mixins import utcnow
+from app.modules.api_keys.models import ApiKey
 from app.modules.audit.models import AuditEvent
 from app.modules.auth.models import OAuthAccount, User, WebAuthnCredential
 from app.modules.auth.models import Session as SessionModel
@@ -98,8 +100,14 @@ BUDGETS: dict[str, int] = {
     "list_my_orgs": 3,
     # Org-scoped: + the org row and the membership (the tenant-isolation
     # check, deliberately never cached -- see get_current_org).
-    "list_members": 5,
     "list_invitations": 5,
+    # One fewer than its neighbours, and the difference is T-311's: this route
+    # now resolves its principal through `require_scope`, which reads the
+    # membership (the isolation check) but *not* the Organization row -- which
+    # the endpoint never used. Opening a route to API keys made it cheaper for
+    # sessions too, which is the sort of thing worth noticing rather than
+    # absorbing.
+    "list_members": 4,
     "list_notifications": 5,
     # + the org's subscription/plan behind the feature-flag map.
     "list_feature_flags": 6,
@@ -119,6 +127,20 @@ BUDGETS: dict[str, int] = {
     "list_users": 2,
     "list_admin_audit_feed": 4,
 }
+
+# T-310. `public_api` ships off, so at the committed configuration
+# `list_api_keys` is not a route in this process and must not have a budget --
+# `test_every_budget_has_a_covering_endpoint_spec` pairs BUDGETS with ENDPOINTS
+# exactly, and an entry for a route that does not exist would be a spec that
+# can never run. In a product that turns the module on (and in CI's
+# module-matrix combination C) the route *is* registered, the meta-check below
+# demands a budget for it, and this is where it comes from. One condition
+# rather than two: the endpoint spec is added under the same `if` further
+# down, so the two halves cannot drift.
+if is_enabled("public_api"):
+    # Same shape as list_members: the maintenance check, get_current_user, the
+    # org row and the membership behind require_permission, and the page.
+    BUDGETS["list_api_keys"] = 5
 
 _SEED_FIRST = 3
 _SEED_SECOND = 27  # 3 + 27 = 30, past the default page cap of 20
@@ -328,6 +350,24 @@ async def _seed_notifications(world: World, n: int) -> None:
     await world.session.commit()
 
 
+async def _seed_api_keys(world: World, n: int) -> None:
+    """T-310. Rows are written directly rather than through ApiKeyService so
+    the seed costs one insert per key instead of a digest and a Redis round
+    trip -- what is being measured is the *read* path."""
+    for index in range(n):
+        world.session.add(
+            ApiKey(
+                org_id=world.org.id,
+                name=f"key {index}",
+                prefix=uuid4().hex[:12],
+                key_hash="0" * 64,
+                scopes=["orgs:read"],
+                created_by=world.owner.id,
+            )
+        )
+    await world.session.commit()
+
+
 async def _seed_files(world: World, n: int) -> None:
     for _ in range(n):
         world.session.add(
@@ -485,6 +525,9 @@ ENDPOINTS: list[ListEndpoint] = [
         "list_admin_audit_feed", "/api/v1/admin/audit", _seed_audit_events, as_superadmin=True
     ),
 ]
+
+if is_enabled("public_api"):
+    ENDPOINTS.append(ListEndpoint("list_api_keys", "/api/v1/api-keys", _seed_api_keys))
 
 
 # --- measurement ------------------------------------------------------------
