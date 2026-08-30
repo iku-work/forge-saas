@@ -1,0 +1,21 @@
+{
+  "$schema": "https://turbo.build/schema.json",
+  "extends": ["//"],
+  "tasks": {
+    // This app's build produces two things, not one: dist/, and the Caddy
+    // site blocks that serve it (T-307 -- caddy/dev/marketing.caddy and
+    // caddy/prod/marketing.caddy, written by scripts/caddy-site.mjs because
+    // the CSP names each inline script by hash). Both have to be listed as
+    // outputs or a cache *hit* restores dist/ and leaves the site blocks
+    // describing a previous build -- which means a CSP whose hashes match
+    // nothing being served, and a site with no working JavaScript and no
+    // error anybody sees. Same class of bug as api-client's stale dist next
+    // door, and the reason product.config.ts is a globalDependency.
+    "build": {
+      // Narrower than `caddy/**` on purpose: the two .gitkeep files are
+      // committed (docker-compose bind-mounts those directories, so they have
+      // to exist in a fresh clone) and are not this task's to produce.
+      "outputs": ["dist/**", "caddy/*/*.caddy"]
+    }
+  }
+}

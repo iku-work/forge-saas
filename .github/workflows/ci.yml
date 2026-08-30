@@ -300,6 +300,12 @@ jobs:
         # zero-JavaScript landing page, the hydrated island, and the module
         # guard. It rebuilds apps/marketing/dist itself, so it neither needs
         # nor disturbs the `pnpm build` above.
+        #
+        # Two cases in tests/caddy.test.ts additionally run `caddy validate`
+        # in a container over the real Caddyfiles and the site block T-307's
+        # build generates -- string matching cannot tell you whether Caddy
+        # would actually load a config. They skip themselves when no Docker
+        # daemon answers, which is a developer machine, not this runner.
         run: pnpm --filter marketing test
 
       - name: i18n package tests
@@ -558,7 +564,57 @@ jobs:
             echo "marketing is disabled but apps/marketing/dist was built anyway — is scripts/guard-enabled.mjs still wired into apps/marketing's build script?" >&2
             exit 1
           fi
-          echo "marketing=$enabled, dist present: $([ -d apps/marketing/dist ] && echo yes || echo no)"
+          # T-307: and the generated Caddy site block goes with it. "Absent"
+          # is the requirement, not "present and 404ing" -- the Caddyfile
+          # imports the directory as a glob, so a missing file is a warning
+          # in Caddy's log and an app host that is completely unaffected.
+          blocks=$(ls apps/marketing/caddy/*/*.caddy 2>/dev/null | wc -l)
+          if [ "$enabled" = "true" ] && [ "$blocks" -ne 2 ]; then
+            echo "marketing is enabled but the build wrote $blocks Caddy site block(s), expected 2" >&2
+            exit 1
+          fi
+          if [ "$enabled" = "false" ] && [ "$blocks" -ne 0 ]; then
+            echo "marketing is disabled but $blocks Caddy site block(s) are still there — is scripts/guard-enabled.mjs still removing them?" >&2
+            exit 1
+          fi
+          echo "marketing=$enabled, dist present: $([ -d apps/marketing/dist ] && echo yes || echo no), Caddy blocks: $blocks"
+
+      # The other half of the same requirement, and the one a file listing
+      # cannot make: that the *edge* still comes up. Caddy only -- no backend,
+      # no database -- because what is being tested is the config it loads,
+      # and `pnpm build` above has already produced the apps/web/dist it
+      # serves. With combination B (marketing off) this is the case the task
+      # names explicitly: the failure to avoid is a disabled marketing module
+      # taking the product's own host down with it.
+      - name: The edge boots and serves the app for this combination (T-307)
+        run: |
+          set -euo pipefail
+          docker compose up -d --no-deps caddy
+          for i in $(seq 1 30); do
+            curl -sfk https://localhost/ -o /dev/null && break
+            sleep 1
+          done
+          curl -sfk https://localhost/ | grep -q '<div id="root">'
+
+          enabled=$(cd backend && python -c \
+            "from product.config import MODULES; print(str(MODULES.marketing.enabled).lower())")
+          status=$(curl -sk --resolve marketing.localhost:443:127.0.0.1 \
+            -o /dev/null -w '%{http_code}' https://marketing.localhost/en/ || true)
+          echo "marketing=$enabled, marketing host answered: $status"
+          if [ "$enabled" = "true" ] && [ "$status" != "200" ]; then
+            echo "marketing is enabled but its host did not serve /en/" >&2
+            docker compose logs caddy
+            exit 1
+          fi
+          if [ "$enabled" = "false" ] && [ "$status" = "200" ]; then
+            echo "marketing is disabled but its host answered anyway" >&2
+            docker compose logs caddy
+            exit 1
+          fi
+
+      - name: Tear down the edge
+        if: always()
+        run: docker compose down -v
 
       # Same dance as the module-generator smoke in `test`: this job works
       # against a dirty checkout, so it puts the checkout back the way it
@@ -1304,6 +1360,60 @@ jobs:
           echo "caddy/backend did not report ready" >&2
           docker compose logs caddy backend
           exit 1
+
+      # T-307: marketing on its own host, in the same stack the app's own E2E
+      # suite is about to run against -- which is what makes "the app host is
+      # unaffected" something this job proves rather than assumes. Runs before
+      # Playwright so a broken edge is reported as a broken edge rather than
+      # as forty failing specs.
+      #
+      # `curl --resolve` rather than an /etc/hosts entry: no sudo, no DNS
+      # assumption about whether this runner resolves *.localhost, and the
+      # same command on every machine. The site block being served here is the
+      # generated one (apps/marketing/scripts/caddy-site.mjs, written by the
+      # `pnpm build` above and bind-mounted into the container).
+      - name: Both hosts serve their own site (T-307)
+        run: |
+          set -euo pipefail
+          marketing() { curl -sk --resolve marketing.localhost:443:127.0.0.1 "$@"; }
+
+          echo "--- the app host is still the app"
+          curl -sfk https://localhost/ | grep -q '<div id="root">'
+
+          echo "--- the marketing host serves marketing, over its own TLS leaf"
+          marketing -f https://marketing.localhost/en/ | grep -q '<html lang="en"'
+
+          headers=$(marketing -D- -o /dev/null https://marketing.localhost/en/ | tr -d '\r')
+          echo "$headers"
+
+          echo "--- its own CSP, with hashes rather than 'unsafe-inline'"
+          csp=$(echo "$headers" | grep -i '^content-security-policy:')
+          echo "$csp" | grep -q "script-src 'self' 'sha256-"
+          if echo "$csp" | grep -qi "script-src[^;]*unsafe-inline"; then
+            echo "the marketing CSP allows inline script" >&2
+            exit 1
+          fi
+
+          echo "--- HTML is short-lived; a content-addressed asset is immutable"
+          echo "$headers" | grep -qi '^cache-control: public, max-age=300'
+          page=$(marketing https://marketing.localhost/en/)
+          asset=$(printf '%s' "$page" | grep -o '/_astro/[A-Za-z0-9._-]*\.css' | sort -u | head -1)
+          marketing -D- -o /dev/null "https://marketing.localhost$asset" \
+            | tr -d '\r' | grep -qi '^cache-control: public, max-age=31536000, immutable'
+
+          echo "--- this build is not the production origin, so: noindex"
+          echo "$headers" | grep -qi '^x-robots-tag: noindex'
+
+          echo "--- marketing sets no cookies at all"
+          if echo "$headers" | grep -qi '^set-cookie:'; then
+            echo "the marketing host set a cookie" >&2
+            exit 1
+          fi
+
+          echo "--- a locale-less URL is redirected, not 404ed"
+          location=$(marketing -o /dev/null -w '%{redirect_url}' \
+            -H 'Accept-Language: de-DE,de;q=0.9' https://marketing.localhost/pricing/)
+          test "$location" = "https://marketing.localhost/de/pricing/"
 
       - name: Run Playwright (chromium + webkit)
         working-directory: apps/web

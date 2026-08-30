@@ -8,8 +8,8 @@ before changing anything structural here.
 
 Built by T-300, with the content surface added by T-301, the meta block by
 T-302, the structured data by T-303 and `robots.txt` plus the sitemap filter by
-T-304, and the locale prefix policy plus its `hreflang` annotations by T-305.
-T-306 and T-307 add the Lighthouse budget and the Caddy host.
+T-304, the locale prefix policy plus its `hreflang` annotations by T-305, the
+Lighthouse budget by T-306, and the host it is actually served on by T-307.
 
 ## Dependencies, and why each one is here
 
@@ -94,6 +94,7 @@ pnpm --filter marketing preview      # serve the built dist/
 pnpm --filter marketing type-check   # astro check
 pnpm --filter marketing test         # build-output assertions (runs real builds)
 pnpm --filter marketing og-image     # redraw public/og-default.png from primaryColor
+node scripts/caddy-site.mjs          # rewrite the Caddy site blocks from ./dist
 ```
 
 `PUBLIC_SITE_URL` sets the absolute origin the site is served from — every URL
@@ -106,6 +107,57 @@ fallback, so a fresh checkout builds without an env file.
 `pnpm --filter marketing test` runs several real builds and one real dev
 server, so it takes about a minute. That is the cost of asserting over `dist/`
 rather than over a component in isolation.
+
+## Serving it
+
+**Separate hosts, not a path split.** Marketing answers on
+`marketing.localhost` locally and on `{$MARKETING_DOMAIN}` — the apex — in
+production; the app keeps `localhost` and `app.<domain>`. The alternative would
+have meant moving every `apps/web` route under `/app/*`, which is TanStack
+Router's basepath, every Playwright spec, every invite link and every
+transactional email URL, or else maintaining an allowlist of marketing path
+prefixes in Caddy. Keeping `localhost` as the app is what lets every existing
+E2E spec, ZAP config and k6 target carry on unchanged.
+
+**The site block is generated**, into `caddy/dev/` and `caddy/prod/`, by
+`scripts/caddy-site.mjs` on every build — see [`caddy/README.md`](caddy/README.md).
+The repo-root `Caddyfile` and `Caddyfile.prod` pull it in with
+`import /etc/caddy/conf.d/*.caddy`, a glob, so a checkout that has never built
+the frontend and a product with `modules.marketing: false` both boot an edge
+that serves the app and has no marketing host at all. That is the requirement:
+absent, not present and 404ing.
+
+**Its headers are its own**, not the app's `default-src 'self'` from
+`backend/app/middleware/security_headers.py`, which describes JSON API
+responses. `script-src` is `'self'` plus a SHA-256 hash per inline script —
+which is why the block has to be generated — and never `'unsafe-inline'`.
+`style-src` does allow inline style and cannot avoid it: shiki emits a
+`style="color:#…"` attribute per token in every fenced code block, and a CSP
+hash cannot cover a style *attribute*.
+
+**Cache-Control follows the filename.** `/_astro/*` is content-addressed, so
+those bytes can never change under a URL: one year, `immutable`. Everything
+else — HTML, `robots.txt`, the sitemap, the OG card — is mutable at a stable
+URL and gets five minutes.
+
+**A locale-less URL gets a 302, not a 301.** The target depends on
+`Accept-Language`, and a 301 is cached per-URL by the browser, which would pin
+the first visitor's language onto everyone who used that machine afterwards.
+`Vary: Accept-Language` is on the same block. Two passes approximate
+`navigator.languages`: the visitor's first tag, then any tag further down their
+list, then the product's default.
+
+To see it locally, build the frontend first and then bring the stack up — Caddy
+serves `dist/` from a bind mount, exactly as it serves `apps/web/dist`:
+
+```bash
+pnpm build && make dev
+curl -k --resolve marketing.localhost:443:127.0.0.1 https://marketing.localhost/en/
+```
+
+A browser needs `marketing.localhost` to resolve. Chrome and Firefox map
+`*.localhost` to loopback on their own; on Windows, and for anything that goes
+through the OS resolver, add `127.0.0.1 marketing.localhost` to your hosts file.
 
 ## Routes and content
 
@@ -143,7 +195,13 @@ against the enabled ones and falls back to the default; the app's other two
 inputs — a signed-in user's stored preference and an in-session choice — do not
 exist on a static, session-less origin that (T-307) is not even the same origin
 as the app. `/` also renders a language chooser, so the page works without
-JavaScript. **T-307 should promote this to a 301 at the edge.**
+JavaScript.
+
+**T-307 promoted that to a redirect at the edge**, so a locale-less URL is
+answered with a 302 rather than with a 404 and a rewrite — see "Serving it"
+below for why 302 and not the 301 the note originally asked for. The component
+stays: it is what any *other* static host does, and it is what answers `/` if
+the edge rule is ever removed.
 
 **Sign-in and sign-up links carry the locale.** `appLink(path, locale)` in
 `src/lib/product.ts` takes it as a required argument rather than defaulting,
@@ -235,10 +293,12 @@ URLs that are actually in the sitemap, so they cannot advertise a translation
 nobody wrote — the same rule the `hreflang` tags in the head follow, arrived at
 from the other end.
 
-**The half T-304 cannot do:** `X-Robots-Tag: noindex` on non-production hosts.
-It is a response header, marketing has no served host until T-307, and T-307's
-task carries the requirement. `robots.txt` is the half that needs no server
-configuration, and it is done.
+**The half T-304 could not do** was `X-Robots-Tag: noindex` on non-production
+hosts — a response header needs a served host. T-307's generated site block
+sends it: unconditionally in the local stack, and in production for any host
+that is not `PRODUCTION_ORIGIN`'s. That is deliberately a rule about the host
+in the request rather than about the build, so a *production* build deployed to
+staging is still covered.
 
 ## The meta block
 
@@ -346,14 +406,19 @@ every left angle bracket as its JSON unicode escape, which closes both ways out
 of a raw-text element — a closing script tag and a comment opener. A blog post
 about exactly that is one of the test fixtures.
 
-**These blocks need no CSP exception.** A `<script>` whose `type` is not a
-JavaScript MIME type is a *data block* in the HTML spec: the browser never
-prepares or executes it, so `script-src` does not gate it and no nonce or hash
-is involved. T-307 owns marketing's header; what it must not do is forbid
-inline markup wholesale.
+**These blocks need no CSP exception**, and that is now measured rather than
+reasoned. A `<script>` whose `type` is not a JavaScript MIME type is a *data
+block* in the HTML spec: the browser never prepares or executes it, so
+`script-src` does not gate it and no nonce or hash is involved. T-307's policy
+is `script-src 'self'` plus three hashes and nothing else, and every page loads
+under it in Chromium with no violation reported and the JSON-LD present in the
+DOM. Which is load-bearing: 51 pages carry a unique payload, so hashing them
+would mean a CSP that changes whenever anybody edits a headline.
 
-**Google's Rich Results Test needs a public URL**, which this repository does
-not have until T-307 puts the site on a host. What can be a build gate instead
+**Google's Rich Results Test needs a *public* URL**, which a `.localhost` host
+served from a laptop still is not — T-307 puts the site on a host, but pointing
+the hosted tool at it is a thing to do once after the first real deploy. What
+can be a build gate instead
 is the part of that tool which reports *errors*: `tests/structured-data.test.ts`
 carries a table of the properties Google documents as required per type and
 walks every node on every built page against it. It is why

@@ -53,6 +53,7 @@ boundary ① — same API, same auth, no separate trust path.
 | # | Boundary | Crosses from → to | Control |
 |---|---|---|---|
 | ① | Public internet → Caddy | Untrusted client → edge | TLS termination, HSTS (`Caddyfile.prod`); `/metrics` blocked externally |
+| ① | Public internet → Caddy, marketing host | Untrusted client → edge | A second public hostname (T-307), serving `apps/marketing/dist` and nothing else: no backend behind it, no session, no `Set-Cookie`. Its own CSP, HSTS and `X-Robots-Tag` come from the site block that app's build generates. The app's refresh cookie is `__Host-` prefixed and host-scoped, so a browser never sends it here — deliberately, and asserted in `backend/tests/test_caddy_config.py` |
 | ① | Caddy → Backend | Edge → application | Plain HTTP, but confined to the docker-internal network (`forge-net`) — never reachable from outside the compose network |
 | ② | Backend/Worker → Postgres/Redis | Application → data store | Credentialed DSNs (`DATABASE_URL`, `REDIS_URL`), required with no default (`backend/app/core/config.py`) — see V1.9.1/V9.2.2 in [ADR-0001](../adr/0001-security-baseline.md) for the TLS-in-transit caveat on this hop |
 | ③ | Backend → Object storage | Application → third-party storage | Files are never proxied through the backend; clients get short-lived presigned URLs (`backend/app/modules/storage/service.py`) and talk to S3/R2/MinIO directly |

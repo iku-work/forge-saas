@@ -96,6 +96,21 @@ class Settings(BaseSettings):
     ALLOWED_ORIGINS: list[str] = []
     LOG_LEVEL: str = "INFO"
     DOMAIN: str = "localhost"  # used by Caddyfile.prod ($DOMAIN) and link generation
+    # T-307: the *marketing* host, which is a different one -- the apex, with
+    # the app on `app.`. Read by Caddyfile.prod's generated marketing block
+    # ($MARKETING_DOMAIN) and nothing in this process, but it has to be
+    # declared here all the same: the caddy service loads backend/.env, and
+    # Settings forbids extra keys, so an undeclared MARKETING_DOMAIN in that
+    # file would stop the *backend* from booting.
+    #
+    # Never blank. Caddy substitutes an env var that is set-but-empty as the
+    # empty string rather than falling back to the `{$MARKETING_DOMAIN:...}`
+    # default, which leaves a site block with no address -- and Caddy then
+    # reads its opening brace as a global-options block and refuses to start
+    # the *whole* edge, app host included (measured, not assumed). The default
+    # here is a `.localhost` name so that the failure mode of forgetting this
+    # setting is a marketing host nobody can resolve.
+    MARKETING_DOMAIN: str = "marketing.localhost"
     FRONTEND_URL: str = "http://localhost:5173"  # base URL for links in transactional emails
     # T-261: the custom URL scheme the mobile app registers (apps/mobile/app.json's
     # `expo.scheme`). Only the impersonation handoff deep link is built from it

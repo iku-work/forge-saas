@@ -23,6 +23,7 @@ import { createRequire } from "node:module";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { removeCaddySites } from "./caddy-site.mjs";
 import { loadProductConfig, PRODUCT_CONFIG_PATH } from "./product-config.mjs";
 
 const APP_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
@@ -74,6 +75,19 @@ async function main() {
   if (existsSync(dist)) {
     rmSync(dist, { recursive: true, force: true });
     console.log("marketing is disabled in product.config.ts — removed a stale dist/");
+  }
+
+  // And the two Caddy site blocks the build writes (T-307), for the same
+  // reason and in the same breath: with the module off, the requirement is
+  // that the marketing block is *absent* from the config Caddy loads -- not
+  // that it is present and serving an empty directory. The repo-root
+  // Caddyfiles import this directory as a glob, so removing the files is all
+  // it takes; the app host is untouched either way.
+  const removed = await removeCaddySites();
+  if (removed.length > 0) {
+    console.log(
+      `marketing is disabled in product.config.ts — removed ${removed.length} stale Caddy site block(s)`,
+    );
   }
   console.log(`marketing is disabled in product.config.ts — skipping \`astro ${args.join(" ")}\``);
 }

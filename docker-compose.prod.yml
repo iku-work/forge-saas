@@ -191,6 +191,13 @@ services:
     volumes:
       - ./Caddyfile.prod:/etc/caddy/Caddyfile
       - caddy_data:/data
+      # T-307: apps/marketing's built output and the site block that serves
+      # it, both produced on the host by `pnpm build` before this stack comes
+      # up. Read-only, and both absent when `modules.marketing` is false --
+      # the Caddyfile imports the directory as a glob, so an empty one leaves
+      # the app's own block above untouched.
+      - ./apps/marketing/dist:/srv/marketing:ro
+      - ./apps/marketing/caddy/prod:/etc/caddy/conf.d:ro
     ports:
       - "80:80"
       - "443:443"

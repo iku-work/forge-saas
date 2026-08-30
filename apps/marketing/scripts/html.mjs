@@ -1,13 +1,14 @@
 /**
  * Reading built HTML from Node, in the one place that knows how (T-302, T-304).
  *
- * Two build gates walk `dist/` after every `astro build` and ask questions of
+ * Several scripts walk `dist/` after every `astro build` and ask questions of
  * the markup: `check-seo.mjs` wants the title, the description and the
  * canonical; `check-indexing.mjs` wants the robots directive, so a page that
- * opted out of indexing cannot also be listed in the sitemap. They need the
- * same three primitives — find the head, find the tags with a given name,
- * read an attribute off one — and a second copy of those would be a second
- * set of the escaping mistakes below.
+ * opted out of indexing cannot also be listed in the sitemap; `caddy-site.mjs`
+ * (T-307) wants the text of every inline script, to hash it into a CSP. They
+ * need the same few primitives — find the head, find the tags with a given
+ * name, read an attribute off one, read an element's contents — and a second
+ * copy of those would be a second set of the escaping mistakes below.
  *
  * This is deliberately not an HTML parser. It reads a document this app
  * generated, in a build that has already type-checked the components that
@@ -73,6 +74,27 @@ export function tagsNamed(fragment, name) {
   return [...fragment.matchAll(TAG)]
     .filter((match) => match[1]?.toLowerCase() === name)
     .map((match) => match[0]);
+}
+
+/**
+ * Every `<name>...</name>` element in a document, as its start tag and the
+ * exact text between the tags.
+ *
+ * The text is returned byte-for-byte, with nothing trimmed, because T-307
+ * hashes it: a CSP `'sha256-...'` source covers the script's content as the
+ * parser saw it, and a helper that tidied whitespace would produce digests
+ * that match nothing a browser computes.
+ *
+ * Non-greedy to the first closing tag, which is what the HTML parser does
+ * too: a `</script>` inside a payload really does end the block, and T-303
+ * escapes the one place this site can emit one.
+ */
+export function inlineBlocks(html, name) {
+  const pattern = new RegExp(`<${name}((?:[^>"]|"[^"]*")*)>([\\s\\S]*?)</${name}\\s*>`, "gi");
+  return [...html.matchAll(pattern)].map((match) => ({
+    tag: `<${name}${match[1] ?? ""}>`,
+    content: match[2] ?? "",
+  }));
 }
 
 /** Every `.html` file under `dir`, as paths relative to it, in a stable order. */

@@ -4,6 +4,7 @@ import react from "@astrojs/react";
 import tailwindcss from "@tailwindcss/vite";
 import { defineConfig } from "astro/config";
 
+import { caddySite } from "./scripts/caddy-site.mjs";
 import { checkBudget } from "./scripts/check-budget.mjs";
 import { checkHreflang } from "./scripts/check-hreflang.mjs";
 import { indexing } from "./scripts/check-indexing.mjs";
@@ -98,6 +99,11 @@ export default defineConfig({
     // see that file for why the page it injects lives under tests/fixtures/
     // rather than under src/pages/.
     ...lighthouseFixture(),
+    // T-307, and last of all: this one *writes*. Every gate above can fail
+    // the build, and a Caddy site block describing output that was rejected
+    // is worse than no site block at all -- so it is produced only once
+    // nothing else has objected.
+    caddySite(),
   ],
 
   vite: {

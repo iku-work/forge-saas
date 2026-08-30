@@ -6757,15 +6757,21 @@ For each of `packages/{ui,api-client,types,hooks,validation,utils}`:
       App result requires one of `offers`, `aggregateRating` or `review`, and
       this template has no honest ratings to give. Run the hosted tool once
       after T-307 and tick this
-- [ ] No CSP violation on any page — **not verifiable from here** for the same
-      reason: marketing has no served host and therefore no CSP header yet
-      (the app's `default-src 'self'` lives in
-      `backend/app/middleware/security_headers.py` and covers API responses
-      only). Worth knowing before T-307 writes one, because the plan's premise
-      above is wrong: a `<script>` whose `type` is not a JavaScript MIME type
-      is a *data block* in the HTML spec — never prepared, never executed — so
+- [x] No CSP violation on any page — verified in a browser against the real
+      edge once T-307 gave marketing a host and a header. Chromium, through
+      Caddy, over six pages (landing, pricing with its island, a post, a guide,
+      the `ar` RTL page, the 404): zero `securitypolicyviolation` events, the
+      JSON-LD blocks present in the DOM, and the pricing island hydrated and
+      interactive. The premise in the plan above was wrong and this confirms
+      it: a `<script>` whose `type` is not a JavaScript MIME type is a *data
+      block* in the HTML spec — never prepared, never executed — so
       `script-src` does not gate these blocks and they need no nonce or hash.
-      What would break them is a header forbidding inline markup wholesale
+      Which is load-bearing, because 51 pages carry a unique payload each and
+      hashing them would mean a policy that changes whenever anybody edits a
+      headline. **Mutation-checked from the other side**: stripping the three
+      hashes out of the served `script-src` makes Chromium block the island's
+      scripts and name the exact digests the generator computed, so the policy
+      is demonstrably enforced rather than merely present
 
 ---
 
@@ -6799,16 +6805,18 @@ For each of `packages/{ui,api-client,types,hooks,validation,utils}`:
       directory with one thing broken in it at a time (mutation-checked). The
       `Sitemap:` line points at `/sitemap-index.xml`: `@astrojs/sitemap` always
       writes an index plus numbered chunks and never a `sitemap.xml`
-- [ ] Staging serves `noindex` from both the header and robots.txt — **the
-      robots.txt half is done and the header half is T-307's**, which is where
-      the requirement is already written down. Indexing is opt-in: a build is
+- [x] Staging serves `noindex` from both the header and robots.txt — the
+      robots.txt half was done here and T-307 added the header, in the site
+      block its build generates. Locally the header is unconditional (no local
+      stack is production); in production it is a matcher on the *host in the
+      request* rather than on the build — `@not_production not host <the
+      PRODUCTION_ORIGIN host>` — which also covers the case a build-time
+      decision gets wrong: a production build deployed to staging. Indexing is
+      opt-in: a build is
       offered to crawlers only when `PUBLIC_SITE_URL` matches the
       `PRODUCTION_ORIGIN` declared in `src/config/indexing.ts`, and every other
       build serves `Disallow: /`, offers no sitemap, and says so in the build
-      log. The header cannot be delivered here for the same reason T-303's CSP
-      box could not be — marketing has no served host and therefore no response
-      headers until T-307. Tick this once that host sets `X-Robots-Tag` on the
-      same condition. Note also that a page-level `noindex` meta was
+      log. Note also that a page-level `noindex` meta was
       *deliberately* not added on staging builds: it is redundant behind
       `Disallow: /` (a crawler forbidden to fetch the page never reads its
       meta), and it would make T-306's Lighthouse SEO assertion fail on every
@@ -6854,9 +6862,12 @@ For each of `packages/{ui,api-client,types,hooks,validation,utils}`:
       has only the last of those. `src/components/LocaleRedirect.astro` applies
       the same order minus the tiers that do not exist, on `/` and on the 404,
       which is the one file a static host can fall back to for `/pricing`. It
-      is a 200 plus a client-side rewrite rather than a 301; **T-307's Caddy
-      block should issue the 301 on the same rule**, exactly as T-233 leaves
-      the same note for an SSR layer
+      is a 200 plus a client-side rewrite rather than a 301, exactly as T-233
+      leaves the same note for an SSR layer. **T-307's Caddy block now issues
+      the redirect at the edge** — a 302 with `Vary: Accept-Language`, not the
+      301 this note asked for, because the target depends on a request header
+      and a 301 is cached per-URL by the browser. The component stays as the
+      fallback any other static host would use
 - [x] No `hreflang` anywhere points at a URL that 404s or serves another
       language — as a build gate rather than a review item.
       `scripts/check-hreflang.mjs` runs on `astro:build:done` and fails on an
@@ -6934,8 +6945,62 @@ For each of `packages/{ui,api-client,types,hooks,validation,utils}`:
 
 **Done when**
 
-- [ ] Existing Playwright, ZAP and k6 targets pass unchanged
-- [ ] `docs/runbooks/deploy-render.md` documents the second host and its DNS
+- [x] Existing Playwright, ZAP and k6 targets pass unchanged — by construction
+      and then by assertion. The app keeps `localhost` and the marketing site
+      gets `marketing.localhost` with its own `tls internal` leaf, so no
+      existing target's URL moves; the app's site block is not edited at all.
+      What is added to the repo-root `Caddyfile` is one line,
+      `import /etc/caddy/conf.d/*.caddy`, and the marketing block itself is
+      **generated** into `apps/marketing/caddy/{dev,prod}/` by that app's build
+      (`scripts/caddy-site.mjs`) rather than committed — because its
+      `Content-Security-Policy` names each inline script by SHA-256 digest and
+      its locale redirects follow `product.config.ts`, so only a copy produced
+      from the `dist/` being served can be right. A glob import that matches
+      nothing is a warning in Caddy's log rather than a fatal config error,
+      which is what makes "the module is off" and "this stack never built the
+      frontend" (the ZAP baseline job, a fresh clone) the same, safe
+      configuration. `e2e-web` proves it in the stack Playwright then runs
+      against: both hosts over TLS, the CSP with hashes and no
+      `'unsafe-inline'`, `immutable` on a content-addressed asset and five
+      minutes on the HTML, `X-Robots-Tag` on this non-production build, no
+      `Set-Cookie` from marketing at all, and a locale-less `/pricing/`
+      answered with a 302 to `/de/pricing/` for a German visitor
+- [x] `docs/runbooks/deploy-render.md` documents the second host and its DNS —
+      a "The second host" section: the two records, the two certificates, why
+      `MARKETING_DOMAIN` must never be blank (Caddy substitutes a set-but-empty
+      env var as the empty string rather than using the `{$VAR:default}`, which
+      leaves a site block with no address and stops the **whole edge**, app
+      host included — measured against `caddy:2-alpine`, which is why
+      `backend/.env.example` ships a `.localhost` name rather than an empty
+      value), the build-before-boot ordering that keeps `dist/` and the block
+      in step, the two settings that decide whether the site is indexable, and
+      a `curl --resolve` recipe for checking a deploy before DNS reaches you
+
+**Three decisions worth knowing, all in `scripts/caddy-site.mjs`'s comments**
+
+- **`style-src` allows `'unsafe-inline'` and `script-src` does not.** Shiki
+  emits a `style="color:#…"` attribute per token in every fenced code block
+  (T-301's guides), and a CSP hash cannot cover a style *attribute* —
+  `'unsafe-hashes'` needs one hash per distinct value, of which there are
+  hundreds, and `style-src-attr` would scope the exemption correctly but
+  Firefox does not implement it and falls back to `style-src`, so that spelling
+  leaves every code block unstyled for a large minority of visitors. Inline CSS
+  on a site with no user input and no session is the cheapest thing on the page
+  to give up; inline *script* is not, so it is bought by hash.
+- **The locale-less redirect is a 302, not the 301 T-305's note asked for.**
+  The target depends on `Accept-Language`, and a 301 is cached per-URL by the
+  browser — it would pin the first visitor's language onto everyone who used
+  that machine afterwards. `Vary: Accept-Language` rides along. Two passes
+  approximate `navigator.languages`: the visitor's first tag, then any tag
+  further down their list, then the product's default. Neither reads `q=`
+  values (Caddy's matchers cannot, and browsers emit tags in preference order
+  anyway), and where the approximation is wrong the visitor lands on a language
+  they did list.
+- **`caddy/*/*.caddy` is a turbo output** (`apps/marketing/turbo.json`).
+  Without that, a cache *hit* restores `dist/` and leaves the site blocks
+  describing the build before it — a CSP whose hashes match nothing being
+  served, which is a site with no working JavaScript and no error anybody sees.
+  Same shape as the stale-generated-client bug next door.
 
 ---
 

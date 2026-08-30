@@ -19,6 +19,12 @@ dev:
 	@(command -v open >/dev/null 2>&1 && open https://localhost) || \
 	 (command -v xdg-open >/dev/null 2>&1 && xdg-open https://localhost) || \
 	 echo "Visit https://localhost (self-signed cert — your browser will warn once)"
+	# T-307: apps/marketing is a second host, served from its own bind mount.
+	# Only there once `pnpm build` has produced apps/marketing/dist and the
+	# site block beside it -- same as apps/web/dist, and silent when the
+	# marketing module is off.
+	@[ -f apps/marketing/caddy/dev/marketing.caddy ] && \
+	 echo "Marketing: https://marketing.localhost (add '127.0.0.1 marketing.localhost' to your hosts file if it does not resolve)" || true
 
 down:
 	docker compose down

@@ -33,6 +33,13 @@ coverage/storybook/
 # Playwright (T-220)
 playwright-report/
 
+# Caddy site blocks for apps/marketing (T-307) -- written by that app's own
+# build from the dist/ it just produced (the CSP names each inline script by
+# hash, so only a generated copy can be right) and deleted again when
+# modules.marketing is false. The two directories themselves are committed,
+# with a .gitkeep each, because docker-compose bind-mounts them.
+apps/marketing/caddy/*/*.caddy
+
 # Lighthouse CI (T-306) -- collected runs and the HTML/JSON reports the
 # marketing budget job uploads as a build artifact.
 .lighthouseci/

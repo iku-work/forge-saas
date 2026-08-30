@@ -47,13 +47,16 @@ at boot, whether or not you spelled the `requires` out yourself.
 | `multi_org` | on | — | The org switcher; users stay pinned to one organisation |
 | `usage_metering` | off | `billing` | Usage records and metered/reported quantities |
 | `outbound_webhooks` | off | `billing` | Customer-facing webhook endpoints and deliveries |
-| `marketing` | on | — | The `apps/marketing` build and the Caddy block serving it (T-290) |
+| `marketing` | on | — | The `apps/marketing` build, and the generated Caddy block that serves it on its own host (T-290, T-307) |
 | `public_api` | off | — | API keys as a second kind of principal, `/api/v1/api-keys`, `api_key` (T-290) |
 | `enterprise_sso` | off | `oauth` | Per-org OIDC/SAML sign-in, and `python3-saml`'s native `libxmlsec1` from the image (T-290) |
 
 `marketing` is the only one that gates a *build* rather than a router:
 `apps/marketing`'s `build` script exits 0 without producing a `dist`, so a
-repo-root `turbo build` stays green for a product that turned it off.
+repo-root `turbo build` stays green for a product that turned it off. It also
+removes the Caddy site block that build generates, so the edge comes up with no
+marketing host and an app host that is completely unaffected — absence, rather
+than a host that exists and 404s.
 
 Your combination is tested, not assumed. CI's `module-matrix` job runs three
 of them from scratch — migrate from an empty database, boot, `GET

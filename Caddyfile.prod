@@ -12,3 +12,36 @@
 http://{$DOMAIN} {
 	redir https://{$DOMAIN}{uri} 301
 }
+
+# T-307: apps/marketing, on its own host.
+#
+# `{$MARKETING_DOMAIN}` -- the apex domain, with the app on `app.` -- separate
+# hosts, not a path split. A path split would mean moving every apps/web route
+# under /app/* (breaking TanStack Router's basepath, every Playwright spec,
+# every invite link and every transactional email URL) or maintaining an
+# allowlist of marketing path prefixes here. Neither is worth it, and leaving
+# `{$DOMAIN}` above to the app alone is what lets every existing E2E spec, ZAP
+# config, k6 target and transactional email URL carry on working untouched.
+#
+# `MARKETING_DOMAIN` is read from backend/.env, the same env file this
+# service already loads for `DOMAIN` (see docker-compose.prod.yml). Leaving it
+# unset serves marketing on a `.localhost` name nobody resolves rather than
+# refusing to start -- see the generator for why that is the safe default.
+#
+# **Do not widen the session cookie to a parent domain.** T-220 already lost a
+# session to a cross-origin redirect once. Marketing is static and needs no
+# session at all, so the app's refresh cookie stays scoped to the app host --
+# it is named `__Host-refresh_token` (backend/app/modules/auth/router.py),
+# and the `__Host-` prefix means a browser *rejects* it outright if a Domain
+# attribute is ever added, which is the guard rail rather than the reminder.
+# If marketing ever needs to know whether someone is signed in, that is a
+# public, cacheable endpoint, not a cookie.
+#
+# The block itself is generated -- apps/marketing/scripts/caddy-site.mjs
+# writes it on every `astro build`, because the CSP names each inline script
+# by hash and the locale redirects follow product.config.ts. With
+# `modules.marketing: false` the file is deleted instead, and this glob then
+# matches nothing: Caddy logs a warning and the app host above is unaffected,
+# which is also what happens in any stack that never builds the frontend (the
+# ZAP baseline job, a fresh clone).
+import /etc/caddy/conf.d/*.caddy
