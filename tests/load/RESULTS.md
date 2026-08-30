@@ -199,3 +199,7 @@ instead of per-PR.
 | 2026-08-29 | ea80acd | browse | - | - | PASS |
 | 2026-08-29 | ea80acd | presign | - | - | PASS |
 | 2026-08-29 | ea80acd | mixed | - | - | FAIL |
+| 2026-08-30 | 58ceac8 | login-burst | - | - | FAIL |
+| 2026-08-30 | 58ceac8 | browse | - | - | PASS |
+| 2026-08-30 | 58ceac8 | presign | - | - | PASS |
+| 2026-08-30 | 58ceac8 | mixed | - | - | FAIL |
