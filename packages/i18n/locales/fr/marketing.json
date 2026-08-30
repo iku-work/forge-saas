@@ -144,5 +144,12 @@
     "legal_heading": "Mentions légales",
     "privacy": "Politique de confidentialité",
     "terms": "Conditions d'utilisation"
+  },
+  "consent": {
+    "region_label": "Consentement aux cookies",
+    "body": "Nous aimerions mesurer l'usage de ce site. Cela nécessite des cookies, et uniquement avec votre accord.",
+    "accept": "Accepter",
+    "decline": "Refuser",
+    "manage": "Paramètres des cookies"
   }
 }

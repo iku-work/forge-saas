@@ -35,28 +35,57 @@
  *     node scripts/check-budget.mjs [dir]     # defaults to ./dist
  */
 import { readFile, readdir } from "node:fs/promises";
-import { join, relative, resolve, sep } from "node:path";
+import { dirname, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { createJiti } from "jiti";
+
 import { attribute, htmlFiles, tagsNamed } from "./html.mjs";
+
+const APP_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+
+/**
+ * The analytics provider's hosts, read from the TypeScript config.
+ *
+ * jiti for the same reason `scripts/product-config.mjs` uses it: this file
+ * runs as plain Node, both as an Astro integration and from the command line,
+ * and a regex over the source could not tell a host in the active
+ * configuration from one in the two inactive worked examples that file also
+ * exports.
+ */
+async function allowedAnalyticsHosts() {
+  const jiti = createJiti(import.meta.url, { interopDefault: true });
+  const config = await jiti.import(join(APP_ROOT, "src", "config", "analytics.ts"));
+  return [...config.allowedHosts()];
+}
 
 /**
  * Hosts a subresource may be fetched from.
  *
- * Empty, and adding to it is the ADR conversation, not a diff. ADR-0004 §7
- * asks for a written justification for any dependency this site pulls in at
- * runtime; a third-party script is the strongest form of that -- it is code
- * from someone else's server, executing on this origin, on the critical path,
- * changeable without a deploy. "Marketing asked for it" is not the
- * justification. If one is ever added here it also needs a CSP entry in
- * T-307's headers and a look at T-308's consent rules.
+ * **Read from `src/config/analytics.ts`, not written here (T-308).** Adding a
+ * third-party host is the ADR conversation, not a diff: ADR-0004's fifth
+ * decision asks for a written justification for any third party this site
+ * pulls in at runtime,
+ * and a third-party script is the strongest form of that -- code from someone
+ * else's server, executing on this origin, on the critical path, changeable
+ * without a deploy. "Marketing asked for it" is not the justification.
+ *
+ * Deriving the list from that file rather than maintaining a second copy is
+ * what makes the three places that have to agree agree: this gate, the CSP
+ * `scripts/caddy-site.mjs` writes, and the consent rules the banner enforces.
+ * A provider added to the config is allowed here automatically *and* gets a
+ * CSP entry automatically; a host that appears in `dist/` without being in
+ * that file fails the build, which is the case this check exists for.
+ *
+ * Empty in the committed configuration, because the committed configuration
+ * has no analytics at all.
  *
  * Note what this does *not* cover: `<a href>` to another origin is a link,
  * not a subresource, and the app itself is on another origin by design
  * (T-307). Only the elements that make the browser fetch something are
  * checked below.
  */
-const ALLOWED_SUBRESOURCE_HOSTS = [];
+const ALLOWED_SUBRESOURCE_HOSTS = await allowedAnalyticsHosts();
 
 /** Elements whose URL attribute makes the browser fetch a subresource. */
 const SUBRESOURCE_ATTRIBUTES = [
@@ -239,9 +268,9 @@ export async function findBudgetProblems(dir) {
           if (isThirdParty(url)) {
             problems.push(
               `${file}: <${name} ${urlAttribute}="${url}"> loads from another origin — ` +
-                `a third-party subresource needs an ADR (ADR-0004 §7), a CSP entry (T-307) ` +
-                `and, if it is a tracker, consent (T-308). Add its host to ` +
-                `ALLOWED_SUBRESOURCE_HOSTS in scripts/check-budget.mjs once it has one`,
+                `a third-party subresource needs a justification (ADR-0004, decision 5), ` +
+                `a CSP entry (T-307) and, if it is a tracker, consent (T-308). Declare it ` +
+                `in src/config/analytics.ts, which is where all three read it from`,
             );
           }
         }

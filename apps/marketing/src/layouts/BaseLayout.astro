@@ -19,9 +19,15 @@
  * <JsonLd> itself. Structured data belonging to a block of markup -- the FAQ,
  * a breadcrumb trail -- stays with the component that renders the markup, so
  * the two cannot disagree.
+ *
+ * T-308's consent banner is rendered here for the same reason <Seo> is: it is
+ * a property of every page rather than of any one, and a page that forgot to
+ * include it would be a page that measured somebody without asking. It
+ * renders nothing at all in the default configuration.
  */
 import { localeMeta } from "@forge/i18n";
 
+import ConsentBanner from "../components/ConsentBanner.astro";
 import JsonLd from "../components/JsonLd.astro";
 import Seo from "../components/Seo.astro";
 import SiteFooter from "../components/SiteFooter.astro";
@@ -98,5 +104,13 @@ const schemas: SchemaNode[] = [organizationSchema(Astro.site), ...pageSchema];
         switcher offers a visitor exactly the pages hreflang offers a crawler,
         so neither can point somewhere the other would not. */}
     <SiteFooter locale={locale} alternateLocales={alternateLocales} />
+    {/* T-308, and last in the body on purpose: it is fixed-position, so its
+        place in the document decides nothing about layout, and being last
+        means it is also last in the tab order -- a visitor reading the page
+        is not interrupted by it before they have reached the content. Renders
+        nothing at all unless a cookie-setting provider is configured and the
+        `gdpr` module is on, which is the template's default and is what
+        tests/consent.test.ts pins. */}
+    <ConsentBanner locale={locale} />
   </body>
 </html>

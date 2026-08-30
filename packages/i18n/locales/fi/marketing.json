@@ -144,5 +144,12 @@
     "legal_heading": "Lakiasiat",
     "privacy": "Tietosuojaseloste",
     "terms": "Käyttöehdot"
+  },
+  "consent": {
+    "region_label": "Evästesuostumus",
+    "body": "Haluaisimme mitata, miten tätä sivustoa käytetään. Se vaatii evästeitä, ja vain suostumuksellasi.",
+    "accept": "Hyväksy",
+    "decline": "Hylkää",
+    "manage": "Evästeasetukset"
   }
 }

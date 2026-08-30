@@ -180,7 +180,7 @@ describe("check-budget's third-party rule", () => {
     });
 
     expect(problems).toContain("loads from another origin");
-    expect(problems).toContain("ADR-0004 §7");
+    expect(problems).toContain("ADR-0004, decision 5");
   });
 
   it("fails a remote stylesheet, a preconnect and an iframe", async () => {

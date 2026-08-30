@@ -101,12 +101,34 @@ node scripts/caddy-site.mjs          # rewrite the Caddy site blocks from ./dist
 a crawler is given resolves against it, and whether `robots.txt` allows
 anything at all depends on it; `PUBLIC_APP_URL` is where `apps/web` lives, for
 the sign-in and sign-up links; `PUBLIC_API_URL` is the backend the build fetches
-the plan catalogue from. All three have documented defaults or a documented
-fallback, so a fresh checkout builds without an env file.
+the plan catalogue from; `PUBLIC_CONSENT_COOKIE_DOMAIN` scopes the consent
+cookie to a registrable domain so a decision made here follows the visitor into
+the app. All four have documented defaults or a documented fallback, so a fresh
+checkout builds without an env file.
 
 `pnpm --filter marketing test` runs several real builds and one real dev
 server, so it takes about a minute. That is the cost of asserting over `dist/`
 rather than over a component in isolation.
+
+## Analytics, and the banner that is not here
+
+This site measures nothing, and that is the shipped default (T-308).
+`src/config/analytics.ts` is the integration point: one object, a `none`
+default, and two worked examples — a cookieless provider (no banner, no
+consent, two lines to wire) and a cookie-setting one (the banner, the consent
+record, the withdrawal flow, all already built).
+
+The default is enforced rather than asserted. `tests/consent.test.ts` reads a
+real build and finds no cookie, no third-party host in anything that makes the
+browser fetch, and no banner on any page. And one declaration feeds three
+places: the provider's `hosts` are `check-budget.mjs`'s subresource allowlist
+*and* the `script-src`/`connect-src`/`img-src` entries `caddy-site.mjs` writes
+into the CSP — so a third-party host that reaches `dist/` without being
+declared fails the build, and one that is declared cannot be blocked at the
+edge by accident.
+
+`docs/runbooks/analytics-and-consent.md` is the decision as a product owner
+has to make it, without reading any of the code.
 
 ## Serving it
 

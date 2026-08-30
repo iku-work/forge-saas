@@ -21,6 +21,19 @@ interface ImportMetaEnv {
    * is what a fresh checkout and every CI frontend build do.
    */
   readonly PUBLIC_API_URL?: string;
+  /**
+   * The registrable domain the consent cookie is scoped to, e.g.
+   * `.example.com` (T-308).
+   *
+   * Unset means host-only, which is correct and slightly repetitive: consent
+   * given on this site is then invisible to the app on `app.<domain>`, so a
+   * visitor who signs in is asked once more inside the product. Setting it is
+   * what makes `src/lib/consent.ts`'s reconciliation at login actually
+   * reconcile. A deployment fact, not a product decision -- staging and
+   * production differ -- which is why it is here rather than in
+   * product.config.ts.
+   */
+  readonly PUBLIC_CONSENT_COOKIE_DOMAIN?: string;
 }
 
 interface ImportMeta {

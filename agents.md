@@ -7032,8 +7032,22 @@ For each of `packages/{ui,api-client,types,hooks,validation,utils}`:
 
 **Done when**
 
-- [ ] Default build sets zero cookies and makes zero third-party requests
-- [ ] The consent path is documented well enough that a product owner can pick a provider without reading the code
+- [x] Default build sets zero cookies and makes zero third-party requests —
+      asserted against a real build in `apps/marketing/tests/consent.test.ts`,
+      over *every* page read off disk rather than a listed few: no
+      `document.cookie` anywhere, no consent cookie name, and no host in any
+      element that makes the browser fetch. The last one needed care — a naive
+      "any absolute URL" check reports a correct build as loading a dozen third
+      parties, because `<link rel="canonical">` and the hreflang cluster
+      legitimately name the production origin and the app is on another origin
+      by design (T-307)
+- [x] The consent path is documented well enough that a product owner can pick a
+      provider without reading the code — `docs/runbooks/analytics-and-consent.md`
+      opens with the only question that decides everything ("does it read or
+      write anything on the visitor's device?"), as a two-column table, and the
+      browser verification walks the five clicks that distinguish real consent
+      from consent mode. The config file itself carries the two worked examples
+      so the shape is copied rather than inferred
 
 ---
 

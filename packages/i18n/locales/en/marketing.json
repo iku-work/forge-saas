@@ -144,5 +144,12 @@
     "legal_heading": "Legal",
     "privacy": "Privacy policy",
     "terms": "Terms of service"
+  },
+  "consent": {
+    "region_label": "Cookie consent",
+    "body": "We'd like to measure how this site is used. That needs cookies, and only with your agreement.",
+    "accept": "Accept",
+    "decline": "Decline",
+    "manage": "Cookie settings"
   }
 }

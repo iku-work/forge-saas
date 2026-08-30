@@ -84,6 +84,23 @@ Each constraint, answered:
    apex beside `app.` in production. Separate hosts rather than a path split,
    so no existing route, spec or link moved.
 
+5. **Nothing third-party runs on this origin without a written
+   justification.** Not a framework property, but a decision the framework
+   makes enforceable, and it belongs here because it is the rule the rest of
+   the repo cites. A marketing site is where tracking arrives, and a
+   third-party script is code from someone else's server, executing on a
+   first-party origin, on the critical path, changeable without a deploy —
+   which is a different class of dependency from an npm package, and gets a
+   different bar. Concretely: every runtime host this site contacts is
+   declared in `apps/marketing/src/config/analytics.ts` with a one-sentence
+   justification naming what it collects and why the numbers are worth it.
+   That declaration is simultaneously the subresource allowlist
+   `scripts/check-budget.mjs` enforces and the `script-src`/`connect-src`/
+   `img-src` entries `scripts/caddy-site.mjs` writes into the CSP, so an
+   undeclared host fails the build rather than shipping, and a declared one
+   cannot be silently blocked at the edge. The shipped default declares
+   nothing (T-308).
+
 Not in the original framing, and decisive in practice: **Astro is Vite-based**,
 so it reuses the toolchain this repo already runs — `@tailwindcss/vite` v4 (the
 same plugin `apps/web` and `@forge/ui`'s Storybook use), the same tsconfig

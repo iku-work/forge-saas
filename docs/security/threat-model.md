@@ -87,6 +87,13 @@ boundary ① — same API, same auth, no separate trust path.
 - **Mobile and web clients are symmetric.** Neither is more trusted than
   the other; both authenticate the same way and are subject to the same
   rate limits and org-scoping.
+- **The marketing site's analytics surface is empty by default (T-308)**, and
+  that is a security property as much as a privacy one: a third-party script is
+  code from someone else's server executing on a first-party origin, changeable
+  without a deploy. Adding one requires an entry in
+  `apps/marketing/src/config/analytics.ts` with a written justification; that
+  entry is simultaneously the build's subresource allowlist and the edge's CSP,
+  so an undeclared host fails the build rather than shipping.
 
 ## 4. Out of scope for this document
 

@@ -168,12 +168,33 @@ export async function inlineScriptHashes(dir) {
  *
  * The four `'none'`s are the ones `default-src` does *not* cover -- they have
  * no fallback and are silently absent if not written.
+ *
+ * **Analytics, if any, widens exactly three directives (T-308.)** The hosts
+ * come from `src/config/analytics.ts`, which is also what
+ * `scripts/check-budget.mjs` reads as its subresource allowlist -- one
+ * declaration, so the gate that refuses an undeclared third party and the
+ * header that would block it cannot disagree. Why three:
+ *
+ * - `script-src`, so the tag can load at all;
+ * - `connect-src`, because most providers beacon to a *different* host than
+ *   they load from, and `default-src 'self'` would block that with no visible
+ *   error -- analytics that silently reports nothing is the failure mode this
+ *   line exists to prevent;
+ * - `img-src`, because a pixel is still how several of them deliver an event
+ *   when `sendBeacon` is unavailable.
+ *
+ * In the committed configuration all three are empty and the policy is
+ * byte-for-byte what it was before this task.
  */
-function contentSecurityPolicy(hashes) {
+function contentSecurityPolicy(hashes, analyticsHosts) {
+  const origins = analyticsHosts.map((host) => `https://${host}`);
+  const widen = (directive, sources) => [directive, ...sources].join(" ");
   return [
     "default-src 'self'",
-    `script-src 'self' ${hashes.join(" ")}`.trim(),
+    widen(`script-src 'self' ${hashes.join(" ")}`.trim(), origins),
     "style-src 'self' 'unsafe-inline'",
+    widen("connect-src 'self'", origins),
+    widen("img-src 'self' data:", origins),
     "base-uri 'none'",
     "form-action 'none'",
     "frame-ancestors 'none'",
@@ -268,7 +289,24 @@ function robotsHeader(target, productionHost) {
  * is a file a person opens at three in the morning when the marketing site is
  * down, and the comments are most of its value.
  */
-export function renderSite(target, { hashes, locales, defaultLocale, productionHost }) {
+/**
+ * @param {(typeof TARGETS)[keyof typeof TARGETS]} target
+ * @param {{
+ *   hashes: string[],
+ *   locales: string[],
+ *   defaultLocale: string,
+ *   productionHost: string,
+ *   analyticsHosts?: string[],
+ * }} options
+ *
+ * Annotated because the callers are TypeScript: without it, `analyticsHosts
+ * = []` infers as `never[]` and `astro check` rejects every caller that
+ * passes a real list.
+ */
+export function renderSite(
+  target,
+  { hashes, locales, defaultLocale, productionHost, analyticsHosts = [] },
+) {
   // Both spellings per locale, and the bare one is not decoration: Caddy's
   // `path /en/*` does not match `/en`, so without it the bare locale falls
   // through to the redirect below and is answered with `/en/en/` -- a 404 for
@@ -301,7 +339,7 @@ ${target.tls === "" ? "" : `\t${target.tls}\n\n`}\troot * ${SITE_ROOT}
 \t\tX-Frame-Options "DENY"
 \t\tReferrer-Policy "strict-origin-when-cross-origin"
 \t\tPermissions-Policy "camera=(), microphone=(), geolocation=()"
-\t\tContent-Security-Policy "${contentSecurityPolicy(hashes)}"
+\t\tContent-Security-Policy "${contentSecurityPolicy(hashes, analyticsHosts)}"
 \t\t-Server
 \t}
 
@@ -365,6 +403,18 @@ ${localeRedirects(locales, defaultLocale)}
 `;
 }
 
+/**
+ * Every host the configured analytics provider contacts (T-308).
+ *
+ * The same file `scripts/check-budget.mjs` reads for its allowlist. Empty in
+ * the committed configuration.
+ */
+export async function analyticsHostnames() {
+  const jiti = createJiti(import.meta.url, { interopDefault: true });
+  const analytics = await jiti.import(join(APP_ROOT, "src", "config", "analytics.ts"));
+  return [...analytics.allowedHosts()];
+}
+
 /** The production origin robots.txt and the sitemap are keyed off (T-304). */
 async function productionHostname() {
   const jiti = createJiti(import.meta.url, { interopDefault: true });
@@ -381,20 +431,24 @@ async function productionHostname() {
  * when somebody deploys.
  */
 export async function writeCaddySites(dir, configPath) {
-  const [hashes, { locales, defaultLocale }, productionHost] = await Promise.all([
+  const [hashes, { locales, defaultLocale }, productionHost, analyticsHosts] = await Promise.all([
     inlineScriptHashes(dir),
     loadProductConfig(configPath).then(enabledLocales),
     productionHostname(),
+    analyticsHostnames(),
   ]);
 
   const written = [];
   for (const target of Object.values(TARGETS)) {
     const path = join(CADDY_DIR, target.file);
     await mkdir(dirname(path), { recursive: true });
-    await writeFile(path, renderSite(target, { hashes, locales, defaultLocale, productionHost }));
+    await writeFile(
+      path,
+      renderSite(target, { hashes, locales, defaultLocale, productionHost, analyticsHosts }),
+    );
     written.push(path);
   }
-  return { written, hashes };
+  return { written, hashes, analyticsHosts };
 }
 
 /**
@@ -430,9 +484,12 @@ export function caddySite() {
     name: "forge:caddy-site",
     hooks: {
       "astro:build:done": async ({ dir, logger }) => {
-        const { written, hashes } = await writeCaddySites(fileURLToPath(dir));
+        const { written, hashes, analyticsHosts } = await writeCaddySites(fileURLToPath(dir));
         logger.info(
-          `wrote ${written.length} Caddy site block(s), script-src pinned to ${hashes.length} inline script hash(es)`,
+          `wrote ${written.length} Caddy site block(s), script-src pinned to ${hashes.length} inline script hash(es)` +
+            (analyticsHosts.length === 0
+              ? ""
+              : `, plus ${analyticsHosts.length} analytics host(s)`),
         );
       },
     },
@@ -441,8 +498,11 @@ export function caddySite() {
 
 async function main() {
   const dir = resolve(process.argv[2] ?? "dist");
-  const { written, hashes } = await writeCaddySites(dir);
-  console.log(`caddy-site: ${hashes.length} inline script hash(es) from ${dir}`);
+  const { written, hashes, analyticsHosts } = await writeCaddySites(dir);
+  console.log(
+    `caddy-site: ${hashes.length} inline script hash(es) from ${dir}` +
+      (analyticsHosts.length === 0 ? "" : `, analytics hosts: ${analyticsHosts.join(", ")}`),
+  );
   for (const path of written) {
     console.log(`  wrote ${path}`);
   }

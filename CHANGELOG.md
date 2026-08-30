@@ -6,6 +6,48 @@ template keep their own changes in `CHANGELOG.product.md` (see
 
 ## [Unreleased]
 ### Added
+- **Analytics and cookie consent, defaulting to neither (T-308).** A marketing
+  site is where tracking lands, so this ships the *integration point* rather
+  than a vendor: `apps/marketing/src/config/analytics.ts`, one object, a `none`
+  default, and two worked examples. The default build is held to that by
+  `tests/consent.test.ts` reading real output — zero cookies, zero third-party
+  requests, no banner on any page.
+  - **The privacy-preserving option is the easy one, on purpose.** A cookieless
+    provider needs two lines and no banner; a cookie-setting one needs the same
+    two lines and gets the whole consent apparatus already built. A banner
+    avoided is worth more than a banner implemented well — it is the layout
+    shift, the consent record, the withdrawal flow and the legal review that do
+    not happen.
+  - **Nothing loads before consent.** Not "loads and waits" — the provider's
+    `<script>` element is created *after* the decision, so a refusal means the
+    request is never made. Verified by running the shipped inline script in a
+    DOM rather than by reading it.
+  - **The banner is pre-rendered, and fixed-position.** A banner injected after
+    paint is a guaranteed CLS regression and would fail T-306's budget; this one
+    is in the HTML and it is the *hiding* that is conditional. Fixed positioning
+    takes it out of flow, so neither showing nor hiding it moves a pixel.
+  - **Withdrawal deletes the cookies**, from a permanent footer control that
+    re-opens the same two buttons. A banner that flips a flag and leaves the
+    cookies in place has not withdrawn anything, which is the half most
+    implementations skip.
+  - **Consent is a first-party cookie for an anonymous visitor and a
+    `consent_record` row for a signed-in one**, reconciled by `apps/web` on the
+    first render after a session appears — watching for the user rather than
+    hooking the login mutation, because a session arrives through five code
+    paths and only one of them is a login call. `PUBLIC_CONSENT_COOKIE_DOMAIN`
+    is the one knob that lets the cookie cross from the marketing host to the
+    app's; unset, the visitor is simply asked again inside the product.
+  - **One declaration feeds three gates.** The provider's `hosts` are the
+    subresource allowlist `check-budget.mjs` enforces *and* the `script-src`,
+    `connect-src` and `img-src` entries `caddy-site.mjs` writes into the CSP.
+    A third-party host in `dist/` that is not in that file fails the build; a
+    host that is in it cannot be blocked at the edge by accident.
+  - The banner is gated on the **`gdpr`** module, not on `marketing`: consent is
+    recorded in that module's table, and a banner collecting an answer it cannot
+    store is worse than no banner because it looks like compliance.
+    `docs/runbooks/analytics-and-consent.md` is the decision as a product owner
+    has to make it.
+
 - **`apps/marketing` — a pre-rendered marketing site, in Astro (T-300).**
   [ADR-0004](docs/adr/0004-marketing-framework.md) is now `Accepted` and names
   the framework. The deciding constraint was `@forge/ui`: it is React 18 +
