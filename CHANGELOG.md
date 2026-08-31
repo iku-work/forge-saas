@@ -6,6 +6,60 @@ template keep their own changes in `CHANGELOG.product.md` (see
 
 ## [Unreleased]
 ### Added
+- **Enterprise SSO: per-org OIDC sign-in, and the right to refuse a password
+  (T-331).** The `enterprise_sso` module (default off, requires `oauth`) lets
+  one organisation point at its own identity provider — Okta, Entra ID, Auth0,
+  Keycloak, anything with a discovery document — and, when it asks, stop its
+  members signing in with a password at all.
+  - **`email_domain` is the tenant boundary, not a convenience.** A connection
+    may only authenticate addresses at its own domain. Without that, an org
+    admin — who configures their own connection, by design — could point it at
+    an IdP under their control, assert `ceo@a-competitor.com`, and have JIT
+    provisioning hand them the account. Every other check here is protocol
+    correctness; this one is what makes self-service configuration safe in a
+    product that hosts rivals.
+  - **Five ID-token checks, five distinct errors.** Signature, `iss`, `aud`,
+    `nonce`, `exp`/`iat` are refused independently rather than collapsed into
+    "invalid token" — the difference between an operator fixing a client id in
+    a minute and reading packet captures for an afternoon. Each has its own
+    heading in the runbook's escalation section.
+  - **Algorithms are allow-listed, asymmetric only.** A verifier that trusts
+    the token's own `alg` header will happily verify an HMAC computed with a
+    key the attacker already has (the client secret, or the public key). `alg:
+    none` is refused by joserfc natively; `HS*` is refused here.
+  - **The enforcement break-glass is the *last remaining* owner.** Not any
+    owner — the last one. An org that enforces SSO against a broken IdP is then
+    inconvenienced rather than locked out, and the recovery is that person
+    signing in and flipping the flag rather than an operator with a psql
+    prompt. Deleting an enforced connection is refused (409) for the same
+    reason.
+  - **Domain hinting is opt-in per org and ships off**, because it leaks
+    whether a domain has an account here: anyone can type an email and watch
+    the form change. `/auth/sso/{org_slug}/start` is the always-available entry
+    point, so hinting stays a convenience rather than a requirement.
+  - **The IdP can raise the MFA bar, never lower it.** An `amr`/`acr` claim
+    skips the second prompt; with no claim, TOTP still applies.
+  - **Discovery and JWKS are cached for an hour and re-fetched exactly once**
+    on a signature failure — a bounded `for force in (False, True)`, not a
+    retry policy. That single retry makes an IdP's key rotation self-heal; the
+    bound stops a forged token becoming unlimited outbound requests.
+  - Turning the module off un-enforces every enforcing connection at once,
+    deliberately: the alternative is a product-wide boolean that can lock every
+    customer out of their own product. The rows survive to enforce again.
+  - OIDC only. ADR-0006's SAML trigger (a signed contract naming an IdP that
+    cannot issue OIDC) has not fired, so nothing pulls `python3-saml` →
+    `xmlsec` → native `libxmlsec1` into the backend image. `docs/runbooks/
+    sso-onboarding.md` walks an admin through connecting a real IdP.
+- **ADR-0007: the tenancy question, answered with numbers (T-340).** Row-level
+  stays, and the document exists so the question stops being reopened in every
+  architecture conversation. It names the middle option the usual framing omits
+  — **PostgreSQL row-level security**, which buys most of what
+  schema-per-tenant is reached for and *composes* with the current model
+  instead of replacing it — and it settles the pgbouncer interaction in advance
+  (`SET LOCAL`, since T-244's transaction pooling makes a session-level `SET
+  search_path` a cross-tenant leak with a plausible-looking implementation).
+  Five revisit triggers, each a threshold a dashboard can show. T-341
+  (schema-per-tenant tooling) is closed as won't-do on the strength of it.
 - **Outbound webhooks: endpoints, signed delivery, retry, replay (T-320, T-321,
   T-322).** The `outbound_webhooks` module (default off, requires `billing`)
   turns "something happened here" into a signed POST to a customer's URL, with

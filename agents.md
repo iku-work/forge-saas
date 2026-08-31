@@ -6488,7 +6488,7 @@ For each of `packages/{ui,api-client,types,hooks,validation,utils}`:
   )
   ```
 
-  The defaults are deliberate, not cosmetic. Nearly every product wants a landing page → `marketing` on. An org-scoped API key is attack surface nobody asked for → `public_api` off. SAML drags `python3-saml` → `xmlsec` → native `libxmlsec1` into the backend image → `enterprise_sso` off. `enterprise_sso` requires `oauth` because T-331's OIDC SP reuses authlib's client registry and T-025's account-linking; `validate_modules()` fails the boot on the illegal combination, which is exactly what that function is for.
+  The defaults are deliberate, not cosmetic. Nearly every product wants a landing page → `marketing` on. An org-scoped API key is attack surface nobody asked for → `public_api` off. `enterprise_sso` is off because most products never sell to a customer with an IdP, and the ones that do turn it on for a named contract on a known day — T-331 shipped OIDC only, so it costs the image nothing (the SAML dependency chain `python3-saml` → `xmlsec` → native `libxmlsec1` arrives with T-332, if T-330's trigger ever fires). `enterprise_sso` requires `oauth` because T-331's OIDC SP reuses authlib's client registry and T-025's account-linking; `validate_modules()` fails the boot on the illegal combination, which is exactly what that function is for.
 
 - `backend/product/config.py` — the three entries, each with a comment saying what turning it off actually removes.
 - `product.config.ts` and `packages/types/src/index.ts` — `marketing`, `publicApi`, `enterpriseSso` on `ProductConfig["modules"]`, camelCase like every existing key.
@@ -7498,8 +7498,23 @@ deploy.
 
 **Done when**
 
-- [ ] A test org signs in end to end against a real IdP once (Okta or Entra dev tenant), then the mock covers CI
-- [ ] `docs/runbooks/sso-onboarding.md` walks an admin through connecting an IdP
+- [ ] A test org signs in end to end against a real IdP once (Okta or Entra dev tenant), then the mock covers CI — **not done, and it needs a person.** No Okta/Entra dev tenant exists here and one cannot be created without an account. The mock IdP in `backend/tests/modules/test_sso.py` is real to the extent it can be — a live RSA key pair, a real discovery document, real JWKS, real signatures over `httpx.MockTransport` — so signature verification is exercised rather than stubbed. What it cannot prove is that a *particular vendor's* discovery document and claim shapes are what this client expects; run `docs/runbooks/sso-onboarding.md` against a dev tenant once before selling this.
+- [x] `docs/runbooks/sso-onboarding.md` walks an admin through connecting an IdP
+- [x] `backend/app/modules/sso/README.md`, the module's own entry point
+
+**Delivered** (T-331)
+
+- `SsoConnection` on the `enterprise_sso` branch (`9b3d5c71ea04`, off core's `a7e4c2f91b60`), `client_secret` as `EncryptedString` — recoverable because it has to be *presented* to the IdP — redacted from `repr`, absent from every response, and picked up by T-245's rotation job.
+- The full flow: `/start` → cached discovery → authorize with `state` + `nonce` → `/callback` → five independent checks (signature, `iss`, `aud`, `nonce`, `exp`/`iat`, one error key each) → match or JIT-create → the *normal* session through T-025's `oauth_account` link (`provider = "sso:<connection id>"`).
+- `email_domain` as the tenant boundary: an IdP may only assert identities inside its own domain, which is what makes self-service connection config safe in a product that hosts competitors.
+- Enforcement with the last-remaining-owner break-glass, in `sso/enforcement.py` rather than `sso/service.py` — `auth.service` imports it, and `sso.service` imports `auth.service`, so the check has to live outside the loop.
+- Opt-in domain hinting (default off, filtered inside the query so the leak cannot be written without the flag that permits it), and the login page hint that consumes it (`apps/web/src/features/auth/LoginPage.tsx`, tests in `LoginPageSso.test.tsx`) — including the way back to the password field, because the break-glass owner needs it.
+- `amr`/`acr` honoured: the IdP can raise the MFA bar, never lower it.
+
+**Not done, and why**
+
+- [ ] **Session cookie survives the callback redirect (Playwright, both browsers).** The E2E suite runs the committed config, where `enterprise_sso` is off, so the routes 404 — and a real journey would additionally need a mock IdP reachable by the browser *and* the backend, over TLS the browser trusts. What the risk actually reduces to is the `Set-Cookie` attributes on the two responses, and those are now asserted directly (`test_the_state_cookie_is_set_to_survive_the_hop_back`, `test_the_callback_clears_the_state_cookie_and_leaves_a_session`): `SameSite=Lax` — not Strict, which would drop the cookie on the IdP's cross-site navigation back and fail every login on the state check, the exact shape T-220 lost a session to — plus HttpOnly, Secure, the scoped path, and the `__Host-` refresh cookie on the way out. That is a narrower guarantee than a browser executing it, and it is stated as narrower rather than ticked.
+- "Module disabled → routes 404 even with a row present" is covered product-wide rather than in this module's file: `enterprise_sso`'s routes are in `MODULE_SURFACE`, and `tests/modules/test_module_toggles.py` asserts every listed path is absent when its module is off, in every matrix leg.
 
 ---
 
@@ -7526,8 +7541,8 @@ deploy.
 
 **Done when**
 
-- [ ] Every XSW vector fails closed
-- [ ] The default backend image contains no `libxmlsec1`
+- [ ] Every XSW vector fails closed — **not started.** Correct outcome, not a skip: this task's own `needs:` says do not start until T-330's trigger has fired, and ADR-0006's trigger is "a signed contract whose IdP cannot issue OIDC". No such contract exists. Starting anyway would put `xmlsec` and native `libxmlsec1` in the backend image, with their own CVE cadence, for a hypothesis.
+- [x] The default backend image contains no `libxmlsec1` — true today, and true for the reason above rather than by arrangement: nothing in `backend/pyproject.toml` or the Dockerfile references `python3-saml`, `xmlsec` or `libxmlsec1`.
 
 ---
 
@@ -7549,8 +7564,8 @@ deploy.
 
 **Done when**
 
-- [ ] ADR is `Accepted` with a decision, not a survey
-- [ ] Every revisit trigger is something a dashboard can show
+- [x] ADR is `Accepted` with a decision, not a survey — `docs/adr/0007-tenancy-model.md`, "stay row-level", with schema-per-tenant rejected on five stated criteria and RLS named as the middle option the usual framing omits.
+- [x] Every revisit trigger is something a dashboard can show — five, each with the query or the log that produces it; triggers 1 and 2 point at RLS, only 3 and 4 point at schemas. The ADR also settles the pgbouncer interaction *in advance* (`SET LOCAL`, since T-244's transaction pooling makes a session-level `SET search_path` a cross-tenant leak with a plausible-looking implementation), so T-341 would start from a decision rather than a design meeting if it is ever reopened.
 
 ---
 
@@ -7564,9 +7579,11 @@ deploy.
 - **The blocker to resolve before anything else: pgbouncer runs in transaction mode (T-244), and a session-level `SET search_path` does not survive transaction pooling.** A connection returned to the pool mid-session can hand another tenant's request a search path pointing at the wrong schema — a cross-tenant data leak, not a bug report. The options are `SET LOCAL` inside every transaction, a schema-qualified query layer, or session pooling for these connections (which forfeits what T-244 bought). Decide this in the ADR, before writing the middleware.
 - Migration runner must be resumable and checkpointed — T-245's key-rotation job is the pattern to copy, including its dry-run mode.
 
-**Done when**
+**Status: closed as won't-do** — T-340 chose row-level, so this task's own `needs:` closes it, and that is a completed outcome rather than a skipped one. The record is [ADR-0007](docs/adr/0007-tenancy-model.md); its five revisit triggers are the only thing that reopens this.
 
-- [ ] The pooling interaction has a tested answer, demonstrated by a concurrency test that would fail without it
+**Done when** (unchanged, for whoever reopens it)
+
+- [ ] The pooling interaction has a tested answer, demonstrated by a concurrency test that would fail without it — the *answer* is already chosen (ADR-0007's Consequences: `SET LOCAL` inside every transaction, which `get_session` already guarantees the shape of). The test is what is missing, and it belongs to whoever writes the middleware.
 - [ ] A tenant can be provisioned, migrated, backed up and restored from a runbook
 
 ---
@@ -7657,22 +7674,22 @@ Each sub-phase is independently shippable and independently gated. A sub-phase w
 **P4-D · Enterprise SSO**
 
 ```
-- [ ] ADR-0006 Accepted, with the SAML trigger stated as an observable condition
-- [ ] OIDC end to end against a real dev tenant once, then a mock in CI
-- [ ] Four separate rejections proven: bad nonce, bad aud, expired, bad signature
-- [ ] Enforcement blocks password login for members; break-glass owner is never locked out
-- [ ] Session survives the callback redirect in both Playwright browsers
-- [ ] client_secret encrypted at rest and absent from every response, log and repr
-- [ ] Module disabled → routes 404 with rows present; default image carries no libxmlsec1
-- [ ] Mobile SSO is explicitly recorded as out of scope, not silently missing
+- [x] ADR-0006 Accepted, with the SAML trigger stated as an observable condition
+- [ ] OIDC end to end against a real dev tenant once, then a mock in CI — mock done and signing for real; the dev-tenant run needs an Okta/Entra account and is the one item here a person has to do
+- [x] Four separate rejections proven: bad nonce, bad aud, expired, bad signature — five, counting `iss`
+- [x] Enforcement blocks password login for members; break-glass owner is never locked out
+- [ ] Session survives the callback redirect in both Playwright browsers — not run; the cookie attributes it turns on are asserted directly instead, see T-331's "Not done, and why"
+- [x] client_secret encrypted at rest and absent from every response, log and repr
+- [x] Module disabled → routes 404 with rows present (via `MODULE_SURFACE`); default image carries no libxmlsec1
+- [x] Mobile SSO is explicitly recorded as out of scope, not silently missing — in the module README, the runbook's escalation section, and the router's own docstring
 ```
 
 **P4-E · Multi-tenancy upgrade path**
 
 ```
-- [ ] ADR-0007 Accepted with a decision, measurable revisit triggers, and RLS evaluated as the middle option
-- [ ] If row-level: T-341 closed as won't-do with the ADR linked — a completed outcome
-- [ ] If schema-per-tenant: the pgbouncer transaction-mode interaction has a tested answer before any middleware is written
+- [x] ADR-0007 Accepted with a decision, measurable revisit triggers, and RLS evaluated as the middle option
+- [x] If row-level: T-341 closed as won't-do with the ADR linked — a completed outcome
+- [x] If schema-per-tenant: the pgbouncer transaction-mode interaction has a tested answer before any middleware is written — n/a (row-level chosen); the ADR nevertheless settles the interaction in advance so a reopened T-341 starts from a decision
 ```
 
 **Phase 4 gate — all of the above, plus**

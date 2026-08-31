@@ -83,12 +83,13 @@ def build_router() -> APIRouter:
 
         router.include_router(webhooks_router)
 
-    # T-290 added the `enterprise_sso` toggle; its block belongs here, in the
-    # same shape as the one above, and lands with the router itself (T-331).
-    # Registering it now would mean importing a module that does not exist, so
-    # a product enabling the toggle early gets a module with no HTTP surface --
-    # not a crash. `marketing` never gets a block: it gates the apps/marketing
-    # build, not a router.
+    if modules.enterprise_sso.enabled:
+        from app.modules.sso.router import router as sso_router  # noqa: PLC0415
+
+        router.include_router(sso_router)
+
+    # `marketing` never gets a block: it gates the apps/marketing build, not a
+    # router.
     #
     # Note what the `public_api` block above does *not* register: the two
     # routes an API key can actually call (T-311) belong to `tenancy` and are

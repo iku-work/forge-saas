@@ -37,15 +37,14 @@ CORE_HEAD_REVISION = "a7e4c2f91b60"
 # Only modules that currently ship a models.py (and therefore a migration)
 # are listed here.
 #
-# T-290's `enterprise_sso` is deliberately *not* here yet. An entry makes
-# migration_targets() ask Alembic for "<branch>@head", which is a hard error
-# while no migration declares that branch label -- so the entry lands with the
-# migration, in T-331, on its own branch rather than on the trunk.
+# `enterprise_sso` gained its entry in T-331, with the migration that declares
+# the branch label -- an entry without one is a hard error, because
+# migration_targets() would ask Alembic for a "<branch>@head" nothing defines.
 # `public_api` gained its entry in T-310, alongside
-# alembic/versions/public_api/, and `outbound_webhooks` in T-320 alongside
-# alembic/versions/outbound_webhooks/ -- both ship *off*, which is why
-# `alembic check` has to apply every branch in this map rather than only the
-# enabled ones (see tests/test_alembic.py and TEMPLATE.md).
+# alembic/versions/public_api/, `outbound_webhooks` in T-320 and
+# `enterprise_sso` in T-331 -- all three ship *off*, which is why `alembic
+# check` has to apply every branch in this map rather than only the enabled
+# ones (see tests/test_alembic.py and TEMPLATE.md).
 # `marketing` never gets one: it owns no tables.
 MODULE_BRANCHES: dict[ModuleName, str] = {
     "billing": "billing",
@@ -54,6 +53,7 @@ MODULE_BRANCHES: dict[ModuleName, str] = {
     "file_storage": "file_storage",
     "public_api": "public_api",
     "outbound_webhooks": "outbound_webhooks",
+    "enterprise_sso": "enterprise_sso",
 }
 
 _BACKEND_DIR = Path(__file__).resolve().parents[2]

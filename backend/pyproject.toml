@@ -19,6 +19,12 @@ dependencies = [
     "pyotp>=2.9",
     "webauthn>=3.0", # T-217 — FIDO2/WebAuthn second factor
     "authlib>=1.3",
+    # Declared explicitly even though authlib pulls it in: T-331 verifies ID
+    # tokens with it directly (app.modules.sso.oidc), and depending on a
+    # transitive package for a *signature check* is how a minor bump in
+    # somebody else's dependency tree becomes an authentication outage.
+    # authlib.jose is the alternative and is deprecated in favour of this.
+    "joserfc>=1.0",
     "python-multipart>=0.0.12",
     "arq>=0.26",
     "apscheduler>=3.10",

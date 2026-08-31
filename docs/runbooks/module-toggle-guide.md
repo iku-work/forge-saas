@@ -260,23 +260,43 @@ Three things to know before flipping it, in either direction:
 
 ### Enabling enterprise_sso
 
-`enterprise_sso` also ships **off**, for a build reason as much as a security
-one: SAML drags `python3-saml` → `xmlsec` → the native `libxmlsec1` library
-into the backend image.
+`enterprise_sso` ships **off** because most products never sell to a customer
+that has an IdP, and the ones that do add it on a specific day for a specific
+contract. What it costs to leave on is small but not nothing — see the
+enforcement note below, which is on the password login path.
 
-- It **requires `oauth`** — T-331's OIDC SP reuses authlib's client registry
-  and T-025's account linking. `enterprise_sso=True` with `oauth=False` is a
+It is **OIDC only**. ADR-0006 defers SAML until a signed contract names an IdP
+that cannot issue OIDC, and that trigger has not fired — so nothing here pulls
+`python3-saml` → `xmlsec` → the native `libxmlsec1` into the backend image,
+and turning the module on does not change what the image contains.
+[sso-onboarding.md](sso-onboarding.md) is the operating runbook.
+
+- It **requires `oauth`** — T-331's OIDC SP reuses authlib's client and
+  T-025's `oauth_account` table for the identity link (`provider =
+  "sso:<connection id>"`). `enterprise_sso=True` with `oauth=False` is a
   `RuntimeError` at boot naming both modules, which is the whole point of
   `validate_modules`. There is no configuration in which half of it works.
-- Off removes per-org OIDC/SAML sign-in (`/api/v1/auth/sso/*`) and the
-  `sso_connection` table. Members of an org that was using SSO fall back to
-  whatever other sign-in method their account has — which, for an account
-  provisioned purely through the IdP, may be none. Check that before turning
-  it off on a live system: it is an account-recovery problem, not a routing
-  one.
+- **Off un-enforces every enforcing connection, at once.** This is the
+  consequence to understand before flipping it either way.
+  `sso.enforcement.password_login_blocked` returns `None` before it queries
+  anything when the module is off, so orgs that were refusing passwords stop
+  refusing them. That is deliberate: the alternative is a product-wide
+  boolean that can lock every customer out of their own product, and a toggle
+  should not be able to do that. It also means the toggle is *not* a way to
+  suspend one customer's SSO — set `enabled: false` on their connection for
+  that.
+- **The people who cannot fall back are the ones the IdP created.** Off also
+  removes `/api/v1/auth/sso/*` and the `sso_connection` table. Members of an
+  org that was using SSO fall back to whatever other sign-in method their
+  account has — and an account JIT-provisioned purely through the IdP has
+  none. Count them before turning it off on a live system
+  (`SELECT count(*) FROM oauth_account WHERE provider LIKE 'sso:%'`); it is an
+  account-recovery problem, not a routing one, and the fix is a password-reset
+  mail-out you would rather send in advance.
 - Unlike `public_api`, an inert `sso_connection` row is not a credential.
   Re-enabling exposes org SSO configuration, not a way in — but the same
-  "read the table before you flip it" habit applies.
+  "read the table before you flip it" habit applies, and re-enabling also
+  restores enforcement for every connection that had it.
 
 ### Adding a new product-specific module
 

@@ -66,15 +66,14 @@ class ModuleSurface(NamedTuple):
     note: str = ""
 
 
-# Declared ahead of the code that serves it: T-290 added the toggle, the
-# router and model land in T-331 (`enterprise_sso`). Writing the surface now
-# means that task cannot add a route or a table without a matching toggle
-# assertion -- the day the router appears, the entry below starts asserting
-# something and the module comes off this set
-# (test_a_pending_surface_is_retired_once_its_module_ships says so, loudly).
-#
-# `public_api` came off it in T-310, which is what that test is for.
-_SURFACE_PENDING: frozenset[ModuleName] = frozenset({"enterprise_sso"})
+# Empty, and that is the point it has been making since T-290: a module whose
+# surface is declared before the code exists cannot ship a route or a table
+# without a matching toggle assertion. `public_api` came off this set in
+# T-310, `enterprise_sso` in T-331 -- each time because
+# test_a_pending_surface_is_retired_once_its_module_ships went red the day the
+# router appeared, which is exactly what it is for. A future module declared
+# ahead of its code goes back in here.
+_SURFACE_PENDING: frozenset[ModuleName] = frozenset()
 
 MODULE_SURFACE: dict[ModuleName, ModuleSurface] = {
     "billing": ModuleSurface(

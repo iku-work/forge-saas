@@ -47,11 +47,9 @@ config.set_main_option("sqlalchemy.url", get_settings().migrations_database_url)
 # physically present in the DB from a time the module was enabled.
 #
 # T-290 registered `public_api` and `enterprise_sso` here ahead of their
-# models: the entries are table *names*, so they cost nothing until T-310 and
-# T-331 add `ApiKey`/`SsoConnection`, and having them already in place means
-# neither task can add a table that autogenerate then proposes for a product
-# that turned the module off. `marketing` owns no tables at all -- it gates a
-# build, not a schema.
+# models, so that neither T-310 nor T-331 could add a table that autogenerate
+# then proposes for a product which turned the module off. Both models exist
+# now. `marketing` owns no tables at all -- it gates a build, not a schema.
 MODULE_TABLES: dict[str, set[str]] = {
     "billing": {"plan", "subscription", "webhook_event", "dunning_campaign", "usage_record"},
     "gdpr": {"consent_record", "data_export_job"},
@@ -93,11 +91,8 @@ def load_models_for_migration() -> None:
         import app.modules.api_keys.models  # noqa: PLC0415
     if modules.outbound_webhooks.enabled:
         import app.modules.webhooks.models  # noqa: PLC0415
-    # No branch for enterprise_sso yet: T-290 added the toggle, but the model
-    # it would import (app.modules.sso.models) arrives with T-331. Its
-    # MODULE_TABLES entry above is already in place -- add the import here at
-    # the same time as the model, or autogenerate will not see the new table
-    # at all.
+    if modules.enterprise_sso.enabled:
+        import app.modules.sso.models  # noqa: PLC0415
 
 
 load_models_for_migration()

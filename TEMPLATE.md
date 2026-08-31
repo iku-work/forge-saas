@@ -49,7 +49,7 @@ at boot, whether or not you spelled the `requires` out yourself.
 | `outbound_webhooks` | off | `billing` | Customer-facing webhook endpoints, the delivery log and its retry/replay surface at `/api/v1/webhooks`, the `webhook_endpoint` + `webhook_delivery` tables, and the delivery job (T-320–T-322) |
 | `marketing` | on | — | The `apps/marketing` build, and the generated Caddy block that serves it on its own host (T-290, T-307) |
 | `public_api` | off | — | Org-scoped API keys, their management surface at `/api/v1/api-keys`, the `api_key` table, and the ability of a key to authenticate at all (T-290, T-310–T-312) |
-| `enterprise_sso` | off | `oauth` | Per-org OIDC/SAML sign-in, and `python3-saml`'s native `libxmlsec1` from the image (T-290) |
+| `enterprise_sso` | off | `oauth` | Per-org OIDC sign-in at `/api/v1/auth/sso`, the `sso_connection` table, and the ability of an organisation to *refuse* password logins (T-331) |
 
 `public_api` is the one whose toggle does something a routing table cannot
 show. Turning it off removes `/api/v1/api-keys` like any other module — but
@@ -68,6 +68,17 @@ was on is dropped rather than pushed to a third party after it is switched
 off. Its rows survive, like every disabled module's, which means turning it
 back on resumes delivery for everything still `pending` — worth knowing
 before you flip it twice.
+
+`enterprise_sso` is the third of these, and the one whose off-switch reaches
+furthest. Its own routes go with the toggle as usual, but so does a check on
+the *password* login path: `sso.enforcement.password_login_blocked` returns
+`None` before it queries anything when the module is off, so a product that
+never enables it pays nothing on the busiest path in the product. Turning it
+off also un-enforces every enforcing connection at once — deliberately, since
+the alternative is a product-wide flag that can lock every customer out — and
+the rows survive to enforce again when it comes back. It requires `oauth`, and
+`validate_modules()` refuses the boot on the illegal pair rather than letting
+a login find half a stack.
 
 `marketing` is the only one that gates a *build* rather than a router:
 `apps/marketing`'s `build` script exits 0 without producing a `dist`, so a
@@ -106,7 +117,7 @@ later. Branch per module:
 | `billing` / `gdpr` / `notifications` / `file_storage` | the matching module | shipped |
 | `public_api` | `public_api` | shipped (T-310, the `api_key` table) |
 | `outbound_webhooks` | `outbound_webhooks` | shipped (T-320, the `webhook_endpoint` + `webhook_delivery` tables) |
-| `enterprise_sso` | `enterprise_sso` | arrives with the `sso_connection` table (T-331) |
+| `enterprise_sso` | `enterprise_sso` | shipped (T-331, the `sso_connection` table) |
 | `product` | yours | use your prefix range from the table above |
 
 A new branch needs three edits together: the directory listed in
@@ -125,6 +136,7 @@ deliberately never applies. Apply the disabled branches first, then check:
 cd backend
 python -m alembic upgrade public_api@head          # each branch your
 python -m alembic upgrade outbound_webhooks@head   # product has off
+python -m alembic upgrade enterprise_sso@head
 python -m alembic check
 ```
 

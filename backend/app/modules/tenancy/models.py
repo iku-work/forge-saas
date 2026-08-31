@@ -16,14 +16,21 @@ from app.modules.auth.permissions import MemberRole
 _TZ_DATETIME = DateTime(timezone=True)
 
 
-def _member_role_column() -> SAEnum:
-    # native_enum=False renders this as VARCHAR + CHECK instead of a
-    # standalone Postgres CREATE TYPE. Two tables (Membership, Invitation)
-    # use this column type; a native PG enum type is a single DB-wide object
-    # that op.drop_table() never cleans up on downgrade, so a later upgrade
-    # fails on "type already exists". A CHECK constraint is per-column, so it
-    # round-trips with the table. A fresh instance per call, rather than one
-    # shared object, avoids coupling the two tables' columns together.
+def member_role_column() -> SAEnum:
+    """A `MemberRole` column, as this schema always spells one.
+
+    native_enum=False renders it as VARCHAR + CHECK instead of a standalone
+    Postgres CREATE TYPE. Three tables use it now (Membership, Invitation,
+    and T-331's SsoConnection); a native PG enum type is a single DB-wide
+    object that op.drop_table() never cleans up on downgrade, so a later
+    upgrade fails on "type already exists". A CHECK constraint is per-column,
+    so it round-trips with the table. A fresh instance per call, rather than
+    one shared object, avoids coupling the tables' columns together.
+
+    Public -- it lost its underscore in T-331 -- because `sso_connection` is
+    on a different module's migration branch and has to spell the column the
+    same way, and two copies of this comment would be one too many.
+    """
     return SAEnum(MemberRole, name="memberrole", native_enum=False, length=20)
 
 
@@ -48,7 +55,7 @@ class Membership(UUIDPKMixin, TimestampMixin, SQLModel, table=True):
 
     user_id: UUID = Field(foreign_key="user.id", index=True)
     org_id: UUID = Field(foreign_key="organization.id", index=True)
-    role: MemberRole = Field(sa_column=Column(_member_role_column(), nullable=False))
+    role: MemberRole = Field(sa_column=Column(member_role_column(), nullable=False))
     invited_by: UUID | None = Field(default=None, foreign_key="user.id")
 
 
@@ -57,7 +64,7 @@ class Invitation(UUIDPKMixin, TimestampMixin, SQLModel, table=True):
 
     org_id: UUID = Field(foreign_key="organization.id", index=True)
     email: str = Field(index=True)
-    role: MemberRole = Field(sa_column=Column(_member_role_column(), nullable=False))
+    role: MemberRole = Field(sa_column=Column(member_role_column(), nullable=False))
     token_hash: str = Field(unique=True)  # SHA-256 hex — never the plain token
     invited_by: UUID = Field(foreign_key="user.id")
     expires_at: datetime = Field(sa_type=_TZ_DATETIME)  # type: ignore[call-overload]

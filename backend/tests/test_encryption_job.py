@@ -231,6 +231,10 @@ def test_discovery_finds_every_encrypted_column() -> None:
         # previous one during its overlap window.
         "webhook_endpoint.secret",
         "webhook_endpoint.secret_previous",
+        # T-331. An IdP client secret has to be *presented* to the IdP, so it
+        # is encrypted rather than hashed -- and therefore rotates with
+        # everything else here.
+        "sso_connection.client_secret",
         DEMO_LABEL,
     }
     # ...paged on each table's own PK, which is not `id` everywhere.
@@ -325,6 +329,7 @@ async def test_rotation_moves_every_row_onto_the_new_key(
     assert records[0].result is not None
     assert records[0].result["done_columns"] == [
         DEMO_LABEL,
+        "sso_connection.client_secret",
         "totp_secret.secret_encrypted",
         "user.full_name",
         "webhook_endpoint.secret",
@@ -636,6 +641,7 @@ async def test_throttle_defaults_come_from_settings(
         "throttle_seconds": 0.25,
         "columns": [
             DEMO_LABEL,
+            "sso_connection.client_secret",
             "totp_secret.secret_encrypted",
             "user.full_name",
             "webhook_endpoint.secret",

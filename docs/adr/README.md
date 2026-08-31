@@ -85,4 +85,5 @@ as the change" rule in step 4 is for.
 | [0004](0004-marketing-framework.md) | Marketing site framework | Accepted | 2026-08-21 |
 | [0005](0005-runtime-operator-switches.md) | A database-backed maintenance switch that fails open | Accepted | 2026-08-07 |
 | [0006](0006-enterprise-sso.md) | Enterprise SSO — OIDC first, SAML on a trigger | Accepted | 2026-08-31 |
+| [0007](0007-tenancy-model.md) | Tenancy model — row-level, with RLS as the named next step | Accepted | 2026-08-31 |
 <!-- adr-index:end -->
