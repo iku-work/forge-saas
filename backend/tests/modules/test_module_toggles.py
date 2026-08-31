@@ -133,7 +133,14 @@ MODULE_SURFACE: dict[ModuleName, ModuleSurface] = {
         ),
     ),
     "outbound_webhooks": ModuleSurface(
-        note="Phase-2 slot; no router, no models, no migration branch yet.",
+        # T-320/T-321/T-322. Like `public_api`, the toggle removes the whole
+        # management surface -- but unlike it, there is nothing left behind:
+        # a webhook has no second principal to authenticate, so with the
+        # module off the only thing that survives is rows in two tables
+        # (MODULE_TABLES again), and the delivery job refuses to send for
+        # them (app/workers/jobs/webhooks.py checks `is_enabled` first).
+        routes=("/api/v1/webhooks/*",),
+        tables=("webhook_endpoint", "webhook_delivery"),
     ),
     "marketing": ModuleSurface(
         note=(
@@ -152,7 +159,10 @@ MODULE_SURFACE: dict[ModuleName, ModuleSurface] = {
         # which app/core/principal.py checks on the auth path and
         # tests/modules/test_api_key_auth.py asserts; a routing assertion
         # could not see it.
-        routes=("/api/v1/api-keys/*",),
+        # T-314's published contract goes with the module too: with
+        # `public_api` off a key cannot authenticate at all, and a contract
+        # nobody can call is worse than no contract.
+        routes=("/api/v1/api-keys/*", "/api/v1/openapi-public.json"),
         tables=("api_key",),
     ),
     "enterprise_sso": ModuleSurface(

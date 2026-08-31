@@ -57,6 +57,7 @@ MODULE_TABLES: dict[str, set[str]] = {
     "gdpr": {"consent_record", "data_export_job"},
     "notifications": {"notification", "push_token"},
     "file_storage": {"stored_file"},
+    "outbound_webhooks": {"webhook_endpoint", "webhook_delivery"},
     "public_api": {"api_key"},
     "enterprise_sso": {"sso_connection"},
 }
@@ -90,6 +91,8 @@ def load_models_for_migration() -> None:
         import app.modules.storage.models  # noqa: PLC0415
     if modules.public_api.enabled:
         import app.modules.api_keys.models  # noqa: PLC0415
+    if modules.outbound_webhooks.enabled:
+        import app.modules.webhooks.models  # noqa: PLC0415
     # No branch for enterprise_sso yet: T-290 added the toggle, but the model
     # it would import (app.modules.sso.models) arrives with T-331. Its
     # MODULE_TABLES entry above is already in place -- add the import here at

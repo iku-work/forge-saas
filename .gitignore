@@ -16,6 +16,10 @@ dist/
 .turbo/
 .next/
 packages/api-client/src/generated/
+# T-313: the all-modules-on OpenAPI document backend/scripts/dump_openapi.py
+# writes and openapi-ts.config.ts reads. Derived from the backend on every
+# `pnpm --filter @forge/api-client generate`, exactly like the client above.
+packages/api-client/openapi.json
 packages/i18n/src/keys.ts
 
 # Astro (T-300) -- apps/marketing/.astro holds the route and content types

@@ -69,6 +69,8 @@ from app.modules.billing.usage_service import UsageService
 from app.modules.feature_flags.service import FeatureFlagService
 from app.modules.tenancy.models import Organization
 from app.modules.tenancy.repository import OrganizationRepository
+from app.modules.webhooks import service as webhooks
+from app.modules.webhooks.events import EventType, SubscriptionPayload
 
 logger = logging.getLogger(__name__)
 
@@ -146,7 +148,7 @@ class BillingService:
             return
 
         org_uuid = UUID(org_id)
-        await self._subscriptions.upsert(
+        subscription = await self._subscriptions.upsert(
             org_id=org_uuid,
             plan_id=plan.id,
             stripe_subscription_id=obj["id"],
@@ -157,6 +159,18 @@ class BillingService:
             trial_end=_epoch_to_datetime(obj.get("trial_end")),
         )
         await self._flags.invalidate(org_uuid)
+        # T-320. The one billing event worth publishing: a consumer that
+        # provisions on plan change needs it, and everything else Stripe
+        # sends is either an implementation detail of this integration or
+        # something the consumer should be reading from Stripe itself.
+        await webhooks.emit(
+            self._session,
+            org_uuid,
+            EventType.SUBSCRIPTION_UPDATED,
+            SubscriptionPayload(
+                subscription_id=subscription.id, plan_slug=plan.slug, status=subscription.status
+            ),
+        )
 
     async def _handle_subscription_deleted(self, payload: dict[str, Any]) -> None:
         obj = payload["data"]["object"]

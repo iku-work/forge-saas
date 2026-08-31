@@ -79,28 +79,13 @@ jobs:
           echo "marketing enabled: $enabled"
           echo "enabled=$enabled" >> "$GITHUB_OUTPUT"
 
-      # packages/api-client/src/generated/ is gitignored (it is produced from
-      # the live OpenAPI schema), so on a fresh checkout @forge/api-client
-      # cannot build -- and `pnpm lint`/`type-check` both depend on `^build`
-      # via turbo. Every other frontend-touching job here already boots the
-      # backend for this; lint was the one that did not, which is why it
-      # failed on @forge/api-client#build rather than on any lint rule.
-      # Client generation only needs /openapi.json, which never touches the
-      # DB/Redis -- .env.test's dummy credentials are enough.
-      - name: Start backend for OpenAPI schema
-        working-directory: backend
-        run: |
-          cp .env.test .env
-          nohup uvicorn app.main:app --host 0.0.0.0 --port 8000 > uvicorn.log 2>&1 &
-          for i in $(seq 1 30); do
-            curl -sf http://localhost:8000/health && exit 0
-            sleep 1
-          done
-          echo "backend did not become ready" >&2
-          cat uvicorn.log
-          exit 1
-
-      - name: Generate API client from live OpenAPI schema
+      # packages/api-client/src/generated/ is gitignored (it is derived from
+      # the OpenAPI schema), so on a fresh checkout @forge/api-client cannot
+      # build -- and `pnpm lint`/`type-check` both depend on `^build` via
+      # turbo. T-313 made that derivation offline: no uvicorn, no port to
+      # poll, and every module's symbols present regardless of what
+      # product/config.py enables.
+      - name: Generate API client from the OpenAPI schema
         run: pnpm --filter @forge/api-client generate
 
       - name: Frontend lint + type-check
@@ -286,7 +271,10 @@ jobs:
           cat uvicorn.log
           exit 1
 
-      - name: Generate API client from live OpenAPI schema
+      # Offline (T-313), from an all-modules-on build -- the backend booted
+      # above is for the schemathesis fuzz at the end of this job, not for
+      # this step.
+      - name: Generate API client from the OpenAPI schema
         run: pnpm --filter @forge/api-client generate
 
       - name: Build workspace packages
@@ -416,47 +404,18 @@ jobs:
         working-directory: backend
         run: cp .env.test .env
 
-      # Deliberately *before* the fixture is applied, and from the committed
-      # config in every combination. packages/api-client/src/generated is
-      # produced from a live /openapi.json, and apps/web imports its symbols
-      # unconditionally (listAdminOrgs, getAdminDashboard, ...) because the
-      # SPA gates modules at runtime from /api/v1/config, not at compile time
-      # -- one bundle serves every configuration. Generating from combination
-      # B's own (smaller) schema would delete symbols the app's source
-      # imports, and type-check would fail on the template's design rather
-      # than on anything the toggle got wrong.
-      - name: Start backend for OpenAPI schema (committed config)
-        working-directory: backend
-        run: |
-          nohup uvicorn app.main:app --host 0.0.0.0 --port 8000 > openapi.log 2>&1 &
-          echo $! > openapi.pid
-          for i in $(seq 1 30); do
-            curl -sf http://localhost:8000/health && exit 0
-            sleep 1
-          done
-          echo "backend did not become ready" >&2
-          cat openapi.log
-          exit 1
-
-      - name: Generate API client from live OpenAPI schema
+      # Deliberately *before* the fixture is applied, and identical in every
+      # combination -- but for a reason that changed in T-313. The schema is
+      # now dumped offline with *every* module enabled
+      # (backend/scripts/dump_openapi.py), so the generated client is the
+      # union of every configuration rather than a picture of one, and
+      # apps/web can go on importing its symbols unconditionally (the SPA
+      # gates modules at runtime from /api/v1/config, not at compile time).
+      # That also retired the second uvicorn this job used to start and stop
+      # on :8000 purely to serve a schema, and the start-order race that came
+      # with it.
+      - name: Generate API client from the OpenAPI schema
         run: pnpm --filter @forge/api-client generate
-
-      # Waits for the port to come free rather than just signalling. The boot
-      # check below binds :8000 again -- the generator's input URL is
-      # hardcoded, so both backends have to live there -- and a predecessor
-      # that was still listening would answer that health poll perfectly
-      # happily, from the *committed* config. That is the one process this
-      # job must never mistake for the fixture's.
-      - name: Stop the schema backend
-        working-directory: backend
-        run: |
-          kill "$(cat openapi.pid)" || true
-          for i in $(seq 1 20); do
-            curl -sf http://localhost:8000/health > /dev/null || exit 0
-            sleep 1
-          done
-          echo "the schema backend is still listening on :8000" >&2
-          exit 1
 
       # Both files, always together: a half-applied toggle (backend 404s, UI
       # still offers the page) is the exact failure the runbook warns about,
@@ -656,25 +615,17 @@ jobs:
       - name: Install frontend dependencies
         run: pnpm install --frozen-lockfile
 
-      # Same as the `build` job: client generation only needs /openapi.json,
-      # which never touches the DB/Redis -- .env.test's dummy credentials are
-      # enough to boot the app and serve the schema.
-      - name: Start backend for OpenAPI schema
-        working-directory: backend
+      # T-313: the document is dumped offline from an *all-modules-on* build
+      # of the app (backend/scripts/dump_openapi.py) rather than fetched from a
+      # running one. Nothing about producing a schema needs a port, a database
+      # or a Redis, and the union of every module is what apps/web's runtime
+      # module gating (from /api/v1/config, not at compile time) already
+      # assumes -- one bundle serves every configuration, so the client it is
+      # built against must contain every configuration's symbols.
+      - name: Generate API client from the OpenAPI schema
         run: |
-          pip install -e .
-          cp .env.test .env
-          nohup uvicorn app.main:app --host 0.0.0.0 --port 8000 > uvicorn.log 2>&1 &
-          for i in $(seq 1 30); do
-            curl -sf http://localhost:8000/health && exit 0
-            sleep 1
-          done
-          echo "backend did not become ready" >&2
-          cat uvicorn.log
-          exit 1
-
-      - name: Generate API client from live OpenAPI schema
-        run: pnpm --filter @forge/api-client generate
+          pip install -e ./backend
+          pnpm --filter @forge/api-client generate
 
       - name: Build workspace packages
         run: pnpm build
@@ -761,27 +712,17 @@ jobs:
       - name: Install frontend dependencies
         run: pnpm install --frozen-lockfile
 
-      # Same host-side boot as the `build` and `storybook` jobs: @forge/ui
-      # depends on @forge/api-client, whose source is generated from the live
-      # OpenAPI schema, and apps/marketing renders @forge/ui. Nothing here
-      # touches the database -- .env.test's dummy credentials are enough to
-      # serve /openapi.json.
-      - name: Start backend for OpenAPI schema
-        working-directory: backend
+      # T-313: the document is dumped offline from an *all-modules-on* build
+      # of the app (backend/scripts/dump_openapi.py) rather than fetched from a
+      # running one. Nothing about producing a schema needs a port, a database
+      # or a Redis, and the union of every module is what apps/web's runtime
+      # module gating (from /api/v1/config, not at compile time) already
+      # assumes -- one bundle serves every configuration, so the client it is
+      # built against must contain every configuration's symbols.
+      - name: Generate API client from the OpenAPI schema
         run: |
-          pip install -e .
-          cp .env.test .env
-          nohup uvicorn app.main:app --host 0.0.0.0 --port 8000 > uvicorn.log 2>&1 &
-          for i in $(seq 1 30); do
-            curl -sf http://localhost:8000/health && exit 0
-            sleep 1
-          done
-          echo "backend did not become ready" >&2
-          cat uvicorn.log
-          exit 1
-
-      - name: Generate API client from live OpenAPI schema
-        run: pnpm --filter @forge/api-client generate
+          pip install -e ./backend
+          pnpm --filter @forge/api-client generate
 
       - name: Build workspace packages
         run: pnpm build
@@ -1080,25 +1021,17 @@ jobs:
       - name: Install frontend dependencies
         run: pnpm install --frozen-lockfile
 
-      # Client generation only needs /openapi.json, which never touches the
-      # DB/Redis -- .env.test's dummy credentials (same fixture the lint/test
-      # jobs use) are enough to boot the app and serve the schema.
-      - name: Start backend for OpenAPI schema
-        working-directory: backend
+      # T-313: the document is dumped offline from an *all-modules-on* build
+      # of the app (backend/scripts/dump_openapi.py) rather than fetched from a
+      # running one. Nothing about producing a schema needs a port, a database
+      # or a Redis, and the union of every module is what apps/web's runtime
+      # module gating (from /api/v1/config, not at compile time) already
+      # assumes -- one bundle serves every configuration, so the client it is
+      # built against must contain every configuration's symbols.
+      - name: Generate API client from the OpenAPI schema
         run: |
-          pip install -e .
-          cp .env.test .env
-          nohup uvicorn app.main:app --host 0.0.0.0 --port 8000 > uvicorn.log 2>&1 &
-          for i in $(seq 1 30); do
-            curl -sf http://localhost:8000/health && exit 0
-            sleep 1
-          done
-          echo "backend did not become ready" >&2
-          cat uvicorn.log
-          exit 1
-
-      - name: Generate API client from live OpenAPI schema
-        run: pnpm --filter @forge/api-client generate
+          pip install -e ./backend
+          pnpm --filter @forge/api-client generate
 
       - name: turbo build — gen-client output feeds every package/app build
         run: pnpm build
@@ -1269,26 +1202,17 @@ jobs:
       - name: Install frontend dependencies
         run: pnpm install --frozen-lockfile
 
-      # Client generation only needs /openapi.json -- same host-side boot as
-      # the build job above, torn down again before docker compose's own
-      # backend container needs port 8000.
-      - name: Start backend for OpenAPI schema
-        working-directory: backend
+      # T-313: the document is dumped offline from an *all-modules-on* build
+      # of the app (backend/scripts/dump_openapi.py) rather than fetched from a
+      # running one. Nothing about producing a schema needs a port, a database
+      # or a Redis, and the union of every module is what apps/web's runtime
+      # module gating (from /api/v1/config, not at compile time) already
+      # assumes -- one bundle serves every configuration, so the client it is
+      # built against must contain every configuration's symbols.
+      - name: Generate API client from the OpenAPI schema
         run: |
-          pip install -e .
-          cp .env.test .env
-          nohup uvicorn app.main:app --host 0.0.0.0 --port 8000 > uvicorn.log 2>&1 &
-          echo $! > uvicorn.pid
-          for i in $(seq 1 30); do
-            curl -sf http://localhost:8000/health && exit 0
-            sleep 1
-          done
-          echo "backend did not become ready" >&2
-          cat uvicorn.log
-          exit 1
-
-      - name: Generate API client from live OpenAPI schema
-        run: pnpm --filter @forge/api-client generate
+          pip install -e ./backend
+          pnpm --filter @forge/api-client generate
 
       # Produces apps/web/dist, which Caddy bind-mounts (docker-compose.yml's
       # caddy service) once the compose stack boots below. VITE_API_URL=
@@ -1304,10 +1228,6 @@ jobs:
         run: pnpm build
         env:
           VITE_API_URL: ""
-
-      - name: Stop host-side backend
-        working-directory: backend
-        run: kill "$(cat uvicorn.pid)" || true
 
       - name: Install Playwright browsers
         working-directory: apps/web

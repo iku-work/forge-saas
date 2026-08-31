@@ -20,6 +20,7 @@ from app.core.exceptions import (
     NotFoundError,
     PermissionDeniedError,
 )
+from app.core.module_loader import is_enabled
 from app.core.urls import frontend_url
 from app.models._mixins import utcnow
 from app.modules.audit.service import AuditService
@@ -34,6 +35,15 @@ from app.modules.tenancy.repository import (
     MembershipRepository,
     OrganizationRepository,
 )
+
+# T-320: imported at module scope rather than lazily, unlike build_router()'s
+# router imports. The distinction is what the import costs: a router pulls in
+# a whole HTTP surface, while these two are an enum, a few pydantic models and
+# a repository. `webhooks.emit` is safe to call with the module off -- it
+# returns immediately -- so every call site below is unconditional except the
+# one that would otherwise need an extra query to build its payload.
+from app.modules.webhooks import service as webhooks
+from app.modules.webhooks.events import EventType, MemberPayload, OrgPayload
 
 _INVITATION_TTL = timedelta(hours=72)
 _INVITATION_TTL_SECONDS = int(_INVITATION_TTL.total_seconds())
@@ -102,6 +112,12 @@ class TenancyService:
             type="member_invited",
             params={"email": email, "org_name": org.name},
         )
+        await webhooks.emit(
+            self._session,
+            org_id,
+            EventType.MEMBER_INVITED,
+            MemberPayload(email=email, role=role.value),
+        )
 
     async def accept_invitation(self, token: str, user: User) -> Membership:
         # Two independent checks: the itsdangerous signature + embedded TTL
@@ -116,12 +132,24 @@ class TenancyService:
             )
 
         await self._invitations.mark_accepted(invitation.id)
-        return await self._memberships.create(
+        membership = await self._memberships.create(
             user_id=user.id,
             org_id=invitation.org_id,
             role=invitation.role,
             invited_by=invitation.invited_by,
         )
+        await webhooks.emit(
+            self._session,
+            invitation.org_id,
+            EventType.MEMBER_JOINED,
+            MemberPayload(
+                membership_id=membership.id,
+                user_id=user.id,
+                email=user.email,
+                role=membership.role.value,
+            ),
+        )
+        return membership
 
     async def change_role(
         self, actor_membership: Membership, target_membership_id: UUID, new_role: MemberRole
@@ -162,6 +190,22 @@ class TenancyService:
             actor_id=actor_membership.user_id,
             diff={"old_role": old_role.value, "new_role": new_role.value},
         )
+        # Guarded, unlike the call sites above: the payload needs the member's
+        # email, which is a row this method does not otherwise read. A product
+        # with the module off must not pay for a query it will never use.
+        if is_enabled("outbound_webhooks"):
+            member = await UserRepository(self._session).get_by_id(target.user_id)
+            await webhooks.emit(
+                self._session,
+                target.org_id,
+                EventType.MEMBER_ROLE_CHANGED,
+                MemberPayload(
+                    membership_id=target.id,
+                    user_id=target.user_id,
+                    email=member.email if member else "",
+                    role=new_role.value,
+                ),
+            )
         return updated
 
     async def remove_member(self, actor_membership: Membership, target_membership_id: UUID) -> UUID:
@@ -186,6 +230,21 @@ class TenancyService:
                     fallback="Cannot remove the last owner of an organization",
                 )
 
+        # Emitted before the row is removed, and guarded for the same reason
+        # as change_role's: the email is an extra read.
+        if is_enabled("outbound_webhooks"):
+            member = await UserRepository(self._session).get_by_id(target.user_id)
+            await webhooks.emit(
+                self._session,
+                target.org_id,
+                EventType.MEMBER_REMOVED,
+                MemberPayload(
+                    membership_id=target.id,
+                    user_id=target.user_id,
+                    email=member.email if member else "",
+                    role=target.role.value,
+                ),
+            )
         await self._memberships.remove(target.id)
         # The removed member's user id, so the router can bust that user's
         # cache (T-240) -- the membership row is gone by the time it returns.
@@ -221,7 +280,14 @@ class TenancyService:
         return await self._orgs.list_for_user(user_id)
 
     async def update_org(self, org_id: UUID, **fields: Any) -> Organization:  # noqa: ANN401 — forwarded to OrganizationRepository.update
-        return await self._orgs.update(org_id, **fields)
+        org = await self._orgs.update(org_id, **fields)
+        await webhooks.emit(
+            self._session,
+            org_id,
+            EventType.ORG_UPDATED,
+            OrgPayload(org_id=org.id, name=org.name, slug=org.slug),
+        )
+        return org
 
     async def list_members(
         self, org_id: UUID, after: UUID | None, limit: int

@@ -20,6 +20,7 @@ from app.workers.jobs.encryption import rotate_encryption_keys_job
 from app.workers.jobs.gdpr import export_user_data, purge_user_data
 from app.workers.jobs.notifications import backfill_notification_preferences, send_push
 from app.workers.jobs.virus_scan import virus_scan
+from app.workers.jobs.webhooks import deliver_webhook
 from app.workers.scheduler import create_scheduler
 
 
@@ -51,6 +52,12 @@ class WorkerSettings:
         send_push,
         virus_scan,
         send_dunning_email,
+        # T-321. Registered unconditionally, like every other job here: the
+        # function itself checks `is_enabled("outbound_webhooks")`, so a
+        # delivery enqueued before the module was switched off is dropped
+        # rather than sent -- which a missing registration could not do (arq
+        # would simply fail to resolve the job name and log it as an error).
+        deliver_webhook,
     ]
     redis_settings = RedisSettings.from_dsn(str(get_settings().REDIS_URL))
     max_jobs = 20

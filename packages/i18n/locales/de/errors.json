@@ -85,5 +85,9 @@
   "api_key_limit_reached": "Diese Organisation ist auf {limit} API-Schlüssel begrenzt.",
   "api_key_expiry_in_the_past": "Das Ablaufdatum muss in der Zukunft liegen.",
   "api_key_rate_limited": "Dieser API-Schlüssel hat sein Limit von {limit} Anfragen pro Minute überschritten.",
-  "invalid_org_header": "X-Org-ID ist keine gültige Kennung."
+  "invalid_org_header": "X-Org-ID ist keine gültige Kennung.",
+  "unsafe_webhook_url": "Diese URL kann nicht als Webhook-Endpunkt verwendet werden: {reason}",
+  "unknown_event_type": "Unbekannter Ereignistyp: {event_type}.",
+  "webhook_endpoint_limit_reached": "Diese Organisation ist auf {limit} Webhook-Endpunkte begrenzt.",
+  "webhook_endpoint_disabled": "Aktivieren Sie diesen Endpunkt, bevor Sie eine Zustellung wiederholen."
 }

@@ -46,7 +46,7 @@ at boot, whether or not you spelled the `requires` out yourself.
 | `totp_2fa` | on | — | TOTP enrolment and step-up prompts |
 | `multi_org` | on | — | The org switcher; users stay pinned to one organisation |
 | `usage_metering` | off | `billing` | Usage records and metered/reported quantities |
-| `outbound_webhooks` | off | `billing` | Customer-facing webhook endpoints and deliveries |
+| `outbound_webhooks` | off | `billing` | Customer-facing webhook endpoints, the delivery log and its retry/replay surface at `/api/v1/webhooks`, the `webhook_endpoint` + `webhook_delivery` tables, and the delivery job (T-320–T-322) |
 | `marketing` | on | — | The `apps/marketing` build, and the generated Caddy block that serves it on its own host (T-290, T-307) |
 | `public_api` | off | — | Org-scoped API keys, their management surface at `/api/v1/api-keys`, the `api_key` table, and the ability of a key to authenticate at all (T-290, T-310–T-312) |
 | `enterprise_sso` | off | `oauth` | Per-org OIDC/SAML sign-in, and `python3-saml`'s native `libxmlsec1` from the image (T-290) |
@@ -60,6 +60,14 @@ rather than a parallel API. What the toggle removes there is the key's ability
 to authenticate: `app/core/principal.py` checks it on the auth path, so a key
 minted while the module was on stops working the moment it is turned off, even
 though its row is still in a table that still exists.
+
+`outbound_webhooks` has the same shape of subtlety from the other side. Its
+routes go with the toggle like any module's, and so does the *delivery*: the
+job checks `is_enabled` before it sends, so a delivery queued while the module
+was on is dropped rather than pushed to a third party after it is switched
+off. Its rows survive, like every disabled module's, which means turning it
+back on resumes delivery for everything still `pending` — worth knowing
+before you flip it twice.
 
 `marketing` is the only one that gates a *build* rather than a router:
 `apps/marketing`'s `build` script exits 0 without producing a `dist`, so a
@@ -97,6 +105,7 @@ later. Branch per module:
 | `core` | always applied | auth, tenancy, audit, job records, product settings |
 | `billing` / `gdpr` / `notifications` / `file_storage` | the matching module | shipped |
 | `public_api` | `public_api` | shipped (T-310, the `api_key` table) |
+| `outbound_webhooks` | `outbound_webhooks` | shipped (T-320, the `webhook_endpoint` + `webhook_delivery` tables) |
 | `enterprise_sso` | `enterprise_sso` | arrives with the `sso_connection` table (T-331) |
 | `product` | yours | use your prefix range from the table above |
 
@@ -114,7 +123,8 @@ deliberately never applies. Apply the disabled branches first, then check:
 
 ```bash
 cd backend
-python -m alembic upgrade public_api@head   # each branch your product has off
+python -m alembic upgrade public_api@head          # each branch your
+python -m alembic upgrade outbound_webhooks@head   # product has off
 python -m alembic check
 ```
 

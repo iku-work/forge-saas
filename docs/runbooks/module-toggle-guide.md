@@ -48,11 +48,19 @@ removes today:
   (`app/core/principal.py`), not in the routing table, because the rows
   survive the toggle by design. See the section on re-enabling it below,
   which is the one flip in this template with a security consequence.
+- **An outbound push, rather than an inbound route.** `outbound_webhooks`
+  (T-320–T-322) removes `/api/v1/webhooks` and its two tables like any
+  module — and also stops the *worker* from delivering: the job checks
+  `is_enabled` before it sends, so a delivery already queued when the toggle
+  flipped is dropped rather than pushed to a third party afterwards. That
+  check is in `app/workers/jobs/webhooks.py`, not in the routing table, for
+  the same reason `public_api`'s is in the auth path: the rows outlive the
+  toggle by design.
 - **Nothing yet.** `oauth` and `totp_2fa` ship routers in `build_router()`'s
   always-on block, so their toggles do not currently remove anything;
-  `usage_metering` and `outbound_webhooks` are Phase-2 slots; and T-290's
-  `enterprise_sso` is a Phase-4 slot whose surface arrives with T-331.
-  Toggling any of these today changes only what `/api/v1/config` reports.
+  `usage_metering` is a Phase-2 slot; and T-290's `enterprise_sso` is a
+  Phase-4 slot whose surface arrives with T-331. Toggling any of these today
+  changes only what `/api/v1/config` reports.
 
 `backend/tests/modules/test_module_toggles.py`'s `MODULE_SURFACE` is the
 machine-readable version of this list, one entry per module, with a note
@@ -223,6 +231,32 @@ On, you get all three, plus the `public_api` migration branch.
 >
 > The same applies to a database restored from a backup taken while the
 > module was on. See [backup-restore.md](backup-restore.md).
+
+### Enabling outbound_webhooks
+
+`outbound_webhooks` ships **off** and **requires `billing`**. On, you get the
+`/api/v1/webhooks` management surface, the `webhook_endpoint` and
+`webhook_delivery` tables on their own migration branch, the delivery job,
+and two scheduled jobs (a retention prune and a due-delivery sweep).
+
+Three things to know before flipping it, in either direction:
+
+- **The worker is load-bearing.** Nothing is delivered by the API process. A
+  product with the module on and no worker running has a `pending` queue and
+  no symptom until somebody looks at `forge_webhook_queue_depth`.
+- **Re-enabling resumes deliveries.** Like `public_api`, the rows survive the
+  toggle — but unlike a key, a stale delivery is not a credential, it is a
+  *stale event*. Turning the module back on will push events that were
+  queued before it was turned off, which a consumer may reasonably treat as
+  new. If the gap is more than a few hours, mark them dead first:
+  `update webhook_delivery set status = 'dead', next_attempt_at = null where
+  status = 'pending';`
+- **Retention is a setting, not a default you can ignore.**
+  `webhook_delivery` is the fastest-growing table this template adds — one
+  row per event per endpoint, each carrying a payload.
+  `WEBHOOK_DELIVERY_RETENTION_DAYS` defaults to 30; the prune job is what
+  keeps it bounded, and it lives in the worker.
+  [outbound-webhooks.md](outbound-webhooks.md) is the operating runbook.
 
 ### Enabling enterprise_sso
 

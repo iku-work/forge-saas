@@ -188,6 +188,17 @@ class Settings(BaseSettings):
     # Notifications (T-103) — global cap on open SSE streams, to bound memory
     SSE_MAX_CONNECTIONS: int = 10000
 
+    # Outbound webhooks (T-321). `webhook_delivery` is the fastest-growing
+    # table this template adds — one row per event per endpoint, each carrying
+    # a stored payload — so the retention window is a setting rather than a
+    # decision deferred until the disk fills. The prune job
+    # (app.workers.jobs.webhooks.prune_webhook_deliveries) deletes in batches.
+    WEBHOOK_DELIVERY_RETENTION_DAYS: int = 30
+    # Connect *and* read timeout for one delivery attempt. One slow consumer
+    # must never occupy a worker; ten seconds is generous for a request whose
+    # only job is to return 200 and enqueue something.
+    WEBHOOK_TIMEOUT_SECONDS: float = 10.0
+
     # Virus scanning (T-113) — "clamav" | "virustotal" | "noop". "noop" (the
     # dev default) marks every uploaded file "clean" immediately.
     VIRUS_SCANNER: Literal["clamav", "virustotal", "noop"] = "noop"

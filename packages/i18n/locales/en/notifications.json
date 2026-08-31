@@ -40,7 +40,8 @@
     "type_file_uploaded": "A file is uploaded",
     "type_file_infected": "A file you uploaded is flagged as infected",
     "channel_required": "required",
-    "required_note": "We always email you about billing problems, so those can't be turned off — you'd lose access without warning."
+    "required_note": "We always email you about billing problems, so those can't be turned off — you'd lose access without warning.",
+    "type_webhook_endpoint_disabled": "A webhook endpoint is switched off after repeated failures"
   },
   "types": {
     "member_invited": {
@@ -66,6 +67,10 @@
     "file_infected": {
       "title": "A file you uploaded was flagged as infected",
       "body": "{filename} was removed after failing a virus scan."
+    },
+    "webhook_endpoint_disabled": {
+      "title": "Webhook endpoint disabled",
+      "body": "{url} failed too many deliveries in a row and has been switched off. Fix your consumer, then re-enable it."
     }
   }
 }

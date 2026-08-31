@@ -151,5 +151,13 @@
     "accept": "Zustimmen",
     "decline": "Ablehnen",
     "manage": "Cookie-Einstellungen"
+  },
+  "api": {
+    "title": "API-Referenz",
+    "description": "Alles, was ein API-Schlüssel aufrufen kann – erzeugt aus dem laufenden Dienst, nicht von Hand geschrieben.",
+    "version": "Vertragsversion {version}",
+    "endpoints_title": "Endpunkte",
+    "endpoints_empty": "Dieses Deployment veröffentlicht keine öffentlichen Endpunkte.",
+    "scope_required": "Erfordert die Berechtigung {scope}"
   }
 }

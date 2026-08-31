@@ -340,7 +340,7 @@ questionnaire) — evidence links point at real files, not at task IDs.
 | V5.2.3 | Input sanitized before mail systems (SMTP/IMAP injection) | met | `backend/app/workers/jobs/email.py` — prod path sends via the Resend HTTP API (`_send_via_resend`); dev path (`EMAIL_BACKEND=smtp`, MailHog) uses `smtplib.SMTP.send_message` with Python's `email` library building the MIME message, not raw string concatenation into SMTP commands. Neither path is injectable by user-controlled header values. |
 | V5.2.4 | No `eval()`/dynamic code execution on user input | met | No `eval`/`exec` use in application code; enforced by the bandit CI gate. |
 | V5.2.5 | Template injection protection | n/a | No server-side HTML templating engine renders user input (JSON-only API). |
-| V5.2.6 | SSRF protection via allow-listed protocols/domains/ports | partial | `backend/app/core/url_guard.py` `validate_outbound_url()` implements exactly this (rejects private/loopback/reserved IPs, DNS rebinding, non-http(s) schemes) but has zero callers today — same gap [T-212](../security/owasp-top10.md) already flagged for OWASP A10. Follow-up: existing task T-320 (outbound webhooks, first caller). |
+| V5.2.6 | SSRF protection via allow-listed protocols/domains/ports | met | `backend/app/core/url_guard.py` `validate_outbound_url()` rejects private/loopback/reserved IPs, DNS rebinding and non-http(s) schemes. T-320 gave it its first caller: the outbound-webhook module calls it when an endpoint is saved *and* again immediately before each delivery, because a hostname that resolved publicly yesterday can resolve to the metadata address today. |
 | V5.2.7 | User-supplied SVG sanitized/sandboxed | n/a | `image/svg+xml` is not in the upload content-type allow-list (`backend/app/modules/storage/service.py:39-53`); no SVG rendering surface exists. |
 | V5.2.8 | User-supplied scriptable template content (Markdown/CSS/XSL) sandboxed | n/a | No Markdown/CSS/XSL rendering of user-submitted content in the backend. |
 
@@ -543,7 +543,7 @@ questionnaire) — evidence links point at real files, not at task IDs.
 
 | ID | Requirement | Status | Evidence |
 |---|---|---|---|
-| V12.6.1 | Server configured with an allow-list for outbound resource requests | partial | Same gap as V5.2.6 — `backend/app/core/url_guard.py` exists but has no caller yet. Follow-up: existing task T-320. |
+| V12.6.1 | Server configured with an allow-list for outbound resource requests | met | As V5.2.6 — the guard is called at save time and at delivery time by `backend/app/workers/jobs/webhooks.py`, which is the only place this product fetches a URL somebody else chose. |
 
 ### V13 — API and Web Service
 

@@ -46,3 +46,41 @@ groups:
             second for at least 5 minutes -- likely an abusive client or
             credential-stuffing attempt being throttled. Investigate the
             source before it escalates to a full rate-limit bypass attempt.
+
+  # T-321: outbound webhooks. Two distinct failures, and only the second is
+  # this product's problem -- which is why they are separate rules rather than
+  # one "webhooks are unhealthy" alert somebody would learn to ignore.
+  - name: forge-outbound-webhooks
+    rules:
+      # A consumer that exhausted the whole ladder (1 m, 5 m, 30 m, 2 h, 12 h).
+      # Their outage, our page only if it is happening broadly -- a single dead
+      # endpoint auto-disables itself and notifies its owners without waking
+      # anyone here.
+      - alert: WebhookDeliveriesDeadLettering
+        expr: sum(rate(forge_webhook_deliveries_total{outcome="dead"}[15m])) > 0.05
+        for: 30m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Webhook deliveries are being given up ({{ $value }}/sec)"
+          description: >-
+            Deliveries have been exhausting all six attempts for half an hour.
+            One customer's endpoint being down looks like this and resolves
+            itself; several at once usually means an egress or DNS problem on
+            our side. See docs/runbooks/outbound-webhooks.md.
+      # This one *is* ours: work owed to customers that nothing is draining.
+      # The queue is the count of rows still awaiting an attempt, so a depth
+      # that climbs and never falls means the worker is not consuming -- not
+      # that a consumer is slow.
+      - alert: WebhookQueueNotDraining
+        expr: forge_webhook_queue_depth > 500
+        for: 15m
+        labels:
+          severity: critical
+        annotations:
+          summary: "{{ $value }} webhook deliveries pending and not draining"
+          description: >-
+            The pending-delivery count has stayed above 500 for 15 minutes.
+            Check that the ARQ worker is running and that `outbound_webhooks`
+            is enabled in *its* configuration -- the delivery job no-ops when
+            it is not. docs/runbooks/outbound-webhooks.md.

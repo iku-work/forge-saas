@@ -31,6 +31,8 @@ from app.core import cache, cache_keys
 from app.core.exceptions import AuthenticationError, PlanLimitError, UnprocessableEntityError
 from app.models._mixins import utcnow
 from app.modules.audit.service import AuditService
+from app.modules.webhooks import service as webhooks
+from app.modules.webhooks.events import ApiKeyPayload, EventType
 
 from .models import KEY_PREFIX, PREFIX_LENGTH, ApiKey
 from .repository import ApiKeyLookupRepository, ApiKeyRepository
@@ -155,6 +157,15 @@ class ApiKeyService:
         # costs is one Redis DEL per key created, and it removes the question
         # entirely rather than leaving it to be reasoned about.
         await self._invalidate(prefix)
+        # T-320. A security integration wants to know a credential was minted,
+        # by whom and with what reach -- and nothing about the credential
+        # itself, which is why ApiKeyPayload has no field that could carry it.
+        await webhooks.emit(
+            self._session,
+            self._org_id,
+            EventType.API_KEY_CREATED,
+            ApiKeyPayload(api_key_id=key.id, name=key.name, prefix=key.prefix, scopes=key.scopes),
+        )
         return key, f"{KEY_PREFIX}{prefix}_{secret}"
 
     async def list_keys(self, after: UUID | None, limit: int) -> tuple[list[ApiKey], UUID | None]:
@@ -188,6 +199,14 @@ class ApiKeyService:
         if key.revoked_at is None:
             key = await self._repo.update(key_id, revoked_at=utcnow())
             await self._log("api_key.revoked", user_id, key_id, diff={"prefix": key.prefix})
+            await webhooks.emit(
+                self._session,
+                self._org_id,
+                EventType.API_KEY_REVOKED,
+                ApiKeyPayload(
+                    api_key_id=key.id, name=key.name, prefix=key.prefix, scopes=key.scopes
+                ),
+            )
         # Unconditional, and outside the branch above: revocation has to take
         # effect on the *next* request rather than at the end of the cache
         # TTL, and re-revoking an already-revoked key is exactly what somebody

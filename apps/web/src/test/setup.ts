@@ -8,6 +8,31 @@ import { server } from "./server";
 // jsdom doesn't implement scrollTo; the router calls it on every navigation.
 window.scrollTo = () => undefined;
 
+// jsdom doesn't implement ResizeObserver either, and Radix reaches for it
+// through @radix-ui/react-use-size the moment a Checkbox mounts inside a
+// Dialog (T-313's create-key form, T-322's event picker) -- an unhandled
+// ReferenceError during commit, which React surfaces as a render failure
+// rather than as the missing-API it is. A no-op is the right stub: nothing
+// in this suite asserts on a resize, and the one place that does need real
+// measurements installs its own (test/virtualLayout.ts, which saves and
+// restores the descriptor it finds -- i.e. this one).
+class NoopResizeObserver implements ResizeObserver {
+  observe(): void {
+    return;
+  }
+  unobserve(): void {
+    return;
+  }
+  disconnect(): void {
+    return;
+  }
+}
+// Assigned unconditionally rather than with `??=`: the DOM lib types
+// `globalThis.ResizeObserver` as always present (jsdom disagrees), so the
+// nullish check reads to TypeScript as dead code. The one place that wants a
+// *real* one saves and restores whatever it finds here (test/virtualLayout.ts).
+globalThis.ResizeObserver = NoopResizeObserver;
+
 // The default 1000ms is tight for this suite's first render in a given test
 // file: renderApp() builds the whole router, and the very first call per
 // file pays a one-time cost (lazy route chunks, Vite's dep-optimizer warming

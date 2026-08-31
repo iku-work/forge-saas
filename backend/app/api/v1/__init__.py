@@ -68,9 +68,20 @@ def build_router() -> APIRouter:
         router.include_router(admin_router)
 
     if modules.public_api.enabled:
+        from app.api.v1.public_openapi import router as public_openapi_router  # noqa: PLC0415
         from app.modules.api_keys.router import router as api_keys_router  # noqa: PLC0415
 
         router.include_router(api_keys_router)
+        # T-314's published contract. Under the same toggle as the management
+        # routes rather than always-on: with `public_api` off a key cannot
+        # authenticate at all, and a contract nobody can call is worse than no
+        # contract.
+        router.include_router(public_openapi_router)
+
+    if modules.outbound_webhooks.enabled:
+        from app.modules.webhooks.router import router as webhooks_router  # noqa: PLC0415
+
+        router.include_router(webhooks_router)
 
     # T-290 added the `enterprise_sso` toggle; its block belongs here, in the
     # same shape as the one above, and lands with the router itself (T-331).

@@ -28,7 +28,7 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 from typing import Any
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import httpx
 import pytest
@@ -59,6 +59,8 @@ from app.modules.tenancy.repository import (
     MembershipRepository,
     OrganizationRepository,
 )
+from app.modules.webhooks.events import ALL_EVENT_TYPES
+from app.modules.webhooks.models import WebhookDelivery, WebhookEndpoint
 from tests.fixtures.query_counter import QueryLog, count_queries
 
 # T-291: this file needs every module that owns a list endpoint -- the shared
@@ -141,6 +143,21 @@ if is_enabled("public_api"):
     # Same shape as list_members: the maintenance check, get_current_user, the
     # org row and the membership behind require_permission, and the page.
     BUDGETS["list_api_keys"] = 5
+
+# T-320, and the same conditional for the same reason: `outbound_webhooks`
+# ships off, so at the committed configuration neither route is registered in
+# this process and neither may carry a budget.
+if is_enabled("outbound_webhooks"):
+    # As list_api_keys.
+    BUDGETS["list_endpoints"] = 5
+    # + the endpoint row, read before the log is paged so a delivery list is
+    # not reachable by guessing an endpoint id (§0.2). The property this file
+    # defends is that it stays 6 for 10,000 deliveries as well as for 3.
+    BUDGETS["list_deliveries"] = 6
+    # The event catalogue is rendered from a dict in code and touches no table
+    # of its own -- only the maintenance check, get_current_user, the org row
+    # and the membership. That it is *not* higher is the point of listing it.
+    BUDGETS["list_event_types"] = 4
 
 _SEED_FIRST = 3
 _SEED_SECOND = 27  # 3 + 27 = 30, past the default page cap of 20
@@ -368,6 +385,71 @@ async def _seed_api_keys(world: World, n: int) -> None:
     await world.session.commit()
 
 
+# T-320. Deliveries need an endpoint to hang off, and the endpoint has to
+# exist before the first delivery is seeded -- a module-level fixture cannot
+# hold it (the org is built per test), so the seeds share this lazily-created
+# one through the World they are handed.
+_WEBHOOK_ENDPOINTS: dict[UUID, WebhookEndpoint] = {}
+
+
+async def _webhook_endpoint(world: World) -> WebhookEndpoint:
+    existing = _WEBHOOK_ENDPOINTS.get(world.org.id)
+    if existing is not None:
+        return existing
+    endpoint = WebhookEndpoint(
+        org_id=world.org.id,
+        url="https://consumer.example.com/hook",
+        secret="whsec_seed",
+        event_types=["member.invited"],
+        created_by=world.owner.id,
+    )
+    world.session.add(endpoint)
+    await world.session.commit()
+    _WEBHOOK_ENDPOINTS[world.org.id] = endpoint
+    return endpoint
+
+
+async def _seed_webhook_endpoints(world: World, n: int) -> None:
+    for index in range(n):
+        world.session.add(
+            WebhookEndpoint(
+                org_id=world.org.id,
+                url=f"https://consumer.example.com/hook/{index}",
+                secret=f"whsec_seed_{index}",
+                event_types=["member.invited"],
+                created_by=world.owner.id,
+            )
+        )
+    await world.session.commit()
+
+
+async def _seed_webhook_deliveries(world: World, n: int) -> None:
+    endpoint = await _webhook_endpoint(world)
+    for _ in range(n):
+        world.session.add(
+            WebhookDelivery(
+                org_id=world.org.id,
+                endpoint_id=endpoint.id,
+                event_type="member.invited",
+                payload={"id": str(uuid4()), "type": "member.invited"},
+                status="delivered",
+                delivery_id=uuid4(),
+            )
+        )
+    await world.session.commit()
+
+
+async def _seed_event_types(world: World, n: int) -> None:  # noqa: ARG001 -- fixed catalogue
+    """The event catalogue is a constant in code, so there is nothing to seed.
+
+    Left as a real (empty) seeder rather than special-casing the sweep: the
+    endpoint still has to prove it issues a constant number of queries, and
+    the "the seed reached the response" assertion is satisfied because the
+    catalogue is always longer than the seed count.
+    """
+    return
+
+
 async def _seed_files(world: World, n: int) -> None:
     for _ in range(n):
         world.session.add(
@@ -528,6 +610,33 @@ ENDPOINTS: list[ListEndpoint] = [
 
 if is_enabled("public_api"):
     ENDPOINTS.append(ListEndpoint("list_api_keys", "/api/v1/api-keys", _seed_api_keys))
+
+if is_enabled("outbound_webhooks"):
+    ENDPOINTS.extend(
+        [
+            ListEndpoint("list_endpoints", "/api/v1/webhooks/endpoints", _seed_webhook_endpoints),
+            ListEndpoint(
+                "list_event_types",
+                "/api/v1/webhooks/event-types",
+                _seed_event_types,
+                # The catalogue is a constant in code, so it returns the same
+                # rows however much data exists -- which is exactly what
+                # `page_cap` means here, and what lets the sweep's "the seed
+                # reached the response" assertion hold for an endpoint with
+                # nothing to seed. Derived from the registry rather than
+                # written as a number, so registering an event does not fail
+                # this file.
+                page_cap=len(ALL_EVENT_TYPES),
+            ),
+            ListEndpoint(
+                "list_deliveries",
+                lambda w: (
+                    f"/api/v1/webhooks/endpoints/{_WEBHOOK_ENDPOINTS[w.org.id].id}/deliveries"
+                ),
+                _seed_webhook_deliveries,
+            ),
+        ]
+    )
 
 
 # --- measurement ------------------------------------------------------------

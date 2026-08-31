@@ -6,6 +6,55 @@ template keep their own changes in `CHANGELOG.product.md` (see
 
 ## [Unreleased]
 ### Added
+- **Outbound webhooks: endpoints, signed delivery, retry, replay (T-320, T-321,
+  T-322).** The `outbound_webhooks` module (default off, requires `billing`)
+  turns "something happened here" into a signed POST to a customer's URL, with
+  a delivery log a developer can debug from without opening a support ticket.
+  - **The signature covers the bytes that are sent, not a re-serialisation of
+    them.** `X-Forge-Signature: t=<unix>,v1=<hmac-sha256 of "{t}.{raw body}">`,
+    Stripe's scheme because an integrator has already written that verifier
+    once. The payload is serialised exactly once in the job and those bytes are
+    both signed and posted — signing `json.dumps(payload)` and sending a
+    differently-ordered serialisation is the failure that costs people days and
+    leaves nothing in either log. `verify_signature` ships as a working
+    reference implementation, timestamp tolerance included, rather than as a
+    paragraph telling consumers to write one.
+  - **The retry ladder is explicit and documented**: 1 m, 5 m, 30 m, 2 h, 12 h,
+    then dead-lettered. Scheduled with ARQ's `_defer_by` computed from the row's
+    own `next_attempt_at`, so the queue and the log can never disagree about
+    when the next attempt is — the first thing anyone checks when a consumer
+    says "you never retried". Driven in tests by moving timestamps, never by
+    sleeping.
+  - **SSRF is re-checked at delivery, not only at save.** A hostname that
+    resolved publicly yesterday can resolve to `169.254.169.254` today, and DNS
+    belongs to whoever registered the URL. T-212's guard runs again immediately
+    before the request; a private destination is dead-lettered at once rather
+    than retried five more times at an internal address.
+  - **The circuit breaker is a row, not a process.** Five consecutive
+    *dead-lettered* deliveries (not five failed attempts of one delivery — that
+    is a consumer restart) disable the endpoint and notify the org's owners,
+    guarded because `notifications` may be off. Re-enabling clears the counter,
+    otherwise the first failure after a fix trips it again and reads as "your
+    fix did not work".
+  - **A replay never touches the original row.** It sends the *stored* payload
+    as a new delivery with a new `X-Forge-Delivery`; retries share that id so a
+    consumer can dedupe, a replay deliberately does not. "We replayed it and now
+    it says delivered" is a sentence this API cannot produce.
+  - **Retention ships with the table, not after it.** `webhook_delivery` is the
+    fastest-growing table this template adds; `WEBHOOK_DELIVERY_RETENTION_DAYS`
+    (30) and a batched prune job are what stop it from being a disk-full
+    incident with a date on it. Queue depth is published worker-side through
+    Redis, like `forge_active_sessions`, because `/metrics` is served by a
+    different process.
+- **API key management UI (T-313)** and **the published public API contract
+  (T-314).** The key is shown once, held in component state and never in the
+  react-query cache — the cache outlives the component and the server keeps no
+  copy, so it would be holding the only one. `/api/v1/openapi-public.json`
+  emits a *second* OpenAPI document containing exactly the routes that declare
+  a `require_scope`, and `/guides/api` on the marketing site renders it, so the
+  published surface is derived rather than maintained and cannot drift from
+  what the code serves.
+
 - **Analytics and cookie consent, defaulting to neither (T-308).** A marketing
   site is where tracking lands, so this ships the *integration point* rather
   than a vendor: `apps/marketing/src/config/analytics.ts`, one object, a `none`
@@ -709,6 +758,18 @@ template keep their own changes in `CHANGELOG.product.md` (see
   moment CI started actually booting this stack.
 
 ### Changed
+- **The TypeScript client is generated offline, from an all-modules-on schema
+  (T-313).** `packages/api-client` used to be generated from a *live*
+  `/openapi.json`, which meant it contained only the routes the committed
+  `product.config.py` happened to enable — so a default-off module had no typed
+  symbols for its own UI to import, and generating from a smaller configuration
+  deleted symbols `apps/web` imports unconditionally. `backend/scripts/dump_openapi.py`
+  now writes the document with every module enabled, and the generated client
+  is the union of every configuration, which is what the SPA's runtime module
+  gating already assumed. Five CI jobs stopped booting a uvicorn (and one
+  stopped racing itself for port 8000) purely to serve a schema, and
+  `make gen-client` no longer needs Docker.
+
 - **The member list and the notification centre are virtualized (T-241).**
   Both render a constant number of DOM nodes regardless of how many rows are
   loaded, through a shared `VirtualList` (`apps/web/src/components`) built on

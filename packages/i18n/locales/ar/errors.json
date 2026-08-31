@@ -85,5 +85,9 @@
   "api_key_limit_reached": "هذه المؤسسة محدودة بـ {limit} من مفاتيح واجهة برمجة التطبيقات.",
   "api_key_expiry_in_the_past": "يجب أن يكون تاريخ انتهاء الصلاحية في المستقبل.",
   "api_key_rate_limited": "تجاوز هذا المفتاح حده البالغ {limit} طلبًا في الدقيقة.",
-  "invalid_org_header": "معرّف X-Org-ID غير صالح."
+  "invalid_org_header": "معرّف X-Org-ID غير صالح.",
+  "unsafe_webhook_url": "لا يمكن استخدام هذا الرابط كنقطة نهاية للويبهوك: {reason}",
+  "unknown_event_type": "نوع حدث غير معروف: {event_type}.",
+  "webhook_endpoint_limit_reached": "هذه المؤسسة محدودة بـ {limit} من نقاط نهاية الويبهوك.",
+  "webhook_endpoint_disabled": "فعّل نقطة النهاية قبل إعادة إرسال التسليم."
 }

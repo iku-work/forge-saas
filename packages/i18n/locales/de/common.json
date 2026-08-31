@@ -31,7 +31,9 @@
     "notifications_hint": "Öffnet Ihre Benachrichtigungsliste",
     "reports": "Erweiterte Berichte",
     "logout": "Abmelden",
-    "logout_hint": "Meldet dieses Konto auf diesem Gerät ab"
+    "logout_hint": "Meldet dieses Konto auf diesem Gerät ab",
+    "api_keys": "API-Schlüssel",
+    "webhooks": "Webhooks"
   },
   "support": {
     "contact": "Support kontaktieren",

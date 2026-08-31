@@ -151,5 +151,13 @@
     "accept": "Aceptar",
     "decline": "Rechazar",
     "manage": "Configuración de cookies"
+  },
+  "api": {
+    "title": "Referencia de la API",
+    "description": "Todo lo que puede llamar una clave de API, generado a partir del servicio en ejecución en lugar de escrito a mano.",
+    "version": "Versión del contrato {version}",
+    "endpoints_title": "Endpoints",
+    "endpoints_empty": "Este despliegue no publica endpoints públicos.",
+    "scope_required": "Requiere el permiso {scope}"
   }
 }

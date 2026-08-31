@@ -85,5 +85,9 @@
   "api_key_limit_reached": "Cette organisation est limitée à {limit} clés d'API.",
   "api_key_expiry_in_the_past": "La date d'expiration doit être dans le futur.",
   "api_key_rate_limited": "Cette clé d'API a dépassé sa limite de {limit} requêtes par minute.",
-  "invalid_org_header": "X-Org-ID n'est pas un identifiant valide."
+  "invalid_org_header": "X-Org-ID n'est pas un identifiant valide.",
+  "unsafe_webhook_url": "Cette URL ne peut pas servir de point de terminaison webhook : {reason}",
+  "unknown_event_type": "Type d'événement inconnu : {event_type}.",
+  "webhook_endpoint_limit_reached": "Cette organisation est limitée à {limit} points de terminaison webhook.",
+  "webhook_endpoint_disabled": "Activez ce point de terminaison avant de rejouer une livraison."
 }

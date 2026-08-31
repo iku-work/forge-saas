@@ -32,6 +32,8 @@ from app.modules.notifications.service import NotificationService
 from app.modules.storage.backend import get_storage_backend
 from app.modules.storage.models import StoredFile
 from app.modules.storage.repository import StoredFileRepository
+from app.modules.webhooks import service as webhooks
+from app.modules.webhooks.events import EventType, FilePayload
 
 _SIZE_TOLERANCE_BYTES = 1024
 _DOWNLOAD_EXPIRES_IN_SECONDS = 3600
@@ -215,6 +217,20 @@ class StorageService:
             org_id=self._org_id,
             type="file_uploaded",
             params={"filename": updated.filename},
+        )
+        # T-320. Emitted here rather than after the virus scan, and the
+        # difference matters to a consumer: this fires when the upload is
+        # *confirmed*, which is the moment the file exists. A subscriber that
+        # cares whether it is clean reads `virus_scan_result` through the API.
+        await webhooks.emit(
+            self._session,
+            self._org_id,
+            EventType.FILE_UPLOADED,
+            FilePayload(
+                file_id=updated.id,
+                filename=updated.filename,
+                size_bytes=updated.size_bytes,
+            ),
         )
         return updated
 

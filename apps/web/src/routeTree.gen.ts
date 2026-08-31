@@ -33,12 +33,14 @@ import { Route as LocaleAppReportsRouteImport } from './routes/$locale._app.repo
 import { Route as LocaleAppFilesRouteImport } from './routes/$locale._app.files'
 import { Route as LocaleAdminUsersIdRouteImport } from './routes/$locale.admin.users_.$id'
 import { Route as LocaleAdminOrgsIdRouteImport } from './routes/$locale.admin.orgs_.$id'
+import { Route as LocaleAppSettingsWebhooksRouteImport } from './routes/$locale._app.settings.webhooks'
 import { Route as LocaleAppSettingsSecurityRouteImport } from './routes/$locale._app.settings.security'
 import { Route as LocaleAppSettingsProfileRouteImport } from './routes/$locale._app.settings.profile'
 import { Route as LocaleAppSettingsOrgRouteImport } from './routes/$locale._app.settings.org'
 import { Route as LocaleAppSettingsNotificationsRouteImport } from './routes/$locale._app.settings.notifications'
 import { Route as LocaleAppSettingsMembersRouteImport } from './routes/$locale._app.settings.members'
 import { Route as LocaleAppSettingsBillingRouteImport } from './routes/$locale._app.settings.billing'
+import { Route as LocaleAppSettingsApiKeysRouteImport } from './routes/$locale._app.settings.api-keys'
 
 const LocaleRoute = LocaleRouteImport.update({
   id: '/$locale',
@@ -161,6 +163,12 @@ const LocaleAdminOrgsIdRoute = LocaleAdminOrgsIdRouteImport.update({
   path: '/orgs/$id',
   getParentRoute: () => LocaleAdminRoute,
 } as any)
+const LocaleAppSettingsWebhooksRoute =
+  LocaleAppSettingsWebhooksRouteImport.update({
+    id: '/settings/webhooks',
+    path: '/settings/webhooks',
+    getParentRoute: () => LocaleAppRoute,
+  } as any)
 const LocaleAppSettingsSecurityRoute =
   LocaleAppSettingsSecurityRouteImport.update({
     id: '/settings/security',
@@ -196,6 +204,12 @@ const LocaleAppSettingsBillingRoute =
     path: '/settings/billing',
     getParentRoute: () => LocaleAppRoute,
   } as any)
+const LocaleAppSettingsApiKeysRoute =
+  LocaleAppSettingsApiKeysRouteImport.update({
+    id: '/settings/api-keys',
+    path: '/settings/api-keys',
+    getParentRoute: () => LocaleAppRoute,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -219,12 +233,14 @@ export interface FileRoutesByFullPath {
   '/$locale/admin/users': typeof LocaleAdminUsersRoute
   '/$locale/': typeof LocaleAppIndexRoute
   '/$locale/admin/': typeof LocaleAdminIndexRoute
+  '/$locale/settings/api-keys': typeof LocaleAppSettingsApiKeysRoute
   '/$locale/settings/billing': typeof LocaleAppSettingsBillingRoute
   '/$locale/settings/members': typeof LocaleAppSettingsMembersRoute
   '/$locale/settings/notifications': typeof LocaleAppSettingsNotificationsRoute
   '/$locale/settings/org': typeof LocaleAppSettingsOrgRoute
   '/$locale/settings/profile': typeof LocaleAppSettingsProfileRoute
   '/$locale/settings/security': typeof LocaleAppSettingsSecurityRoute
+  '/$locale/settings/webhooks': typeof LocaleAppSettingsWebhooksRoute
   '/$locale/admin/orgs/$id': typeof LocaleAdminOrgsIdRoute
   '/$locale/admin/users/$id': typeof LocaleAdminUsersIdRoute
 }
@@ -248,12 +264,14 @@ export interface FileRoutesByTo {
   '/$locale/admin/settings': typeof LocaleAdminSettingsRoute
   '/$locale/admin/users': typeof LocaleAdminUsersRoute
   '/$locale/admin': typeof LocaleAdminIndexRoute
+  '/$locale/settings/api-keys': typeof LocaleAppSettingsApiKeysRoute
   '/$locale/settings/billing': typeof LocaleAppSettingsBillingRoute
   '/$locale/settings/members': typeof LocaleAppSettingsMembersRoute
   '/$locale/settings/notifications': typeof LocaleAppSettingsNotificationsRoute
   '/$locale/settings/org': typeof LocaleAppSettingsOrgRoute
   '/$locale/settings/profile': typeof LocaleAppSettingsProfileRoute
   '/$locale/settings/security': typeof LocaleAppSettingsSecurityRoute
+  '/$locale/settings/webhooks': typeof LocaleAppSettingsWebhooksRoute
   '/$locale/admin/orgs/$id': typeof LocaleAdminOrgsIdRoute
   '/$locale/admin/users/$id': typeof LocaleAdminUsersIdRoute
 }
@@ -281,12 +299,14 @@ export interface FileRoutesById {
   '/$locale/admin/users': typeof LocaleAdminUsersRoute
   '/$locale/_app/': typeof LocaleAppIndexRoute
   '/$locale/admin/': typeof LocaleAdminIndexRoute
+  '/$locale/_app/settings/api-keys': typeof LocaleAppSettingsApiKeysRoute
   '/$locale/_app/settings/billing': typeof LocaleAppSettingsBillingRoute
   '/$locale/_app/settings/members': typeof LocaleAppSettingsMembersRoute
   '/$locale/_app/settings/notifications': typeof LocaleAppSettingsNotificationsRoute
   '/$locale/_app/settings/org': typeof LocaleAppSettingsOrgRoute
   '/$locale/_app/settings/profile': typeof LocaleAppSettingsProfileRoute
   '/$locale/_app/settings/security': typeof LocaleAppSettingsSecurityRoute
+  '/$locale/_app/settings/webhooks': typeof LocaleAppSettingsWebhooksRoute
   '/$locale/admin/orgs_/$id': typeof LocaleAdminOrgsIdRoute
   '/$locale/admin/users_/$id': typeof LocaleAdminUsersIdRoute
 }
@@ -314,12 +334,14 @@ export interface FileRouteTypes {
     | '/$locale/admin/users'
     | '/$locale/'
     | '/$locale/admin/'
+    | '/$locale/settings/api-keys'
     | '/$locale/settings/billing'
     | '/$locale/settings/members'
     | '/$locale/settings/notifications'
     | '/$locale/settings/org'
     | '/$locale/settings/profile'
     | '/$locale/settings/security'
+    | '/$locale/settings/webhooks'
     | '/$locale/admin/orgs/$id'
     | '/$locale/admin/users/$id'
   fileRoutesByTo: FileRoutesByTo
@@ -343,12 +365,14 @@ export interface FileRouteTypes {
     | '/$locale/admin/settings'
     | '/$locale/admin/users'
     | '/$locale/admin'
+    | '/$locale/settings/api-keys'
     | '/$locale/settings/billing'
     | '/$locale/settings/members'
     | '/$locale/settings/notifications'
     | '/$locale/settings/org'
     | '/$locale/settings/profile'
     | '/$locale/settings/security'
+    | '/$locale/settings/webhooks'
     | '/$locale/admin/orgs/$id'
     | '/$locale/admin/users/$id'
   id:
@@ -375,12 +399,14 @@ export interface FileRouteTypes {
     | '/$locale/admin/users'
     | '/$locale/_app/'
     | '/$locale/admin/'
+    | '/$locale/_app/settings/api-keys'
     | '/$locale/_app/settings/billing'
     | '/$locale/_app/settings/members'
     | '/$locale/_app/settings/notifications'
     | '/$locale/_app/settings/org'
     | '/$locale/_app/settings/profile'
     | '/$locale/_app/settings/security'
+    | '/$locale/_app/settings/webhooks'
     | '/$locale/admin/orgs_/$id'
     | '/$locale/admin/users_/$id'
   fileRoutesById: FileRoutesById
@@ -561,6 +587,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof LocaleAdminOrgsIdRouteImport
       parentRoute: typeof LocaleAdminRoute
     }
+    '/$locale/_app/settings/webhooks': {
+      id: '/$locale/_app/settings/webhooks'
+      path: '/settings/webhooks'
+      fullPath: '/$locale/settings/webhooks'
+      preLoaderRoute: typeof LocaleAppSettingsWebhooksRouteImport
+      parentRoute: typeof LocaleAppRoute
+    }
     '/$locale/_app/settings/security': {
       id: '/$locale/_app/settings/security'
       path: '/settings/security'
@@ -603,6 +636,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof LocaleAppSettingsBillingRouteImport
       parentRoute: typeof LocaleAppRoute
     }
+    '/$locale/_app/settings/api-keys': {
+      id: '/$locale/_app/settings/api-keys'
+      path: '/settings/api-keys'
+      fullPath: '/$locale/settings/api-keys'
+      preLoaderRoute: typeof LocaleAppSettingsApiKeysRouteImport
+      parentRoute: typeof LocaleAppRoute
+    }
   }
 }
 
@@ -610,24 +650,28 @@ interface LocaleAppRouteChildren {
   LocaleAppFilesRoute: typeof LocaleAppFilesRoute
   LocaleAppReportsRoute: typeof LocaleAppReportsRoute
   LocaleAppIndexRoute: typeof LocaleAppIndexRoute
+  LocaleAppSettingsApiKeysRoute: typeof LocaleAppSettingsApiKeysRoute
   LocaleAppSettingsBillingRoute: typeof LocaleAppSettingsBillingRoute
   LocaleAppSettingsMembersRoute: typeof LocaleAppSettingsMembersRoute
   LocaleAppSettingsNotificationsRoute: typeof LocaleAppSettingsNotificationsRoute
   LocaleAppSettingsOrgRoute: typeof LocaleAppSettingsOrgRoute
   LocaleAppSettingsProfileRoute: typeof LocaleAppSettingsProfileRoute
   LocaleAppSettingsSecurityRoute: typeof LocaleAppSettingsSecurityRoute
+  LocaleAppSettingsWebhooksRoute: typeof LocaleAppSettingsWebhooksRoute
 }
 
 const LocaleAppRouteChildren: LocaleAppRouteChildren = {
   LocaleAppFilesRoute: LocaleAppFilesRoute,
   LocaleAppReportsRoute: LocaleAppReportsRoute,
   LocaleAppIndexRoute: LocaleAppIndexRoute,
+  LocaleAppSettingsApiKeysRoute: LocaleAppSettingsApiKeysRoute,
   LocaleAppSettingsBillingRoute: LocaleAppSettingsBillingRoute,
   LocaleAppSettingsMembersRoute: LocaleAppSettingsMembersRoute,
   LocaleAppSettingsNotificationsRoute: LocaleAppSettingsNotificationsRoute,
   LocaleAppSettingsOrgRoute: LocaleAppSettingsOrgRoute,
   LocaleAppSettingsProfileRoute: LocaleAppSettingsProfileRoute,
   LocaleAppSettingsSecurityRoute: LocaleAppSettingsSecurityRoute,
+  LocaleAppSettingsWebhooksRoute: LocaleAppSettingsWebhooksRoute,
 }
 
 const LocaleAppRouteWithChildren = LocaleAppRoute._addFileChildren(

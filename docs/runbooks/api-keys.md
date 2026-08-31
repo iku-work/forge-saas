@@ -43,6 +43,14 @@ not a new credential.
 
 ### 1. Mint a key
 
+In the app: **Settings → API keys → Create key** (T-313 — the entry appears
+only where `public_api` is on *and* the signed-in user can manage settings).
+The dialog shows the key once, with a copy button and a warning that says so;
+it is held in component state and never in the query cache, so closing the
+dialog is the end of it.
+
+The same thing from a terminal:
+
 ```bash
 curl -sX POST https://app.example.com/api/v1/api-keys \
   -H "Authorization: Bearer $SESSION_TOKEN" \
@@ -116,6 +124,26 @@ key's row, and the write busts the cached copy.
 Before raising a limit, look at the `X-RateLimit-*` headers the integration is
 already receiving. Every response carries them, including successful ones, so
 "how close is it" is answerable without waiting for a 429.
+
+### 5. Point an integrator at the published contract
+
+`https://<marketing host>/en/guides/api` renders the public contract —
+authentication, the scope vocabulary, the rate-limit headers, the error
+envelope, the versioning policy, and every endpoint a key can call. The page
+is built from `/api/v1/openapi-public.json`, which is itself derived from
+which routes declare a `require_scope` (T-314), so it cannot describe an
+endpoint that does not exist or miss one that does.
+
+Serve the document directly to anyone generating a client:
+
+```bash
+curl -s https://app.example.com/api/v1/openapi-public.json | jq '.paths | keys'
+```
+
+It is unauthenticated on purpose: a contract you need a credential to read
+cannot be read by the person deciding whether to integrate. It contains
+*only* the scoped routes — `tests/modules/test_public_openapi.py` fails the
+build if an internal one ever appears in it.
 
 ## Verification
 

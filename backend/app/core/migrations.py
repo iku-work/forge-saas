@@ -42,13 +42,18 @@ CORE_HEAD_REVISION = "a7e4c2f91b60"
 # while no migration declares that branch label -- so the entry lands with the
 # migration, in T-331, on its own branch rather than on the trunk.
 # `public_api` gained its entry in T-310, alongside
-# alembic/versions/public_api/. `marketing` never gets one: it owns no tables.
+# alembic/versions/public_api/, and `outbound_webhooks` in T-320 alongside
+# alembic/versions/outbound_webhooks/ -- both ship *off*, which is why
+# `alembic check` has to apply every branch in this map rather than only the
+# enabled ones (see tests/test_alembic.py and TEMPLATE.md).
+# `marketing` never gets one: it owns no tables.
 MODULE_BRANCHES: dict[ModuleName, str] = {
     "billing": "billing",
     "gdpr": "gdpr",
     "notifications": "notifications",
     "file_storage": "file_storage",
     "public_api": "public_api",
+    "outbound_webhooks": "outbound_webhooks",
 }
 
 _BACKEND_DIR = Path(__file__).resolve().parents[2]

@@ -151,5 +151,13 @@
     "accept": "Accepter",
     "decline": "Refuser",
     "manage": "Paramètres des cookies"
+  },
+  "api": {
+    "title": "Référence de l'API",
+    "description": "Tout ce qu'une clé d'API peut appeler, généré à partir du service en cours d'exécution plutôt qu'écrit à la main.",
+    "version": "Version du contrat {version}",
+    "endpoints_title": "Points de terminaison",
+    "endpoints_empty": "Ce déploiement ne publie aucun point de terminaison public.",
+    "scope_required": "Nécessite la portée {scope}"
   }
 }

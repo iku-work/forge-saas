@@ -8,6 +8,7 @@ import {
   ChevronsUpDown,
   CreditCard,
   FolderOpen,
+  KeyRound,
   LayoutDashboard,
   LogOut,
   Plus,
@@ -15,6 +16,7 @@ import {
   ShieldAlert,
   User as UserIcon,
   Users,
+  Webhook,
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
@@ -70,7 +72,9 @@ type NavTo =
   | "/$locale/settings/org"
   | "/$locale/settings/members"
   | "/$locale/settings/billing"
-  | "/$locale/settings/notifications";
+  | "/$locale/settings/notifications"
+  | "/$locale/settings/api-keys"
+  | "/$locale/settings/webhooks";
 
 interface NavItem {
   to: NavTo;
@@ -148,6 +152,26 @@ const SETTINGS_NAV: NavItem[] = [
     icon: Bell,
     module: "notifications",
   },
+  // T-313/T-322: both are org-manage surfaces (a key that can mint a key and
+  // an endpoint that can be pointed anywhere are each an escalation), so the
+  // permission gate is SETTINGS_MANAGE on top of the module toggle -- the
+  // same pair their routers use.
+  {
+    to: "/$locale/settings/api-keys",
+    path: "/settings/api-keys",
+    labelKey: "common.nav.api_keys",
+    icon: KeyRound,
+    permission: Permission.SETTINGS_MANAGE,
+    module: "publicApi",
+  },
+  {
+    to: "/$locale/settings/webhooks",
+    path: "/settings/webhooks",
+    labelKey: "common.nav.webhooks",
+    icon: Webhook,
+    permission: Permission.SETTINGS_MANAGE,
+    module: "outboundWebhooks",
+  },
 ];
 
 // Route paths that sit one level under "Settings" in the header breadcrumb
@@ -159,6 +183,8 @@ const SETTINGS_PAGE_TITLE_KEYS: Record<string, string> = {
   "/settings/members": "common.nav.members",
   "/settings/billing": "common.nav.billing",
   "/settings/notifications": "common.nav.notifications",
+  "/settings/api-keys": "common.nav.api_keys",
+  "/settings/webhooks": "common.nav.webhooks",
 };
 
 function pageTitleFor(pathname: string, t: (key: string) => string): string {

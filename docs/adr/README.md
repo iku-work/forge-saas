@@ -84,4 +84,5 @@ as the change" rule in step 4 is for.
 | [0003](0003-read-replica.md) | Read-replica routing | Accepted | 2026-08-05 |
 | [0004](0004-marketing-framework.md) | Marketing site framework | Accepted | 2026-08-21 |
 | [0005](0005-runtime-operator-switches.md) | A database-backed maintenance switch that fails open | Accepted | 2026-08-07 |
+| [0006](0006-enterprise-sso.md) | Enterprise SSO — OIDC first, SAML on a trigger | Accepted | 2026-08-31 |
 <!-- adr-index:end -->

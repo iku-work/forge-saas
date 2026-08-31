@@ -31,7 +31,9 @@
     "notifications_hint": "Opens your notifications list",
     "reports": "Advanced reports",
     "logout": "Log out",
-    "logout_hint": "Signs out of this account on this device"
+    "logout_hint": "Signs out of this account on this device",
+    "api_keys": "API keys",
+    "webhooks": "Webhooks"
   },
   "support": {
     "contact": "Contact support",

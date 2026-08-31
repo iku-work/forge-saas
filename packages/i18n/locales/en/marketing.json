@@ -151,5 +151,13 @@
     "accept": "Accept",
     "decline": "Decline",
     "manage": "Cookie settings"
+  },
+  "api": {
+    "title": "API reference",
+    "description": "Everything an API key can call, generated from the running service rather than written by hand.",
+    "version": "Contract version {version}",
+    "endpoints_title": "Endpoints",
+    "endpoints_empty": "This deployment publishes no public endpoints.",
+    "scope_required": "Requires the {scope} scope"
   }
 }

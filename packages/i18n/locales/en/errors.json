@@ -85,5 +85,9 @@
   "api_key_limit_reached": "This organization is limited to {limit} API keys.",
   "api_key_expiry_in_the_past": "The expiry date must be in the future.",
   "api_key_rate_limited": "This API key has exceeded its limit of {limit} requests per minute.",
-  "invalid_org_header": "X-Org-ID is not a valid identifier."
+  "invalid_org_header": "X-Org-ID is not a valid identifier.",
+  "unsafe_webhook_url": "This URL can't be used as a webhook endpoint: {reason}",
+  "unknown_event_type": "Unknown event type: {event_type}.",
+  "webhook_endpoint_limit_reached": "This organization is limited to {limit} webhook endpoints.",
+  "webhook_endpoint_disabled": "Enable this endpoint before replaying a delivery."
 }

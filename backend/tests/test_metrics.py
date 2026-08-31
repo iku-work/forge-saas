@@ -35,6 +35,10 @@ def test_metrics_endpoint_returns_prometheus_text_format() -> None:
     # Published to Redis by the key-rotation job's own process (T-245), read
     # back here -- same split as forge_active_sessions.
     assert "forge_reencrypt_remaining" in response.text
+    # T-321, same split again: the worker counts pending deliveries and
+    # publishes the number through Redis; this process is the one that has to
+    # answer for it.
+    assert "forge_webhook_queue_depth" in response.text
     assert "forge_stripe_webhook_seconds" in response.text
     assert "forge_emails_sent_total" in response.text
     assert "forge_push_sent_total" in response.text
@@ -76,6 +80,37 @@ def test_gauges_fail_closed_to_zero_when_redis_unreachable(monkeypatch: pytest.M
     assert metrics_module._read_arq_queue_depth() == 0.0
     assert metrics_module._read_active_sessions() == 0.0
     assert metrics_module._read_reencrypt_remaining() == 0.0
+    assert metrics_module._read_webhook_queue_depth() == 0.0
+
+
+class _PublishedRedis:
+    """A Redis that has exactly what a worker published, and nothing else."""
+
+    def __init__(self, values: dict[str, str]) -> None:
+        self._values = values
+
+    def get(self, key: str) -> bytes | None:
+        value = self._values.get(key)
+        return value.encode() if value is not None else None
+
+
+def test_the_webhook_queue_depth_gauge_reads_what_the_worker_published(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """T-321's "visible from the API process, not only inside the worker".
+
+    The count is a query only the worker makes; /metrics is served here. The
+    whole bridge is one Redis key, so this asserts the two halves agree on
+    which one -- a typo on either side would otherwise read as a permanently
+    empty panel.
+    """
+    monkeypatch.setattr(
+        metrics_module,
+        "_get_sync_redis",
+        lambda: _PublishedRedis({metrics_module.WEBHOOK_QUEUE_DEPTH_REDIS_KEY: "42"}),
+    )
+
+    assert metrics_module._read_webhook_queue_depth() == 42.0
 
 
 def test_route_templates_used_not_raw_paths_for_high_cardinality_labels() -> None:

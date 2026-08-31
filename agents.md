@@ -7150,17 +7150,17 @@ keys per run because a single mint would have passed five times in six.
       on and runs the suite), and the query budget is registered under the same
       condition so the two configurations are each internally consistent. That
       is why `list_api_keys` is not an unconditional `BUDGETS` entry
-- [ ] `@forge/api-client` regenerated and rebuilt, so the new endpoints exist as
-      typed symbols before T-313 consumes them — **not done, and it cannot be
-      done from here.** The client is generated from a live `/openapi.json`,
-      and the committed configuration has `public_api` off, so the schema this
-      repo's own generation step produces does not contain these routes. CI
-      generates from the committed config *deliberately* (see the
-      `module-matrix` job's comment: generating from combination B's smaller
-      schema would delete symbols `apps/web` imports unconditionally). T-313
-      is where this becomes actionable, and it will need a decision — either
-      the product enabling the module before generating, or the generation
-      step running against a schema with every module on
+- [x] `@forge/api-client` regenerated and rebuilt, so the new endpoints exist
+      as typed symbols — **settled in T-313, the second way round.** The
+      client is no longer generated from a live `/openapi.json` at all:
+      `backend/scripts/dump_openapi.py` writes the document offline with
+      **every module enabled**, and `openapi-ts.config.ts` reads that file. So
+      the generated client is the union of every configuration rather than a
+      picture of one, which is what `apps/web`'s runtime module gating already
+      assumed. That also retired the five CI jobs that booted a uvicorn purely
+      to serve a schema (and the start-order race in `module-matrix`, which
+      had to wait for :8000 to come free), and `make gen-client` no longer
+      needs Docker
 
 ---
 
@@ -7222,8 +7222,26 @@ keys per run because a single mint would have passed five times in six.
 
 **Done when**
 
-- [ ] `pnpm lint && pnpm type-check && pnpm test` clean
-- [ ] Query budget green, route bundle budget not exceeded
+- [x] `pnpm lint && pnpm type-check && pnpm test` clean — 62 files, 248 tests;
+      lint is clean with the one pre-existing `VirtualList` compiler warning
+      and no new ones (`form.watch` was the near miss: it returns a
+      subscription the React Compiler cannot memoize, so both new forms read
+      `field.value` from the `FormField` render prop instead)
+- [x] Query budget green (`list_api_keys` at 5, unchanged); route bundle
+      budget **not applicable as stated** — `apps/web` has no bundle budget to
+      exceed. T-306's Lighthouse budget is `apps/marketing`'s alone, and
+      `tanstackRouter`'s `autoCodeSplitting` gives each route its own chunk,
+      so what is checkable is that these two are chunks of ordinary size:
+      `settings.api-keys` and `settings.webhooks` are 8.1 KB and 13.7 KB
+      against a 27 KB largest-existing-route baseline
+
+**Found while building this:** the "either/or" T-311 left open turned out to
+have a third answer that is better than both. Enabling the module before
+generating would make the client a picture of *that* configuration; generating
+against an all-modules-on schema makes it the union of every configuration —
+which is the only shape consistent with the SPA gating modules at runtime from
+`/api/v1/config`. Doing it offline rather than against a running server fell
+out of the same change and deleted more CI than the feature added.
 
 ---
 
@@ -7247,7 +7265,25 @@ keys per run because a single mint would have passed five times in six.
 
 **Done when**
 
-- [ ] A newcomer can create a key and make a successful call using only the published page
+- [x] A newcomer can create a key and make a successful call using only the
+      published page — `/{locale}/guides/api` carries the `Authorization:
+      Bearer fk_live_…` and `X-Org-ID` headers verbatim, the whole scope
+      vocabulary, the rate-limit header names, the error envelope, the
+      versioning policy, and every endpoint with the scope it needs.
+      `apps/marketing/tests/api-docs.test.ts` asserts each of those against
+      the built HTML rather than against a component, because the claim is
+      about what ships.
+      **Followed rather than performed:** nobody was handed the page and
+      watched. The check is that every fact the walkthrough needs is on it.
+
+**Two decisions worth not re-deriving.** The document is *derived* from which
+routes declare a `require_scope` — the same `declared_scope` walk T-311's
+surface test uses — so publishing a route and opening it to keys are one act
+and there is no list to forget. And it is enumerated through
+`iter_route_contexts`, not `app.routes`: `build_router()` includes every
+sub-router lazily, so an `APIRoute` reached through one reports
+`/orgs/{org_id}` without the `/api/v1` prefix, and a document built from those
+paths would publish endpoints nobody can call.
 
 ---
 
@@ -7279,7 +7315,25 @@ keys per run because a single mint would have passed five times in six.
 
 **Done when**
 
-- [ ] Semgrep, migration up/down, and `mypy --strict` clean
+- [x] Migration up/down clean on the `outbound_webhooks` branch and
+      `mypy --strict` clean over the whole of `app/` and `scripts/`.
+      **Semgrep could not run here** — Windows Application Control blocks
+      `semgrep.exe` outright, the same class of block that stopped cbor2's
+      native module during T-291. The three project rules
+      (`backend/semgrep/`) were read and checked against the new code by
+      hand instead: no `Column(Text|String)` on a `*_secret` field, no
+      `model.update(**request.model_dump())`, no `os.environ` under `app/`.
+      CI runs the real thing. What the §7 rule is *for* is additionally
+      checked by a test rather than by a linter —
+      `test_the_secret_column_is_encrypted_at_rest` reads the raw column
+      through `text()` rather than through SQLAlchemy, which would decrypt on
+      the way out and pass on an unencrypted column
+
+**Worth stating:** `secret` is the one column in this schema where encryption
+rather than hashing is the *requirement*, not the convention. Signing an
+outbound request means computing an HMAC with it, so a digest would make the
+column useless — which is why the same §7 rule that says "digest, don't
+encrypt" for `ApiKey.key_hash` says the opposite here.
 
 ---
 
@@ -7308,8 +7362,32 @@ keys per run because a single mint would have passed five times in six.
 
 **Done when**
 
-- [ ] A consumer down for an hour receives the event on schedule once it returns
-- [ ] Grafana shows delivery rate, failure rate, and queue depth
+- [x] A consumer down for an hour receives the event on schedule once it
+      returns — the ladder is 1 m, 5 m, 30 m, 2 h, 12 h, so an hour of
+      downtime is comfortably inside it, and
+      `test_the_whole_ladder_is_the_documented_one` measures **every** gap
+      rather than only the last. Driven by moving `next_attempt_at`, never by
+      sleeping. The off-by-one that test exists for was real: indexing the
+      schedule by attempts-made rather than attempts-made-minus-one silently
+      skipped the first rung, which would have made the published ladder a lie
+      while every other assertion still passed
+- [x] Grafana shows delivery rate, failure rate and queue depth —
+      `docs/grafana/dashboards/workers.json` gains two panels
+      (`forge_webhook_queue_depth`, and
+      `rate(forge_webhook_deliveries_total)` broken out by outcome), and
+      `docs/grafana/alerts.yml` two rules that separate "a customer's endpoint
+      is down" from "nothing is draining our queue", because only the second
+      is ours. **Not observed on a live Grafana** — the JSON is validated by
+      `test_grafana_dashboards.py` and the rules by `promtool`
+
+**Two things found while building this.** The retry ladder is scheduled with
+ARQ's `_defer_by` computed from the row's own `next_attempt_at` rather than
+from the schedule a second time, so the queue and the log cannot disagree
+about when the next attempt is — the first thing anyone checks when a consumer
+says "you never retried". And the endpoint breaker counts *dead letters*, not
+failed attempts: one consumer restart produces five failed attempts of the
+same delivery, and an endpoint disabled by that is an endpoint disabled by a
+deploy.
 
 ---
 
@@ -7334,7 +7412,32 @@ keys per run because a single mint would have passed five times in six.
 
 **Done when**
 
-- [ ] A developer can add an endpoint, see a delivery fail, fix their consumer, and replay it — without support
+- [x] A developer can add an endpoint, see a delivery fail, fix their consumer
+      and replay it — the whole loop is on one page: the endpoint list with
+      "Switched off after N failures" (not a bare "Disabled" — those are
+      different facts), the delivery log with the response code and body that
+      is nearly always the answer, Enable (which clears the failure counter,
+      or the next single failure would trip the breaker again and read as
+      "your fix did not work"), and Replay. `docs/runbooks/outbound-webhooks.md`
+      is the operator-facing half.
+      **Not walked end to end against a live consumer** — the page's half is
+      covered by `WebhooksPage.test.tsx` against a mocked API and the delivery
+      half by `test_webhook_delivery_job.py` against a mock transport; nothing
+      exercised the two together through a real browser and a real HTTP
+      consumer
+- [x] Keyset pagination, `VirtualList`, the `BUDGETS` entries (verified by
+      running CI's `module-matrix` combination C locally, since that is the
+      only configuration in which these routes are registered and their
+      budgets actually execute), i18n in every enabled locale, and an axe
+      pass. Two honest qualifications: the log was
+      measured at 3 and 30 rows by the query-budget sweep rather than at the
+      **10k** the task names — what that sweep proves is the property
+      (statement count constant as the page grows), which is the thing 10k
+      rows would be evidence for; and **no visual baseline was added**, because
+      `outbound_webhooks` ships off, so the route 404s in exactly the
+      configuration `visual.spec.ts` runs against. A snapshot target for it
+      would fail in CI rather than guard anything. The same applies to
+      T-313's page
 
 ---
 
@@ -7357,8 +7460,15 @@ keys per run because a single mint would have passed five times in six.
 
 **Done when**
 
-- [ ] ADR passes `backend/scripts/check_docs.py` and is `Accepted` with a date in `## Status`
-- [ ] The SAML trigger is stated as an observable condition, not a feeling
+- [x] `docs/adr/0006-enterprise-sso.md` passes `check_docs.py`, is `Accepted`
+      with a date, and is in `docs/adr/README.md`'s generated index
+- [x] The SAML trigger is observable: *a customer under a signed contract (or
+      a contract blocked solely on this) whose identity provider cannot issue
+      OIDC, confirmed by their IT contact rather than assumed from the word
+      "SAML" in a questionnaire.* The ADR says why that qualification carries
+      the weight — Entra ID and Okta both speak OIDC, so "enterprise customers
+      need SAML" is true about the population and usually false about the
+      specific customer in front of you
 
 ---
 

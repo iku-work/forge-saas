@@ -32,6 +32,23 @@ const sections = await guideSections(locale);
       {t("marketing.guides.subtitle")}
     </p>
 
+    {/* T-314's API reference is a *route*, not a content entry — it is
+        generated from the live public OpenAPI document rather than written —
+        so it cannot appear in the sections below, which are built from the
+        `guides` collection. Linked here explicitly rather than left findable
+        only by URL: a published contract nobody can navigate to is a
+        contract nobody reads. */}
+    <a
+      class="mt-10 block rounded-lg border p-5 transition-colors hover:bg-muted/50"
+      href={localePath(locale, "guides/api")}
+      data-testid="guides-api-link"
+    >
+      <span class="font-medium underline-offset-4">{t("marketing.api.title")}</span>
+      <span class="mt-1 block text-sm text-pretty text-muted-foreground">
+        {t("marketing.api.description")}
+      </span>
+    </a>
+
     {
       sections.length === 0 ? (
         <p class="mt-12 text-muted-foreground" data-testid="guides-empty">

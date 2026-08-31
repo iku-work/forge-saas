@@ -85,5 +85,9 @@
   "api_key_limit_reached": "Esta organización tiene un límite de {limit} claves de API.",
   "api_key_expiry_in_the_past": "La fecha de caducidad debe ser futura.",
   "api_key_rate_limited": "Esta clave de API ha superado su límite de {limit} solicitudes por minuto.",
-  "invalid_org_header": "X-Org-ID no es un identificador válido."
+  "invalid_org_header": "X-Org-ID no es un identificador válido.",
+  "unsafe_webhook_url": "Esta URL no puede usarse como endpoint de webhook: {reason}",
+  "unknown_event_type": "Tipo de evento desconocido: {event_type}.",
+  "webhook_endpoint_limit_reached": "Esta organización está limitada a {limit} endpoints de webhook.",
+  "webhook_endpoint_disabled": "Activa este endpoint antes de reenviar una entrega."
 }

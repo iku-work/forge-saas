@@ -58,15 +58,15 @@ migrate:
 migrate-plan:
 	cd backend && python -m app.core.migrations plan
 
+# T-313: no Docker, no port, no running backend. The schema is dumped offline
+# from an all-modules-on build of the app (backend/scripts/dump_openapi.py),
+# so the generated client is the union of every module -- which is what
+# apps/web already assumes, since it gates modules at runtime from
+# /api/v1/config rather than at compile time. Needs the backend's Python
+# dependencies installed; the wrapper prefers backend/.venv and says which
+# interpreters it tried if it cannot find one.
 gen-client:
-	docker compose up -d backend
-	@echo "Waiting for backend..."
-	@for i in $$(seq 1 30); do \
-		curl -sf http://localhost:8000/health >/dev/null 2>&1 && exit 0; \
-		sleep 1; \
-	done; \
-	echo "backend did not become ready" >&2; docker compose down; exit 1
-	pnpm --filter @forge/api-client generate; status=$$?; docker compose down; exit $$status
+	pnpm --filter @forge/api-client generate
 
 seed:
 	cd backend && python -m app.core.seed

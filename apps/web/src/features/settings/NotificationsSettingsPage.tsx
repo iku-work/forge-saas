@@ -43,6 +43,8 @@ const TYPE_LABEL_KEYS: Record<NotificationType, string> = {
   weekly_summary: "notifications.preferences.type_weekly_summary",
   file_uploaded: "notifications.preferences.type_file_uploaded",
   file_infected: "notifications.preferences.type_file_infected",
+  webhook_endpoint_disabled:
+    "notifications.preferences.type_webhook_endpoint_disabled",
 };
 
 const REQUIRED_NOTE_ID = "notification-required-note";

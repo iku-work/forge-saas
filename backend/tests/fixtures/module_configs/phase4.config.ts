@@ -12,7 +12,7 @@ export const config = {
   supportEmail: "support@example.com",
   modules: {
     // T-291 combination C's twin of tests/fixtures/module_configs/phase4.py:
-    // the template defaults with the two off-by-default Phase 4 modules on.
+    // the template defaults with every off-by-default Phase 4 module on.
     billing: true,
     notifications: true,
     fileStorage: true,
@@ -23,7 +23,7 @@ export const config = {
     totp2fa: true,
     multiOrg: true,
     usageMetering: false,
-    outboundWebhooks: false,
+    outboundWebhooks: true,
     marketing: true,
     publicApi: true,
     enterpriseSso: true,
