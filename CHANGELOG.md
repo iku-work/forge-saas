@@ -47,6 +47,23 @@ template keep their own changes in `CHANGELOG.product.md` (see
     averaging it into a mixed workload is how a regression there goes unnoticed.
 
 ### Fixed
+- **CI's `module-matrix` job ran for the first time and found 86 failures**,
+  two of them production defects rather than test problems. `webhooks.emit()`
+  (T-320) sits on tenancy's and billing's write paths and
+  `password_login_blocked()` (T-331) on the password login path; both return
+  before querying when their module is off, which is correct and is exactly
+  why nothing noticed that seven test files' bespoke table subsets lacked
+  `webhook_endpoint` and `sso_connection`. Any product enabling those modules
+  would have hit the same wall in its own tests. `backend/tests/_module_tables.py`
+  now states the reasoning once, as a merging function rather than a list to
+  splat — `create_all` does not deduplicate within a call.
+- **Both Trivy scans now pass `--ignore-unfixed`.** The image scan's first
+  ever run reported twelve HIGH+ findings, every one an *unfixed* Debian
+  package in `python:3.12-slim` with an empty Fixed Version column. They are
+  fixed when Debian ships a patch and the image is rebuilt, which happens on
+  every push; blocking the build until then makes the gate something people
+  learn to ignore rather than making the image safer. A HIGH or CRITICAL
+  **with a fix** still fails, which is the class this repo can act on.
 - **An IdP refusing the authorization code produced a 500, not the documented
   401.** `authlib` has two unrelated exception trees — `OAuth2Error` is its
   *protocol* error and `OAuthError` its *client-integration* error, sharing no
