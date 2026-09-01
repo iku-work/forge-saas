@@ -14,6 +14,7 @@ from redis.asyncio import Redis
 
 from app.core.config import get_settings
 from app.core.db import dispose_engine
+from app.core.metrics import start_worker_metrics_server
 from app.workers.jobs.billing import send_dunning_email
 from app.workers.jobs.email import send_email
 from app.workers.jobs.encryption import rotate_encryption_keys_job
@@ -26,6 +27,11 @@ from app.workers.scheduler import create_scheduler
 
 async def worker_startup(ctx: dict[str, Any]) -> None:
     settings = get_settings()
+    # T-350: this process has its own Prometheus registry, so anything it
+    # counts is invisible until something scrapes *it*. See
+    # metrics.start_worker_metrics_server for why a counter cannot take the
+    # Redis path the gauges use.
+    start_worker_metrics_server(settings.WORKER_METRICS_PORT)
     ctx["redis"] = Redis.from_url(str(settings.REDIS_URL))
     scheduler = create_scheduler(ctx["redis"])
     scheduler.start()

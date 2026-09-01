@@ -47,6 +47,51 @@ template keep their own changes in `CHANGELOG.product.md` (see
     averaging it into a mixed workload is how a regression there goes unnoticed.
 
 ### Fixed
+- **CI's Schemathesis step failed a build that had no contract failures.** It
+  reported "2564 generated, 2564 passed" and exited 1 on four health checks —
+  Hypothesis saying a *generator* is inefficient on path parameters with tight
+  patterns, which is not the API being wrong. `--suppress-health-check=all`
+  now, matching what `tests/contract/test_schemathesis.py` already concluded
+  about the same library. Not reproduced locally: the same version, the same
+  `--seed` and the same 2564 cases pass here with the narrower flag that was
+  already in place, so what differs is the runner. The two checks the step
+  exists for — `not_a_server_error` and `response_schema_conformance` — are
+  untouched.
+- **Deleting an organization failed on a foreign key instead of removing it.**
+  T-310 gave `api_key.org_id` `ON DELETE CASCADE` and wrote down why — "a live
+  credential outliving its tenant is the worst orphan this schema could
+  produce" — and T-331 followed it for `sso_connection`. Both webhook tables
+  did not, and `webhook_endpoint` holds an HMAC signing secret. The effect was
+  not an orphan but a refusal: removing a customer hit
+  `webhook_endpoint_org_id_fkey` and stopped. Fixed on the `outbound_webhooks`
+  branch (`c7e4a1f0b382`), with a test that proves the cascade against the
+  *migrated* schema for all three credential tables — `alembic check` cannot
+  see this class of drift at all, because autogenerate compares a foreign
+  key's columns and target, not its `ON DELETE` rule.
+- **Every counter the worker increments read as zero on the dashboards.**
+  Prometheus scraped `backend:8000` only, and the worker is a separate process
+  with a separate registry, so `forge_webhook_deliveries_total`,
+  `forge_emails_sent_total` and `forge_push_sent_total` were flat lines — which
+  on a Grafana panel is indistinguishable from "nothing is being delivered",
+  the exact reading somebody acts on during an incident. The worker now serves
+  its own `/metrics` (`WORKER_METRICS_PORT`, default 9100) with a scrape target
+  to match. The gauges keep their Redis path deliberately: queue depth has to
+  be readable when the worker is *down*, which is precisely when its endpoint
+  is not answering.
+- **`/metrics` hung instead of reporting zeros when Redis was unreachable.**
+  Four gauges each read Redis on every scrape, the sync client had no timeouts,
+  and the readers' "fail closed to 0.0" never fired because there was no
+  `RedisError` to catch — just a blocked connect on prometheus_client's scrape
+  thread. A full collect took 16 seconds against Prometheus's 10-second
+  default, so the first thing an operator reaches for during a Redis outage was
+  the thing that stopped answering. Now bounded: explicit timeouts, no retry,
+  and the first failure of a scrape stands the other gauges down for 30
+  seconds. Measured 16s → 2.03s, then 0.00s within the window. That window is
+  process-global, which is right for a server and wrong for a test suite, so
+  `reset_scrape_backoff()` exists and the root conftest calls it between
+  tests — the suite has a test that makes a gauge fail on purpose, and
+  without the reset every gauge read in the next thirty seconds returns 0.0
+  without asking Redis: green alone, red in a full run.
 - **`pnpm type-check` was green locally and red in CI, on a file nobody had
   touched.** Three copies of `@types/node` (22, 24, 26) were in the tree with
   nothing choosing between them, so which one the Astro language server

@@ -148,8 +148,13 @@ starts the requests.
 With the stack from step 1:
 
 1. Create a key in org settings. **The secret shows exactly once** — copy it.
-2. Call a scoped endpoint with it:
-   `curl -H "Authorization: Bearer forge_sk_..." -H "X-Org-ID: <org>" .../api/v1/orgs/<org>`
+2. Call a scoped endpoint with it. Put the key in the environment rather than
+   on the command line — it is a live credential, and a literal here ends up in
+   your shell history and in anything you paste this into:
+   ```bash
+   export THE_KEY=...            # the value shown once in step 1
+   curl -H "Authorization: Bearer $THE_KEY" -H "X-Org-ID: $ORG_ID"      https://localhost/api/v1/orgs/$ORG_ID
+   ```
 3. Call an endpoint the key's scopes do not cover → **403**.
 4. Exceed the budget → **429**, with `X-RateLimit-Limit`, `-Remaining` and
    `-Reset`. They are on the **success** path too, which is the half worth

@@ -107,6 +107,12 @@ class Settings(BaseSettings):
     DB_MAX_OVERFLOW: int = 15
     ALLOWED_ORIGINS: list[str] = []
     LOG_LEVEL: str = "INFO"
+    # T-350: where the *worker* serves its own /metrics. Prometheus scrapes
+    # the API and the worker separately because they are separate processes
+    # with separate registries -- see metrics.start_worker_metrics_server.
+    # Not published to the host by docker-compose: like the API's own
+    # /metrics (T-202), this is an inside-the-network endpoint.
+    WORKER_METRICS_PORT: int = 9100
     DOMAIN: str = "localhost"  # used by Caddyfile.prod ($DOMAIN) and link generation
     # T-307: the *marketing* host, which is a different one -- the apex, with
     # the app on `app.`. Read by Caddyfile.prod's generated marketing block

@@ -17,9 +17,11 @@ import {
   DIST,
   MINIMAL_FIXTURE,
   build,
+  builtPages,
   read,
   readPath,
   scriptTagsOf,
+  sitemapPaths,
 } from "./helpers";
 
 /**
@@ -75,6 +77,30 @@ describe("the marketing module toggle", () => {
 
     expect(html).toContain("Accounts and teams");
     expect(html).not.toContain("Subscriptions that reconcile");
+  });
+
+  // pricing.astro's own frontmatter makes three claims about `billing` being
+  // off -- "the page is not built, src/lib/nav.ts does not link it, and it
+  // cannot appear in T-304's sitemap". All three were true and nothing
+  // checked any of them, which is the state a claim rots from. A pricing page
+  // surviving that toggle is worse than a missing feature: a public page
+  // advertising plans the product cannot sell, linked from its own nav.
+  //
+  // One build, three assertions, rather than a case each: every `build()` in
+  // this file is a real `astro build`, and the claim is about one state of
+  // the world seen three ways.
+  it("builds, links and lists no /pricing anywhere when billing is off", () => {
+    build({ productConfig: BILLING_DISABLED_FIXTURE });
+
+    expect(builtPages().filter((page) => page.includes("pricing"))).toEqual([]);
+    expect(sitemapPaths().filter((path) => path.includes("pricing"))).toEqual(
+      [],
+    );
+    // Every built page, not just the landing one: the nav renders into all of
+    // them, so a stale link would survive on the pages nobody looked at.
+    for (const page of builtPages()) {
+      expect(read(page)).not.toContain('href="/en/pricing');
+    }
   });
 });
 

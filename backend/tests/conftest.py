@@ -22,7 +22,7 @@ from sqlalchemy.pool import NullPool
 from testcontainers.postgres import PostgresContainer
 from testcontainers.redis import RedisContainer
 
-from app.core import encrypted_type, resilience
+from app.core import encrypted_type, metrics, resilience
 from app.core import jobs as jobs_module
 from app.core.config import get_settings
 from app.core.db import get_session
@@ -126,6 +126,23 @@ def postgres_container() -> Generator[PostgresContainer, None, None]:
 def redis_container() -> Generator[RedisContainer, None, None]:
     with RedisContainer("redis:7-alpine") as container:
         yield container
+
+
+@pytest.fixture(autouse=True)
+def _reset_metrics_scrape_backoff() -> Generator[None, None, None]:
+    """Un-poison `app.core.metrics`' Redis stand-down between tests.
+
+    That window is process-global on purpose (a scrape must not pay four
+    connect timeouts while Redis is down), which makes it exactly the kind of
+    state that leaks across a suite: `test_gauges_fail_closed_to_zero_when_
+    redis_unreachable` induces a failure deliberately, and without this the
+    next thirty seconds of tests read every Redis-backed gauge as 0.0 without
+    asking Redis. Alone they pass, in a full run they do not -- this
+    codebase's most-repeated trap, so it gets a fixture rather than a note.
+    """
+    metrics.reset_scrape_backoff()
+    yield
+    metrics.reset_scrape_backoff()
 
 
 @pytest.fixture(scope="session")

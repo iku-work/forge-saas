@@ -306,12 +306,32 @@ jobs:
       # (T-050): this app never documents 401/403/404/409/429 in the OpenAPI
       # schema (§0.4), so status_code_conformance / positive_data_acceptance
       # would fail on every unauthenticated fuzz hit against a protected route.
+      #
+      # --suppress-health-check=all, not just filter_too_much (T-350). A
+      # health check is Hypothesis telling you a *generator* is inefficient --
+      # "too many examples were filtered out for this operation" -- not the
+      # API telling you it is wrong, and the two must not fail the same build.
+      # This step went red on four operations whose path parameters are tight
+      # patterns (`{provider}`, `{token}`) while reporting "2564 generated,
+      # 2564 passed": every contract assertion held and the run failed anyway.
+      #
+      # Stated plainly because it was not reproduced: the same version
+      # (4.21.8), the same `--seed`, the same flags and the same 2564 cases
+      # pass locally with `filter_too_much` already suppressed, so what
+      # differs is the runner, not the schema. The narrower flag was in place
+      # and did not prevent it. tests/contract/test_schemathesis.py reached
+      # the same conclusion about the same library from the other direction --
+      # see its `HealthCheck.all` and the comment on why one suppression layer
+      # there was not enough either.
+      #
+      # What this does *not* silence: not_a_server_error and
+      # response_schema_conformance, which are the two things this step is for.
       - name: Schemathesis live fuzz against running backend
         working-directory: backend
         run: |
           schemathesis run http://localhost:8000/openapi.json \
             --checks=not_a_server_error,response_schema_conformance \
-            --suppress-health-check=filter_too_much \
+            --suppress-health-check=all \
             --max-examples=20
 
   # T-291: the half of the module matrix that cannot run in-process.

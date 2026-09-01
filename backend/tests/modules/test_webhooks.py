@@ -17,6 +17,7 @@ outer transaction holds once a test has inserted an org. Creating the tables
 lazily therefore hangs forever with no output.
 """
 
+import json
 import socket
 from collections.abc import AsyncIterator, Callable
 from datetime import UTC, datetime, timedelta
@@ -194,6 +195,73 @@ async def test_one_org_cannot_see_or_touch_another_orgs_endpoints(
     ).status_code == 404
     assert (await client_b.delete(f"{_PREFIX}/endpoints/{endpoint.id}")).status_code == 404
     assert (await client_b.get(f"{_PREFIX}/endpoints/{endpoint.id}/deliveries")).status_code == 404
+
+
+async def test_the_delivery_log_still_pages_from_an_index_at_ten_thousand_rows(
+    session: AsyncSession,
+) -> None:
+    """`webhook_delivery` is the fastest-growing table this template adds --
+    one row per event per endpoint -- so "it paginates" has to mean something
+    at a size nobody has locally.
+
+    The statement *count* is already fixed by tests/test_query_budgets.py,
+    which measures at 3 rows and again at 30 and fails if the two differ. That
+    catches an N+1 and cannot catch this: a keyset query whose index has been
+    dropped, reordered, or made unusable by a change to the ORDER BY issues
+    exactly one statement either way, and simply reads the whole table to do
+    it. What changes is the *plan*, so that is what this asserts.
+
+    EXPLAIN rather than a timing assertion, because a wall-clock budget on a
+    shared CI runner is a flake generator, and "how long did it take" is a
+    worse question than "did it have to sort the table to answer".
+    """
+    org, owner = await _make_org(session, MemberRole.OWNER)
+    endpoint = await _seed_endpoint(session, (org, owner))
+    await session.flush()
+
+    # Bulk-inserted in one statement: 10k rows through the ORM would dominate
+    # this test's runtime and prove nothing extra.
+    await session.execute(
+        text("""
+            INSERT INTO webhook_delivery
+                (id, org_id, endpoint_id, event_type, payload, status,
+                 attempt_count, delivery_id, created_at, updated_at)
+            SELECT gen_random_uuid(), :org_id, :endpoint_id, 'member.invited',
+                   '{}'::jsonb, 'delivered', 1, gen_random_uuid(),
+                   now() - (i * interval '1 second'),
+                   now()
+            FROM generate_series(1, 10000) AS i
+        """),
+        {"org_id": org.id, "endpoint_id": endpoint.id},
+    )
+    # Without stats the planner assumes a tiny table and picks a sequential
+    # scan on merit, which would make this assert the wrong thing.
+    await session.execute(text("ANALYZE webhook_delivery"))
+
+    plan = (
+        await session.execute(
+            text("""
+                EXPLAIN (FORMAT JSON)
+                SELECT * FROM webhook_delivery
+                 WHERE org_id = :org_id
+                   AND endpoint_id = :endpoint_id
+                   AND deleted_at IS NULL
+                 ORDER BY created_at DESC, id DESC
+                 LIMIT 21
+            """),
+            {"org_id": org.id, "endpoint_id": endpoint.id},
+        )
+    ).scalar_one()
+
+    rendered = json.dumps(plan)
+    assert "Seq Scan" not in rendered, (
+        "the delivery log is reading the whole table to serve one page:\n" + rendered
+    )
+    # The index that exists for exactly this query
+    # (WebhookDelivery.__table_args__). Named rather than merely asserting
+    # "some index", so that dropping this one and leaving another is a
+    # failure rather than a silently slower plan.
+    assert "ix_webhook_delivery_endpoint_id_created_at_id" in rendered, rendered
 
 
 # --- §0.8 non-negotiable 2: the RBAC gate ------------------------------------

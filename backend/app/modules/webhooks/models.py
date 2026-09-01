@@ -85,6 +85,19 @@ class WebhookEndpoint(
         Index("ix_webhook_endpoint_org_id_created_at_id", "org_id", "created_at", "id"),
     )
 
+    # Declared rather than inherited from OrgScopedMixin, for the one reason
+    # T-310's ApiKey.org_id gives: ON DELETE CASCADE. This row holds a live
+    # signing secret, and a credential outliving its tenant is the worst
+    # orphan this schema can produce. Without it, deleting an organization
+    # does not orphan the endpoint -- it fails outright on the foreign key,
+    # which is safe but means "remove this customer" is a puzzle rather than a
+    # DELETE. The product exposes no org-delete endpoint, so the only thing
+    # that can remove that row is an operator at a psql prompt: a rule the
+    # database enforces holds whether or not that person has read this file.
+    # Otherwise identical to the mixin's, which is what keeps
+    # BaseRepository's org filter (§0.2) applicable.
+    org_id: UUID = Field(foreign_key="organization.id", index=True, ondelete="CASCADE")
+
     url: str = Field(max_length=2048)
     description: str | None = Field(default=None, max_length=500)
     # §7's rule, and the one column in this codebase where encryption rather
@@ -137,6 +150,12 @@ class WebhookDelivery(
         Index("ix_webhook_delivery_status_next_attempt_at", "status", "next_attempt_at"),
     )
 
+    # Same override, same reason, one level down: an org delete has to reach
+    # this table too. `endpoint_id` already cascades, so in practice the
+    # endpoint takes its log with it -- but the org FK below is what the
+    # database checks first, and without CASCADE on it a tenant delete
+    # fails on the log rather than on the endpoint.
+    org_id: UUID = Field(foreign_key="organization.id", index=True, ondelete="CASCADE")
     endpoint_id: UUID = Field(foreign_key="webhook_endpoint.id", index=True, ondelete="CASCADE")
     event_type: str = Field(max_length=100, index=True)
     payload: dict = Field(default_factory=dict, sa_column=Column(JSONB, nullable=False))  # type: ignore[type-arg]

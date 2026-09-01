@@ -245,6 +245,102 @@ def test_the_migrations_build_exactly_what_the_models_declare(real_config: Confi
     )
 
 
+def test_deleting_an_organization_takes_its_credentials_with_it(real_config: Config) -> None:
+    """T-310's rule, checked against the schema `alembic upgrade` actually
+    builds, for every table that stores a credential.
+
+    "A live credential outliving its tenant is the worst orphan this schema
+    could produce" is `ApiKey.org_id`'s own comment, and three tables now hold
+    one: `api_key` (a digest), `webhook_endpoint` (an HMAC signing secret) and
+    `sso_connection` (an IdP client secret). All three ship in modules that
+    are **off** by default, so this runs after every branch is applied.
+
+    Behavioural rather than a read of `pg_constraint`, because what has to be
+    true is that the delete *happens*, and because `alembic check` cannot see
+    this class of drift at all: autogenerate compares a foreign key's columns
+    and target, not its ON DELETE rule, so a model saying CASCADE over a
+    migration that forgot it is invisible to the drift test above. That is
+    exactly what had happened to both webhook tables (T-350).
+
+    There is no org-delete endpoint -- the only thing that can remove that row
+    is an operator at a psql prompt -- which is the reason to enforce it in
+    the database rather than in a service that such a person never runs.
+    """
+    migration_runner.upgrade(real_config)
+    for branch in migration_runner.MODULE_BRANCHES.values():
+        command.upgrade(real_config, f"{branch}@head")
+
+    url = (real_config.get_main_option("sqlalchemy.url") or "").replace("+asyncpg", "")
+
+    async def _run() -> dict[str, int]:
+        conn = await asyncpg.connect(url)
+        try:
+            org_id = await conn.fetchval(
+                "insert into organization (id, name, slug, settings, created_at, "
+                "updated_at) values (gen_random_uuid(), 'Doomed', 'doomed', "
+                "'{}'::jsonb, now(), now()) returning id"
+            )
+            await conn.execute(
+                "insert into api_key (id, org_id, name, prefix, key_hash, scopes, "
+                "created_at, updated_at) values (gen_random_uuid(), $1, 'k', 'pfx', "
+                "'digest', '[]'::jsonb, now(), now())",
+                org_id,
+            )
+            endpoint_id = await conn.fetchval(
+                "insert into webhook_endpoint (id, org_id, url, secret, event_types, "
+                "enabled, consecutive_failures, created_at, updated_at) values "
+                "(gen_random_uuid(), $1, 'https://x.example/h', 'enc', '[]'::jsonb, "
+                "true, 0, now(), now()) returning id",
+                org_id,
+            )
+            await conn.execute(
+                "insert into webhook_delivery (id, org_id, endpoint_id, event_type, "
+                "payload, status, attempt_count, delivery_id, created_at, updated_at) "
+                "values (gen_random_uuid(), $1, $2, 'x.y', '{}'::jsonb, 'pending', 0, "
+                "gen_random_uuid(), now(), now())",
+                org_id,
+                endpoint_id,
+            )
+            await conn.execute(
+                "insert into sso_connection (id, org_id, provider_label, issuer, "
+                "discovery_url, client_id, client_secret, email_domain, jit_provisioning, "
+                "default_role, group_role_mappings, enforced, domain_hint_enabled, enabled, "
+                "created_at, updated_at) values (gen_random_uuid(), $1, 'IdP', "
+                "'https://idp.example', 'https://idp.example/.well-known/openid-configuration', "
+                "'cid', 'enc', 'example.com', true, 'MEMBER', '{}'::jsonb, false, false, true, "
+                "now(), now())",
+                org_id,
+            )
+
+            # What an operator does. If any of these foreign keys lacks its ON
+            # DELETE rule this raises ForeignKeyViolationError rather than
+            # leaving an orphan -- safe, but it means "remove this customer"
+            # is a puzzle instead of a DELETE, which is the bug this catches.
+            await conn.execute("delete from organization where id = $1", org_id)
+
+            return {
+                table: await conn.fetchval(
+                    f"select count(*) from {table} where org_id = $1",  # noqa: S608
+                    org_id,
+                )
+                for table in (
+                    "api_key",
+                    "webhook_endpoint",
+                    "webhook_delivery",
+                    "sso_connection",
+                )
+            }
+        finally:
+            await conn.close()
+
+    assert asyncio.run(_run()) == {
+        "api_key": 0,
+        "webhook_endpoint": 0,
+        "webhook_delivery": 0,
+        "sso_connection": 0,
+    }
+
+
 def test_round_trip_up_down_up_with_billing_disabled(
     real_config: Config, monkeypatch: pytest.MonkeyPatch
 ) -> None:

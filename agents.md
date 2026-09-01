@@ -7615,7 +7615,9 @@ deploy.
 **Done when**
 
 - [ ] The runbook executes start to finish without intervention or undocumented steps — **written, not executed here.** `docs/runbooks/phase4-verification.md` exists with all eleven steps; running it needs a live stack, a Stripe test key and an Okta/Entra dev tenant, and a runbook nobody has walked is a draft. Every command in it was checked to exist (`make load-test`, `pnpm --filter marketing lighthouse`, the fixture paths); two claims it made were wrong on the first pass and are fixed — the API-key rate-limit headers are `X-RateLimit-*`, and the Lighthouse Windows note lives in `apps/marketing/scripts/lighthouse.mjs`, not a README.
-- [ ] Every acceptance criterion below is ticked — no, and the shape of what was assessed matters. **P4-0, P4-D and P4-E were gone through item by item** and are ticked or annotated with what is missing. **P4-A, P4-B and P4-C were deliberately left untouched**: almost every criterion in them (a Lighthouse run, a real webhook consumer going down and coming back, an integrator following the published docs, Grafana showing queue depth) is answered by *executing* this task's runbook, not by reading code — and ticking them from the code would be exactly the thing this runbook's own Verification section warns against. They stay open until somebody runs the pass.
+- [ ] Every acceptance criterion below is ticked — **all five sub-phases have now been gone through item by item**, and four criteria remain open on purpose. Each of those four needs something this repo cannot contain: Google's Rich Results verdict, a browser proving a cookie did not cross a host boundary, an Okta/Entra dev tenant, and a newcomer who has not read the code. They are annotated with what is missing rather than ticked.
+
+  The pass was worth doing rather than deferring wholesale to the runbook: **five criteria were not actually met**, and three of them were defects rather than missing tests — deleting an organization failed on a foreign key instead of removing it (both webhook tables had no `ON DELETE CASCADE`, so a signing secret outlived nothing but blocked the delete); every counter the worker increments read as a flat zero in Grafana (separate process, separate registry, nothing scraping it); and `/metrics` hung for 16s instead of reporting zeros when Redis was down, which is the one moment somebody is reading it. The other two were real coverage gaps: `/pricing` surviving `billing=False`, and the delivery log's plan at 10k rows.
 
 **Delivered** (T-350)
 
@@ -7651,38 +7653,38 @@ Each sub-phase is independently shippable and independently gated. A sub-phase w
 **P4-A · Marketing site + SEO**
 
 ```
-- [ ] ADR-0004 Accepted, names Astro, answers all four of its constraints (in particular the "use client" boundary)
-- [ ] @forge/ui renders on marketing as an island with packages/ui and apps/web unmodified
-- [ ] Landing, pricing, features, blog, guides, legal and 404 build in every enabled locale
-- [ ] check-seo.mjs passes on every built page; JSON-LD clean in Rich Results with no CSP violation
-- [ ] sitemap + robots correct per environment; hreflang alternates all resolve; no locale serves another locale's content
-- [ ] Lighthouse CI green on four pages (LCP, CLS, TBT-as-INP-proxy, SEO ≥ 0.95, a11y = 1.0)
-- [ ] Both hosts serve over TLS; the app's session cookie never reaches the marketing host
-- [ ] Default build sets zero cookies and makes zero third-party requests
-- [ ] `/pricing` absent from build, nav and sitemap when `billing` is off
+- [x] ADR-0004 Accepted, names Astro, answers all four of its constraints (in particular the "use client" boundary)
+- [x] @forge/ui renders on marketing as an island with packages/ui and apps/web unmodified — `build.test.ts` asserts both halves (static markup on the landing page, the token layer emitted). One honest caveat: `packages/ui` *was* touched in T-300, deliberately, to move the design tokens into it; `apps/web` was not.
+- [x] Landing, pricing, features, blog, guides, legal and 404 build in every enabled locale — `routes.test.ts`: "builds every static route in every enabled locale", read off disk rather than listed, so a page added tomorrow is covered without editing the test
+- [ ] check-seo.mjs passes on every built page; JSON-LD clean in Rich Results with no CSP violation — the first half gates every build and the offline JSON-LD check (T-303) passes; **Rich Results itself is Google's, and needs the runbook's step 3**
+- [x] sitemap + robots correct per environment; hreflang alternates all resolve; no locale serves another locale's content — `indexing.test.ts`, `hreflang.test.ts` ("each resolve to a built page, written in the language announced" — both directions), `routes.test.ts` ("puts every built route in the sitemap")
+- [x] Lighthouse CI green on four pages (LCP, CLS, TBT-as-INP-proxy, SEO ≥ 0.95, a11y = 1.0) — observed green in CI's `lighthouse` job on 2026-09-01
+- [ ] Both hosts serve over TLS; the app's session cookie never reaches the marketing host — the two-host split, its TLS and its "marketing sets no cookies" header assertion all run in CI's `e2e-web` job; that the *app's* cookie never crosses is a property of `__Host-` + the host split rather than something asserted directly, and belongs to the runbook's step 2
+- [x] Default build sets zero cookies and makes zero third-party requests — `consent.test.ts`, over `dist/`
+- [x] `/pricing` absent from build, nav and sitemap when `billing` is off — **was the one real gap here.** `pricing.astro`'s frontmatter made all three claims and nothing checked any of them; one now does, asserting all three (T-350). A pricing page surviving that toggle is worse than a missing feature: a public page advertising plans the product cannot sell, linked from its own nav.
 ```
 
 **P4-B · Public API keys**
 
 ```
-- [ ] A key authenticates only on endpoints that declare a scope; every other endpoint refuses it
-- [ ] Key is shown once, stored only as a digest, and appears in no log, response or repr
-- [ ] Rate limiting is per key and survives a config change without a restart
-- [ ] Revocation, expiry, org deletion and module disable each kill a live key
-- [ ] Public OpenAPI contains exactly the tagged endpoints; T-049 and T-050 cover them
-- [ ] A newcomer creates a key and makes a successful call using only the published docs
+- [x] A key authenticates only on endpoints that declare a scope; every other endpoint refuses it — `test_a_route_without_require_scope_rejects_a_valid_key` (parametrized) plus `test_the_public_surface_is_exactly_the_routes_that_declare_a_scope`, which is the version that cannot rot
+- [x] Key is shown once, stored only as a digest, and appears in no log, response or repr — four separate tests, including `test_the_stored_digest_is_sha256_of_the_secret_and_nothing_else` and `test_minting_and_revoking_are_audited_without_the_secret`
+- [x] Rate limiting is per key and survives a config change without a restart — `test_a_per_key_override_takes_effect_without_a_restart`, `test_the_budget_is_read_at_request_time`, `test_a_second_key_in_the_same_org_is_unaffected`
+- [x] Revocation, expiry, org deletion and module disable each kill a live key — **org deletion was the gap.** Revocation, expiry and module-disable each had a test; the fourth rested on an `ondelete="CASCADE"` nothing exercised, and `alembic check` cannot see that class of drift (autogenerate compares a foreign key's columns and target, not its ON DELETE rule). `test_deleting_an_organization_takes_its_credentials_with_it` now proves it against the migrated schema for all three credential tables — and found that **both webhook tables were missing the rule entirely**, so deleting an organization failed on a foreign key rather than removing it (fixed, migration `c7e4a1f0b382`).
+- [x] Public OpenAPI contains exactly the tagged endpoints; T-049 and T-050 cover them — `test_public_openapi.py` for the document, and T-050 now fuzzes it as a second schema
+- [ ] A newcomer creates a key and makes a successful call using only the published docs — `docs/runbooks/api-keys.md` and the published contract both exist and were written for it, but "a newcomer succeeded" is a claim only a newcomer can make. Runbook step 6 walks it; nobody unfamiliar has.
 ```
 
 **P4-C · Outbound webhooks**
 
 ```
-- [ ] Signature verifies against a fixed vector; a mutated body fails
-- [ ] SSRF guard rejects at save and again at delivery, including a hostname that re-resolves private
-- [ ] Retry schedule observed exactly; dead-letter and auto-disable both fire; a recovered consumer receives the event
-- [ ] Replay produces a new delivery with a new id and leaves the original row untouched
-- [ ] Delivery log paginates by keyset under budget at 10k rows, and the retention job prunes
-- [ ] Endpoint secret is EncryptedString, redacted in repr, and rotatable with an overlap window
-- [ ] Delivery rate, failure rate and queue depth visible in Grafana from outside the worker
+- [x] Signature verifies against a fixed vector; a mutated body fails — `test_the_signature_verifies_against_a_known_vector`, `test_a_mutated_body_fails_verification`, plus a stale-timestamp and a malformed-header case
+- [x] SSRF guard rejects at save and again at delivery, including a hostname that re-resolves private — `test_a_private_or_non_http_url_is_rejected_at_save`, `test_a_hostname_that_rebinds_to_a_private_ip_is_never_requested`, `test_a_url_edited_to_the_metadata_address_is_never_requested`
+- [x] Retry schedule observed exactly; dead-letter and auto-disable both fire; a recovered consumer receives the event — `test_the_whole_ladder_is_the_documented_one`, `test_the_ladder_runs_out_and_the_delivery_is_dead_lettered`, `test_n_dead_lettered_deliveries_switch_the_endpoint_off`, `test_a_success_resets_the_counter`
+- [x] Replay produces a new delivery with a new id and leaves the original row untouched — `test_replay_creates_a_new_delivery_and_leaves_the_original_untouched`
+- [x] Delivery log paginates by keyset under budget at 10k rows, and the retention job prunes — retention was covered; **10k rows was not.** The query-budget suite measures statement *count* at 3 rows and 30, which cannot catch this: a keyset query whose index has been dropped or reordered issues exactly one statement either way and reads the whole table to do it. `test_the_delivery_log_still_pages_from_an_index_at_ten_thousand_rows` asserts the *plan* instead (EXPLAIN, no Seq Scan, by index name) — verified to fail when that index is removed.
+- [x] Endpoint secret is EncryptedString, redacted in repr, and rotatable with an overlap window — three tests plus `test_rotation_keeps_the_old_secret_valid_for_the_overlap`
+- [x] Delivery rate, failure rate and queue depth visible in Grafana from outside the worker — **queue depth was; the two rates were not.** They are Counters incremented in the worker process, Prometheus only scraped `backend:8000`, and the worker exposed no `/metrics` — so both panels read a flat zero, which on a dashboard is indistinguishable from "nothing is being delivered". The worker now serves its own metrics endpoint with a scrape target to match (T-350), which also un-breaks `forge_emails_sent_total` and `forge_push_sent_total`.
 ```
 
 **P4-D · Enterprise SSO**
