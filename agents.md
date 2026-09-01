@@ -7643,7 +7643,7 @@ Each sub-phase is independently shippable and independently gated. A sub-phase w
 
 ```
 - [x] Fourteen modules; T-066's in-process matrix asserts routes and tables for every one
-- [ ] T-291's CI matrix green on default, everything-off, and Phase-4-modules-on — backend and frontend. The job exists and its three legs are defined; it has not been observed green since the Phase 4 modules landed, because CI's last runs failed earlier in the pipeline (see the `lint` fix in this batch).
+- [x] T-291's CI matrix green on default, everything-off, and Phase-4-modules-on — backend and frontend. **Observed green on all three legs 2026-09-01**, and it earned its keep on the first run: 9 failures on `b-minimal` and 77 on `c-phase4`, none of which any amount of running the shipped configuration could have found. Two were production defects rather than test problems — `webhooks.emit()` on tenancy's and billing's write paths, and `password_login_blocked()` on the password login path, each querying a table the suite had no reason to create until its module was on.
 - [x] `enterprise_sso` without `oauth` fails at boot with a message naming both
 - [x] ModuleName, ModulesResponse, ProductConfig["modules"], DENY_BY_DEFAULT and toActiveModules() agree key-for-key, enforced by a test
 - [x] `marketing=False` → root `pnpm build` green, no dist, app host unaffected
