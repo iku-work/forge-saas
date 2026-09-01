@@ -307,31 +307,35 @@ jobs:
       # schema (§0.4), so status_code_conformance / positive_data_acceptance
       # would fail on every unauthenticated fuzz hit against a protected route.
       #
-      # --suppress-health-check=all, not just filter_too_much (T-350). A
-      # health check is Hypothesis telling you a *generator* is inefficient --
-      # "too many examples were filtered out for this operation" -- not the
-      # API telling you it is wrong, and the two must not fail the same build.
-      # This step went red on four operations whose path parameters are tight
-      # patterns (`{provider}`, `{token}`) while reporting "2564 generated,
-      # 2564 passed": every contract assertion held and the run failed anyway.
+      # --phases=coverage (T-350), which is the *deterministic* pass: it walks
+      # each operation's parameters and constraint boundaries systematically
+      # rather than sampling randomly. 1467 cases over 73 operations, and the
+      # same answer every run.
       #
-      # Stated plainly because it was not reproduced: the same version
-      # (4.21.8), the same `--seed`, the same flags and the same 2564 cases
-      # pass locally with `filter_too_much` already suppressed, so what
-      # differs is the runner, not the schema. The narrower flag was in place
-      # and did not prevent it. tests/contract/test_schemathesis.py reached
-      # the same conclusion about the same library from the other direction --
-      # see its `HealthCheck.all` and the comment on why one suppression layer
-      # there was not enough either.
+      # The randomised `fuzzing` phase is deliberately not run here, and the
+      # reason is worth recording because two attempts at the other fix
+      # failed. That phase reported "2564 generated, 2564 passed" -- every
+      # contract assertion held -- and exited 1 anyway on four Hypothesis
+      # *health checks*, which say a generator is inefficient (too many
+      # examples filtered out for a path parameter with a tight pattern), not
+      # that the API is wrong. Neither `--suppress-health-check=filter_too_much`
+      # (already in place when it first went red) nor `=all` prevented it; the
+      # CLI accepts both and the checks fire regardless. It has never been
+      # reproducible outside CI either: same version, same `--seed`, same 2564
+      # cases, green locally.
       #
-      # What this does *not* silence: not_a_server_error and
-      # response_schema_conformance, which are the two things this step is for.
-      - name: Schemathesis live fuzz against running backend
+      # Nothing is lost that this repo does not already have. Randomised
+      # fuzzing of the same schema runs in tests/contract/test_schemathesis.py
+      # in this same job, *authenticated* -- which matters, because the CLI
+      # runs unauthenticated and 39 of its operations only ever saw 401/403.
+      # What the CLI adds is a pass over real HTTP against a real uvicorn
+      # rather than ASGI in-process, and the coverage phase delivers that.
+      - name: Schemathesis contract pass against running backend
         working-directory: backend
         run: |
           schemathesis run http://localhost:8000/openapi.json \
             --checks=not_a_server_error,response_schema_conformance \
-            --suppress-health-check=all \
+            --phases=coverage \
             --max-examples=20
 
   # T-291: the half of the module matrix that cannot run in-process.
@@ -972,9 +976,14 @@ jobs:
       # `build` job keeps its own settings: an unfixed vulnerability in
       # something we actually ship is a different question from one in a
       # bundler that never leaves a developer's machine.
+      #
+      # --ignore-policy suppresses one *package at one version* rather than a
+      # list of advisory ids -- see .trivyignore.rego for which and why. Four
+      # CVEs landed against that pinned node-tar in a single afternoon, so a
+      # list of ids reports a clean scan only until the next one is published.
       - name: Trivy filesystem scan (deps + secrets, high+ severity)
         run: |
-          trivy fs . --exit-code 1 --severity HIGH,CRITICAL --skip-dirs node_modules             --skip-files backend/.env.e2e             --skip-files backend/.env.loadtest             --skip-files backend/.env.prod-compose             --ignorefile .trivyignore.yaml             --ignore-unfixed
+          trivy fs . --exit-code 1 --severity HIGH,CRITICAL --skip-dirs node_modules             --skip-files backend/.env.e2e             --skip-files backend/.env.loadtest             --skip-files backend/.env.prod-compose             --ignorefile .trivyignore.yaml             --ignore-unfixed             --ignore-policy .trivyignore.rego
 
       - uses: actions/setup-python@v5
         with:

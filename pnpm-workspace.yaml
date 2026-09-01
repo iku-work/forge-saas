@@ -80,6 +80,10 @@ overrides:
   # versions to fix a DoS in one of them trades a known bug for an unknown
   # one, in glob matching, in the build tooling.
   "brace-expansion@1": ">=1.1.18 <2"
+  # The 1.x pin above fixed the copy `minimatch@3` asks for; newer consumers
+  # pull their own 5.x, which carries the same advisory and needed its own
+  # floor. A scoped override fixes one line, not the package.
+  "brace-expansion@5": ">=5.0.9 <6"
   # T-350: the rest of what trivy's HIGH set found once the job could finally
   # reach this step. All seven are transitive build tooling -- none is a
   # dependency of apps/web or any packages/* -- and every one is pinned to a
