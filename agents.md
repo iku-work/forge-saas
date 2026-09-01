@@ -7694,7 +7694,7 @@ Each sub-phase is independently shippable and independently gated. A sub-phase w
 - [ ] OIDC end to end against a real dev tenant once, then a mock in CI — mock done and signing for real; the dev-tenant run needs an Okta/Entra account and is the one item here a person has to do
 - [x] Four separate rejections proven: bad nonce, bad aud, expired, bad signature — five, counting `iss`
 - [x] Enforcement blocks password login for members; break-glass owner is never locked out
-- [ ] Session survives the callback redirect in both Playwright browsers — not run; the cookie attributes it turns on are asserted directly instead, see T-331's "Not done, and why"
+- [ ] Session survives the callback redirect in both Playwright browsers — not run; the cookie attributes it turns on are asserted directly instead, see T-331's "Not done, and why". **Separately, `e2e-web` itself ran for the first time on 2026-09-01 and is not green**: 4 passed, 5 failed, all webkit. One was a race in the RTL check and is fixed; the other four (two visual-baseline mismatches, one a11y violation, one canonical-URL assertion) are first sightings that need the uploaded Playwright artifacts to diagnose. The baselines were generated in a local Docker container and GitHub's runner renders differently — regenerating them from CI output would be the "baseline nobody looked at" failure `phase3-verification.md` names.
 - [x] client_secret encrypted at rest and absent from every response, log and repr
 - [x] Module disabled → routes 404 with rows present (via `MODULE_SURFACE`); default image carries no libxmlsec1
 - [x] Mobile SSO is explicitly recorded as out of scope, not silently missing — in the module README, the runbook's escalation section, and the router's own docstring
