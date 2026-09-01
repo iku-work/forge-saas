@@ -142,6 +142,35 @@ export async function inlineScriptHashes(dir) {
 }
 
 /**
+ * The security headers every document response carries, at a given indent.
+ *
+ * Emitted twice on purpose: Caddy runs `handle_errors` as its own handler
+ * chain, so the site block's `header` directive does not reach the 404
+ * response. That page is not a bare status -- it is styled, translated and
+ * links back into the site (see the handle_errors comment below), so serving
+ * it without a Content-Security-Policy or an X-Frame-Options is a real gap
+ * rather than a cosmetic one. T-350's ZAP baseline against the marketing host
+ * is what found it: "Content Security Policy (CSP) Header Not Set" on five
+ * URLs, every one a 404.
+ *
+ * One function rather than two copies in the template, so the two can never
+ * drift; the duplication lands in the generated file, where it costs nothing.
+ */
+function documentHeaders(target, hashes, analyticsHosts, indent) {
+  return [
+    `${indent}header {`,
+    `${indent}\tStrict-Transport-Security "${target.hsts}"`,
+    `${indent}\tX-Content-Type-Options "nosniff"`,
+    `${indent}\tX-Frame-Options "DENY"`,
+    `${indent}\tReferrer-Policy "strict-origin-when-cross-origin"`,
+    `${indent}\tPermissions-Policy "camera=(), microphone=(), geolocation=()"`,
+    `${indent}\tContent-Security-Policy "${contentSecurityPolicy(hashes, analyticsHosts)}"`,
+    `${indent}\t-Server`,
+    `${indent}}`,
+  ].join("\n");
+}
+
+/**
  * The Content-Security-Policy this site is served with.
  *
  * Its own policy, not the app's `default-src 'self'` from
@@ -333,15 +362,7 @@ ${target.tls === "" ? "" : `\t${target.tls}\n\n`}\troot * ${SITE_ROOT}
 \t# backend/app/middleware/security_headers.py and describe JSON API
 \t# responses; these describe a document. See contentSecurityPolicy() in the
 \t# generator for why script-src carries hashes and style-src does not.
-\theader {
-\t\tStrict-Transport-Security "${target.hsts}"
-\t\tX-Content-Type-Options "nosniff"
-\t\tX-Frame-Options "DENY"
-\t\tReferrer-Policy "strict-origin-when-cross-origin"
-\t\tPermissions-Policy "camera=(), microphone=(), geolocation=()"
-\t\tContent-Security-Policy "${contentSecurityPolicy(hashes, analyticsHosts)}"
-\t\t-Server
-\t}
+${documentHeaders(target, hashes, analyticsHosts, "\t")}
 
 ${robotsHeader(target, productionHost)}
 
@@ -395,6 +416,7 @@ ${localeRedirects(locales, defaultLocale)}
 \t# page Google indexes.
 \thandle_errors 404 {
 \t\trewrite * /404.html
+${documentHeaders(target, hashes, analyticsHosts, "\t\t")}
 \t\tfile_server {
 \t\t\tstatus 404
 \t\t}
