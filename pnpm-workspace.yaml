@@ -67,7 +67,19 @@ overrides:
   # satisfies the security job without the 0.9.0 breaking change. Tilde-pinned
   # so a future `pnpm install` can't silently float across that line again.
   "@xmldom/xmldom": "~0.8.13"
-  "tar": ">=7.5.11"
+  # Bumped from >=7.5.11 (T-350): the floor only covers the CVEs known when it
+  # was written, and 7.5.16 resolved under it carries CVE-2026-59873
+  # (CRITICAL, gzip bomb), -59874 and -73566. 7.5.21 is the highest fix line
+  # among them. A floor is a decision with an expiry date -- trivy is what
+  # notices when it has passed.
+  "tar": ">=7.5.21"
+  # CVE-2026-13149 (HIGH), which reaches this tree only through the 1.x line.
+  # Scoped to that line on purpose: an unscoped `>=1.1.16` is satisfied by
+  # 5.0.6, so pnpm hoists *every* consumer onto it -- including `minimatch@3`,
+  # which asks for `^1.1.7`. Forcing a transitive dependency across two major
+  # versions to fix a DoS in one of them trades a known bug for an unknown
+  # one, in glob matching, in the build tooling.
+  "brace-expansion@1": "1.1.16"
   # Exempted from the blanket tar bump above (T-222): @expo/cli@0.22.28's own
   # bundled tar.js/npm.js do `require('tar').default.extract` -- CJS interop
   # that assumes any `__esModule`-flagged module also has a `.default`. tar's

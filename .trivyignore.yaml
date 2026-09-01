@@ -1,0 +1,37 @@
+# Trivy suppressions (T-350).
+#
+# Same rule as .zap/baseline.conf: every entry carries an owner, a date, and a
+# reason somebody can check. An undocumented ignore is not allowed, and neither
+# is an ignore added instead of reading the finding.
+#
+# `expired_at` is the point of using the YAML format rather than a bare
+# .trivyignore list: a suppression with no end date is a decision nobody
+# revisits. When one expires the scan goes red again and somebody has to look.
+
+vulnerabilities:
+  # 2026-09-01 iku-work — expires 2026-12-01
+  #
+  # node-tar 6.2.1, reachable only through `@expo/cli>tar`, which
+  # pnpm-workspace.yaml pins to the 6.x line on purpose: @expo/cli@0.22.28's
+  # bundled tar.js does `_interopRequireDefault(require("tar")).default.extract`,
+  # and tar 7 sets `__esModule: true` while exporting no `default`. Verified
+  # against the installed 7.5.x: `.default` is `undefined`, so `expo prebuild`
+  # dies with "Cannot read properties of undefined (reading 'extract')".
+  #
+  # There is no fix on the 6.x line -- the advisory's only fixed version is
+  # 7.5.19 -- so the choice is this suppression or a broken native build. What
+  # is actually exposed: archive extraction during `expo prebuild`, on a
+  # developer's machine, over archives Expo itself fetched. Not a request path,
+  # and not something a user of the deployed product can reach.
+  #
+  # The real fix is a newer @expo/cli, whose own tar range has moved on. Revisit
+  # when the mobile app's Expo SDK is next upgraded; that is what the expiry is
+  # here to force.
+  - id: CVE-2026-59873
+    paths:
+      - "pnpm-lock.yaml"
+    statement: >-
+      node-tar 6.2.1 is pinned for @expo/cli's CJS interop (see
+      pnpm-workspace.yaml). Build-time archive extraction on a developer
+      machine; not reachable from the deployed product.
+    expired_at: 2026-12-01

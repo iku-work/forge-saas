@@ -40,6 +40,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, cast
 
 import httpx
+from authlib.integrations.base_client.errors import OAuthError
 from authlib.integrations.httpx_client import AsyncOAuth2Client
 from authlib.oauth2 import OAuth2Error
 from joserfc import jwt
@@ -151,7 +152,13 @@ async def exchange_code(
             token = await client.fetch_token(
                 str(discovery["token_endpoint"]), code=code, grant_type="authorization_code"
             )
-        except (httpx.HTTPError, OAuth2Error) as exc:
+        # Three trees, not one. `OAuth2Error` is authlib's *protocol* error and
+        # `OAuthError` is its *client-integration* error -- they share no base
+        # beyond Exception, and it is the second one an IdP refusing the code
+        # actually produces. Catching only the first let an `invalid_grant`
+        # escape this module as a 500, throwing away both the 401 and the
+        # message that tells an operator the code was rejected (T-350).
+        except (httpx.HTTPError, OAuth2Error, OAuthError) as exc:
             raise AuthenticationError(
                 "errors.sso_exchange_failed",
                 fallback="The identity provider rejected the sign-in attempt",

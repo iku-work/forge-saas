@@ -57,6 +57,8 @@ from app.modules.tenancy.models import Membership, Organization
 from app.modules.tenancy.repository import MembershipRepository, OrganizationRepository
 
 # isort: split
+from app.core import cache_keys
+from app.modules.sso import discovery as discovery_module
 from app.modules.sso import oidc
 from app.modules.sso import service as sso_service
 from app.modules.sso.models import SsoConnection
@@ -115,6 +117,10 @@ class _MockIdp:
         self.claims_override: dict[str, Any] = {}
         self.sign_with: RSAKey | None = None
         self.token_endpoint_body: dict[str, Any] | None = None
+        # Status overrides, for the two ways an IdP fails that are not a
+        # malformed token: it refuses the code, or it is simply down.
+        self.token_endpoint_status = 200
+        self.discovery_status = 200
         self.nonce: str | None = None
         self.discovery = {
             "issuer": _ISSUER,
@@ -144,10 +150,14 @@ class _MockIdp:
     def handler(self, request: httpx.Request) -> httpx.Response:
         path = request.url.path
         if path.endswith("openid-configuration"):
+            if self.discovery_status != 200:
+                return httpx.Response(self.discovery_status, json={"error": "down"})
             return httpx.Response(200, json=self.discovery)
         if path.endswith("/jwks"):
             return httpx.Response(200, json=self.jwks)
         if path.endswith("/token"):
+            if self.token_endpoint_status != 200:
+                return httpx.Response(self.token_endpoint_status, json={"error": "invalid_grant"})
             body = self.token_endpoint_body
             if body is None:
                 body = {
@@ -482,6 +492,324 @@ async def test_an_idp_cannot_assert_an_identity_outside_its_own_domain(
         .all()
     )
     assert links == []
+
+
+# --- what a *misbehaving* IdP gets back ---------------------------------------
+#
+# Every case below has an error key in packages/i18n/locales/en/errors.json,
+# which is a promise that the product answers that way. Each was reachable and
+# untested: a documented failure mode nothing exercises is a docstring, not a
+# behaviour.
+
+
+async def test_a_token_endpoint_that_returns_no_id_token_says_so(
+    session: AsyncSession, api_client: ClientFactory, idp: _MockIdp
+) -> None:
+    """A plain OAuth2 response, which is what a connection configured without
+    the `openid` scope produces. Named rather than a KeyError, because the fix
+    is one word in the IdP's own console."""
+    org, _ = await _make_org(session)
+    await _connect(session, org)
+    idp.token_endpoint_body = {"access_token": "at", "token_type": "Bearer"}
+    client = api_client()
+
+    state, _ = await _start(client, org.slug)
+    response = await client.get(f"{_PREFIX}/callback", params={"code": "c", "state": state})
+
+    assert response.status_code == 401
+    assert response.json()["error"]["message_key"] == "errors.sso_no_id_token"
+
+
+async def test_a_token_endpoint_that_refuses_the_code_is_reported_as_such(
+    session: AsyncSession, api_client: ClientFactory, idp: _MockIdp
+) -> None:
+    org, _ = await _make_org(session)
+    await _connect(session, org)
+    idp.token_endpoint_status = 400
+    client = api_client()
+
+    state, _ = await _start(client, org.slug)
+    response = await client.get(f"{_PREFIX}/callback", params={"code": "c", "state": state})
+
+    assert response.status_code == 401
+    assert response.json()["error"]["message_key"] == "errors.sso_exchange_failed"
+
+
+@pytest.mark.parametrize(
+    ("override", "expected"),
+    [
+        pytest.param({"email": None}, "errors.sso_no_email", id="no email"),
+        pytest.param({"email": ""}, "errors.sso_no_email", id="empty email"),
+        pytest.param({"sub": None}, "errors.sso_no_subject", id="no subject"),
+    ],
+)
+async def test_a_token_missing_an_identity_claim_is_refused(
+    session: AsyncSession,
+    api_client: ClientFactory,
+    idp: _MockIdp,
+    override: dict[str, object],
+    expected: str,
+) -> None:
+    """`sub` and `email` are the two claims this product cannot proceed
+    without -- one is who the IdP says they are, the other is how they are
+    matched to an account here."""
+    org, _ = await _make_org(session)
+    await _connect(session, org)
+    client = api_client()
+
+    state, nonce = await _start(client, org.slug)
+    idp.nonce = nonce
+    idp.claims_override = override
+    response = await client.get(f"{_PREFIX}/callback", params={"code": "c", "state": state})
+
+    assert response.status_code == 401
+    assert response.json()["error"]["message_key"] == expected
+
+
+async def test_a_token_issued_in_the_future_is_refused(
+    session: AsyncSession, api_client: ClientFactory, idp: _MockIdp
+) -> None:
+    """The other half of the expiry check. A clock ahead of ours by more than
+    the tolerance widens the window in which a captured token is still fresh,
+    so `iat` is bounded in both directions rather than only the past one."""
+    org, _ = await _make_org(session)
+    await _connect(session, org)
+    client = api_client()
+
+    state, nonce = await _start(client, org.slug)
+    idp.nonce = nonce
+    idp.claims_override = {"iat": int(time.time()) + oidc.CLOCK_SKEW_SECONDS + 120}
+    response = await client.get(f"{_PREFIX}/callback", params={"code": "c", "state": state})
+
+    assert response.status_code == 401
+    assert response.json()["error"]["message_key"] == "errors.sso_expired"
+
+
+async def test_an_audience_array_containing_this_client_is_accepted(
+    session: AsyncSession, api_client: ClientFactory, idp: _MockIdp
+) -> None:
+    """`aud` is a string *or* an array of strings, and both are legal OIDC --
+    an IdP that always sends the array form would otherwise be unusable here
+    for a reason no error message would explain."""
+    org, _ = await _make_org(session)
+    await _connect(session, org)
+    client = api_client()
+
+    state, nonce = await _start(client, org.slug)
+    idp.nonce = nonce
+    idp.claims_override = {"aud": ["someone-else", _CLIENT_ID]}
+    response = await client.get(f"{_PREFIX}/callback", params={"code": "c", "state": state})
+
+    assert response.status_code == 200, response.text
+
+
+async def test_an_audience_of_the_wrong_shape_is_refused(
+    session: AsyncSession, api_client: ClientFactory, idp: _MockIdp
+) -> None:
+    """Neither a string nor an array. Refused rather than coerced: a claim
+    this product cannot read is not a claim it may assume matches."""
+    org, _ = await _make_org(session)
+    await _connect(session, org)
+    client = api_client()
+
+    state, nonce = await _start(client, org.slug)
+    idp.nonce = nonce
+    idp.claims_override = {"aud": {"client": _CLIENT_ID}}
+    response = await client.get(f"{_PREFIX}/callback", params={"code": "c", "state": state})
+
+    assert response.status_code == 401
+    assert response.json()["error"]["message_key"] == "errors.sso_bad_audience"
+
+
+async def test_an_amr_claim_naming_a_second_factor_satisfies_totp(
+    session: AsyncSession, api_client: ClientFactory, idp: _MockIdp
+) -> None:
+    """`amr` is the list form of "I checked a second factor". The `acr` form
+    is covered by the MFA test above; this is the one most IdPs actually
+    send, and it must not be the reason somebody is asked twice."""
+    org, _ = await _make_org(session)
+    await _connect(session, org)
+    user = await UserRepository(session).create(
+        email=f"newcomer@{_DOMAIN}",
+        hashed_password=hash_password("Correct-Horse9"),
+        email_verified_at=datetime.now(UTC),
+        totp_enabled=True,
+    )
+    await session.flush()
+    client = api_client()
+
+    state, nonce = await _start(client, org.slug)
+    idp.nonce = nonce
+    idp.claims_override = {"amr": ["pwd", "otp"]}
+    response = await client.get(f"{_PREFIX}/callback", params={"code": "c", "state": state})
+
+    assert response.status_code == 200, response.text
+    body = response.json()["data"]
+    # A session, not a challenge: the IdP already did the second factor.
+    assert body["access_token"]
+    assert body["user"]["id"] == str(user.id)
+
+
+async def test_a_discovery_document_missing_a_required_field_names_it(
+    session: AsyncSession, api_client: ClientFactory, idp: _MockIdp
+) -> None:
+    """Reported at *save* time, listing what is absent -- an admin pasting the
+    wrong URL is the common case, and "missing: token_endpoint, jwks_uri" is
+    the difference between a fix and a support ticket."""
+    caller = await _make_org(session)
+    idp.discovery = {"issuer": _ISSUER, "authorization_endpoint": f"{_ISSUER}/authorize"}
+    client = api_client(caller)
+
+    response = await client.put(
+        f"{_PREFIX}/connection",
+        json={
+            "provider_label": "Acme IdP",
+            "issuer": _ISSUER,
+            "discovery_url": _DISCOVERY_URL,
+            "client_id": _CLIENT_ID,
+            "client_secret": "s",
+            "email_domain": _DOMAIN,
+        },
+    )
+
+    assert response.status_code == 422
+    assert response.json()["error"]["message_key"] == "errors.sso_discovery_incomplete"
+
+
+async def test_an_unreachable_idp_is_a_503_about_us_not_a_422_about_them(
+    session: AsyncSession, api_client: ClientFactory, idp: _MockIdp
+) -> None:
+    """The configuration may be perfectly fine and the IdP merely down.
+    Telling an admin their settings are wrong when they are not is how a
+    five-minute outage becomes an afternoon."""
+    caller = await _make_org(session)
+    idp.discovery_status = 500
+    client = api_client(caller)
+
+    response = await client.put(
+        f"{_PREFIX}/connection",
+        json={
+            "provider_label": "Acme IdP",
+            "issuer": _ISSUER,
+            "discovery_url": _DISCOVERY_URL,
+            "client_id": _CLIENT_ID,
+            "client_secret": "s",
+            "email_domain": _DOMAIN,
+        },
+    )
+
+    assert response.status_code == 503
+
+
+@pytest.mark.parametrize(
+    ("groups_claim", "expected_role"),
+    [
+        pytest.param(["acme-admins"], MemberRole.ADMIN, id="array"),
+        pytest.param("acme-admins", MemberRole.ADMIN, id="bare string"),
+        pytest.param({"unexpected": "shape"}, MemberRole.MEMBER, id="neither"),
+    ],
+)
+async def test_a_group_claim_is_read_in_every_shape_an_idp_sends_it(
+    session: AsyncSession,
+    api_client: ClientFactory,
+    idp: _MockIdp,
+    groups_claim: object,
+    expected_role: MemberRole,
+) -> None:
+    """Group mapping decides a *role*, so how the claim is parsed is a
+    privilege decision rather than a formatting one.
+
+    An IdP with a single group commonly sends a bare string rather than a
+    one-element array; reading only the array form would silently drop that
+    person to `default_role` with nothing in any log to say why. A shape that
+    is neither falls back to the default rather than guessing.
+    """
+    org, _ = await _make_org(session)
+    await _connect(
+        session,
+        org,
+        group_claim="groups",
+        group_role_mappings={"acme-admins": "admin"},
+    )
+    client = api_client()
+
+    state, nonce = await _start(client, org.slug)
+    idp.nonce = nonce
+    idp.claims_override = {"groups": groups_claim}
+    response = await client.get(f"{_PREFIX}/callback", params={"code": "c", "state": state})
+
+    assert response.status_code == 200, response.text
+    user = await UserRepository(session).get_by_email(f"newcomer@{_DOMAIN}")
+    assert user is not None
+    membership = await MembershipRepository(session).get_by_user_and_org(user.id, org.id)
+    assert membership is not None
+    assert membership.role is expected_role
+
+
+@pytest.mark.usefixtures("idp")
+async def test_reconfiguring_a_connection_updates_it_and_drops_the_cached_document(
+    session: AsyncSession,
+    api_client: ClientFactory,
+    _redis_client: Redis,  # noqa: PT019 -- conftest names it this; its value is used below
+) -> None:
+    """A second PUT edits the row rather than creating a second one, and
+    throws away the cached discovery document.
+
+    That second half is the point. A stale discovery document for a
+    *replaced* IdP is the worst kind of stale: it works, against the wrong
+    provider, for up to an hour -- which is a live sign-in path pointed
+    somewhere the operator has already decided to stop trusting.
+    """
+    caller = await _make_org(session)
+    org, _ = caller
+    existing = await _connect(session, org, provider_label="Old IdP")
+    # Warm the cache the way a login would, so there is something to lose.
+    await discovery_module.fetch_discovery(_redis_client, _DISCOVERY_URL)
+    assert await _redis_client.get(cache_keys.sso_discovery_key(_DISCOVERY_URL)) is not None
+
+    client = api_client(caller)
+    response = await client.put(
+        f"{_PREFIX}/connection",
+        json={
+            "provider_label": "New IdP",
+            "issuer": _ISSUER,
+            "discovery_url": _DISCOVERY_URL,
+            "client_id": "rotated-client",
+            "client_secret": "rotated-secret",
+            "email_domain": _DOMAIN,
+        },
+    )
+
+    assert response.status_code == 200, response.text
+    assert response.json()["data"]["provider_label"] == "New IdP"
+
+    rows = (await session.execute(select(SsoConnection))).scalars().all()
+    assert [row.id for row in rows] == [existing.id]
+    await session.refresh(existing)
+    assert existing.client_id == "rotated-client"
+
+    assert await _redis_client.get(cache_keys.sso_discovery_key(_DISCOVERY_URL)) is None
+
+
+async def test_a_callback_for_a_connection_disabled_mid_flight_is_refused(
+    session: AsyncSession, api_client: ClientFactory, idp: _MockIdp
+) -> None:
+    """The window between `/start` and `/callback` is a real one -- a browser
+    can sit on an IdP's login screen for minutes. Turning the connection off
+    during it has to stop the sign-in, not merely stop new ones."""
+    org, _ = await _make_org(session)
+    connection = await _connect(session, org)
+    client = api_client()
+
+    state, nonce = await _start(client, org.slug)
+    idp.nonce = nonce
+    connection.enabled = False
+    await session.flush()
+
+    response = await client.get(f"{_PREFIX}/callback", params={"code": "c", "state": state})
+
+    assert response.status_code == 401
+    assert response.json()["error"]["message_key"] == "errors.sso_not_configured"
 
 
 # --- CSRF, state and the module toggle ---------------------------------------

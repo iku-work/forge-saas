@@ -7712,7 +7712,7 @@ Each sub-phase is independently shippable and independently gated. A sub-phase w
 
 ```
 - [x] §7's cross-cutting checklist passes for every task in this phase
-- [ ] pytest --cov thresholds not regressed; new auth-adjacent code (api_keys, sso) at 100% — thresholds not regressed; the 100% claim for the two new modules has not been measured module-by-module here
+- [ ] pytest --cov thresholds not regressed; new auth-adjacent code (api_keys, sso) at 100% — **measured, and the first half holds while the second does not.** Overall 96.19% against an 85% floor. `sso` is at 98% (from 91%) and `api_keys` at 96%; `sso/oidc.py`, where every security decision in the module lives, is at **100%**. Closing the gap turned up a real defect rather than just lines: `errors.sso_exchange_failed` was a documented error key with no test, and writing one showed the handler caught authlib's protocol error but not its client-integration error, so an IdP refusing the code returned a 500. What remains uncovered is defensive branches in `service.py`/`discovery.py` and one `router.py` line; they are worth covering but none is a documented behaviour with nothing behind it, which was the bar that mattered.
 - [ ] ZAP baseline extended to the marketing host and the public API, and **green** — extended (two hosts, two reports) but not yet run; see T-350's "Not done, and why"
 - [x] Every new setting has a .env.example entry and a line in the deploy runbook — Phase 4 added no backend settings: SSO is configured per organization in the database, API keys and webhooks per row. Nothing to add, which is the answer rather than an omission.
 - [x] ADRs 0004, 0006 and 0007 pass backend/scripts/check_docs.py, and docs/adr/README.md's index is regenerated rather than hand-edited

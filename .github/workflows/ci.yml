@@ -960,7 +960,7 @@ jobs:
       # committed on purpose.
       - name: Trivy filesystem scan (deps + secrets, high+ severity)
         run: |
-          trivy fs . --exit-code 1 --severity HIGH,CRITICAL --skip-dirs node_modules             --skip-files backend/.env.e2e             --skip-files backend/.env.loadtest             --skip-files backend/.env.prod-compose
+          trivy fs . --exit-code 1 --severity HIGH,CRITICAL --skip-dirs node_modules             --skip-files backend/.env.e2e             --skip-files backend/.env.loadtest             --skip-files backend/.env.prod-compose             --ignorefile .trivyignore.yaml
 
       - uses: actions/setup-python@v5
         with:

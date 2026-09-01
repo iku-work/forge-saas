@@ -47,6 +47,27 @@ template keep their own changes in `CHANGELOG.product.md` (see
     averaging it into a mixed workload is how a regression there goes unnoticed.
 
 ### Fixed
+- **An IdP refusing the authorization code produced a 500, not the documented
+  401.** `authlib` has two unrelated exception trees — `OAuth2Error` is its
+  *protocol* error and `OAuthError` its *client-integration* error, sharing no
+  base beyond `Exception` — and it is the second one `fetch_token` raises on an
+  `invalid_grant`. Catching only the first let it escape the SSO module
+  entirely, throwing away both the status code and the message that tells an
+  operator the code was rejected. Found by writing the test for
+  `errors.sso_exchange_failed`, which was a documented error key with nothing
+  exercising it.
+- **Dependency CVEs that had never been reachable in CI.** The `tar` override
+  floor is bumped from `>=7.5.11` to `>=7.5.21` (CVE-2026-59873, CRITICAL, plus
+  -59874 and -73566), and `brace-expansion` is fixed on the 1.x line
+  (CVE-2026-13149). The `brace-expansion` override is scoped to that line
+  deliberately: an unscoped `>=1.1.16` is satisfied by 5.0.6, and pnpm then
+  hoists every consumer onto it — including `minimatch@3`, which asks for
+  `^1.1.7` — trading a known DoS for an unknown glob bug in the build tooling.
+  The one edge that cannot move is `@expo/cli`'s pinned `tar@6.2.1`: verified
+  that tar 7 sets `__esModule: true` while exporting no `default`, so
+  `expo prebuild` dies exactly as `pnpm-workspace.yaml` predicted. That gets a
+  `.trivyignore.yaml` entry with an owner, a reason and an **expiry date** —
+  the point of the YAML format over a bare ignore list.
 - **CI's Schemathesis step failed a build that had no contract failures.** It
   reported "2564 generated, 2564 passed" and exited 1 on four health checks —
   Hypothesis saying a *generator* is inefficient on path parameters with tight
