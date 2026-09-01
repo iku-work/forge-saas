@@ -47,6 +47,23 @@ template keep their own changes in `CHANGELOG.product.md` (see
     averaging it into a mixed workload is how a regression there goes unnoticed.
 
 ### Fixed
+- **The marketing 404 was served with no CSP, HSTS or `X-Frame-Options`.**
+  Caddy runs `handle_errors` as its own handler chain, so the site block's
+  `header` directive never reached the error response — and that response is
+  not a bare status: it is a styled, translated page that links back into the
+  site. Both hosts, dev and production, since the generator writes both. Found
+  by the two-host ZAP scan T-350 added, on its first ever execution, which is
+  the most direct argument for that scan existing.
+- **CI's `zap-baseline` job now passes on both hosts** (app: `FAIL-NEW 0,
+  WARN-NEW 0, PASS 65`). Three suppressions were added to `.zap/baseline.conf`
+  along the way, each with an owner, a date and a reason that names what it
+  costs: HSTS on Caddy's own 404 probes, deliberate cacheability on public
+  marketing pages, `style-src 'unsafe-inline'` (unavoidable — Shiki emits a
+  style *attribute* per token and Firefox does not implement `style-src-attr`),
+  and Cross-Origin-Embedder-Policy, which is **not** set on purpose:
+  `require-corp` would block the opt-in analytics hosts the CSP exists to
+  allow, so turning it on would be a silent production regression dressed as
+  hardening.
 - **CI's `module-matrix` job ran for the first time and found 86 failures**,
   two of them production defects rather than test problems. `webhooks.emit()`
   (T-320) sits on tenancy's and billing's write paths and
