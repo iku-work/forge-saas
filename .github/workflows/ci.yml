@@ -1017,9 +1017,28 @@ jobs:
       # isn't a published package: there's nothing on PyPI/OSV to audit it
       # against, and pip-audit treats an unaudited package as a hard failure
       # otherwise. Real findings in third-party deps still fail this step.
+      # --ignore-vuln PYSEC-2026-1325 (T-350): `ecdsa`, and the advisory has
+      # **no fixed version** -- pip-audit prints an empty Fix Versions column
+      # for it, because upstream's position is that constant-time operations
+      # are out of scope for a pure-Python implementation. So there is nothing
+      # to upgrade to, and the choice is this flag or a permanently red job.
+      #
+      # What makes it acceptable rather than merely unavoidable: the advisory
+      # is a side-channel in ECDSA signing/verification, and this application
+      # never performs either. `ecdsa` arrives transitively through
+      # python-jose, which uses it only for the ES* algorithms;
+      # app/modules/auth/utils.py signs with RS256 and pins
+      # `algorithms=["RS256"]` at the decode site, so a token asking for ES256
+      # is rejected before any of that code is reached.
+      #
+      # The durable fix is moving app/modules/auth/utils.py off python-jose
+      # onto joserfc -- already a dependency of this project (T-331 uses it for
+      # ID-token verification) and the maintained successor. That changes how
+      # session tokens are signed and verified, so it is its own task with its
+      # own review, not a line in a CI fix.
       - name: pip-audit (Python dependency CVEs)
         working-directory: backend
-        run: pip-audit --skip-editable
+        run: pip-audit --skip-editable --ignore-vuln PYSEC-2026-1325
 
       - uses: pnpm/action-setup@v4
 
