@@ -42,6 +42,11 @@ _DEFAULT_SAMPLE_RATIO = 0.1
 
 
 def _sample_ratio() -> float:
+    # nosemgrep: semgrep.no-os-environ -- OTel's own convention, not app config.
+    # The rule's advice ("add it to Settings") is wrong here: the SDK reads
+    # this variable from the environment itself, so a mirrored setting could
+    # disagree with it and the env var would still win. See the module
+    # docstring.
     return float(os.environ.get(_OTEL_TRACES_SAMPLER_ARG_ENV, _DEFAULT_SAMPLE_RATIO))
 
 
@@ -56,6 +61,8 @@ def _build_tracer_provider(settings: Settings) -> TracerProvider:
         ),
         sampler=ParentBased(TraceIdRatioBased(_sample_ratio())),
     )
+    # nosemgrep: semgrep.no-os-environ -- see above; OTLPSpanExporter() below
+    # takes no arguments precisely because it reads this same variable itself.
     if os.environ.get(_OTEL_EXPORTER_OTLP_ENDPOINT_ENV):
         # OTLPSpanExporter() with no args reads OTEL_EXPORTER_OTLP_ENDPOINT
         # (and friends) itself -- no need to pass the value along here.

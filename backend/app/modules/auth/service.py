@@ -1161,6 +1161,14 @@ class AuthService:
                 # detection in refresh() (T-019): a counter that goes
                 # backwards means this credential was cloned, so every
                 # session gets revoked, not just this login attempt.
+                # Semgrep's logger-credential-disclosure rule fires on the
+                # word "credential" in the format string below. What is
+                # logged is a user id and `record.id` -- the primary key of
+                # the webauthn_credential row -- not the credential itself,
+                # which is a public key this code never logs anywhere.
+                # Suppressed at the line rather than by disabling the rule,
+                # which is worth keeping for what it is actually looking for.
+                # nosemgrep
                 logger.warning(
                     "auth.webauthn: sign-count regression detected (user_id=%s, credential_id=%s)",
                     user_id,
