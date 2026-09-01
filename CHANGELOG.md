@@ -6,6 +6,62 @@ template keep their own changes in `CHANGELOG.product.md` (see
 
 ## [Unreleased]
 ### Added
+- **Phase 4 acceptance runbook, and the checks it leans on (T-350).**
+  `docs/runbooks/phase4-verification.md` is the integrated pass for everything
+  Phase 4 added — eleven numbered steps in the shape of the phase 1–3 runbooks,
+  written to be executable by somebody who did not build any of it.
+  - **Three of Phase 4's five modules ship off**, so step 1 boots from
+    `backend/tests/fixtures/module_configs/phase4.py` — the configuration CI's
+    `module-matrix` job already proves boots and migrates — rather than telling
+    the reader to hand-edit a config. A module left off passes by having its
+    **absence** verified; that is a pass, not a skip.
+  - Its Rollback section names the state each step leaves on the machine,
+    including the one that can outlive the pass: SSO accounts provisioned
+    through an IdP have **no password**, so turning enforcement off comes
+    before deleting anything.
+  - **The cross-tenant sweep now reaches every Phase 4 surface.** `api_keys`
+    and `webhooks` already carried their §0.8 probe; `sso` did not, and now
+    does. It is written against the layer that decides — the repository's org
+    scoping — and says so, rather than implying a header check it does not make.
+  - **T-050 fuzzes the *published* contract too.** `tests/contract/` now runs
+    the same conformance checks over `build_public_schema()`'s output (T-314)
+    as over the app's own `/openapi.json`. That second document is assembled by
+    hand — filtered to scope-declaring operations, with its own security scheme
+    and contract version — so it can drift from what the app actually returns
+    while every other test stays green. Built from the function rather than
+    fetched, so it runs whether or not `public_api` is on.
+  - **The ZAP baseline covers both hosts**, as two reports rather than one: the
+    app sets a session cookie and serves an API, marketing sets no cookies and
+    serves a hash-based CSP, and one mixed report makes "which host is this
+    alert about?" a question you answer by reading URLs. The marketing site
+    arrives as an artifact from the `build` job that already produced it, and
+    `docker-compose.yml` gives caddy a `marketing.localhost` network alias —
+    from inside a container that name would otherwise resolve to the container
+    itself, which is why every other check of that host runs on the runner with
+    `curl --resolve`.
+  - **`tests/load/api-key.js`**, the key-authenticated read path. Its own
+    script rather than a branch inside `mixed.js`: a session token costs one
+    signature check, while a key costs a lookup by prefix plus a constant-time
+    digest comparison on **every** request before any handler runs — the shape
+    of path T-223 found the argon2-on-the-event-loop bug hiding in, and
+    averaging it into a mixed workload is how a regression there goes unnoticed.
+
+### Fixed
+- **`pnpm type-check` was green locally and red in CI, on a file nobody had
+  touched.** Three copies of `@types/node` (22, 24, 26) were in the tree with
+  nothing choosing between them, so which one the Astro language server
+  resolved depended on the shape of the install. 26.0.0 is why it mattered
+  rather than merely being untidy: it changed `ChildProcess` from `extends
+  EventEmitter` to `implements EventEmitter` *without declaring any of the
+  members*, so `child.on(...)` stops existing on the type — and
+  `apps/marketing/tests/content.test.ts` uses it to watch a dev server start.
+  Pinned in `pnpm-workspace.yaml` to the version `apps/web` already declares
+  and CI's runner already runs, for the same reason `backend/pyproject.toml`
+  pins ruff, mypy, pytest and schemathesis: a dependency nobody chose must not
+  be able to turn a green tree red on its own. A `devDependency` in
+  `apps/marketing` does **not** fix this — the language server does not resolve
+  through that package's `node_modules`, which is exactly what made the
+  original resolution a lottery.
 - **Enterprise SSO: per-org OIDC sign-in, and the right to refuse a password
   (T-331).** The `enterprise_sso` module (default off, requires `oauth`) lets
   one organisation point at its own identity provider — Okta, Entra ID, Auth0,

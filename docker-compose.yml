@@ -216,7 +216,19 @@ services:
       backend:
         condition: service_healthy
     networks:
-      - forge-net
+      forge-net:
+        # T-350: the marketing host, resolvable *inside* the compose network.
+        # From a container, `marketing.localhost` would otherwise resolve to
+        # that container itself -- which is why every existing check of this
+        # host (ci.yml's edge assertions) runs on the runner with `curl
+        # --resolve` rather than in here. The ZAP baseline scan cannot: it is
+        # a container on this network, and it addresses services by their
+        # compose DNS name. An alias makes the marketing host reachable the
+        # same way `caddy` already is, so it can be scanned rather than
+        # skipped. Costs a default stack nothing -- an unused alias is a DNS
+        # record nobody looks up.
+        aliases:
+          - marketing.localhost
 
   # T-204: local Grafana/Prometheus stack for viewing docs/grafana/*.json
   # against live data -- `make observe`. Never started by default (`make dev`

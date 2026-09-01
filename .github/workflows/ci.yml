@@ -1036,6 +1036,26 @@ jobs:
       - name: turbo build — gen-client output feeds every package/app build
         run: pnpm build
 
+      # T-350: `zap-baseline` needs this job's marketing output to have a
+      # marketing host to scan at all (T-307 generates the Caddy site block
+      # as part of the build). Passed as an artifact rather than rebuilt
+      # there: that job has no Node toolchain, no pnpm store and no backend
+      # install, and adding all three so it can re-derive bytes this job
+      # already produced would cost minutes on every push to save a download.
+      #
+      # `if-no-files-found: ignore` because a product with `marketing` off
+      # builds neither path, and that is a valid configuration rather than a
+      # broken job -- the scan step below is conditional on the same toggle.
+      - name: Upload the marketing site for the ZAP scan
+        uses: actions/upload-artifact@v4
+        with:
+          name: marketing-dist
+          path: |
+            apps/marketing/dist
+            apps/marketing/caddy/dev
+          if-no-files-found: ignore
+          retention-days: 1
+
       - name: Log in to GHCR
         uses: docker/login-action@v3
         with:
@@ -1099,7 +1119,11 @@ jobs:
   # bare backend, so TLS termination and security headers are actually in
   # the request path being tested.
   zap-baseline:
-    needs: build
+    # `build` is the dependency that matters; `lint` is already upstream of it
+    # (lint -> test -> build), so naming it as well costs no wall time and
+    # makes its marketing-toggle output readable by the step below -- the same
+    # output the `lighthouse` job gates on.
+    needs: [build, lint]
     runs-on: ubuntu-latest
 
     # Fixes the compose network name (<project>_forge-net) so the ZAP
@@ -1114,6 +1138,20 @@ jobs:
       - name: Copy test environment file
         working-directory: backend
         run: cp .env.test .env
+
+      # T-350: the marketing host only exists once `astro build` has written
+      # both the site and the Caddy site block that serves it (T-307). The
+      # `build` job this one already depends on produced both, so they arrive
+      # as an artifact -- compose bind-mounts these two paths (see the caddy
+      # service), and without them the stack comes up with no marketing host
+      # at all: correct for a product with the module off, useless for a scan
+      # meant to find headers on it.
+      - name: Fetch the marketing site built upstream
+        if: needs.lint.outputs.marketing == 'true'
+        uses: actions/download-artifact@v4
+        with:
+          name: marketing-dist
+          path: apps/marketing
 
       - name: Boot ephemeral stack (backend + Caddy + Postgres + Redis + MinIO + Mailhog)
         run: docker compose up -d postgres redis minio minio-init mailhog backend caddy
@@ -1152,7 +1190,7 @@ jobs:
       # embedded DNS; "localhost" from inside the ZAP container would only
       # ever resolve to itself. See the Caddyfile comment for why the site
       # block also matches that hostname.
-      - name: ZAP baseline scan
+      - name: ZAP baseline scan (app host)
         run: |
           docker run --rm \
             --network ${{ env.COMPOSE_PROJECT_NAME }}_forge-net \
@@ -1160,12 +1198,40 @@ jobs:
             -t ghcr.io/zaproxy/zaproxy:stable zap-baseline.py \
             -t https://caddy -c baseline.conf -r zap-report.html
 
-      - name: Upload ZAP report
+      # T-350: a second pass, against the second host. Separate rather than a
+      # wider spider scope on the first, because the two hosts have
+      # deliberately different answers -- marketing sets no cookies and serves
+      # a hash-based CSP, the app sets a session cookie and serves an API --
+      # and one report mixing them makes "which host is this about?" a
+      # question you answer by reading URLs.
+      #
+      # `marketing.localhost` resolves to the caddy container through the
+      # network alias docker-compose.yml gives it: from inside a container
+      # that name would otherwise resolve to the container itself, which is
+      # why every other check of this host runs on the runner with `curl
+      # --resolve` instead. Overrides for it, if it ever needs any, are scoped
+      # by URL in the same baseline.conf.
+      - name: ZAP baseline scan (marketing host)
+        # A product with `marketing` off has no marketing host by design
+        # (T-307: the site block is absent, not a host that 404s), so there is
+        # nothing here to scan and its absence is verified by the
+        # `module-matrix` job instead. Skipped, not failed.
+        if: needs.lint.outputs.marketing == 'true'
+        run: |
+          docker run --rm \
+            --network ${{ env.COMPOSE_PROJECT_NAME }}_forge-net \
+            -v "$(pwd)/.zap:/zap/wrk:rw" \
+            -t ghcr.io/zaproxy/zaproxy:stable zap-baseline.py \
+            -t https://marketing.localhost/en/ -c baseline.conf -r zap-marketing-report.html
+
+      - name: Upload ZAP reports
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: zap-baseline-report
-          path: .zap/zap-report.html
+          path: |
+            .zap/zap-report.html
+            .zap/zap-marketing-report.html
           retention-days: 30
 
       - name: Tear down stack

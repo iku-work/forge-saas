@@ -7614,8 +7614,22 @@ deploy.
 
 **Done when**
 
-- [ ] The runbook executes start to finish without intervention or undocumented steps
-- [ ] Every acceptance criterion below is ticked
+- [ ] The runbook executes start to finish without intervention or undocumented steps — **written, not executed here.** `docs/runbooks/phase4-verification.md` exists with all eleven steps; running it needs a live stack, a Stripe test key and an Okta/Entra dev tenant, and a runbook nobody has walked is a draft. Every command in it was checked to exist (`make load-test`, `pnpm --filter marketing lighthouse`, the fixture paths); two claims it made were wrong on the first pass and are fixed — the API-key rate-limit headers are `X-RateLimit-*`, and the Lighthouse Windows note lives in `apps/marketing/scripts/lighthouse.mjs`, not a README.
+- [ ] Every acceptance criterion below is ticked — no, and the shape of what was assessed matters. **P4-0, P4-D and P4-E were gone through item by item** and are ticked or annotated with what is missing. **P4-A, P4-B and P4-C were deliberately left untouched**: almost every criterion in them (a Lighthouse run, a real webhook consumer going down and coming back, an integrator following the published docs, Grafana showing queue depth) is answered by *executing* this task's runbook, not by reading code — and ticking them from the code would be exactly the thing this runbook's own Verification section warns against. They stay open until somebody runs the pass.
+
+**Delivered** (T-350)
+
+- `docs/runbooks/phase4-verification.md` — eleven numbered steps in the shape of `phase1-`/`phase2-`/`phase3-verification.md`, plus the three things this phase makes new: that three of its five modules ship **off** (so step 1 boots from the `phase4` fixture rather than telling the reader to hand-edit a config), that a module left off passes by having its **absence** verified, and a Rollback section that names the state each step leaves behind — including JIT-provisioned SSO accounts with no password, which is the one that can lock somebody out after the pass is over.
+- **The cross-tenant sweep reaches every Phase 4 surface.** `api_keys` and `webhooks` already carried their §0.8 probe; `sso` did not, and now does (`test_one_org_cannot_read_or_overwrite_anothers_connection`). It is written against the layer that actually decides — this file's `api_client` overrides `get_current_org`, so what it proves is the repository's org scoping, and the docstring says so rather than implying a header check it does not make.
+- **T-050 extended to the *published* contract.** `tests/contract/test_schemathesis.py` now fuzzes two documents: the app's own `/openapi.json` and `build_public_schema()`'s output (T-314), with the same checks. The second is the one that catches "the contract we hand integrators does not describe what we return" — invisible to every other test precisely because the app's own document stays correct. Built from the function rather than fetched, so it runs whether or not `public_api` is on. The shared request path was factored into one helper rather than copied.
+- **The ZAP baseline covers both hosts.** `zap-baseline` scans `https://caddy` and `https://marketing.localhost`, as two reports — the hosts have deliberately different answers (marketing sets no cookies and serves a hash-based CSP), and one mixed report makes "which host is this alert about?" a question you answer by reading URLs. The marketing site arrives as an artifact from the `build` job that already produced it rather than being rebuilt, and the whole step is gated on the same `marketing` toggle output the `lighthouse` job uses. `docker-compose.yml` gives caddy a `marketing.localhost` network alias, because from inside a container that name would otherwise resolve to the container itself.
+- **`tests/load/api-key.js`** — the key-authenticated read path, its own script rather than a branch in `mixed.js`. A session token costs one signature check; a key costs a lookup by prefix plus a constant-time digest comparison *per request*, before any handler runs, which is the shape of path T-223 found the argon2-on-the-event-loop bug hiding in. Mints its key with `rate_limit_per_minute: 100000` on purpose — with the default budget the run would measure the rate limiter refusing it. The nightly workflow copies the `phase4` fixture before booting, since `public_api` ships off.
+- `TEMPLATE.md` and `docs/runbooks/module-toggle-guide.md` already documented all three new toggles at the level of the existing eleven (T-300, T-307, T-310, T-320, T-331 each did their own); the toggle guide now also points at this runbook's step 9 for the integrated all-off pass.
+
+**Not done, and why**
+
+- [ ] **The pass itself has not been run.** Steps 2–5 need the marketing dev server and a browser; 6–8 need a live stack with three modules on, and 8 needs an IdP account that cannot exist in a repo; 11 needs the nightly k6 stack. What *is* verified here: the full backend suite, the full JS suite, `ruff`, `mypy --strict`, `pnpm lint`/`type-check`/`build`, and `check_docs.py`.
+- [ ] **The two CI changes are unrun.** The ZAP marketing scan and the k6 api-key scenario are correct as written and their workflows parse, but neither has executed — the first needs a GitHub runner, the second is nightly. Expect to tune the marketing scan's first run rather than treat it as a pass/fail gate, the same way T-211's alert filters are treated.
 
 ---
 
@@ -7626,12 +7640,12 @@ Each sub-phase is independently shippable and independently gated. A sub-phase w
 **P4-0 · Module system**
 
 ```
-- [ ] Fourteen modules; T-066's in-process matrix asserts routes and tables for every one
-- [ ] T-291's CI matrix green on default, everything-off, and Phase-4-modules-on — backend and frontend
-- [ ] `enterprise_sso` without `oauth` fails at boot with a message naming both
-- [ ] ModuleName, ModulesResponse, ProductConfig["modules"], DENY_BY_DEFAULT and toActiveModules() agree key-for-key, enforced by a test
-- [ ] `marketing=False` → root `pnpm build` green, no dist, app host unaffected
-- [ ] module-toggle-guide.md and TEMPLATE.md document all three, including the re-enable path for public_api
+- [x] Fourteen modules; T-066's in-process matrix asserts routes and tables for every one
+- [ ] T-291's CI matrix green on default, everything-off, and Phase-4-modules-on — backend and frontend. The job exists and its three legs are defined; it has not been observed green since the Phase 4 modules landed, because CI's last runs failed earlier in the pipeline (see the `lint` fix in this batch).
+- [x] `enterprise_sso` without `oauth` fails at boot with a message naming both
+- [x] ModuleName, ModulesResponse, ProductConfig["modules"], DENY_BY_DEFAULT and toActiveModules() agree key-for-key, enforced by a test
+- [x] `marketing=False` → root `pnpm build` green, no dist, app host unaffected
+- [x] module-toggle-guide.md and TEMPLATE.md document all three, including the re-enable path for public_api
 ```
 
 **P4-A · Marketing site + SEO**
@@ -7695,12 +7709,12 @@ Each sub-phase is independently shippable and independently gated. A sub-phase w
 **Phase 4 gate — all of the above, plus**
 
 ```
-- [ ] §7's cross-cutting checklist passes for every task in this phase
-- [ ] pytest --cov thresholds not regressed; new auth-adjacent code (api_keys, sso) at 100%
-- [ ] ZAP baseline extended to the marketing host and the public API, and green
-- [ ] Every new setting has a .env.example entry and a line in the deploy runbook
-- [ ] ADRs 0004, 0006 and 0007 pass backend/scripts/check_docs.py, and docs/adr/README.md's index is regenerated rather than hand-edited
-- [ ] docs/runbooks/phase4-verification.md executes clean on a fresh checkout
+- [x] §7's cross-cutting checklist passes for every task in this phase
+- [ ] pytest --cov thresholds not regressed; new auth-adjacent code (api_keys, sso) at 100% — thresholds not regressed; the 100% claim for the two new modules has not been measured module-by-module here
+- [ ] ZAP baseline extended to the marketing host and the public API, and **green** — extended (two hosts, two reports) but not yet run; see T-350's "Not done, and why"
+- [x] Every new setting has a .env.example entry and a line in the deploy runbook — Phase 4 added no backend settings: SSO is configured per organization in the database, API keys and webhooks per row. Nothing to add, which is the answer rather than an omission.
+- [x] ADRs 0004, 0006 and 0007 pass backend/scripts/check_docs.py, and docs/adr/README.md's index is regenerated rather than hand-edited
+- [ ] docs/runbooks/phase4-verification.md executes clean on a fresh checkout — written, not executed; the credentials two of its steps need cannot live in this repo
 ```
 
 ---

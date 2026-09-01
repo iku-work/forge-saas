@@ -36,7 +36,7 @@ jobs:
       # a shortcut around this check).
       - name: Verify every script asserts the shared budget thresholds
         run: |
-          for script in tests/load/login-burst.js tests/load/browse.js tests/load/presign.js tests/load/mixed.js; do
+          for script in tests/load/login-burst.js tests/load/browse.js tests/load/presign.js tests/load/mixed.js tests/load/api-key.js; do
             grep -q 'thresholds: THRESHOLDS' "$script" || {
               echo "$script does not use the shared THRESHOLDS (tests/load/lib/config.js)" >&2
               exit 1
@@ -54,6 +54,16 @@ jobs:
       - name: Copy load-test environment file
         working-directory: backend
         run: cp .env.loadtest .env
+
+      # T-350: api-key.js needs `public_api` on, and the template ships it
+      # off. The phase4 fixture is the same one CI's module-matrix job runs,
+      # so this stack is a configuration already proven to boot and migrate
+      # rather than a bespoke one invented here. The four older scripts are
+      # unaffected -- every module they touch is on in both configurations.
+      - name: Enable the Phase 4 modules (public_api, outbound_webhooks, enterprise_sso)
+        run: |
+          cp backend/tests/fixtures/module_configs/phase4.py backend/product/config.py
+          cp backend/tests/fixtures/module_configs/phase4.config.ts product.config.ts
 
       # --build, because the `backend` service names an image
       # (forge-saas-backend-dev) that exists only on a developer's machine.
@@ -102,7 +112,7 @@ jobs:
           chmod 777 tests/load/results
           : > tests/load/results/status.txt
           overall=0
-          for script in login-burst browse presign mixed; do
+          for script in login-burst browse presign mixed api-key; do
             echo "=== k6: $script ==="
             if docker compose run --rm -T k6 run --summary-export=/results/$script.json /scripts/$script.js; then
               echo "$script PASS" >> tests/load/results/status.txt

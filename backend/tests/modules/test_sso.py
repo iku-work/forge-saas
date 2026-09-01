@@ -744,6 +744,70 @@ async def test_owner_is_refused_as_a_jit_default_role(
     assert response.status_code == 422
 
 
+# --- §0.8 non-negotiable 1: cross-tenant isolation ---------------------------
+
+
+@pytest.mark.usefixtures("idp")
+async def test_one_org_cannot_read_or_overwrite_anothers_connection(
+    session: AsyncSession, api_client: ClientFactory
+) -> None:
+    """The org-scoping probe §0.2 asks for, at the layer that decides it.
+
+    A connection carries no id in its URL -- there is one per organization
+    and the route resolves it from the caller's organization -- so what is
+    under test is `SsoConnectionRepository`'s scoping rather than a guessable
+    identifier. This file's `api_client` overrides `get_current_org`, so the
+    caller *is* org B by construction; whether a member of B may claim B at
+    all is that dependency's own question, answered centrally in
+    tests/security/test_tenant_isolation.py.
+    """
+    org_a, _ = await _make_org(session)
+    caller_b = await _make_org(session)
+    await _connect(session, org_a, provider_label="A's IdP")
+    client_b = api_client(caller_b)
+
+    read = await client_b.get(f"{_PREFIX}/connection")
+    assert read.status_code == 200
+    # "You have none" is the honest answer, and it is the same answer whether
+    # or not somebody else has one.
+    assert read.json()["data"] is None
+
+    written = await client_b.put(
+        f"{_PREFIX}/connection",
+        json={
+            "provider_label": "B's IdP",
+            "issuer": _ISSUER,
+            "discovery_url": _DISCOVERY_URL,
+            "client_id": _CLIENT_ID,
+            "client_secret": "s",
+            "email_domain": _DOMAIN,
+        },
+    )
+    assert written.status_code == 200, written.text
+
+    # Two rows, and org A's is untouched: the UNIQUE(org_id) that makes "the
+    # connection" singular is per organization, not global -- a PUT from B
+    # creates B's, it does not overwrite the one next door.
+    connections = (await session.execute(select(SsoConnection))).scalars().all()
+    assert len(connections) == 2
+    a_row = next(c for c in connections if c.org_id == org_a.id)
+    assert a_row.provider_label == "A's IdP"
+
+    # And the delete stays on its own side of the fence. Soft, so both rows
+    # are still on the table -- what has to be true is that the one B retired
+    # is B's.
+    assert (await client_b.delete(f"{_PREFIX}/connection")).status_code == 200
+    live = (
+        (await session.execute(select(SsoConnection).where(SsoConnection.deleted_at.is_(None))))
+        .scalars()
+        .all()
+    )
+    assert [c.org_id for c in live] == [org_a.id]
+
+
+# --- §0.8 non-negotiable 2: the RBAC gate ------------------------------------
+
+
 async def test_a_plain_member_cannot_read_or_change_the_connection(
     session: AsyncSession, api_client: ClientFactory
 ) -> None:

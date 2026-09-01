@@ -329,6 +329,11 @@ what a half-mirrored toggle looks like.
 
 Beyond the per-scenario checks, two automated layers verify the whole matrix.
 
+For the three toggles Phase 4 added -- `marketing`, `public_api` and
+`enterprise_sso` -- there is also an integrated pass that flips all of them
+in one sitting and checks the product is still whole either way:
+[phase4-verification.md](phase4-verification.md), step 9.
+
 **In-process** — `backend/tests/modules/test_module_toggles.py` runs five
 configurations end-to-end (its own Postgres container per scenario, since each
 drives a distinct `alembic upgrade`):

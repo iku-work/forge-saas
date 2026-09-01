@@ -31,6 +31,25 @@ minimumReleaseAgeExclude:
   - '@sentry/expo-upload-sourcemaps@8.17.2'
   - '@sentry/react-native@8.17.2'
 overrides:
+  # Three copies of @types/node were in this tree (22, 24, 26) with nothing
+  # choosing between them, so which one the Astro language server resolved
+  # depended on the shape of the install -- green locally, red on a fresh
+  # `--frozen-lockfile` checkout in CI, on a file nobody had touched.
+  #
+  # 26.0.0 is why it mattered rather than merely being untidy: it changed
+  # `ChildProcess` from `extends EventEmitter` to `implements EventEmitter`
+  # *without declaring any of the members*, so `child.on(...)` stops existing
+  # on the type. apps/marketing/tests/content.test.ts uses it to watch a dev
+  # server start.
+  #
+  # Pinned to the version apps/web already declares and CI's runner already
+  # runs (node-version: "22"), for the same reason backend/pyproject.toml
+  # pins ruff, mypy, pytest and schemathesis: a dependency nobody chose must
+  # not be able to turn a green tree red on its own. A devDependency in
+  # apps/marketing does not fix this -- the language server does not resolve
+  # through that package's node_modules, which is exactly what made the
+  # original resolution a lottery.
+  "@types/node": "22.20.0"
   "@tanstack/react-router": ">=1.170.4"
   "@tanstack/react-router-devtools": ">=1.167.0"
   "@tanstack/router-plugin": ">=1.168.18"
