@@ -35,3 +35,42 @@ vulnerabilities:
       pnpm-workspace.yaml). Build-time archive extraction on a developer
       machine; not reachable from the deployed product.
     expired_at: 2026-12-01
+
+  # 2026-09-01 iku-work — expires 2026-12-01
+  #
+  # The second advisory against that same pinned node-tar 6.2.1, and the
+  # reason the entry above should be read as a *countdown* rather than a
+  # settled decision: 6.x is end-of-life, so this list grows every time
+  # somebody files against it. Enumerating CVEs one at a time is a treadmill.
+  # The fix that ends it is upgrading @expo/cli, whose own tar range has moved
+  # past 7; that is a mobile-toolchain change with its own testing, which is
+  # why it is not bundled into this task.
+  - id: CVE-2026-23745
+    paths:
+      - "pnpm-lock.yaml"
+    statement: >-
+      Same pinned node-tar 6.2.1 as CVE-2026-59873 above; same reasoning, same
+      expiry. Upgrading @expo/cli is what removes both.
+    expired_at: 2026-12-01
+
+  # 2026-09-01 iku-work — expires 2026-12-01
+  #
+  # image-size 1.2.1, pulled in by `metro` -- React Native's bundler, so this
+  # is the mobile build, not anything the deployed product serves. Listed here
+  # for a different reason from the tar entries: **there is no fixed version**.
+  # Trivy's advisory names none, so there is nothing to bump to and the only
+  # alternatives are suppressing it or removing the mobile toolchain.
+  #
+  # What it costs to accept: metro reads image dimensions from asset files a
+  # developer already has in their own repo during a bundle. A malformed image
+  # is one they put there themselves.
+  #
+  # Revisit at the expiry, or sooner if a fix ships -- that is exactly what
+  # the expiry is for, since "no fix available" is a statement about today.
+  - id: CVE-2025-71329
+    paths:
+      - "pnpm-lock.yaml"
+    statement: >-
+      image-size 1.2.1 via metro (React Native bundler). No fixed version
+      exists. Build-time only, over assets already in the developer's repo.
+    expired_at: 2026-12-01

@@ -56,18 +56,26 @@ template keep their own changes in `CHANGELOG.product.md` (see
   operator the code was rejected. Found by writing the test for
   `errors.sso_exchange_failed`, which was a documented error key with nothing
   exercising it.
-- **Dependency CVEs that had never been reachable in CI.** The `tar` override
-  floor is bumped from `>=7.5.11` to `>=7.5.21` (CVE-2026-59873, CRITICAL, plus
-  -59874 and -73566), and `brace-expansion` is fixed on the 1.x line
-  (CVE-2026-13149). The `brace-expansion` override is scoped to that line
-  deliberately: an unscoped `>=1.1.16` is satisfied by 5.0.6, and pnpm then
-  hoists every consumer onto it — including `minimatch@3`, which asks for
-  `^1.1.7` — trading a known DoS for an unknown glob bug in the build tooling.
-  The one edge that cannot move is `@expo/cli`'s pinned `tar@6.2.1`: verified
-  that tar 7 sets `__esModule: true` while exporting no `default`, so
-  `expo prebuild` dies exactly as `pnpm-workspace.yaml` predicted. That gets a
-  `.trivyignore.yaml` entry with an owner, a reason and an **expiry date** —
-  the point of the YAML format over a bare ignore list.
+- **Nine dependency CVEs that had never been reachable in CI** — the Trivy step
+  sits behind Gitleaks, which had been failing first. Seven are fixed by
+  overrides (`tar`, `brace-expansion`, `fast-uri`, `js-yaml`, `nanoid`,
+  `postcss`, `shell-quote`, `socket.io-parser`), all transitive build tooling
+  rather than anything the product serves.
+  - **Every override carries an upper bound**, which is the part worth copying.
+    A pnpm key like `js-yaml@3` selects which *requests* to rewrite; the value
+    is then free to satisfy them with anything, so a bare `>=3.15.0` resolved
+    every `^3` consumer onto 4.x — where `safeLoad` no longer exists. The same
+    shape put `minimatch@3`'s `brace-expansion` on 5.x. Each pin now stays
+    inside the major it was asked for.
+  - Two cannot be fixed by bumping and are suppressed in `.trivyignore.yaml`,
+    with an owner, a reason and an **expiry date** each: `@expo/cli`'s pinned
+    `tar@6.2.1` (verified that tar 7 exports no `default` while setting
+    `__esModule: true`, so `expo prebuild` dies exactly as
+    `pnpm-workspace.yaml` predicted), and `image-size` via metro, for which no
+    fixed version exists at all. Both are build-time, on a developer's machine.
+    The tar entries are explicitly a countdown rather than a decision: 6.x is
+    end-of-life, so enumerating its CVEs is a treadmill that only an
+    `@expo/cli` upgrade ends.
 - **CI's Schemathesis step failed a build that had no contract failures.** It
   reported "2564 generated, 2564 passed" and exited 1 on four health checks —
   Hypothesis saying a *generator* is inefficient on path parameters with tight
