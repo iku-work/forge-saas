@@ -207,3 +207,7 @@ instead of per-PR.
 | 2026-08-31 | a0f17f3 | browse | - | - | PASS |
 | 2026-08-31 | a0f17f3 | presign | - | - | PASS |
 | 2026-08-31 | a0f17f3 | mixed | - | - | FAIL |
+| 2026-09-01 | 4a7ec23 | login-burst | - | - | FAIL |
+| 2026-09-01 | 4a7ec23 | browse | - | - | PASS |
+| 2026-09-01 | 4a7ec23 | presign | - | - | PASS |
+| 2026-09-01 | 4a7ec23 | mixed | - | - | FAIL |
