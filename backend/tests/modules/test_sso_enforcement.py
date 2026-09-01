@@ -53,14 +53,18 @@ async def _sso_table(engine: AsyncEngine) -> None:
 def sso_enabled(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
     """`enterprise_sso` on, for the duration of one test.
 
-    `enterprise_sso` requires `oauth`, which is already on in the committed
-    config -- `validate_modules` would refuse the combination otherwise, and
-    that refusal is asserted in test_module_toggles.py rather than worked
-    around here.
+    **And `oauth` with it**, because `enterprise_sso` requires it and
+    `validate_modules` refuses the pair otherwise. Enabling only the one this
+    file is about read fine against the committed config, where `oauth`
+    happens to be on -- and blew up in CI's `module-matrix` job on the
+    everything-off leg, which is the configuration this fixture has no right
+    to assume anything about. A fixture that turns a module on owes it its
+    dependencies; the refusal itself is asserted in test_module_toggles.py.
     """
     overridden = replace(
         product_config.MODULES,
         enterprise_sso=replace(product_config.MODULES.enterprise_sso, enabled=True),
+        oauth=replace(product_config.MODULES.oauth, enabled=True),
     )
     monkeypatch.setattr(product_config, "MODULES", overridden)
     module_loader.get_modules.cache_clear()
@@ -227,11 +231,25 @@ async def test_a_connection_that_is_not_enforced_changes_nothing(
 
 
 async def test_the_check_is_skipped_entirely_when_the_module_is_off(
-    session: AsyncSession,
+    session: AsyncSession, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """No `sso_enabled` fixture: at the committed configuration this must not
-    even query, which is what makes it acceptable on every password login in
-    the product."""
+    """An enforcing connection is ignored outright while the module is off,
+    which is what makes this check acceptable on every password login in the
+    product.
+
+    The module is turned off *here* rather than left to the ambient config.
+    Relying on "it is off in the committed configuration" made this test pass
+    for the wrong reason and then fail outright in CI's module-matrix job on
+    the Phase-4-modules-on leg, where it is on -- a test named for a state it
+    did not establish.
+    """
+    overridden = replace(
+        product_config.MODULES,
+        enterprise_sso=replace(product_config.MODULES.enterprise_sso, enabled=False),
+    )
+    monkeypatch.setattr(product_config, "MODULES", overridden)
+    module_loader.get_modules.cache_clear()
+
     org = await _enforcing_org(session)
     await _member(session, org, MemberRole.OWNER)
     member = await _member(session, org, MemberRole.MEMBER)

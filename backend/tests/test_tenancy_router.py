@@ -43,15 +43,18 @@ from app.modules.auth.utils import create_access_token
 from app.modules.billing.models import Plan
 from app.modules.notifications.models import Notification
 from app.modules.tenancy.models import Invitation, Membership, Organization
+from tests._module_tables import with_module_hot_path_tables
 
-_TABLES = [
+# Wrapped rather than listed: an enabled optional module reaches for tables
+# this file has no other reason to know about. See tests/_module_tables.py.
+_TABLES = with_module_hot_path_tables(
     User.__table__,
     Plan.__table__,
     Organization.__table__,
     Membership.__table__,
     Invitation.__table__,
     Notification.__table__,
-]
+)
 
 
 @pytest.fixture(scope="module")

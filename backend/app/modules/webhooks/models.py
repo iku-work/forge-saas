@@ -43,7 +43,7 @@ from sqlalchemy.dialects.postgresql import JSONB
 from sqlmodel import Field, SQLModel
 
 from app.core.encrypted_type import EncryptedString, RedactedReprMixin
-from app.models._mixins import OrgScopedMixin, SoftDeleteMixin, TimestampMixin, UUIDPKMixin
+from app.models._mixins import SoftDeleteMixin, TimestampMixin, UUIDPKMixin
 
 _TZ_DATETIME = DateTime(timezone=True)
 
@@ -70,7 +70,6 @@ class WebhookEndpoint(
     UUIDPKMixin,
     TimestampMixin,
     SoftDeleteMixin,
-    OrgScopedMixin,
     SQLModel,
     table=True,
 ):
@@ -85,7 +84,7 @@ class WebhookEndpoint(
         Index("ix_webhook_endpoint_org_id_created_at_id", "org_id", "created_at", "id"),
     )
 
-    # Declared rather than inherited from OrgScopedMixin, for the one reason
+    # Declared here instead of inheriting OrgScopedMixin, for the one reason
     # T-310's ApiKey.org_id gives: ON DELETE CASCADE. This row holds a live
     # signing secret, and a credential outliving its tenant is the worst
     # orphan this schema can produce. Without it, deleting an organization
@@ -119,9 +118,7 @@ class WebhookEndpoint(
     created_by: UUID | None = Field(default=None, foreign_key="user.id", index=True)
 
 
-class WebhookDelivery(
-    UUIDPKMixin, TimestampMixin, SoftDeleteMixin, OrgScopedMixin, SQLModel, table=True
-):
+class WebhookDelivery(UUIDPKMixin, TimestampMixin, SoftDeleteMixin, SQLModel, table=True):
     """One attempt-tracked delivery of one event to one endpoint.
 
     `payload` is captured at **emit** time and stored, which is the single
@@ -150,7 +147,7 @@ class WebhookDelivery(
         Index("ix_webhook_delivery_status_next_attempt_at", "status", "next_attempt_at"),
     )
 
-    # Same override, same reason, one level down: an org delete has to reach
+    # Same, one level down: an org delete has to reach
     # this table too. `endpoint_id` already cascades, so in practice the
     # endpoint takes its log with it -- but the org FK below is what the
     # database checks first, and without CASCADE on it a tenant delete

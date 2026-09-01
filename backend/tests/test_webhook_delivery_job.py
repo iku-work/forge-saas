@@ -452,14 +452,17 @@ async def test_n_dead_lettered_deliveries_switch_the_endpoint_off(
     assert len(events) == 1
 
 
+@pytest.mark.module_dependent
 async def test_the_orgs_owners_are_told_when_an_endpoint_is_switched_off(
     session: AsyncSession, ctx: dict[str, Any], consumer: ConsumerFactory
 ) -> None:
     """The half of the auto-disable a developer actually notices.
 
-    Guarded on the `notifications` module being enabled -- it is in the
-    committed config, and `test_a_disabled_notifications_module_is_not_an_
-    outage` below covers the other side.
+    Guarded on the `notifications` module being enabled, which the committed
+    config has and the everything-off configuration does not -- hence the
+    marker, without which this asserts a notification nothing was ever going
+    to send. `test_a_disabled_notifications_module_is_not_an_outage` below is
+    the unmarked half, and covers the other side.
     """
     consumer(httpx.Response(500))
     endpoint, first = await _seed(session)

@@ -369,7 +369,14 @@ async def test_a_session_still_needs_its_permission_on_an_opened_route(
     [
         pytest.param("/api/v1/auth/me", id="a user-only route"),
         pytest.param("/api/v1/orgs", id="the org list"),
-        pytest.param("/api/v1/me/consents", id="a gdpr route"),
+        # `gdpr` off means this route does not exist, and a 404 proves
+        # nothing about how a key is treated -- the two routes above are
+        # always registered and carry the assertion on their own.
+        pytest.param(
+            "/api/v1/me/consents",
+            id="a gdpr route",
+            marks=pytest.mark.module_dependent,
+        ),
     ],
 )
 async def test_a_route_without_require_scope_rejects_a_valid_key(world: KeyWorld, url: str) -> None:
@@ -406,12 +413,17 @@ async def test_a_key_cannot_manage_keys(world: KeyWorld) -> None:
 
 
 @pytest.mark.usefixtures("public_api_enabled")
+@pytest.mark.module_dependent
 async def test_an_impersonation_endpoint_rejects_a_key_regardless_of_scope(
     world: KeyWorld,
 ) -> None:
     """T-260's blocklist and this task have to agree: a support agent's
     impersonation surface is superadmin-gated and session-only, and no scope
-    opens it."""
+    opens it.
+
+    Marked: the route lives in `admin`, so with that module off there is
+    nothing to reject and the 404 would be measuring the toggle instead.
+    """
     presented = await _mint(world, scopes=["members:read", "orgs:read", "files:read"])
 
     response = await world.client.post(

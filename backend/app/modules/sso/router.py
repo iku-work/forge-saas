@@ -142,6 +142,11 @@ async def sso_hint(
     session: Annotated[AsyncSession, Depends(get_session)],
     redis: Annotated[Redis, Depends(get_redis)],
 ) -> Envelope[SsoHintResponse]:
+    # impersonation-ok: a POST that writes nothing. It answers "does this
+    # email domain have an opt-in SSO connection" and is reachable without any
+    # session at all, so it never reads the caller's identity -- there is no
+    # "acting as" for an impersonator to do here, and refusing it would break
+    # the login page for a support agent looking at their own screen.
     resolved = await SsoLoginService(session, redis).hint(body.email)
     data = (
         SsoHintResponse(
