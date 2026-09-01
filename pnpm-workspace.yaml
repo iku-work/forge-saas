@@ -79,7 +79,7 @@ overrides:
   # which asks for `^1.1.7`. Forcing a transitive dependency across two major
   # versions to fix a DoS in one of them trades a known bug for an unknown
   # one, in glob matching, in the build tooling.
-  "brace-expansion@1": "1.1.17"
+  "brace-expansion@1": ">=1.1.18 <2"
   # T-350: the rest of what trivy's HIGH set found once the job could finally
   # reach this step. All seven are transitive build tooling -- none is a
   # dependency of apps/web or any packages/* -- and every one is pinned to a
@@ -94,7 +94,7 @@ overrides:
   "fast-uri@3": ">=3.1.3 <4"
   "js-yaml@3": ">=3.15.0 <4"
   "nanoid@3": ">=3.3.18 <4"
-  "postcss@8": ">=8.5.12 <9"
+  "postcss@8": ">=8.5.18 <9"
   "shell-quote@1": ">=1.9.0 <2"
   "socket.io-parser@4": ">=4.2.7 <5"
   # Exempted from the blanket tar bump above (T-222): @expo/cli@0.22.28's own

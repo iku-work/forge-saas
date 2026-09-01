@@ -958,9 +958,23 @@ jobs:
       # RS256 keypair every one of them carries (Settings() needs real-shaped
       # key material to construct) fails this step on three "secrets" that are
       # committed on purpose.
+      #
+      # --ignore-unfixed (T-350): fail only on findings somebody can act on.
+      # This monorepo carries a React Native toolchain, and metro's
+      # `image-size` is the shape of the problem -- a HIGH with **no fixed
+      # version in the advisory**, so the only responses are suppress it or
+      # delete the mobile app. A gate that goes red for something nobody can
+      # fix teaches people to ignore the gate, which costs more than the
+      # finding. Anything with a fix still fails, which is the whole set this
+      # step is useful for.
+      #
+      # Deliberately scoped to this filesystem scan. The image scan in the
+      # `build` job keeps its own settings: an unfixed vulnerability in
+      # something we actually ship is a different question from one in a
+      # bundler that never leaves a developer's machine.
       - name: Trivy filesystem scan (deps + secrets, high+ severity)
         run: |
-          trivy fs . --exit-code 1 --severity HIGH,CRITICAL --skip-dirs node_modules             --skip-files backend/.env.e2e             --skip-files backend/.env.loadtest             --skip-files backend/.env.prod-compose             --ignorefile .trivyignore.yaml
+          trivy fs . --exit-code 1 --severity HIGH,CRITICAL --skip-dirs node_modules             --skip-files backend/.env.e2e             --skip-files backend/.env.loadtest             --skip-files backend/.env.prod-compose             --ignorefile .trivyignore.yaml             --ignore-unfixed
 
       - uses: actions/setup-python@v5
         with:

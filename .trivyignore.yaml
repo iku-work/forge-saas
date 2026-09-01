@@ -7,6 +7,11 @@
 # `expired_at` is the point of using the YAML format rather than a bare
 # .trivyignore list: a suppression with no end date is a decision nobody
 # revisits. When one expires the scan goes red again and somebody has to look.
+#
+# Nothing *unfixed* belongs here. CI passes `--ignore-unfixed`, so a finding
+# with no fixed version -- metro's `image-size` is the standing example --
+# never reaches this file. Every entry below is therefore a vulnerability that
+# **has** a fix which this repo has a stated reason not to take.
 
 vulnerabilities:
   # 2026-09-01 iku-work — expires 2026-12-01
@@ -55,22 +60,20 @@ vulnerabilities:
 
   # 2026-09-01 iku-work — expires 2026-12-01
   #
-  # image-size 1.2.1, pulled in by `metro` -- React Native's bundler, so this
-  # is the mobile build, not anything the deployed product serves. Listed here
-  # for a different reason from the tar entries: **there is no fixed version**.
-  # Trivy's advisory names none, so there is nothing to bump to and the only
-  # alternatives are suppressing it or removing the mobile toolchain.
+  # The third against the same pin, added in the same afternoon as the first
+  # two. **If you are here to add a fourth, stop and do the real fix instead.**
   #
-  # What it costs to accept: metro reads image dimensions from asset files a
-  # developer already has in their own repo during a bundle. A malformed image
-  # is one they put there themselves.
-  #
-  # Revisit at the expiry, or sooner if a fix ships -- that is exactly what
-  # the expiry is for, since "no fix available" is a statement about today.
-  - id: CVE-2025-71329
+  # The real fix is upgrading `@expo/cli`, whose own tar range has moved past
+  # 7. Patching the installed one was considered and rejected on evidence: its
+  # two call sites use `extract({ onentry, strip, filter, cwd })`, and tar 7
+  # renamed `onentry` to `onReadEntry`, so the interop shim alone would leave
+  # the entry resolver silently not running during template extraction. That
+  # is a worse outcome than this suppression, and it is not verifiable without
+  # a mobile toolchain.
+  - id: CVE-2026-23950
     paths:
       - "pnpm-lock.yaml"
     statement: >-
-      image-size 1.2.1 via metro (React Native bundler). No fixed version
-      exists. Build-time only, over assets already in the developer's repo.
+      Same pinned node-tar 6.2.1 again. 6.x is end-of-life; the fix is an
+      @expo/cli upgrade, not another line in this file.
     expired_at: 2026-12-01

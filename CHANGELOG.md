@@ -67,15 +67,25 @@ template keep their own changes in `CHANGELOG.product.md` (see
     every `^3` consumer onto 4.x — where `safeLoad` no longer exists. The same
     shape put `minimatch@3`'s `brace-expansion` on 5.x. Each pin now stays
     inside the major it was asked for.
-  - Two cannot be fixed by bumping and are suppressed in `.trivyignore.yaml`,
-    with an owner, a reason and an **expiry date** each: `@expo/cli`'s pinned
-    `tar@6.2.1` (verified that tar 7 exports no `default` while setting
-    `__esModule: true`, so `expo prebuild` dies exactly as
-    `pnpm-workspace.yaml` predicted), and `image-size` via metro, for which no
-    fixed version exists at all. Both are build-time, on a developer's machine.
-    The tar entries are explicitly a countdown rather than a decision: 6.x is
-    end-of-life, so enumerating its CVEs is a treadmill that only an
-    `@expo/cli` upgrade ends.
+  - **The scan now passes `--ignore-unfixed`**, which is a change of policy
+    rather than a suppression: it fails only on findings somebody can act on.
+    This monorepo carries a React Native toolchain, and metro's `image-size`
+    is the shape of the problem — a HIGH with no fixed version in the
+    advisory, so the only responses are suppress it or delete the mobile app.
+    A gate that goes red for something nobody can fix teaches people to ignore
+    the gate. Scoped to this filesystem scan; the image scan in `build` keeps
+    its own settings, because an unfixed vulnerability in something we ship is
+    a different question.
+  - `@expo/cli`'s pinned `tar@6.2.1` is suppressed in `.trivyignore.yaml`,
+    with an owner, a reason and an **expiry date** — three CVEs against the one
+    pin, all added the same afternoon, which is the point: 6.x is end-of-life
+    and enumerating its advisories is a treadmill only an `@expo/cli` upgrade
+    ends. The file says so, and says to do the upgrade rather than add a
+    fourth line. Patching the installed copy was considered and rejected on
+    evidence: its two call sites pass `onentry`, which tar 7 renamed to
+    `onReadEntry`, so the interop shim alone would leave the entry resolver
+    silently not running during template extraction — worse than the
+    suppression, and unverifiable without a mobile toolchain.
 - **CI's Schemathesis step failed a build that had no contract failures.** It
   reported "2564 generated, 2564 passed" and exited 1 on four health checks —
   Hypothesis saying a *generator* is inefficient on path parameters with tight
