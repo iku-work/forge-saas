@@ -44,7 +44,11 @@ function dynamicRegionMasks(page: import("@playwright/test").Page) {
 
 const SNAPSHOT_TARGETS = [
   { path: "/", name: "dashboard", readyTestId: "app-shell" },
-  { path: "/settings/profile", name: "settings-profile", readyTestId: "profile-avatar" },
+  {
+    path: "/settings/profile",
+    name: "settings-profile",
+    readyTestId: "profile-avatar",
+  },
   { path: "/settings/org", name: "settings-org", readyTestId: "org-avatar" },
 ];
 
@@ -82,9 +86,12 @@ test.describe("visual regression: dashboard + settings", () => {
           await page.goto(localePath("en", target.path));
           await expect(page.getByTestId(target.readyTestId)).toBeVisible();
           await stabilizeForSnapshot(page);
-          await expect(page).toHaveScreenshot(`${target.name}-${viewport.name}.png`, {
-            mask: dynamicRegionMasks(page),
-          });
+          await expect(page).toHaveScreenshot(
+            `${target.name}-${viewport.name}.png`,
+            {
+              mask: dynamicRegionMasks(page),
+            },
+          );
         });
       }
     }
@@ -105,13 +112,21 @@ test.describe("visual regression: dashboard + settings", () => {
   }) => {
     await page.setViewportSize(DESKTOP_VIEWPORT);
     await page.goto("/ar/login");
-    expect(await page.evaluate(() => document.documentElement.dir)).toBe("rtl");
+    // Polled, not read once. `goto` resolves on load, and `dir` is set by the
+    // app as it boots -- chromium happens to get there first and webkit does
+    // not, so a single read is a race that fails in one browser and passes in
+    // the other for reasons that have nothing to do with RTL.
+    await expect
+      .poll(() => page.evaluate(() => document.documentElement.dir))
+      .toBe("rtl");
     await page.getByTestId("login-email-input").fill(SUPERADMIN_EMAIL);
     await page.getByTestId("login-password-input").fill(SUPERADMIN_PASSWORD);
     await page.getByTestId("login-submit").click();
     await expect(page.getByTestId("app-shell")).toBeVisible();
 
-    for (const target of SNAPSHOT_TARGETS.filter((t) => t.name !== "settings-org")) {
+    for (const target of SNAPSHOT_TARGETS.filter(
+      (t) => t.name !== "settings-org",
+    )) {
       await test.step(`${target.name} @ desktop (ar)`, async () => {
         await page.goto(localePath("ar", target.path));
         await expect(page.getByTestId(target.readyTestId)).toBeVisible();
