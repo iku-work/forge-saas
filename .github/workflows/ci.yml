@@ -905,6 +905,35 @@ jobs:
         if: always()
         run: docker compose -f docker-compose.prod.yml down -v
 
+  # The configuration a self-hosted deployment actually runs, which nothing
+  # exercised until 2026-09-03: ENVIRONMENT=prod, so every startup invariant is
+  # live, and TLS on all three container-to-container hops. `pgbouncer-prod-compose`
+  # above deliberately stays on ENVIRONMENT=dev to isolate pooling behaviour --
+  # that gap is what let four separate prod-only defects ship (see the
+  # "Make the app bootable outside dev" commit).
+  #
+  # The assertions that matter are the ones made from the *far* side of each
+  # hop: an application that connects proves only that it was willing to, not
+  # that anything was encrypted.
+  prod-compose-tls:
+    needs: lint
+    runs-on: ubuntu-latest
+
+    env:
+      COMPOSE_PROJECT_NAME: forge-tls
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Boot the prod stack with ENVIRONMENT=prod and TLS everywhere
+        run: make prod-compose-tls-check
+
+      - name: Tear down
+        if: always()
+        run: |
+          docker compose -f docker-compose.prod.yml -f docker-compose.tls.yml down -v || true
+          rm -rf certs
+
   security:
     needs: lint
     runs-on: ubuntu-latest

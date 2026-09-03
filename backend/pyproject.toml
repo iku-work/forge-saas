@@ -130,6 +130,20 @@ dev = [
     # replacement suppression that cannot be verified without Docker.
     "schemathesis==4.21.8",
     "hypothesis==6.155.3",
+    # Third member of the same pinned set, and pinned for the same reason:
+    # schemathesis 4.21.8 reaches into `anyio` for an attribute that 4.15.0
+    # removed, so a *fresh* install resolves a combination whose contract
+    # tests cannot even be collected --
+    #   ERROR tests/contract/test_schemathesis.py - AttributeError: module 'anyio' has ...
+    # and pytest exits on the collection error before running anything else,
+    # so it takes the whole suite with it rather than just that file.
+    #
+    # Nothing in the repo changed to cause this; anyio 4.15.0 was published
+    # and every environment built after that point got it. An existing
+    # virtualenv keeps whatever it resolved earlier, which is why this can be
+    # green locally and red on a clean CI runner on the same commit.
+    # Reproduced in a container built from Dockerfile.dev.
+    "anyio==4.14.0",
     "freezegun>=1.5",
     "bandit>=1.7",
     "semgrep>=1.168",

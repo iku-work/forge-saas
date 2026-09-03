@@ -28,6 +28,7 @@ htmlcov/
 .coverage
 
 # Env -- never bake secrets into a build context or image
+certs/
 .env
 .env.local
 .env.*.local

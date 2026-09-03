@@ -85,3 +85,8 @@ zap-reports/
 # k6 load test (T-223) -- generated per-run JSON summaries, not the checked-in
 # tests/load/*.js or tests/load/RESULTS.md trend log
 tests/load/results/
+
+# Internal TLS material for docker-compose.tls.yml (scripts/gen-internal-certs.sh).
+# A private key: never committed, and never in a build context either -- see
+# .dockerignore. Regenerate per environment rather than sharing one.
+certs/

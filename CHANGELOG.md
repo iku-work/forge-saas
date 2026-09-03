@@ -46,6 +46,41 @@ template keep their own changes in `CHANGELOG.product.md` (see
     of path T-223 found the argon2-on-the-event-loop bug hiding in, and
     averaging it into a mixed workload is how a regression there goes unnoticed.
 
+### Added
+- **TLS on the self-hosted stack's internal hops, as one command.**
+  `docker-compose.tls.yml` layers onto `docker-compose.prod.yml` and turns on
+  encryption for app→pgbouncer, pgbouncer→Postgres and app→Redis;
+  `make internal-certs` (`scripts/gen-internal-certs.sh`) writes the material,
+  which is gitignored and kept out of the build context. An overlay rather
+  than the default, because certificate material must not live in a committed
+  file and its rotation is not something the template can own.
+
+  This closes the last unexercised item on `backup-restore.md`'s checklist.
+  Every Postgres DSN must carry `sslmode=require` outside dev, so a
+  self-hosted `ENVIRONMENT=prod` deployment could not boot without it — and
+  the instructions for turning it on had never been run. Now verified from the
+  far side of each hop rather than from the application, which only ever
+  proves it was willing to connect: `pg_stat_ssl` reports `ssl=true TLSv1.3`
+  for pgbouncer→Postgres, `SHOW CLIENTS` reports
+  `TLSv1.3/TLS_AES_256_GCM_SHA384` for app→pgbouncer, and a plaintext Redis
+  connect is reset. ADR-0002's contract survives it: 150 concurrent pooled
+  queries return correct results and leave zero rows in
+  `pg_prepared_statements`.
+
+  Four traps are recorded in the runbook so they are not rediscovered:
+  `server_tls_sslmode` is not implied by `client_tls_sslmode` (configuring
+  only the client leaves the upstream hop in cleartext while every DSN still
+  reads `sslmode=require`); the pgbouncer image runs as uid 70 and rejects a
+  group-readable key, with only BusyBox `su` available to drop privileges;
+  Redis needs `--port 0` or the cleartext listener stays open beside the TLS
+  one; and none of these commands may be written as a YAML folded scalar,
+  which silently truncates them and brings the stack up healthy with TLS off.
+
+  `make prod-compose-tls-check` and CI's new `prod-compose-tls` job reproduce
+  the whole thing. That job is the direct answer to how four prod-only defects
+  shipped: no job had ever started this app with `ENVIRONMENT` set to anything
+  but `dev`.
+
 ### Fixed
 - **`ENVIRONMENT=prod` could not boot at all, and nothing noticed.** Every CI
   job that starts the real app runs with `ENVIRONMENT=dev` — the

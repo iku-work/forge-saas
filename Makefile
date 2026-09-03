@@ -1,4 +1,4 @@
-.PHONY: dev test lint migrate migrate-plan gen-client seed pentest-accounts seed-load load-test prod-compose-check new-module check-docs install-hooks down update-from-template check-template-drift observe
+.PHONY: dev test lint migrate migrate-plan gen-client seed pentest-accounts seed-load load-test prod-compose-check prod-compose-tls-check internal-certs new-module check-docs install-hooks down update-from-template check-template-drift observe
 
 TEMPLATE_VERSION ?= main
 
@@ -112,6 +112,28 @@ prod-compose-check:
 	docker compose -f docker-compose.prod.yml exec -T pgbouncer sh -c \
 		'psql -h 127.0.0.1 -p 6432 -U "$$DB_USER" -d pgbouncer -c "SHOW POOLS"'
 	docker compose -f docker-compose.prod.yml down -v
+
+internal-certs:
+	bash scripts/gen-internal-certs.sh ./certs
+
+# The prod stack as it would actually run outside dev: ENVIRONMENT=prod, so
+# every startup invariant is live, and TLS on all three container-to-container
+# hops. `prod-compose-check` above deliberately stays on ENVIRONMENT=dev to
+# isolate pgbouncer's pooling behaviour; this one proves the configuration a
+# self-hosted deployment really uses, which nothing did until now.
+prod-compose-tls-check: internal-certs
+	sed -e 's|^ENVIRONMENT=.*|ENVIRONMENT=prod|' 	    -e 's|^FORCE_HTTPS=.*|FORCE_HTTPS=true|' 	    -e 's|^VIRUS_SCANNER=.*|VIRUS_SCANNER=virustotal|' 	    -e 's|^PASSWORD_PEPPER=.*|PASSWORD_PEPPER=local-check-pepper|' 	    -e 's|^DATABASE_URL=.*|DATABASE_URL=postgresql+asyncpg://postgres:postgres@pgbouncer:6432/forge?sslmode=require|' 	    -e 's|^MIGRATIONS_DATABASE_URL=.*|MIGRATIONS_DATABASE_URL=postgresql+asyncpg://postgres:postgres@postgres:5432/forge?sslmode=require|' 	    -e 's|^REDIS_URL=.*|REDIS_URL=rediss://redis:6379/0?ssl_ca_certs=/certs/server.crt|' 	    backend/.env.prod-compose > backend/.env
+	sed 's/change-me/postgres/' .env.postgres.example > .env.postgres
+	sed 's/change-me/postgres/' .env.pgbouncer.example > .env.pgbouncer
+	cp .env.postgres-exporter.example .env.postgres-exporter
+	docker compose -f docker-compose.prod.yml -f docker-compose.tls.yml up -d --build 		postgres pgbouncer redis backend
+	@for i in $$(seq 1 45); do 		docker compose -f docker-compose.prod.yml -f docker-compose.tls.yml exec -T backend 			python -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')" 			>/dev/null 2>&1 && break; 		sleep 2; 	done
+	docker compose -f docker-compose.prod.yml -f docker-compose.tls.yml exec -T backend 		python -m app.core.migrations
+	docker compose -f docker-compose.prod.yml -f docker-compose.tls.yml exec -T backend python -c 		"import urllib.request; r=urllib.request.urlopen('http://localhost:8000/health/ready'); print('health/ready:', r.status, r.read().decode())"
+	@echo "--- both hops must report TLS, not just the one the app can see ---"
+	docker compose -f docker-compose.prod.yml -f docker-compose.tls.yml exec -T postgres 		psql -U postgres -d forge -tAc 		"SELECT 'pgbouncer->postgres ssl=' || s.ssl || ' ' || coalesce(s.version,'') FROM pg_stat_ssl s JOIN pg_stat_activity a USING (pid) WHERE a.datname='forge' AND a.backend_type='client backend' AND a.client_addr IS NOT NULL LIMIT 1"
+	docker compose -f docker-compose.prod.yml -f docker-compose.tls.yml exec -T pgbouncer 		psql "postgres://postgres:postgres@127.0.0.1:6432/pgbouncer?sslmode=require" -tAc "SHOW POOLS"
+	docker compose -f docker-compose.prod.yml -f docker-compose.tls.yml down -v
 
 # T-251: all of the logic lives in Python -- validation, substitution, and the
 # follow-up checklist's file:line pointers are all things shell would do badly.
