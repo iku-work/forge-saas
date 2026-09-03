@@ -2,6 +2,8 @@ import ast
 import re
 from pathlib import Path
 
+import yaml
+
 from app.core.config import Settings
 
 REPO_ROOT = Path(__file__).parent.parent.parent
@@ -157,3 +159,37 @@ def test_caddyfiles_carry_the_cookie_note_where_the_next_person_will_look() -> N
         content = (REPO_ROOT / name).read_text()
         assert "__Host-refresh_token" in content
         assert "Do not widen the session cookie" in content
+
+
+def test_storage_host_is_declared_and_never_blank() -> None:
+    """MinIO on the same box needs a public hostname, not a bridge address.
+
+    There is one AWS_ENDPOINT_URL, and the presigned URLs built from it go to
+    the browser -- a SigV4 download signature covers the Host header, so the
+    browser cannot be pointed somewhere else afterwards. Same never-blank rule
+    as MARKETING_DOMAIN: Caddy substitutes a set-but-empty variable as the
+    empty string rather than taking the `{$VAR:default}` fallback, and a site
+    block with no address takes the whole edge down.
+    """
+    content = (REPO_ROOT / "Caddyfile.prod").read_text()
+
+    assert "{$STORAGE_DOMAIN:storage.localhost}" in content
+    assert "reverse_proxy minio:9000" in content
+    # The console is not a public surface, whatever else is. Checked against
+    # the directives rather than the whole file, which also mentions 9001 in
+    # prose explaining why it is absent.
+    directives = [
+        line.strip()
+        for line in content.splitlines()
+        if line.strip() and not line.strip().startswith("#")
+    ]
+    assert not any("9001" in line for line in directives)
+
+
+def test_prod_compose_keeps_minio_off_the_public_interface() -> None:
+    """Caddy is the only way in. A stray `ports:` here would publish the
+    object store, and its console, straight onto the internet."""
+    compose = yaml.safe_load((REPO_ROOT / "docker-compose.prod.yml").read_text())
+
+    assert "ports" not in compose["services"]["minio"]
+    assert compose["services"]["minio"]["env_file"] == ["./.env.minio"]

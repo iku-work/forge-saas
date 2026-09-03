@@ -68,6 +68,7 @@ web-build/
 .env.postgres
 .env.pgbouncer
 .env.postgres-exporter
+.env.minio
 
 # OS
 .DS_Store

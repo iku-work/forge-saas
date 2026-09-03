@@ -99,6 +99,7 @@ prod-compose-check:
 	sed 's/change-me/postgres/' .env.postgres.example > .env.postgres
 	sed 's/change-me/postgres/' .env.pgbouncer.example > .env.pgbouncer
 	cp .env.postgres-exporter.example .env.postgres-exporter
+	sed 's/change-me/a-real-password-here/' .env.minio.example > .env.minio
 	docker compose -f docker-compose.prod.yml up -d --build postgres pgbouncer redis backend
 	@for i in $$(seq 1 30); do \
 		docker compose -f docker-compose.prod.yml exec -T backend \
@@ -137,6 +138,7 @@ prod-compose-tls-check: internal-certs
 	sed 's/change-me/postgres/' .env.postgres.example > .env.postgres
 	sed 's/change-me/postgres/' .env.pgbouncer.example > .env.pgbouncer
 	cp .env.postgres-exporter.example .env.postgres-exporter
+	sed 's/change-me/a-real-password-here/' .env.minio.example > .env.minio
 	docker compose -f docker-compose.prod.yml -f docker-compose.tls.yml up -d --build 		postgres pgbouncer redis backend
 	@for i in $$(seq 1 45); do 		docker compose -f docker-compose.prod.yml -f docker-compose.tls.yml exec -T backend 			python -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')" 			>/dev/null 2>&1 && break; 		sleep 2; 	done
 	docker compose -f docker-compose.prod.yml -f docker-compose.tls.yml exec -T backend 		python -m app.core.migrations

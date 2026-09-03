@@ -101,6 +101,37 @@ template keep their own changes in `CHANGELOG.product.md` (see
   shipped: no job had ever started this app with `ENVIRONMENT` set to anything
   but `dev`.
 
+### Added
+- **Object storage on the box.** `docker-compose.prod.yml` gains `minio` and a
+  `minio-init` that creates the bucket, so a self-hosted deployment no longer
+  has to buy S3 or R2 to satisfy `file_storage`. Configured from
+  `.env.minio.example`, like the other sidecars, because `MINIO_*` are not
+  `Settings` fields.
+
+  **It gets a public hostname, and that is not incidental.** There is one
+  `AWS_ENDPOINT_URL`, and the presigned upload and download URLs built from it
+  are handed to the *browser* — a SigV4 download signature covers the Host
+  header, so the browser cannot be pointed at a different endpoint afterwards.
+  `http://minio:9000` would be unreachable from where it matters. Caddy fronts
+  it on `{$STORAGE_DOMAIN}` (a third DNS record) and the service publishes no
+  ports of its own; the console on 9001 is not proxied at all, which a test
+  now pins. `STORAGE_DOMAIN` is declared on `Settings` for the same reason
+  `MARKETING_DOMAIN` is: Caddy reads it from `backend/.env`, nothing in the
+  process does, and an undeclared key there stops the backend booting.
+
+  `MINIO_KMS_SECRET_KEY` is **required**, not optional. Every upload this app
+  presigns carries `x-amz-server-side-encryption: AES256` as a policy
+  condition, and MinIO only honours SSE-S3 with a KMS configured — without it
+  every upload is rejected by the policy it was signed with. Measured:
+  `501 NotImplemented — Server side encryption specified but KMS is not
+  configured`, which reads as a permissions problem and is not one. That key
+  decrypts the objects, so it belongs in the same off-box backup as
+  `ENCRYPTION_KEY` and `PASSWORD_PEPPER`.
+
+  Verified end to end against a real MinIO with the production-shaped config:
+  presign, a browser-shaped multipart POST (204), `head_object` reporting
+  `ServerSideEncryption: AES256`, and a presigned download returning the bytes.
+
 ### Fixed
 - **`respond /metrics 404` was dead code in both Caddyfiles.** Caddy sorts
   `handle` ahead of `respond` in its default directive order, so once either

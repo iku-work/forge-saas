@@ -58,6 +58,31 @@ http://{$DOMAIN} {
 	redir https://{$DOMAIN}{uri} 301
 }
 
+# Object storage, when it runs on this box (docker-compose.prod.yml's minio
+# service). Its own host because there is only one AWS_ENDPOINT_URL in the
+# application: the presigned upload and download URLs the backend signs are
+# handed straight to the browser, so the endpoint has to be one the browser can
+# resolve and trust. A SigV4 download signature covers the Host header, so
+# rewriting the host client-side is not an option either.
+#
+# Access control is the signature, not the network -- the same model S3 itself
+# uses. What must never be published is the MinIO console on 9001, which is why
+# the service exposes no ports and only :9000 is proxied here.
+#
+# Default is a `.localhost` name nobody resolves, for the same reason
+# MARKETING_DOMAIN's is: a deployment using S3 or R2 has no local MinIO, and
+# forgetting to set this should cost you a storage host nobody can reach rather
+# than an edge that refuses to start.
+{$STORAGE_DOMAIN:storage.localhost} {
+	reverse_proxy minio:9000
+
+	encode gzip zstd
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+		-Server
+	}
+}
+
 # T-307: apps/marketing, on its own host.
 #
 # `{$MARKETING_DOMAIN}` -- the apex domain, with the app on `app.` -- separate

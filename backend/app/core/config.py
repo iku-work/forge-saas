@@ -129,6 +129,23 @@ class Settings(BaseSettings):
     # here is a `.localhost` name so that the failure mode of forgetting this
     # setting is a marketing host nobody can resolve.
     MARKETING_DOMAIN: str = "marketing.localhost"
+    # The object-storage host, for a self-hosted deployment that runs MinIO on
+    # the same box (docker-compose.prod.yml). Declared here for exactly the
+    # reason MARKETING_DOMAIN above is -- Caddy reads it from backend/.env and
+    # this process never does, but an undeclared key in that file would stop
+    # the backend booting.
+    #
+    # It needs a public hostname rather than an internal one because there is
+    # only one AWS_ENDPOINT_URL: the presigned upload and download URLs handed
+    # to the *browser* are built from the same endpoint the backend uses
+    # server-side, and a SigV4 download signature covers the Host header, so
+    # the browser cannot be pointed somewhere else after the fact.
+    #
+    # Blank when storage is a managed service (S3, R2) -- then there is no
+    # local MinIO, AWS_ENDPOINT_URL points at the provider, and the generated
+    # site block below is simply not imported. Same never-empty rule as
+    # MARKETING_DOMAIN applies when it *is* in use.
+    STORAGE_DOMAIN: str = "storage.localhost"
     FRONTEND_URL: str = "http://localhost:5173"  # base URL for links in transactional emails
     # T-261: the custom URL scheme the mobile app registers (apps/mobile/app.json's
     # `expo.scheme`). Only the impersonation handoff deep link is built from it
