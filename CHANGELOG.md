@@ -102,6 +102,27 @@ template keep their own changes in `CHANGELOG.product.md` (see
   but `dev`.
 
 ### Fixed
+- **`respond /metrics 404` was dead code in both Caddyfiles.** Caddy sorts
+  `handle` ahead of `respond` in its default directive order, so once either
+  file grew handle blocks the catch-all matched `/metrics` first and the
+  respond never ran. Both edges answered **200** with the SPA shell while
+  `test_caddy_config.py` reported them as blocking it — the test grepped for
+  the string, which is exactly why this survived. Not an exposure (the request
+  reached the SPA, never the backend's real endpoint), but the guarantee the
+  files claimed was not being delivered, and a later `handle /metrics
+  { reverse_proxy backend:8000 }` would have turned it into one. Now wrapped
+  in a `handle` placed above the catch-all, asserted by shape in the unit test
+  and **by request** in CI's module-matrix job, which already boots a real
+  Caddy.
+- **Nothing served the SPA in production.** `Caddyfile.prod` reverse-proxied
+  everything to the backend and never mounted `apps/web/dist`, so the
+  self-hosted stack had no frontend at all and a deep link like
+  `/accept-invitation/<token>` was answered by FastAPI's 404. The app host now
+  routes `/api/*` and `/health*` (the only two prefixes the backend owns,
+  checked against the OpenAPI document) to the backend and falls through to
+  the SPA with an `index.html` fallback for TanStack Router. Verified by
+  request: deep links and hashed assets resolve, `/api` reaches the backend,
+  `/metrics` refuses.
 - **`ENVIRONMENT=prod` could not boot at all, and nothing noticed.** Every CI
   job that starts the real app runs with `ENVIRONMENT=dev` — the
   `pgbouncer-prod-compose` job says so in its own env file — so the whole

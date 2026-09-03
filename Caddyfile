@@ -14,7 +14,16 @@ localhost, caddy {
 	# so it targets https://caddy instead. Both hostnames need their own tls
 	# internal leaf cert, which is why they're both site addresses here
 	# rather than "localhost" alone.
-	respond /metrics 404
+	# Inside a `handle`, not a bare `respond /metrics 404`. Caddy sorts
+	# `handle` ahead of `respond` in its default directive order, so with any
+	# handle block present the catch-all matched /metrics first and the
+	# respond never ran -- the rule read correctly and did nothing. Verified
+	# by request, not by reading: it answered 200 with the SPA shell. Handle
+	# blocks are mutually exclusive and evaluated in written order, so this
+	# must stay above the catch-all.
+	handle /metrics {
+		respond 404
+	}
 
 	# T-220: everything the backend actually owns goes to it; everything
 	# else falls through to the SPA below. Without this split, the

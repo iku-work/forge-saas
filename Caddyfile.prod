@@ -1,6 +1,51 @@
 {$DOMAIN} {
-	respond /metrics 404
-	reverse_proxy backend:8000
+	# Inside a `handle`, not a bare `respond /metrics 404`. Caddy sorts
+	# `handle` ahead of `respond` in its default directive order, so with any
+	# handle block present the catch-all matched /metrics first and the
+	# respond never ran -- the rule read correctly and did nothing. Verified
+	# by request, not by reading: it answered 200 with the SPA shell. Handle
+	# blocks are mutually exclusive and evaluated in written order, so this
+	# must stay above the catch-all.
+	handle /metrics {
+		respond 404
+	}
+
+	# The backend owns exactly two prefixes -- verified against the OpenAPI
+	# document plus main.py's health routes -- and everything else is the SPA.
+	# Without this split the catch-all reverse_proxy swallowed every frontend
+	# route, so a hard refresh on /settings/billing or an invite deep link was
+	# answered by FastAPI with a 404 instead of by the app shell.
+	handle /api/* {
+		reverse_proxy backend:8000
+	}
+	handle /health* {
+		reverse_proxy backend:8000
+	}
+
+	# Disabled outside dev (main.py passes docs_url=None), so these exist only
+	# to make that a clean 404 from FastAPI rather than the SPA's index.html
+	# served with a 200.
+	handle /docs* {
+		reverse_proxy backend:8000
+	}
+	handle /redoc* {
+		reverse_proxy backend:8000
+	}
+	handle /openapi.json {
+		reverse_proxy backend:8000
+	}
+
+	# apps/web's dist, bind-mounted read-only (see docker-compose.prod.yml).
+	# try_files falls back to index.html for anything that is not a real
+	# asset, which is what a client-side-routed SPA (TanStack Router) needs.
+	# Built on the host before `docker compose up`, exactly like
+	# apps/marketing/dist already is.
+	handle {
+		root * /srv/web
+		try_files {path} /index.html
+		file_server
+	}
+
 	# Caddy auto-obtains and renews Let's Encrypt cert — no config needed
 	encode gzip zstd
 	header {

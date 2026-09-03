@@ -191,6 +191,10 @@ services:
     volumes:
       - ./Caddyfile.prod:/etc/caddy/Caddyfile
       - caddy_data:/data
+      # apps/web's built output, produced on the host by `pnpm build` before
+      # this stack comes up -- the same requirement apps/marketing/dist below
+      # already has. Nothing served the SPA in production before this.
+      - ./apps/web/dist:/srv/web:ro
       # T-307: apps/marketing's built output and the site block that serves
       # it, both produced on the host by `pnpm build` before this stack comes
       # up. Read-only, and both absent when `modules.marketing` is false --

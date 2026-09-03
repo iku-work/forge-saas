@@ -31,14 +31,39 @@ def test_caddyfile_dev_serves_caddy_hostname_for_zap() -> None:
     assert "default_sni caddy" in content
 
 
+# A bare `respond /metrics 404` is not enough and these tests used to accept
+# it. Caddy sorts `handle` ahead of `respond` in its default directive order,
+# so once either file grew handle blocks the catch-all matched /metrics first
+# and the respond never ran: both edges answered 200 with the SPA shell while
+# this file reported them as blocking it. Grepping for the old string is what
+# made that invisible for as long as it lasted.
+#
+# So the assertion is on the shape that actually works -- the rule inside a
+# `handle`, which is mutually exclusive with the other handle blocks and wins
+# by being written first. CI's module-matrix job makes the behavioural
+# assertion, curling /metrics against a real Caddy.
+_METRICS_BLOCK = "handle /metrics {"
+
+
+def _first_handle_is_metrics(content: str) -> bool:
+    """The rule only holds while it precedes the catch-all handle."""
+    return content.index(_METRICS_BLOCK) < content.index("	handle {")
+
+
 def test_caddyfile_prod_blocks_public_metrics_access() -> None:
     content = (REPO_ROOT / "Caddyfile.prod").read_text()
-    assert "respond /metrics 404" in content
+
+    assert _METRICS_BLOCK in content
+    assert "respond 404" in content
+    assert _first_handle_is_metrics(content)
 
 
 def test_caddyfile_dev_blocks_public_metrics_access() -> None:
     content = (REPO_ROOT / "Caddyfile").read_text()
-    assert "respond /metrics 404" in content
+
+    assert _METRICS_BLOCK in content
+    assert "respond 404" in content
+    assert _first_handle_is_metrics(content)
 
 
 def test_caddyfile_prod_strips_server_header() -> None:
