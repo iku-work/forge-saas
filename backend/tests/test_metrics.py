@@ -19,6 +19,7 @@ from prometheus_client import REGISTRY, CollectorRegistry
 from prometheus_fastapi_instrumentator import Instrumentator
 
 from app.core import metrics as metrics_module
+from app.core.config import get_settings
 from app.main import app
 
 
@@ -158,3 +159,65 @@ def test_default_registry_has_no_duplicate_forge_metric_names() -> None:
         if sample.name.startswith("forge_") and sample.name.endswith(("_total", "_count"))
     ]
     assert len(samples) == len(set(samples))
+
+
+class TestMetricsToken:
+    """T-350 follow-up: /metrics no longer depends on an edge to be private.
+
+    The endpoint was registered unauthenticated, and `respond /metrics 404`
+    in the two Caddyfiles was the whole of its protection. That holds only
+    for deployments that put Caddy in front -- on a platform (Render, Fly,
+    Cloud Run) the app is the edge and this answered 200 to the internet.
+    """
+
+    def test_no_token_configured_leaves_the_endpoint_open(self) -> None:
+        """Unchanged behaviour for the compose stack and for dev.
+
+        Settings refuses to boot outside dev unless METRICS_BLOCKED_AT_EDGE
+        is set instead, so "open" here always means "something else is
+        refusing the route".
+        """
+        with TestClient(app) as client:
+            assert client.get("/metrics").status_code == 200
+
+    def test_configured_token_is_required(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        _set_metrics_token(monkeypatch, "a-scrape-token")
+
+        with TestClient(app) as client:
+            assert client.get("/metrics").status_code == 404
+
+    def test_wrong_token_is_refused(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        _set_metrics_token(monkeypatch, "a-scrape-token")
+
+        with TestClient(app) as client:
+            response = client.get("/metrics", headers={"Authorization": "Bearer wrong"})
+
+        # 404 rather than 401: an unauthenticated caller learns nothing about
+        # whether this deployment scrapes metrics at all.
+        assert response.status_code == 404
+
+    def test_correct_token_still_scrapes(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        _set_metrics_token(monkeypatch, "a-scrape-token")
+
+        with TestClient(app) as client:
+            response = client.get("/metrics", headers={"Authorization": "Bearer a-scrape-token"})
+
+        assert response.status_code == 200
+        assert "forge_db_pool_size" in response.text
+
+    def test_scheme_must_be_bearer(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        _set_metrics_token(monkeypatch, "a-scrape-token")
+
+        with TestClient(app) as client:
+            response = client.get("/metrics", headers={"Authorization": "Basic a-scrape-token"})
+
+        assert response.status_code == 404
+
+
+def _set_metrics_token(monkeypatch: pytest.MonkeyPatch, token: str) -> None:
+    """Swap METRICS_TOKEN on the cached Settings the dependency reads.
+
+    get_settings() is lru_cached and app.main resolved it at import time, so
+    setting an environment variable here would change nothing.
+    """
+    monkeypatch.setattr(get_settings(), "METRICS_TOKEN", token)

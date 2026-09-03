@@ -47,6 +47,64 @@ template keep their own changes in `CHANGELOG.product.md` (see
     averaging it into a mixed workload is how a regression there goes unnoticed.
 
 ### Fixed
+- **`ENVIRONMENT=prod` could not boot at all, and nothing noticed.** Every CI
+  job that starts the real app runs with `ENVIRONMENT=dev` — the
+  `pgbouncer-prod-compose` job says so in its own env file — so the whole
+  non-dev configuration path had never once been executed. Reproduced by
+  running the real entrypoints against Postgres and Redis with TLS actually
+  on. Three defects, each of which alone stops a deploy:
+  - **`sslmode=require` and the asyncpg driver were mutually exclusive.**
+    `Settings._enforce_startup_invariants` refuses to boot outside dev unless
+    every Postgres DSN carries `sslmode=require` (or stricter), but
+    SQLAlchemy's asyncpg dialect builds its connect arguments with a bare
+    `opts.update(url.query)` — so `sslmode` arrived at `asyncpg.connect()` as
+    a keyword it does not have and raised `TypeError` before a byte reached
+    Postgres. `app.core.db.split_ssl_params` now moves libpq's TLS parameters
+    into the `ssl` connect argument asyncpg does understand, and
+    `alembic/env.py` does the same for its own independent hop — that one runs
+    *first* in a deploy, so it was the failure an operator would have hit
+    before ever seeing the app. `sslrootcert` becomes a real `SSLContext`,
+    since asyncpg only reads that parameter when it parses a DSN itself.
+    Covered by `tests/test_db_ssl.py`, including the trap the first fix fell
+    into: `str(URL)` renders the password as literal `***`, so round-tripping
+    a DSN through it swaps the credential and turns a TLS bug into an
+    authentication one.
+  - **`/metrics` was public on any deployment without Caddy in front.** The
+    endpoint was registered with no authentication; `respond /metrics 404` in
+    the two Caddyfiles was the whole of its protection. That is a property of
+    the edge, and a platform deployment (Render, Fly, Cloud Run) has none —
+    there the app *is* the edge, and the route served route inventory, traffic
+    volumes, pool saturation and active session counts to anyone with the URL.
+    `METRICS_TOKEN` now gates it on a bearer token (404, not 401, so a caller
+    learns nothing), and startup refuses outside dev unless the deployment has
+    named which protection it relies on — the token, or
+    `METRICS_BLOCKED_AT_EDGE` for the compose posture.
+  - **Every anonymous caller shared one rate-limit bucket, and the audit trail
+    recorded the proxy.** `request.client.host` is the rate-limit key for
+    unauthenticated requests *and* the `ip` on every audit event, but uvicorn
+    only honours `X-Forwarded-For` from `forwarded_allow_ips`, which defaults
+    to `127.0.0.1` — never a containerised proxy. Measured: one caller
+    exhausting `AUTH_RATE_LIMIT` returned 429 to an unrelated caller's very
+    first request. This affected the shipped `docker-compose.prod.yml` stack
+    too, not just platform deployments. New `TRUSTED_PROXY_IPS` applies
+    uvicorn's `ProxyHeadersMiddleware` as the outermost middleware, so it
+    travels with the configuration rather than with however the process was
+    launched; unset outside dev now logs a warning naming both consequences.
+    It takes the proxy's actual addresses, **not `*`**: X-Forwarded-For is a
+    list each proxy appends to (Caddy does, and Render's router does not reset
+    a client-supplied value), so a forged header arrives as `<forged>, <real
+    client>`. Given real addresses uvicorn walks from the right and takes the
+    first untrusted entry; given `*` it takes the leftmost, which is the forged
+    one — measured, and strictly worse than leaving the setting unset, since
+    every attacker then picks their own bucket and forges the IP on their own
+    audit events. The shipped value is the private ranges that cover both
+    Render's router and Caddy on forge-net, `*` logs a warning of its own, and
+    `tests/test_proxy_headers.py` pins both directions.
+- **`docs/runbooks/deploy-render.md` recommended a migration command that
+  cannot work here.** Its Pre-Deploy Command was `alembic upgrade head`;
+  optional modules branch off the core trunk with their own `branch_labels`,
+  so there is no single head. `python -m app.core.migrations` is the command
+  CI's own `deploy` job already used.
 - **The marketing 404 was served with no CSP, HSTS or `X-Frame-Options`.**
   Caddy runs `handle_errors` as its own handler chain, so the site block's
   `header` directive never reached the error response — and that response is

@@ -2,14 +2,17 @@
   "$schema": "https://turbo.build/schema.json",
   "extends": ["//"],
   "tasks": {
-    // src/generated/ is gitignored (it is produced by `make gen-client` from
-    // the live OpenAPI schema), and turbo's default input set is a package's
-    // *git-tracked* files -- so without the extra input below, regenerating
-    // the client does not change this task's cache key and `turbo build`
-    // restores a dist built from the previous schema. The failure is silent
-    // and confusing: type-check then reports a brand-new endpoint's symbols
-    // as missing from a package that was, apparently, just rebuilt.
-    // $TURBO_DEFAULT$ keeps the normal inputs and adds the generated tree.
+    // src/generated/ is committed now, so turbo's default input set -- a
+    // package's *git-tracked* files -- already covers it, and the cache trap
+    // this override was written for cannot happen: regenerating the client
+    // changes tracked files and therefore changes this task's cache key.
+    //
+    // Kept anyway, explicitly, because the trap it guards against is silent
+    // and expensive when it does happen (a `dist` restored from the previous
+    // schema, and a type-check reporting a brand-new endpoint's symbols as
+    // missing from a package that was apparently just rebuilt) and because
+    // it costs nothing while the tree is tracked. $TURBO_DEFAULT$ keeps the
+    // normal inputs and adds the generated tree.
     "build": {
       "inputs": ["$TURBO_DEFAULT$", "src/generated/**"]
     }

@@ -21,6 +21,7 @@ queue on its own, in which case this is a harmless no-op.
 """
 
 from typing import Any
+from urllib.parse import parse_qs, urlparse
 
 from arq import create_pool
 from arq.connections import ArqRedis, RedisSettings
@@ -30,12 +31,47 @@ from app.core.config import get_settings
 
 _pool: ArqRedis | None = None
 
+# TLS query parameters redis-py accepts on a DSN, mapped to the RedisSettings
+# fields arq exposes for the same thing.
+_SSL_DSN_PARAMS = {
+    "ssl_ca_certs": "ssl_ca_certs",
+    "ssl_certfile": "ssl_certfile",
+    "ssl_keyfile": "ssl_keyfile",
+    "ssl_cert_reqs": "ssl_cert_reqs",
+    "ssl_check_hostname": "ssl_check_hostname",
+}
+
+
+def redis_settings() -> RedisSettings:
+    """arq connection settings for REDIS_URL, TLS parameters included.
+
+    `RedisSettings.from_dsn` parses scheme, host, port, credentials and `db`
+    and **silently drops every other query parameter** -- so a
+    `rediss://host/0?ssl_ca_certs=/path/ca.crt` DSN, which redis-py honours
+    (and which is how a self-hosted deployment points at a private CA), left
+    arq verifying against the default trust store instead. The app connected
+    and the worker did not, from one identical setting.
+
+    Both arq call sites go through here so they cannot drift apart again.
+    """
+    url = str(get_settings().REDIS_URL)
+    settings = RedisSettings.from_dsn(url)
+    query = parse_qs(urlparse(url).query)
+    for param, field in _SSL_DSN_PARAMS.items():
+        values = query.get(param)
+        if not values:
+            continue
+        value: object = values[0]
+        if field == "ssl_check_hostname":
+            value = values[0].lower() in ("1", "true", "yes")
+        setattr(settings, field, value)
+    return settings
+
 
 async def _get_pool() -> ArqRedis:
     global _pool  # noqa: PLW0603 -- guards the module-level singleton below
     if _pool is None:
-        settings = get_settings()
-        _pool = await create_pool(RedisSettings.from_dsn(str(settings.REDIS_URL)))
+        _pool = await create_pool(redis_settings())
     return _pool
 
 

@@ -8,6 +8,14 @@ Caddyfile / Caddyfile.prod's `respond /metrics 404` rules, verified by
 test_caddy_config.py) -- it's scrapeable only from inside forge-net, where a
 Prometheus instance itself would live.
 
+That is a property of the *edge*, not of this endpoint, and it stops being
+true the moment the app is deployed without one -- on Render the app is the
+edge, and this route answered 200 to the open internet. So the endpoint now
+carries `require_metrics_token` below, and Settings refuses to boot outside
+dev unless the deployment has answered for one or the other (METRICS_TOKEN /
+METRICS_BLOCKED_AT_EDGE). Nothing changes for the compose stack, which sets
+the latter.
+
 `forge_active_sessions` can't just query the DB on every scrape the way
 `forge_db_pool_used`/`forge_db_pool_size` do: the count is refreshed every 60s
 by an APScheduler job running in the *worker* process (app.workers.scheduler),
@@ -18,11 +26,12 @@ itself.
 """
 
 import logging
+import secrets
 import time
 from typing import TYPE_CHECKING, cast
 
 import redis
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI, HTTPException, Request
 from prometheus_client import Counter, Gauge, Histogram, start_http_server
 from prometheus_fastapi_instrumentator import Instrumentator
 from redis.backoff import NoBackoff
@@ -281,10 +290,35 @@ def start_worker_metrics_server(port: int) -> None:
         logger.info("worker metrics available on :%d/metrics", port)
 
 
+def require_metrics_token(request: Request) -> None:
+    """Gate /metrics on a bearer token when one is configured.
+
+    A no-op when METRICS_TOKEN is unset, which is the dev default and the
+    docker-compose posture -- there, `respond /metrics 404` in the Caddyfile
+    is what keeps the endpoint unreachable, and Settings refuses to boot
+    outside dev unless one of the two is true. `compare_digest` because this
+    is a plain secret equality check on an unauthenticated route.
+    """
+    token = get_settings().METRICS_TOKEN
+    if not token:
+        return
+    header = request.headers.get("authorization", "")
+    scheme, _, presented = header.partition(" ")
+    if scheme.lower() != "bearer" or not secrets.compare_digest(presented, token):
+        # 404, not 401: an unauthenticated caller learns nothing about
+        # whether this deployment scrapes metrics at all.
+        raise HTTPException(status_code=404)
+
+
 def init_metrics(app: FastAPI) -> None:
     # should_instrument_requests_inprogress: powers the "in-flight requests"
     # panel on T-204's api-overview.json dashboard -- off by default in this
     # instrumentator version, so it must be requested explicitly.
     Instrumentator(should_instrument_requests_inprogress=True).instrument(app).expose(
-        app, endpoint="/metrics", include_in_schema=False
+        app,
+        endpoint="/metrics",
+        include_in_schema=False,
+        # expose() forwards **kwargs to app.get(), so the endpoint it
+        # registers carries this dependency like any other route.
+        dependencies=[Depends(require_metrics_token)],
     )

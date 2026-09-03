@@ -8,12 +8,12 @@ connection sharing is involved.
 
 from typing import Any, ClassVar
 
-from arq.connections import RedisSettings
 from arq.typing import WorkerCoroutine
 from redis.asyncio import Redis
 
 from app.core.config import get_settings
 from app.core.db import dispose_engine
+from app.core.jobs import redis_settings as build_redis_settings
 from app.core.metrics import start_worker_metrics_server
 from app.workers.jobs.billing import send_dunning_email
 from app.workers.jobs.email import send_email
@@ -65,7 +65,9 @@ class WorkerSettings:
         # would simply fail to resolve the job name and log it as an error).
         deliver_webhook,
     ]
-    redis_settings = RedisSettings.from_dsn(str(get_settings().REDIS_URL))
+    # Shared with app.core.jobs so the enqueue side and the consume side
+    # cannot disagree about TLS -- see redis_settings()'s docstring.
+    redis_settings = build_redis_settings()
     max_jobs = 20
     job_timeout = 300
     on_startup = worker_startup

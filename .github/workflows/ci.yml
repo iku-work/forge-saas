@@ -62,6 +62,22 @@ jobs:
       - name: Install frontend dependencies
         run: pnpm install --frozen-lockfile
 
+      # The generated API client is committed (see .gitignore), so that
+      # apps/web can be built anywhere Node runs -- a Render Static Site, a
+      # Vercel/Netlify build, a frontend-only checkout -- rather than only
+      # where a Python 3.12 with the backend installed happens to exist. The
+      # cost of committing a generated artefact is that it can go stale, so
+      # this job regenerates it and fails on any difference. This is the one
+      # place in CI that already has both toolchains.
+      - name: The committed API client still matches the backend's schema
+        run: |
+          pip install -e ./backend
+          pnpm --filter @forge/api-client generate
+          if ! git diff --exit-code -- packages/api-client/openapi.json packages/api-client/src/generated/; then
+            echo "::error::The committed API client is stale. Run 'pnpm --filter @forge/api-client generate' and commit the result." >&2
+            exit 1
+          fi
+
       # Through apps/marketing's own reader rather than by grepping
       # product.config.ts: the same function `astro build` consults to decide
       # whether there is a marketing site at all decides whether there is one

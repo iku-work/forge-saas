@@ -106,7 +106,7 @@ questionnaire) — evidence links point at real files, not at task IDs.
 
 | ID | Requirement | Status | Evidence |
 |---|---|---|---|
-| V1.9.1 | Encrypted communication between components across containers/sites | met | Client-facing traffic is TLS-terminated at Caddy (`Caddyfile.prod`). `Settings._enforce_startup_invariants` (`backend/app/core/config.py`, T-225) now refuses to boot outside dev unless `DATABASE_URL` sets `sslmode=require`+ and `REDIS_URL` uses `rediss://`. Render's managed Postgres/Redis satisfy this by default; self-hosted `docker-compose.prod.yml` deployers must complete the cert setup in `docs/runbooks/backup-restore.md`'s "Docker-network TLS" section or the app won't start. |
+| V1.9.1 | Encrypted communication between components across containers/sites | met | Client-facing traffic is TLS-terminated at Caddy (`Caddyfile.prod`). `Settings._enforce_startup_invariants` (`backend/app/core/config.py`, T-225) now refuses to boot outside dev unless `DATABASE_URL` sets `sslmode=require`+ and `REDIS_URL` uses `rediss://`. Render's managed Postgres satisfies this (append `sslmode=require`; `app.core.db.split_ssl_params` translates it for asyncpg, which takes `ssl=` and not `sslmode`). Render's **Key Value does not** — its internal URL is plain `redis://` and TLS is reserved for the external URL, so that deployment claims the requirement via network isolation instead, with `REDIS_ON_PRIVATE_NETWORK=true`. Self-hosted `docker-compose.prod.yml` deployers must complete the cert setup in `docs/runbooks/backup-restore.md`'s "Docker-network TLS" section or the app won't start. |
 | V1.9.2 | Components verify authenticity of each side of a communication link | met | Outbound calls to Stripe/Resend/OAuth providers use standard HTTP-client TLS certificate verification (no `verify=False` found anywhere in the codebase). |
 
 #### V1.10 Malicious Software Architecture
@@ -494,7 +494,7 @@ questionnaire) — evidence links point at real files, not at task IDs.
 | ID | Requirement | Status | Evidence |
 |---|---|---|---|
 | V9.2.1 | Trusted TLS certs between servers, restrict self-signed | met | Caddy auto-obtains Let's Encrypt certificates (`Caddyfile.prod`); outbound calls to Stripe/Resend/OAuth providers use their publicly-trusted CA certs. |
-| V9.2.2 | Encrypted connections for all inbound/outbound (incl. DB, mgmt) | met | Same enforcement as V1.9.1 — `Settings._enforce_startup_invariants` (T-225) requires `sslmode=require`+ on `DATABASE_URL` and `rediss://` on `REDIS_URL` outside dev. |
+| V9.2.2 | Encrypted connections for all inbound/outbound (incl. DB, mgmt) | met | Same enforcement as V1.9.1 — `Settings._enforce_startup_invariants` (T-225) requires `sslmode=require`+ on `DATABASE_URL` and `rediss://` on `REDIS_URL` outside dev, the latter unless `REDIS_ON_PRIVATE_NETWORK` explicitly claims network isolation instead (see V1.9.1). |
 | V9.2.3 | Encrypted external connections carrying sensitive data are authenticated | met | `backend/app/core/config.py` — `STRIPE_SECRET_KEY`, `RESEND_API_KEY`, `GOOGLE_CLIENT_SECRET`/`GITHUB_CLIENT_SECRET` are required for their respective clients; every encrypted external call is also credential-authenticated. |
 | V9.2.4 | Certificate revocation checking (OCSP stapling) configured | met | Caddy enables OCSP stapling by default for ACME-issued certs — no explicit config is needed to turn it on. T-225 confirmed this is Caddy's documented default behavior rather than adding a no-op config line. |
 

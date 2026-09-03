@@ -329,6 +329,7 @@ _PROD_SAFE_OVERRIDES: dict[str, object] = {
     "ALLOWED_ORIGINS": ["https://app.example.com"],
     "DATABASE_URL": "postgresql+asyncpg://u:p@pgbouncer:6432/forge?sslmode=require",
     "REDIS_URL": "rediss://redis:6379/0",
+    "METRICS_BLOCKED_AT_EDGE": True,
 }
 
 

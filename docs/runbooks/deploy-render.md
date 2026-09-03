@@ -47,7 +47,14 @@ image.
 On the Web Service:
 - **Health Check Path**: `/health/ready`
 - **Pre-Deploy Command** (optional, defense in depth alongside CI's own
-  migration step): `alembic upgrade head`
+  migration step): `python -m app.core.migrations`
+
+  **Not `alembic upgrade head`.** Every optional module's first migration
+  branches off the core trunk with its own `branch_labels`, so there is no
+  single head to upgrade to and that command cannot succeed against this
+  schema. `app.core.migrations` asks Alembic for `<branch>@head` once per
+  *enabled* module, which is also what keeps a disabled module's tables out
+  of the database entirely. CI's `deploy` job already runs this one.
 
 ### 2. Registry credential (only if the GHCR package is private)
 
@@ -63,6 +70,19 @@ Dashboard → Account Settings → Registry Credentials → add a GitHub PAT wit
 | `RENDER_WORKER_SERVICE_ID` | Worker service page URL: `srv-xxxxxxxxxxxx` |
 | `PROD_ENV_FILE` | Full contents of a production `backend/.env` (see `backend/.env.example` for the field list) — written to disk and passed to the migration container via `--env-file` |
 | `PROD_DOMAIN` | The domain Caddy/Render terminates TLS for, e.g. `app.example.com` — used for the post-deploy smoke test |
+
+### 4. Environment values Render specifically needs
+
+Most of `backend/.env.example` carries over unchanged. These four do not, and
+three of them are startup-enforced — the app refuses to boot rather than
+running in the wrong shape:
+
+| Variable | Value | Why Render differs |
+|---|---|---|
+| `DATABASE_URL` | `postgresql+asyncpg://…?sslmode=require` | Render hands you a bare `postgres://`; rewrite the scheme to `+asyncpg` and append `sslmode`. `app.core.db.split_ssl_params` translates that into the `ssl` argument asyncpg actually takes. |
+| `REDIS_ON_PRIVATE_NETWORK` | `true` | Key Value's **internal** URL is plain `redis://red-xxx:6379` — TLS is only on the external URL, which costs an IP allowlist and a public round trip per session lookup. This setting is the explicit claim that nothing but your own services can route to that instance; it does not relax the Postgres DSNs. |
+| `METRICS_TOKEN` | a generated token | On Render the app is the edge. Without this (or `METRICS_BLOCKED_AT_EDGE`, which would be a lie here) startup refuses, because `/metrics` would otherwise answer 200 to anyone. |
+| `TRUSTED_PROXY_IPS` | `10.0.0.0/8,172.16.0.0/12,192.168.0.0/16` | Render's router reaches the container over the private network. Without this the app believes the socket, so every anonymous caller shares one rate-limit bucket and every audit event records the router. **Not `*`:** Render appends to `X-Forwarded-For` without resetting a client-supplied value, and `*` makes uvicorn take the leftmost (caller-supplied) entry — so anyone could pick their own rate-limit bucket and forge the IP on their audit events. Add Cloudflare's published ranges if you put it in front. |
 
 `PROD_ENV_FILE`'s `DATABASE_URL` must be the Postgres instance's **External**
 connection string — the GitHub-hosted runner isn't on Render's private
@@ -100,9 +120,12 @@ if it fails. Do the other half by hand the first time, because a green
 - Confirm the worker is actually consuming: trigger something that enqueues a
   job (a password-reset email) and watch it arrive, rather than trusting the
   worker service's "live" badge.
-- `curl -i https://$PROD_DOMAIN/metrics` from outside → not 200. Caddy blocks
-  it externally, and this is the cheapest check that the right Caddy config is
-  in front.
+- `curl -i https://$PROD_DOMAIN/metrics` from outside → not 200. **There is
+  no Caddy on Render**, so this is not the edge check it is in the compose
+  stack: what makes it 404 here is `METRICS_TOKEN` (see the environment
+  section above). Startup refuses without either that or
+  `METRICS_BLOCKED_AT_EDGE`, so a 200 means the token is set to something the
+  request happens to match, not that the guard is missing.
 - The negative check: hit the backend service's own Render URL directly. If it
   answers, it is reachable without going through your edge, and the TLS/header
   guarantees above are bypassable.
@@ -224,6 +247,26 @@ placeholder). `/_astro/<hash>.css` should answer with
   push) — a GitHub repo setting, not code; configure manually via
   Settings → Branches, or `gh api repos/<owner>/<repo>/branches/main/protection`,
   once this repo has a remote.
+- **The SPA on Render.** `Caddyfile.prod` reverse-proxies everything to the
+  backend and never mounts `apps/web/dist`, so nothing in this repo serves the
+  SPA in production — on Render or in the compose stack. The Render shape is a
+  **Static Site** with publish directory `apps/web/dist`, a rewrite of `/*` to
+  `/index.html` (TanStack Router is client-side; without it a hard refresh on
+  `/settings/billing` or an invite deep link 404s) and `VITE_API_URL` set **at
+  build time** to the API's origin — Vite bakes it in via `define`, nothing
+  reads it at runtime. The build itself needs no Python: the generated API
+  client is committed and `turbo`'s build task no longer depends on
+  `gen-client`.
+
+  **Use a custom domain before testing auth.** `onrender.com` is on the Public
+  Suffix List, so `web-x.onrender.com` and `api-x.onrender.com` are different
+  registrable domains — cross-site. The refresh cookie is
+  `__Host-refresh_token` with `SameSite=strict`, so the browser will not send
+  it, and the `__Host-` prefix forbids widening with a `Domain` attribute.
+  Login appears to work and then every refresh 401s once the 15-minute access
+  token expires. `app.example.com` + `api.example.com` are same-site and
+  behave correctly; set `ALLOWED_ORIGINS` to the SPA's origin.
+
 - Marketing on Render specifically. T-307 serves `apps/marketing` from the
   self-hosted Caddy stack (see "The second host" below), which is the
   `docker-compose.prod.yml` path. On Render the equivalent is a **Static Site**

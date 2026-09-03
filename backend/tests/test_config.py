@@ -60,6 +60,11 @@ _PROD_SAFE_OVERRIDES: dict[str, object] = {
     "PASSWORD_PEPPER": "a-real-pepper",
     "DATABASE_URL": "postgresql+asyncpg://u:p@localhost:5432/db?sslmode=require",
     "REDIS_URL": "rediss://localhost:6379/0",
+    # The compose posture: Caddy answers /metrics with a 404 before the app
+    # ever sees the request (verified for both Caddyfiles by
+    # test_caddy_config.py). A deployment with no such edge -- Render, Fly,
+    # Cloud Run -- sets METRICS_TOKEN instead; one of the two is mandatory.
+    "METRICS_BLOCKED_AT_EDGE": True,
 }
 
 
@@ -237,3 +242,99 @@ def test_get_settings_loads_from_env_test_fixture(monkeypatch: pytest.MonkeyPatc
         assert get_settings() is settings
     finally:
         get_settings.cache_clear()
+
+
+@pytest.mark.owasp("A01")
+def test_metrics_unprotected_outside_dev_raises(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The Caddy assumption, made explicit.
+
+    `/metrics` was registered with no authentication at all; the only thing
+    that ever kept it off the internet was `respond /metrics 404` in the
+    Caddyfiles. That is a property of the edge, and a platform deployment
+    (Render, Fly, Cloud Run) has no such edge -- there the app is the edge and
+    the endpoint answered 200 to anyone. Outside dev the deployment now has to
+    say which of the two protections it is relying on.
+    """
+    _clear_settings_env(monkeypatch)
+
+    with pytest.raises(RuntimeError, match="/metrics would be publicly readable"):
+        Settings(
+            _env_file=FIXTURE_ENV_FILE,
+            **{**_PROD_SAFE_OVERRIDES, "METRICS_BLOCKED_AT_EDGE": False},
+        )
+
+
+def test_metrics_token_satisfies_the_requirement_without_an_edge(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _clear_settings_env(monkeypatch)
+
+    settings = Settings(
+        _env_file=FIXTURE_ENV_FILE,
+        **{
+            **_PROD_SAFE_OVERRIDES,
+            "METRICS_BLOCKED_AT_EDGE": False,
+            "METRICS_TOKEN": "a-scrape-token",
+        },
+    )
+
+    assert settings.METRICS_TOKEN == "a-scrape-token"
+
+
+def test_metrics_endpoint_is_unguarded_in_dev(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Dev pays nothing for either of the above."""
+    _clear_settings_env(monkeypatch)
+
+    settings = Settings(_env_file=FIXTURE_ENV_FILE)
+
+    assert settings.ENVIRONMENT == "dev"
+    assert settings.METRICS_TOKEN is None
+    assert settings.METRICS_BLOCKED_AT_EDGE is False
+
+
+@pytest.mark.owasp("A02")
+def test_redis_private_network_opt_in_permits_plain_scheme(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The managed-Redis case the strict rule could not express.
+
+    Render's Key Value (and several like it) offers `redis://` on a private
+    network and reserves TLS for an external URL that costs an IP allowlist
+    and a public round trip per session lookup. "Encrypted" and "not on an
+    untrusted network" both satisfy ASVS V9.2.2; this is the second, and it
+    has to be claimed explicitly.
+    """
+    _clear_settings_env(monkeypatch)
+
+    settings = Settings(
+        _env_file=FIXTURE_ENV_FILE,
+        **{
+            **_PROD_SAFE_OVERRIDES,
+            "REDIS_URL": "redis://red-abc123:6379/0",
+            "REDIS_ON_PRIVATE_NETWORK": True,
+        },
+    )
+
+    assert settings.REDIS_URL.scheme == "redis"
+
+
+def test_redis_private_network_opt_in_does_not_relax_postgres(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The escape hatch is Redis-shaped and must not widen.
+
+    Render's Postgres has no equivalent excuse -- TLS is available on both its
+    internal and external connection strings -- so `sslmode` stays mandatory
+    no matter what the Redis instance is doing.
+    """
+    _clear_settings_env(monkeypatch)
+
+    with pytest.raises(RuntimeError, match="DATABASE_URL"):
+        Settings(
+            _env_file=FIXTURE_ENV_FILE,
+            **{
+                **_PROD_SAFE_OVERRIDES,
+                "REDIS_ON_PRIVATE_NETWORK": True,
+                "DATABASE_URL": "postgresql+asyncpg://u:p@localhost:5432/db",
+            },
+        )

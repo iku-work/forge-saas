@@ -15,11 +15,15 @@ node_modules/
 dist/
 .turbo/
 .next/
-packages/api-client/src/generated/
-# T-313: the all-modules-on OpenAPI document backend/scripts/dump_openapi.py
-# writes and openapi-ts.config.ts reads. Derived from the backend on every
-# `pnpm --filter @forge/api-client generate`, exactly like the client above.
-packages/api-client/openapi.json
+# packages/api-client/src/generated/ and packages/api-client/openapi.json are
+# deliberately NOT ignored, though both are generated. They are the one
+# generated artefact whose producer is not a Node tool: `gen-client` shells
+# out to backend/scripts/dump_openapi.py, so it needs a Python 3.12 with the
+# whole backend installed. turbo's build task depends on gen-client, which
+# made `apps/web` unbuildable in any Node-only environment -- a Render Static
+# Site, a Vercel/Netlify build, a frontend-only contributor's checkout.
+# Committing them decouples the frontend build from the Python toolchain; CI's
+# `lint` job regenerates and fails on a diff, so they cannot go stale.
 packages/i18n/src/keys.ts
 
 # Astro (T-300) -- apps/marketing/.astro holds the route and content types

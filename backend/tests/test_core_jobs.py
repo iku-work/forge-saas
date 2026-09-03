@@ -107,3 +107,51 @@ async def test_revoke_job_removes_a_still_deferred_job_from_the_queue() -> None:
 @pytest.mark.usefixtures("_point_at_test_redis")
 async def test_revoke_job_on_an_unknown_job_id_is_a_no_op() -> None:
     await real_revoke_job("does-not-exist")
+
+
+class TestRedisSettingsTls:
+    """`RedisSettings.from_dsn` drops every query parameter except `db`.
+
+    That meant a `rediss://host/0?ssl_ca_certs=/path/ca.crt` DSN -- which
+    redis-py honours, and which is how a self-hosted deployment points at a
+    private CA -- left arq verifying against the default trust store. The app
+    connected over TLS and the worker did not, from one identical setting.
+    Reproduced against a real TLS Redis before this was fixed.
+    """
+
+    def test_ssl_ca_certs_survives_the_dsn(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(
+            get_settings(),
+            "REDIS_URL",
+            "rediss://localhost:6379/0?ssl_ca_certs=/etc/ssl/ca.crt",
+        )
+
+        settings = jobs.redis_settings()
+
+        assert settings.ssl is True
+        assert settings.ssl_ca_certs == "/etc/ssl/ca.crt"
+        # from_dsn's own parsing must still apply.
+        assert settings.database == 0
+        assert settings.port == 6379
+
+    def test_ssl_check_hostname_is_parsed_as_a_boolean(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """redis-py takes it as a URL string; arq's field is a bool."""
+        monkeypatch.setattr(
+            get_settings(),
+            "REDIS_URL",
+            "rediss://localhost:6379/0?ssl_check_hostname=true",
+        )
+
+        assert jobs.redis_settings().ssl_check_hostname is True
+
+    def test_plain_dsn_is_unchanged(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """The private-network case (Render's Key Value) pays nothing."""
+        monkeypatch.setattr(get_settings(), "REDIS_URL", "redis://red-abc123:6379/2")
+
+        settings = jobs.redis_settings()
+
+        assert settings.ssl is False
+        assert settings.ssl_ca_certs is None
+        assert settings.database == 2

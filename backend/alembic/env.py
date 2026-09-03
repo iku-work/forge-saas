@@ -11,6 +11,7 @@ from sqlalchemy.sql.schema import SchemaItem
 from sqlmodel import SQLModel
 
 from app.core.config import get_settings
+from app.core.db import split_ssl_params
 from app.core.encrypted_type import EncryptedString
 from app.core.module_loader import get_modules
 
@@ -202,10 +203,19 @@ def do_run_migrations(connection: Connection) -> None:
 
 
 async def run_async_migrations() -> None:
+    # Same asyncpg/libpq mismatch the application engines have to bridge: an
+    # `sslmode` left on the DSN reaches asyncpg.connect() as an unknown
+    # keyword and raises TypeError. This is the *second* independent hop to
+    # Postgres (see migrations_database_url above), so it needs the
+    # translation in its own right -- and it is the one that runs first in a
+    # deploy, before the app is ever started.
+    section = dict(config.get_section(config.config_ini_section, {}))
+    section["sqlalchemy.url"], ssl_args = split_ssl_params(section["sqlalchemy.url"])
     connectable = async_engine_from_config(
-        config.get_section(config.config_ini_section, {}),
+        section,
         prefix="sqlalchemy.",
         poolclass=pool.NullPool,
+        connect_args=ssl_args,
     )
     async with connectable.connect() as connection:
         await connection.run_sync(do_run_migrations)
