@@ -76,6 +76,26 @@ template keep their own changes in `CHANGELOG.product.md` (see
   one; and none of these commands may be written as a YAML folded scalar,
   which silently truncates them and brings the stack up healthy with TLS off.
 
+  **Rotation is a first-class operation, not a paragraph.**
+  `make rotate-internal-certs` replaces the material on a running stack in
+  three phases — trust both, serve the new one, drop the old — because two
+  hops here verify rather than merely encrypt (pgbouncer of Postgres, the app
+  and worker of Redis) and replacing a certificate before its verifier trusts
+  the new issuer fails that hop closed. This is why `server.crt` and `ca.crt`
+  are separate files despite starting out identical: point trust and identity
+  at one path and the trust set cannot widen without simultaneously changing
+  what is served, so a failure window is unavoidable.
+
+  Exercised on a live stack: the served fingerprint changed, `/health/ready`
+  stayed 200, both Postgres hops kept reporting TLSv1.3, the bundle pruned
+  back to one certificate, and a foreign CA was still rejected with
+  `CERTIFICATE_VERIFY_FAILED` — so the verification the phases protect is
+  real. `make check-certs` (`scripts/check-cert-expiry.sh`) reports days
+  remaining and exits non-zero inside the warning window, for cron. That is
+  the failure that actually happens: rotation is deliberate, expiry is a date
+  nobody watches, and when these lapse the public Caddy certificate is
+  perfectly healthy so the obvious suspect is innocent.
+
   `make prod-compose-tls-check` and CI's new `prod-compose-tls` job reproduce
   the whole thing. That job is the direct answer to how four prod-only defects
   shipped: no job had ever started this app with `ENVIRONMENT` set to anything

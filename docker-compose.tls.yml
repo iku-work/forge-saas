@@ -49,7 +49,7 @@ services:
       [
         "sh",
         "-c",
-        "cp /certs/server.crt /certs/server.key /etc/pgbouncer/ && chown postgres:postgres /etc/pgbouncer/server.crt /etc/pgbouncer/server.key && chmod 600 /etc/pgbouncer/server.key && exec su postgres -s /bin/sh -c '/entrypoint.sh /usr/bin/pgbouncer /etc/pgbouncer/pgbouncer.ini'",
+        "cp /certs/server.crt /certs/server.key /certs/ca.crt /etc/pgbouncer/ && chown postgres:postgres /etc/pgbouncer/server.crt /etc/pgbouncer/server.key /etc/pgbouncer/ca.crt && chmod 600 /etc/pgbouncer/server.key && exec su postgres -s /bin/sh -c '/entrypoint.sh /usr/bin/pgbouncer /etc/pgbouncer/pgbouncer.ini'",
       ]
     environment:
       # The hop the application terminates on: DATABASE_URL points here, so
@@ -67,7 +67,7 @@ services:
       # less. (Not verify-full -- that additionally matches the hostname
       # against the certificate, and the SAN list is compose service names.)
       SERVER_TLS_SSLMODE: verify-ca
-      SERVER_TLS_CA_FILE: /etc/pgbouncer/server.crt
+      SERVER_TLS_CA_FILE: /etc/pgbouncer/ca.crt
     volumes:
       - ./certs:/certs:ro
 
@@ -79,14 +79,14 @@ services:
       [
         "sh",
         "-c",
-        "cp /certs/server.crt /certs/server.key /tmp/ && chown redis:redis /tmp/server.crt /tmp/server.key && chmod 600 /tmp/server.key && exec redis-server --port 0 --tls-port 6379 --tls-cert-file /tmp/server.crt --tls-key-file /tmp/server.key --tls-ca-cert-file /tmp/server.crt --tls-auth-clients no",
+        "cp /certs/server.crt /certs/server.key /certs/ca.crt /tmp/ && chown redis:redis /tmp/server.crt /tmp/server.key /tmp/ca.crt && chmod 600 /tmp/server.key && exec redis-server --port 0 --tls-port 6379 --tls-cert-file /tmp/server.crt --tls-key-file /tmp/server.key --tls-ca-cert-file /tmp/ca.crt --tls-auth-clients no",
       ]
     # The stock healthcheck speaks cleartext to a port that no longer exists.
     healthcheck:
       test:
         [
           "CMD-SHELL",
-          "redis-cli --tls --cacert /tmp/server.crt --cert /tmp/server.crt --key /tmp/server.key ping | grep -q PONG",
+          "redis-cli --tls --cacert /tmp/ca.crt --cert /tmp/server.crt --key /tmp/server.key ping | grep -q PONG",
         ]
       interval: 5s
       timeout: 5s
@@ -95,7 +95,7 @@ services:
       - ./certs:/certs:ro
 
   # The application reads the CA from the DSN itself
-  # (`rediss://redis:6379/0?ssl_ca_certs=/certs/server.crt`), which redis-py,
+  # (`rediss://redis:6379/0?ssl_ca_certs=/certs/ca.crt`), which redis-py,
   # the slowapi rate-limit storage and arq all honour -- so the backend and
   # worker need the material on disk too, at the same path.
   backend:

@@ -208,9 +208,48 @@ results and leave **zero** rows in `pg_prepared_statements`.
   passes URL query parameters through verbatim, so `app.core.db.split_ssl_params`
   translates it. Removing that helper makes every DSN above fail with
   `TypeError` before a byte reaches Postgres.
-- **No automatic renewal.** Caddy's public certificate is ACME-managed; these
-  are not. `make internal-certs` prints the expiry — put it somewhere you will
-  see it.
+- **`asyncpg` does not accept `sslmode`** — covered above.
+
+### Rotation
+
+```sh
+make check-certs             # days left; non-zero exit inside WARN_DAYS (30)
+make rotate-internal-certs   # replace the material on a running stack
+```
+
+There is no ACME here. Caddy's public certificate renews itself; these do not,
+and when they lapse the stack goes down for a reason that looks nothing like a
+certificate problem from outside — the public certificate is healthy, so the
+obvious suspect is innocent. **Put `check-cert-expiry.sh` in cron**; it exits
+non-zero when anything is inside the warning window, so cron mails you:
+
+```
+0 6 * * *  cd /srv/forge && ./scripts/check-cert-expiry.sh >/dev/null
+```
+
+**Why rotation is three phases and not "regenerate, restart".** Two hops here
+*verify* rather than merely encrypt: pgbouncer checks Postgres against a CA,
+and the app and worker check Redis against one. Replace a server's certificate
+before its verifier trusts the new issuer and that hop fails closed until the
+verifier catches up. So trust widens first and narrows last:
+
+| Phase | `ca.crt` holds | Restarts | Invariant |
+|---|---|---|---|
+| 1 | old + new | pgbouncer, backend, worker | verifiers accept both |
+| 2 | old + new | postgres, redis, pgbouncer | new certificate served, still trusted |
+| 3 | new | pgbouncer, backend, worker | old issuer no longer accepted |
+
+At no point does a service present something a verifier does not already
+accept. This removes the *failure* window, not the restarts — connections
+still drop as containers recreate, and Caddy will 502 briefly.
+
+This is also why `server.crt` and `ca.crt` are separate files even though they
+start out identical. Point trust and identity at one path and the trust set
+cannot be widened without simultaneously changing what is served, which is
+precisely the window the phases exist to remove.
+
+`--force-recreate` rather than `restart`: each container copies the material
+in at start, so a restarted container reuses its stale copy.
 
 ## Verification status
 
@@ -231,8 +270,19 @@ results and leave **zero** rows in `pg_prepared_statements`.
       results leaving zero rows in `pg_prepared_statements`, so ADR-0002's
       contract holds under TLS.
 
-      Not covered by that run: certificate **rotation**, and any cert other
-      than the self-signed one the generator writes.
+- [x] **Certificate rotation exercised on a running stack (2026-09-03).**
+      `make rotate-internal-certs` against the live TLS stack: the served
+      fingerprint changed, `/health/ready` returned 200 afterwards, both
+      Postgres hops still reported TLSv1.3, the trust bundle was pruned back
+      to exactly one certificate matching the new server cert, and a
+      deliberately foreign CA was still rejected with
+      `CERTIFICATE_VERIFY_FAILED` — so verification is genuinely enforced and
+      the phasing is load-bearing rather than decorative. The expiry checker
+      was exercised on its ok, expiring and two-certificate-bundle paths.
+
+      Not covered: any certificate other than the self-signed one the
+      generator writes, and rotation under sustained load (the restarts drop
+      connections; only the verification window is closed).
 
 The first two are not checked off — this repo is a template with no live
 deployment yet (see `docs/runbooks/deploy-render.md`). Check one off (with the

@@ -52,10 +52,19 @@ openssl req -new -x509 -nodes \
   -out "$OUT_DIR/server.crt" \
   -config "$OUT_DIR/openssl.cnf" 2>/dev/null
 
-chmod 644 "$OUT_DIR/server.crt"
+# Trust is a separate file from identity, and that separation is the whole
+# reason rotation can happen without downtime. `server.crt` is what a service
+# presents; `ca.crt` is what a verifier accepts. Point them at one file and
+# the trust set cannot be widened without simultaneously changing what is
+# served, so there is always a window where verification fails. Kept apart,
+# `ca.crt` can hold old and new at once while the swap happens -- see
+# scripts/rotate-internal-certs.sh.
+cp "$OUT_DIR/server.crt" "$OUT_DIR/ca.crt"
+
+chmod 644 "$OUT_DIR/server.crt" "$OUT_DIR/ca.crt"
 chmod 600 "$OUT_DIR/server.key"
 
-echo "Wrote $OUT_DIR/server.crt and $OUT_DIR/server.key"
+echo "Wrote $OUT_DIR/server.crt, $OUT_DIR/server.key and $OUT_DIR/ca.crt"
 openssl x509 -in "$OUT_DIR/server.crt" -noout -subject -enddate -ext subjectAltName
 
 cat <<EOF
@@ -64,7 +73,7 @@ Next:
   1. Point the three DSNs at TLS (see backend/.env.example):
        DATABASE_URL=postgresql+asyncpg://USER:PASS@pgbouncer:6432/forge?sslmode=require
        MIGRATIONS_DATABASE_URL=postgresql+asyncpg://USER:PASS@postgres:5432/forge?sslmode=require
-       REDIS_URL=rediss://redis:6379/0?ssl_ca_certs=/certs/server.crt
+       REDIS_URL=rediss://redis:6379/0?ssl_ca_certs=/certs/ca.crt
   2. Bring the stack up with the TLS overlay:
        docker compose -f docker-compose.prod.yml -f docker-compose.tls.yml up -d
 

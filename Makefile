@@ -1,4 +1,4 @@
-.PHONY: dev test lint migrate migrate-plan gen-client seed pentest-accounts seed-load load-test prod-compose-check prod-compose-tls-check internal-certs new-module check-docs install-hooks down update-from-template check-template-drift observe
+.PHONY: dev test lint migrate migrate-plan gen-client seed pentest-accounts seed-load load-test prod-compose-check prod-compose-tls-check internal-certs rotate-internal-certs check-certs new-module check-docs install-hooks down update-from-template check-template-drift observe
 
 TEMPLATE_VERSION ?= main
 
@@ -116,13 +116,24 @@ prod-compose-check:
 internal-certs:
 	bash scripts/gen-internal-certs.sh ./certs
 
+# Replace the internal TLS material on a running stack. Trust widens before
+# the certificate changes and narrows after, so no hop ever presents something
+# its verifier does not already accept -- see the script's header.
+rotate-internal-certs:
+	bash scripts/rotate-internal-certs.sh
+
+# Days left on the internal material. Non-zero exit when anything is inside
+# WARN_DAYS (default 30) or already expired, so it works as a cron job.
+check-certs:
+	bash scripts/check-cert-expiry.sh
+
 # The prod stack as it would actually run outside dev: ENVIRONMENT=prod, so
 # every startup invariant is live, and TLS on all three container-to-container
 # hops. `prod-compose-check` above deliberately stays on ENVIRONMENT=dev to
 # isolate pgbouncer's pooling behaviour; this one proves the configuration a
 # self-hosted deployment really uses, which nothing did until now.
 prod-compose-tls-check: internal-certs
-	sed -e 's|^ENVIRONMENT=.*|ENVIRONMENT=prod|' 	    -e 's|^FORCE_HTTPS=.*|FORCE_HTTPS=true|' 	    -e 's|^VIRUS_SCANNER=.*|VIRUS_SCANNER=virustotal|' 	    -e 's|^PASSWORD_PEPPER=.*|PASSWORD_PEPPER=local-check-pepper|' 	    -e 's|^DATABASE_URL=.*|DATABASE_URL=postgresql+asyncpg://postgres:postgres@pgbouncer:6432/forge?sslmode=require|' 	    -e 's|^MIGRATIONS_DATABASE_URL=.*|MIGRATIONS_DATABASE_URL=postgresql+asyncpg://postgres:postgres@postgres:5432/forge?sslmode=require|' 	    -e 's|^REDIS_URL=.*|REDIS_URL=rediss://redis:6379/0?ssl_ca_certs=/certs/server.crt|' 	    backend/.env.prod-compose > backend/.env
+	sed -e 's|^ENVIRONMENT=.*|ENVIRONMENT=prod|' 	    -e 's|^FORCE_HTTPS=.*|FORCE_HTTPS=true|' 	    -e 's|^VIRUS_SCANNER=.*|VIRUS_SCANNER=virustotal|' 	    -e 's|^PASSWORD_PEPPER=.*|PASSWORD_PEPPER=local-check-pepper|' 	    -e 's|^DATABASE_URL=.*|DATABASE_URL=postgresql+asyncpg://postgres:postgres@pgbouncer:6432/forge?sslmode=require|' 	    -e 's|^MIGRATIONS_DATABASE_URL=.*|MIGRATIONS_DATABASE_URL=postgresql+asyncpg://postgres:postgres@postgres:5432/forge?sslmode=require|' 	    -e 's|^REDIS_URL=.*|REDIS_URL=rediss://redis:6379/0?ssl_ca_certs=/certs/ca.crt|' 	    backend/.env.prod-compose > backend/.env
 	sed 's/change-me/postgres/' .env.postgres.example > .env.postgres
 	sed 's/change-me/postgres/' .env.pgbouncer.example > .env.pgbouncer
 	cp .env.postgres-exporter.example .env.postgres-exporter
