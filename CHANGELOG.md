@@ -133,6 +133,31 @@ template keep their own changes in `CHANGELOG.product.md` (see
   `ServerSideEncryption: AES256`, and a presigned download returning the bytes.
 
 ### Fixed
+- **The built image could not render an email or resolve a translation.** The
+  image ships two copies of `app/` — one pip-installed under
+  `site-packages`, one `COPY`ed to `/app/app` — and which one imports depends
+  on the working directory, because a console script (`uvicorn`, `arq`) does
+  not put the cwd on `sys.path` the way `python -c` and pytest do. Both asset
+  paths were computed as `Path(__file__).parents[N]`, which lands on `/app`
+  under pytest and on `site-packages` in production. The `COPY`s put the
+  assets beside the *other* copy.
+
+  So every deployment built from this Dockerfile — the Render path included —
+  failed on the first email with `Cannot find module
+  '…/site-packages/email-templates/cli.js'`, and `t()` raised `KeyError` on
+  the first translated string it was asked for. Neither failed at startup:
+  `load_translations()` caches empty catalogs without complaint.
+
+  The Dockerfile now states both paths outright (`EMAIL_RENDERER_CLI`,
+  `LOCALES_DIR`) and the resolvers honour them, read per call rather than
+  bound at import. Verified by building the image and importing under
+  production's exact `sys.path` order: before, both paths resolved to
+  nonexistent directories and `t()` raised; after, both resolve and `t()`
+  returns the real string.
+
+  `tests/test_i18n_docker_context.py` asserted the `COPY` existed but never
+  that the running app could find what was copied — which is precisely the
+  gap. It now pins both halves.
 - **A production marketing build could link every call to action at
   `localhost`.** `src/lib/product.ts` builds app links from `PUBLIC_APP_URL`
   and falls back to `https://localhost` — correct for a dev build, silently
