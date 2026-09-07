@@ -133,6 +133,30 @@ template keep their own changes in `CHANGELOG.product.md` (see
   `ServerSideEncryption: AES256`, and a presigned download returning the bytes.
 
 ### Fixed
+- **The web app retried requests that could never succeed.** `main.tsx` built
+  its `QueryClient` with no options, so TanStack Query's default `retry: 3`
+  applied to every failure including 4xx. A plan-gated route — storage is
+  gated on `require_feature("storage_gb")`, and an org with no Subscription
+  row has no entitlements — answers 402, so the dashboard issued **four**
+  requests for `/api/v1/files` per mount and repeated them on every window
+  focus, filling the console and the access log with requests whose answer was
+  known before they were sent.
+
+  Retries now skip 4xx, except 408 (a timeout is a "try again" by definition)
+  and 429 (the server asked for a delay rather than refusing). Errors with no
+  status never reached the server at all — a network failure, which is the
+  case retries exist for — and are still retried. Mutations get the same
+  policy, and more strongly: a rejected mutation may have side effects and
+  somebody is waiting on the answer.
+
+  This needed a second fix to be possible at all. The generated client throws
+  the parsed error envelope and nothing else, so the status was gone by the
+  time any caller saw it — no retry predicate could have distinguished a 402
+  from a timeout. `attachHttpStatus` is an error interceptor, the one place
+  the Response and the thrown value both exist, and annotates the error with a
+  non-enumerable symbol so the envelope handed to render code and
+  `JSON.stringify` is unchanged. It handles `response` being undefined, which
+  the generated signature allows and which is exactly the network-error case.
 - **The built image could not render an email or resolve a translation.** The
   image ships two copies of `app/` — one pip-installed under
   `site-packages`, one `COPY`ed to `/app/app` — and which one imports depends
