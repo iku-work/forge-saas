@@ -37,7 +37,7 @@
  * deploy proves nothing. The build prints which way it decided (see
  * `robots.txt.ts`), so a deploy log always says.
  */
-export const PRODUCTION_ORIGIN = "https://example.com";
+export const PRODUCTION_ORIGIN = "https://mycalendar.party";
 
 /** Is this build the production site, and therefore allowed to be indexed? */
 export function isProductionSite(site: URL | undefined): boolean {
