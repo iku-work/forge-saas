@@ -133,6 +133,28 @@ template keep their own changes in `CHANGELOG.product.md` (see
   `ServerSideEncryption: AES256`, and a presigned download returning the bytes.
 
 ### Fixed
+- **A deploy could permanently lock a user out of their own notifications.**
+  SSE connection slots were plain Redis counters: `INCR` in the route handler,
+  `DECR` in the generator's `finally`. That `finally` does not run when the
+  process is killed — which is what a deploy is — so every restart with a
+  stream open left the count one higher, on a key with no expiry and no other
+  way down. Five of those and `_PER_USER_CONNECTION_LIMIT` rejected that user
+  forever; the client backed off correctly and reconnected into a wall, and
+  the only cure was flushing Redis by hand.
+
+  Slots are now sorted sets scored by when each connection last checked in,
+  with the existing 30-second ping doubling as the check-in. A slot is held
+  only while something keeps saying it is there, so one whose process is gone
+  is reclaimed after three missed pings. Two properties come free that a
+  counter could not have: releasing a slot releases *that* connection's slot
+  rather than an anonymous unit, so a double release can no longer take a slot
+  from whoever holds it next.
+
+  The old tests passed throughout because they acquired and released in one
+  process — the path that cannot leak. The new ones cover the path that does:
+  slots orphaned by a killed process are reclaimed, a live stream keeps its
+  place across the staleness window, and a double release leaves other
+  connections alone.
 - **The web app retried requests that could never succeed.** `main.tsx` built
   its `QueryClient` with no options, so TanStack Query's default `retry: 3`
   applied to every failure including 4xx. A plan-gated route — storage is
