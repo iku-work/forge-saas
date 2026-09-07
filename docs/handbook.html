@@ -1109,6 +1109,334 @@ make dev &amp;&amp; make test              # verify before pushing</code></pre>
         </table>
       </div>
 
+      <h3>Deploying to your own server</h3>
+      <p>
+        A worked example, start to finish: one VPS running the whole stack behind Caddy, on a
+        domain with Cloudflare DNS. This was written by doing it, so the traps in it are real
+        ones rather than anticipated ones. Roughly &euro;5&ndash;8 a month.
+      </p>
+
+      <div class="warn-box">
+        <span class="warn-label">Pick an x86 server, not ARM</span>
+        <p>
+          CI builds <code>linux/amd64</code> only &mdash; a plain <code>docker build</code>, no
+          buildx and no <code>--platform</code>. ARM instances are around half the price and
+          tempting, and the image will not run on them. Adding multi-arch to the build job is a
+          small change if you want that saving; make it <em>before</em> you provision.
+        </p>
+      </div>
+
+      <p>
+        <strong>4&nbsp;GB of RAM is enough</strong> provided the frontend is built somewhere else
+        &mdash; in CI, or in a container as below. The running stack is about 900&nbsp;MB
+        (Postgres, pgbouncer, Redis, MinIO, backend, worker, Caddy); it is
+        <code>pnpm build</code> that is memory-hungry, not serving.
+      </p>
+
+      <ol class="steps">
+        <li>
+          <h4>Point three DNS records at the box</h4>
+          <p>
+            Three hosts, because the app and the marketing site are separate origins and object
+            storage needs a public one of its own. Keep them <strong>DNS-only</strong> (grey cloud
+            in Cloudflare) for the first deploy: Caddy needs a clear path to Let's Encrypt, and a
+            proxy in front changes both the challenge and the client IP handling.
+          </p>
+          <div class="table-scroll">
+            <table>
+              <thead><tr><th>Record</th><th>Serves</th><th>Set by</th></tr></thead>
+              <tbody>
+                <tr><td><code>@</code></td><td>The marketing site</td><td><code>MARKETING_DOMAIN</code></td></tr>
+                <tr><td><code>app</code></td><td>The SPA <em>and</em> the API, one origin</td><td><code>DOMAIN</code></td></tr>
+                <tr><td><code>storage</code></td><td>MinIO, proxied by Caddy</td><td><code>STORAGE_DOMAIN</code></td></tr>
+              </tbody>
+            </table>
+          </div>
+          <p>
+            All three must resolve <em>before</em> the stack first starts. Caddy orders a
+            certificate per hostname at boot and backs off on failure, so a missing record costs
+            minutes of unavailability rather than a clean error.
+          </p>
+          <p>
+            The SPA and API sharing one origin is deliberate: no CORS, and the
+            <code>__Host-refresh_token</code> cookie needs no special handling. Splitting them
+            across two registrable domains breaks the session in a way that only shows up on the
+            second token refresh.
+          </p>
+        </li>
+
+        <li>
+          <h4>Prepare the machine</h4>
+          <div class="code">
+            <div class="code-head"><span>shell &mdash; as root</span><button class="copy" type="button">Copy</button></div>
+<pre><code>apt update &amp;&amp; apt upgrade -y &amp;&amp; apt install -y make git
+curl -fsSL https://get.docker.com | sh
+
+adduser --disabled-password --gecos "" forge
+usermod -aG docker forge
+mkdir -p /home/forge/.ssh &amp;&amp; cp ~/.ssh/authorized_keys /home/forge/.ssh/
+chown -R forge:forge /home/forge/.ssh &amp;&amp; chmod 700 /home/forge/.ssh
+
+# swap: cloud images ship with none, and the frontend build OOMs without it
+fallocate -l 2G /swapfile &amp;&amp; chmod 600 /swapfile
+mkswap /swapfile &amp;&amp; swapon /swapfile
+echo '/swapfile none swap sw 0 0' &gt;&gt; /etc/fstab</code></pre>
+          </div>
+          <p>
+            Open only <strong>22, 80 and 443</strong> inbound. Nothing else is published: the
+            backend, Postgres, Redis and MinIO are reachable only on the compose network. That is
+            what makes <code>TRUSTED_PROXY_IPS</code> and <code>METRICS_BLOCKED_AT_EDGE</code>
+            truthful rather than aspirational.
+          </p>
+          <p>Everything from here runs as <code>forge</code>, never root.</p>
+        </li>
+
+        <li>
+          <h4>Clone</h4>
+          <div class="code">
+            <div class="code-head"><span>shell</span><button class="copy" type="button">Copy</button></div>
+<pre><code>ssh-keygen -t ed25519 -f ~/.ssh/id_ed25519 -N "" -C "forge-prod-deploy"
+ssh-keyscan github.com &gt;&gt; ~/.ssh/known_hosts 2&gt;/dev/null
+cat ~/.ssh/id_ed25519.pub   # add as a read-only Deploy key on the repo
+
+git clone git@github.com:YOU/YOUR-REPO.git ~/forge &amp;&amp; cd ~/forge</code></pre>
+          </div>
+        </li>
+
+        <li>
+          <h4>Edit the one committed setting</h4>
+          <p>
+            <code>PRODUCTION_ORIGIN</code> in
+            <code>apps/marketing/src/config/indexing.ts</code> ships as
+            <code>https://example.com</code>. It is committed source, not configuration, because
+            indexing is opt-in &mdash; a fresh clone tells crawlers nothing until somebody states
+            where production is. Change it to your apex and push, <em>then</em> pull on the box.
+          </p>
+        </li>
+
+        <li>
+          <h4>Generate the configuration</h4>
+          <p>
+            Run this on the server so the secrets are created where they will be used and never
+            travel. Replace the three hostnames.
+          </p>
+          <div class="code">
+            <div class="code-head"><span>shell</span><button class="copy" type="button">Copy</button></div>
+<pre><code>cd ~/forge
+APEX=example.com          # your apex
+APP=app.$APEX
+STORAGE=storage.$APEX
+
+PGPASS="$(openssl rand -hex 24)"
+MINIOPASS="$(openssl rand -hex 24)"
+MINIOKMS="forge-prod:$(openssl rand -base64 32)"
+PEPPER="$(openssl rand -base64 36 | tr -d '=+/' | cut -c1-43)"
+FERNET="$(openssl rand -base64 32)"
+openssl genrsa -out /tmp/jwt.pem 2048 2&gt;/dev/null
+JWT_PRIV="$(cat /tmp/jwt.pem)"
+JWT_PUB="$(openssl rsa -in /tmp/jwt.pem -pubout 2&gt;/dev/null)"
+rm -f /tmp/jwt.pem
+
+cat &gt; .env.postgres &lt;&lt;EOF
+POSTGRES_USER=postgres
+POSTGRES_PASSWORD=$PGPASS
+POSTGRES_DB=forge
+EOF
+
+sed -e "s|^DATABASE_URL=.*|DATABASE_URL=postgres://postgres:$PGPASS@postgres:5432/forge|" \
+    -e "s|^PGPASSWORD=.*|PGPASSWORD=$PGPASS|" \
+    .env.pgbouncer.example &gt; .env.pgbouncer
+
+sed -e "s|^MINIO_ROOT_PASSWORD=.*|MINIO_ROOT_PASSWORD=$MINIOPASS|" \
+    -e "s|^MINIO_KMS_SECRET_KEY=.*|MINIO_KMS_SECRET_KEY=$MINIOKMS|" \
+    .env.minio.example &gt; .env.minio
+
+cat &gt; backend/.env &lt;&lt;EOF
+ENVIRONMENT=prod
+LOG_LEVEL=INFO
+FORCE_HTTPS=true
+
+DOMAIN=$APP
+MARKETING_DOMAIN=$APEX
+STORAGE_DOMAIN=$STORAGE
+FRONTEND_URL=https://$APP
+ALLOWED_ORIGINS=["https://$APP"]
+
+DATABASE_URL=postgresql+asyncpg://postgres:$PGPASS@pgbouncer:6432/forge?sslmode=require
+MIGRATIONS_DATABASE_URL=postgresql+asyncpg://postgres:$PGPASS@postgres:5432/forge?sslmode=require
+PGBOUNCER_ENABLED=true
+REDIS_URL=rediss://redis:6379/0?ssl_ca_certs=/certs/ca.crt
+
+TRUSTED_PROXY_IPS=10.0.0.0/8,172.16.0.0/12,192.168.0.0/16
+METRICS_BLOCKED_AT_EDGE=true
+
+JWT_PRIVATE_KEY="$JWT_PRIV"
+JWT_PUBLIC_KEY="$JWT_PUB"
+ENCRYPTION_KEY=$FERNET
+PASSWORD_PEPPER=$PEPPER
+
+STORAGE_BACKEND=minio
+AWS_BUCKET_NAME=forge
+AWS_REGION=us-east-1
+AWS_ACCESS_KEY_ID=forge
+AWS_SECRET_ACCESS_KEY=$MINIOPASS
+AWS_ENDPOINT_URL=https://$STORAGE
+
+VIRUS_SCANNER=virustotal
+VIRUSTOTAL_API_KEY=
+
+STRIPE_SECRET_KEY=sk_test_placeholder
+STRIPE_WEBHOOK_SECRET=whsec_placeholder
+
+RESEND_API_KEY=re_placeholder
+EMAIL_FROM_ADDRESS=YourProduct &lt;noreply@$APEX&gt;
+EMAIL_BACKEND=resend
+EOF
+
+chmod 600 backend/.env .env.postgres .env.pgbouncer .env.minio
+echo "BACK UP OFF THE BOX: $PEPPER / $FERNET / $MINIOKMS / $PGPASS"</code></pre>
+          </div>
+          <div class="warn-box">
+            <span class="warn-label">Three of those are unrecoverable</span>
+            <p>
+              Changing <code>PASSWORD_PEPPER</code> invalidates every password hash ever written.
+              Losing <code>ENCRYPTION_KEY</code> loses the encrypted columns. Losing
+              <code>MINIO_KMS_SECRET_KEY</code> loses every uploaded file. Put all three somewhere
+              off the machine before you continue.
+            </p>
+          </div>
+        </li>
+
+        <li>
+          <h4>Certificates for the internal hops</h4>
+          <div class="code">
+            <div class="code-head"><span>shell</span><button class="copy" type="button">Copy</button></div>
+<pre><code>bash scripts/gen-internal-certs.sh ./certs</code></pre>
+          </div>
+          <p>
+            Not the public certificate &mdash; Caddy gets that from Let's Encrypt on its own.
+            These encrypt the container-to-container hops, which the startup checks require
+            outside development. Rotate with <code>make rotate-internal-certs</code>, and put
+            <code>scripts/check-cert-expiry.sh</code> in cron: nothing renews these, and when they
+            lapse the public certificate is still perfectly healthy, so the obvious suspect is
+            innocent.
+          </p>
+        </li>
+
+        <li>
+          <h4>Build</h4>
+          <div class="code">
+            <div class="code-head"><span>shell</span><button class="copy" type="button">Copy</button></div>
+<pre><code>docker run --rm -v "$PWD":/repo -w /repo \
+  -e PUBLIC_SITE_URL=https://$APEX \
+  -e PUBLIC_APP_URL=https://$APP \
+  -e VITE_API_URL=https://$APP \
+  node:22-slim sh -c "corepack enable &amp;&amp; pnpm install --frozen-lockfile \
+    &amp;&amp; pnpm build &amp;&amp; chown -R $(id -u):$(id -g) /repo"
+
+docker compose -f docker-compose.prod.yml build backend</code></pre>
+          </div>
+          <p>
+            In a container so the host needs no Node, and as root inside it because
+            <code>corepack</code> requires that &mdash; ownership is handed back at the end. No
+            Python is needed: the generated API client is committed.
+          </p>
+          <p>
+            <strong>All three variables matter.</strong> <code>PUBLIC_SITE_URL</code> must equal
+            <code>PRODUCTION_ORIGIN</code> exactly or the site ships <code>Disallow: /</code>.
+            <code>PUBLIC_APP_URL</code> is every link into the app &mdash; Sign in, Register, the
+            pricing CTA &mdash; and without it they all point at <code>localhost</code> on a page
+            that otherwise looks perfect. That one shipped for real; a build gate now refuses it.
+          </p>
+        </li>
+
+        <li>
+          <h4>Migrate, then start</h4>
+          <div class="code">
+            <div class="code-head"><span>shell</span><button class="copy" type="button">Copy</button></div>
+<pre><code>C="docker compose -f docker-compose.prod.yml -f docker-compose.tls.yml"
+
+$C up -d postgres pgbouncer redis minio minio-init
+$C ps                       # wait for healthy, not merely running
+
+$C run --rm backend python -m app.core.migrations
+
+$C up -d backend worker caddy
+$C logs -f caddy            # watch three certificates be issued</code></pre>
+          </div>
+          <p>
+            <code>python -m app.core.migrations</code>, never <code>alembic upgrade head</code>:
+            each optional module branches off the core trunk with its own label, so there is no
+            single head and that command cannot succeed here.
+          </p>
+          <p>
+            pgbouncer reporting <em>healthy</em> is the first real signal &mdash; its healthcheck
+            opens a genuine pooled connection through to Postgres, so it means TLS on both hops is
+            working.
+          </p>
+        </li>
+
+        <li>
+          <h4>Verify by request</h4>
+          <div class="code">
+            <div class="code-head"><span>shell</span><button class="copy" type="button">Copy</button></div>
+<pre><code>for u in https://$APP/health/ready https://$APP/metrics \
+         https://$APP/settings/billing https://$APEX/en/ \
+         https://$STORAGE/ http://$APP/; do
+  printf '%-46s %s\n' "$u" "$(curl -s -o /dev/null -w '%{http_code}' "$u")"
+done</code></pre>
+          </div>
+          <div class="table-scroll">
+            <table>
+              <thead><tr><th>Check</th><th>Expect</th><th>What a wrong answer means</th></tr></thead>
+              <tbody>
+                <tr><td><code>/health/ready</code></td><td>200</td><td>503 is Postgres or Redis unreachable, not a dead process.</td></tr>
+                <tr><td><code>/metrics</code></td><td>404</td><td>200 means the edge is not refusing it and your metrics are public.</td></tr>
+                <tr><td><code>/settings/billing</code></td><td>200</td><td>404 means deep links are not reaching the SPA shell.</td></tr>
+                <tr><td>apex <code>/en/</code></td><td>200</td><td>The marketing site.</td></tr>
+                <tr><td>storage host</td><td>403</td><td>403 is correct &mdash; MinIO's AccessDenied proves it is reachable over TLS.</td></tr>
+                <tr><td>plain HTTP</td><td>301</td><td>Redirect to HTTPS.</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <p>
+            Then the parts curl cannot answer: register an account and confirm the email arrives,
+            log in and wait past the fifteen-minute access-token expiry to confirm the session
+            survives, and upload a file. Session problems only appear on the <em>second</em>
+            refresh.
+          </p>
+        </li>
+
+        <li>
+          <h4>Keep it running</h4>
+          <div class="code">
+            <div class="code-head"><span>shell</span><button class="copy" type="button">Copy</button></div>
+<pre><code># internal certificates expire and nothing renews them
+(crontab -l 2&gt;/dev/null; echo "0 6 * * * cd ~/forge &amp;&amp; bash scripts/check-cert-expiry.sh &gt;/dev/null") | crontab -
+
+# old images accumulate on every rebuild and fill the disk before your data does
+echo 'docker image prune -af --filter "until=168h"' | sudo tee /etc/cron.weekly/docker-prune
+sudo chmod +x /etc/cron.weekly/docker-prune</code></pre>
+          </div>
+          <p>
+            Turn on your provider's snapshots. Postgres and MinIO both live in Docker volumes on
+            that disk, so until you have something better, the snapshot <em>is</em> your recovery
+            story. <code>docs/runbooks/backup-restore.md</code> is the something better.
+          </p>
+        </li>
+      </ol>
+
+      <div class="note">
+        <span class="note-label">Three placeholders the stack boots with</span>
+        <p>
+          <code>RESEND_API_KEY</code> is the one that blocks real use: every authentication email
+          goes through the job queue, so without it nobody can complete a signup. An empty
+          <code>VIRUSTOTAL_API_KEY</code> makes uploads fail at the scan step, and placeholder
+          Stripe keys make billing endpoints fail. The app starts with all three &mdash; only the
+          first stops you having users.
+        </p>
+      </div>
+
       <h3>Deploying to a managed platform</h3>
       <p>
         <code>docs/runbooks/deploy-render.md</code> is the worked example. The shape is:
