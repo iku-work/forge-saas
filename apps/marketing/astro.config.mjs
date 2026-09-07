@@ -5,6 +5,7 @@ import tailwindcss from "@tailwindcss/vite";
 import { defineConfig } from "astro/config";
 
 import { caddySite } from "./scripts/caddy-site.mjs";
+import { checkAppLinks } from "./scripts/check-app-links.mjs";
 import { checkBudget } from "./scripts/check-budget.mjs";
 import { checkHreflang } from "./scripts/check-hreflang.mjs";
 import { indexing } from "./scripts/check-indexing.mjs";
@@ -88,6 +89,12 @@ export default defineConfig({
     // *different* page, so it is the only one that cannot be checked until
     // every page exists.
     checkHreflang(),
+    // Every link into the app is built from PUBLIC_APP_URL, which falls back
+    // to this repo's local Caddy host -- right for a dev build, silently wrong
+    // for a real one, and it takes every conversion path on the site with it.
+    // Shipped exactly that way on the first production deploy, so this reads
+    // the built markup rather than trusting the variable was set.
+    checkAppLinks(),
     // T-306. Not a metric -- a metric needs a browser, and that is the
     // Lighthouse job -- but the three things that reliably cost one: a
     // webfont that hides text while it loads, an image with no dimensions,

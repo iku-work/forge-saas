@@ -133,6 +133,24 @@ template keep their own changes in `CHANGELOG.product.md` (see
   `ServerSideEncryption: AES256`, and a presigned download returning the bytes.
 
 ### Fixed
+- **A production marketing build could link every call to action at
+  `localhost`.** `src/lib/product.ts` builds app links from `PUBLIC_APP_URL`
+  and falls back to `https://localhost` — correct for a dev build, silently
+  wrong for a real one, and `appLink()` is the header's Sign in, the hero's
+  Register and Log in, and the pricing CTA. Forget the variable at build time
+  and every conversion path points at the visitor's own machine, on a site
+  that otherwise looks perfect. Shipped exactly that way on this template's
+  first production deploy and was found by a human clicking Sign in.
+
+  `scripts/check-app-links.mjs` now fails any **production** build (the same
+  `isProductionSite()` that decides whether the site is indexable) whose built
+  markup contains a link to localhost. It reads the markup rather than
+  checking that the variable was set, for the reason `check-indexing.mjs`
+  gives for reading `noindex` out of `dist/`: the markup is what the visitor
+  actually clicks, so it also catches a hard-coded host in a component or a
+  stale absolute URL pasted into MDX. Attributes only, never text — a guide
+  showing `curl http://localhost:8000` is documentation, and flagging it would
+  make the gate something people switch off.
 - **`respond /metrics 404` was dead code in both Caddyfiles.** Caddy sorts
   `handle` ahead of `respond` in its default directive order, so once either
   file grew handle blocks the catch-all matched `/metrics` first and the

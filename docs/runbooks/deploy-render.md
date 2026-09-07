@@ -212,6 +212,13 @@ silently rather than loudly:
   what the production site block's `X-Robots-Tag` rule is written against, so
   every *other* host — staging, a preview deploy — is told `noindex` without
   anybody having to remember.
+- **`PUBLIC_APP_URL` must be set to the app's public origin**, or every link
+  into the app falls back to `https://localhost` — the header's Sign in, the
+  hero's Register and Log in, and the pricing CTA, i.e. every conversion path
+  on the site. It shipped that way on this template's first production deploy
+  and was found by a human clicking Sign in. `check-app-links.mjs` now fails
+  any production build whose markup links to localhost, so this cannot recur
+  silently.
 - The environment that builds the site must set `PUBLIC_SITE_URL` to exactly
   that origin. Any other value, including leaving it unset, is treated as a
   staging build: `robots.txt` disallows every crawler and offers no sitemap.
