@@ -154,9 +154,10 @@ async def _grant_storage_entitlement(
     session: AsyncSession, redis: Redis, org: Organization, actor_id: UUID
 ) -> None:
     # New orgs have no Subscription row (TenancyService.create_org doesn't
-    # create one) -- require_feature("storage_gb") then resolves the
-    # in-memory _FREE_PLAN (features={}), so presign.js's POST /files/presign
-    # would 403 with feature_unavailable on every request without this.
+    # create one), so they resolve to the in-memory _FREE_PLAN. That tier
+    # does grant storage_gb, but only 1GB with a 10MB per-file cap -- the
+    # load fixtures below push well past both, so presign.js's POST
+    # /files/presign would 402 on quota partway through a run without this.
     # Same admin-override mechanism app.core.seed_pentest.py already uses for
     # its own synthetic org, not a workaround specific to this script.
     if not is_enabled("billing"):

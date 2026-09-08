@@ -15,6 +15,7 @@ from app.core.module_loader import is_enabled
 from app.modules.auth.models import User
 from app.modules.auth.repository import UserRepository
 from app.modules.auth.utils import hash_password
+from app.modules.billing.dependencies import FREE_PLAN_FEATURES
 from app.modules.billing.models import Plan
 from app.modules.billing.repository import PlanRepository
 from app.modules.tenancy.repository import OrganizationRepository
@@ -77,7 +78,10 @@ async def seed(session: AsyncSession) -> None:
                 stripe_price_id_yearly="price_free_yearly",
                 price_monthly=0,
                 price_yearly=0,
-                features={"seats": 3, "storage_gb": 1, "api_calls": 1000},
+                # Same entitlements the in-memory free tier resolves to, so
+                # an admin plan override onto "free" lands an org exactly
+                # where a self-signup org already sits.
+                features=dict(FREE_PLAN_FEATURES),
             ),
         )
         await _ensure_plan(

@@ -5,9 +5,17 @@ org's Subscription row (kept in sync by Stripe webhooks -- see
 app.modules.billing.service.handle_event), not Organization.plan_id, which
 nothing in this codebase writes. An org with no Subscription row, or one
 whose Subscription has lapsed past the dunning grace period, resolves to
-_FREE_PLAN: an in-memory Plan with no entitlements, never persisted -- a
-literal "free" catalog row would need a real Stripe price for no reason,
-since nothing about the free tier is ever billed.
+_FREE_PLAN: an in-memory Plan carrying FREE_PLAN_FEATURES, never persisted
+-- a literal "free" catalog row would need a real Stripe price for no
+reason, since nothing about the free tier is ever billed.
+
+FREE_PLAN_FEATURES is the single source of truth for what the free tier
+grants, and is what app.core.seed seeds its "free" catalog row with too --
+that row exists only so an admin plan override (T-141) can name a slug,
+never for entitlement resolution, which always goes through _FREE_PLAN.
+The two must not drift: an empty free tier here silently 402s every
+storage route for self-signup orgs, since TenancyService.create_org
+deliberately creates no Subscription row.
 
 Same FastAPI-dependency-not-service-layer reasoning as app.core.dependencies
 (see that module's docstring): this goes straight to the repository layer
@@ -54,6 +62,22 @@ from app.modules.tenancy.models import Membership, Organization
 _GRACE_PERIOD = timedelta(days=7)
 _ENTITLED_STATUSES = frozenset({"active", "trialing"})
 
+# The free tier's entitlements. `storage_gb` is load-bearing beyond its
+# numeric quota: require_feature's boolean layer reads bool(features[flag]),
+# so dropping the key here (rather than setting it to 0) turns every
+# /files/... route into a 402 for free orgs, which is not the same product
+# decision as "1GB and no more".
+FREE_PLAN_FEATURES: dict[str, int] = {
+    "seats": 3,
+    "storage_gb": 1,
+    "api_calls": 1000,
+    "max_upload_mb": 10,
+}
+
+# Copied per Plan instance: _FREE_PLAN is a process-wide singleton handed to
+# every request that resolves to the free tier, so it must not share a
+# mutable dict with the seed's catalog row (or with a future caller that
+# edits what it is handed).
 _FREE_PLAN = Plan(
     name="Free",
     slug="free",
@@ -61,7 +85,7 @@ _FREE_PLAN = Plan(
     stripe_price_id_yearly="",
     price_monthly=0,
     price_yearly=0,
-    features={},
+    features=dict(FREE_PLAN_FEATURES),
 )
 
 
@@ -100,9 +124,7 @@ async def resolve_org_subscription(
         # non-entitled subscription: it costs one query on a cache miss and
         # keeps the cached payload independent of the (time-dependent)
         # entitlement decision above.
-        plan_row = (
-            await PlanRepository(session).get_by_id(row.plan_id) if row is not None else None
-        )
+        plan_row = await PlanRepository(session).get_by_id(row.plan_id) if row is not None else None
         return {
             "subscription": cache.dump(row) if row is not None else None,
             "plan": cache.dump(plan_row) if plan_row is not None else None,

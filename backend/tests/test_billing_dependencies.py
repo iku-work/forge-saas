@@ -46,7 +46,11 @@ from app.core.exceptions import PlanLimitError
 from app.core.modules import EnabledModules, ModuleConfig
 from app.models._mixins import utcnow
 from app.modules.auth.permissions import MemberRole
-from app.modules.billing.dependencies import get_current_org_subscription, require_feature
+from app.modules.billing.dependencies import (
+    FREE_PLAN_FEATURES,
+    get_current_org_subscription,
+    require_feature,
+)
 from app.modules.billing.models import Plan, Subscription
 from app.modules.feature_flags.repository import OrgFeatureFlagRepository
 from app.modules.tenancy.models import Membership, Organization, OrgFeatureFlag
@@ -150,7 +154,10 @@ async def test_no_subscription_resolves_to_free_plan(session: AsyncSession, redi
 
     assert org_sub.subscription is None
     assert org_sub.plan.slug == "free"
-    assert org_sub.plan.features == {}
+    assert org_sub.plan.features == FREE_PLAN_FEATURES
+    # Not the constant itself: _FREE_PLAN is a process-wide singleton, so a
+    # caller mutating what it resolved must not rewrite the free tier.
+    assert org_sub.plan.features is not FREE_PLAN_FEATURES
 
 
 async def test_active_subscription_resolves_to_its_plan(

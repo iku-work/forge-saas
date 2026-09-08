@@ -256,8 +256,9 @@ async def org(session: AsyncSession, owner: User, plan: Plan) -> Organization:
 
 @pytest.fixture
 async def free_org(session: AsyncSession, owner: User) -> Organization:
-    # No Subscription row -> resolves to the in-memory free plan, which has
-    # no `storage_gb` feature -- require_feature("storage_gb") denies it.
+    # No Subscription row -> resolves to the in-memory free plan, which does
+    # grant `storage_gb` (1GB, 10MB per file) -- the shape every self-signup
+    # org is in, since TenancyService.create_org creates no Subscription.
     organization = Organization(name="Freebie", slug=f"freebie-{uuid4().hex[:8]}")
     session.add(organization)
     await session.flush()
@@ -320,12 +321,24 @@ async def test_presign_member_without_files_manage_returns_403(
     assert response.status_code == 403
 
 
-async def test_presign_free_plan_returns_402(
+async def test_presign_free_plan_within_quota_is_allowed(
     client: httpx.AsyncClient, owner: User, free_org: Organization
 ) -> None:
+    # An org with no Subscription is still entitled to storage -- this is the
+    # avatar-upload path for every self-signup account, so a 402 here means
+    # the free tier has lost its storage_gb entitlement.
     response = await _presign(client, owner, free_org)
 
+    assert response.status_code == 200
+
+
+async def test_presign_free_plan_oversized_file_returns_402(
+    client: httpx.AsyncClient, owner: User, free_org: Organization
+) -> None:
+    response = await _presign(client, owner, free_org, size_bytes=20_000_000)
+
     assert response.status_code == 402
+    assert response.json()["error"]["code"] == "plan_limit_reached"
 
 
 async def test_presign_disallowed_content_type_returns_422(

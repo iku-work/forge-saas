@@ -1,7 +1,9 @@
 """
 HTTP layer for the file storage module (T-112): presign/confirm/list/download/
-delete. Every route is gated on require_feature("storage_gb") (denies free
-plans with no storage entitlement at all) on top of the usual FILES_READ/
+delete. Every route is gated on require_feature("storage_gb") (denies any plan
+without a storage entitlement, and any org whose storage_gb flag an admin has
+overridden off -- the free tier grants it, see
+billing.dependencies.FREE_PLAN_FEATURES) on top of the usual FILES_READ/
 FILES_MANAGE permission gate -- matches billing/router.py's own pattern of
 declaring get_current_org directly alongside require_permission when a route
 needs the resolved Organization/Membership themselves, not just a yes/no.
