@@ -146,6 +146,12 @@ class Settings(BaseSettings):
     # site block below is simply not imported. Same never-empty rule as
     # MARKETING_DOMAIN applies when it *is* in use.
     STORAGE_DOMAIN: str = "storage.localhost"
+    # The way out of app.core.storage_endpoint's boot refusal, for the
+    # deployment where the object store genuinely is at a public address --
+    # MinIO on a separate host, say. Off by default: the configuration it
+    # permits is the one that silently loses a fraction of uploads when a CDN
+    # sits in front of the domain.
+    ALLOW_PUBLIC_STORAGE_ENDPOINT: bool = False
     FRONTEND_URL: str = "http://localhost:5173"  # base URL for links in transactional emails
     # T-261: the custom URL scheme the mobile app registers (apps/mobile/app.json's
     # `expo.scheme`). Only the impersonation handoff deep link is built from it
