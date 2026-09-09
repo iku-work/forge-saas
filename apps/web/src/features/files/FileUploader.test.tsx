@@ -9,11 +9,23 @@ import type { StoredFilePublic } from "@forge/api-client";
 import { envelope, makeStoredFile } from "../../test/appShellFixtures";
 import { server } from "../../test/server";
 
-// Auto-succeed XHR PUTs (S3 presigned upload) -- jsdom has no real network
-// stack, and MSW v2 intercepts fetch but not raw XMLHttpRequest in jsdom.
-// Replace the global with a minimal stand-in that resolves onload in a
-// microtask so the upload promise can chain through to the confirm step.
+// Auto-succeed the S3 upload -- jsdom has no real network stack, and MSW v2
+// intercepts fetch but not raw XMLHttpRequest in jsdom. Replace the global
+// with a minimal stand-in that resolves onload in a microtask so the upload
+// promise can chain through to the confirm step.
+//
+// Every instance is recorded. A stand-in that accepts any method and any body
+// is why a real defect shipped: the component PUT the raw file at the bucket
+// root, ignoring the signed policy fields entirely, and MinIO answered 400 in
+// production while this suite stayed green. Asserting what was actually sent
+// is the point of keeping the handles.
+const xhrInstances: AutoSuccessXHR[] = [];
+
 class AutoSuccessXHR {
+  constructor() {
+    xhrInstances.push(this);
+  }
+
   readonly upload = { onprogress: null as ((e: ProgressEvent) => void) | null };
   status = 200;
   onload: (() => void) | null = null;
@@ -38,6 +50,7 @@ class AutoSuccessXHR {
 }
 
 beforeEach(() => {
+  xhrInstances.length = 0;
   vi.stubGlobal("XMLHttpRequest", AutoSuccessXHR);
 });
 
@@ -46,8 +59,16 @@ const storedFile: StoredFilePublic = makeStoredFile(1);
 
 const presignResponse = {
   file_id: storedFile.id,
-  upload_url: "https://s3.example.test/upload",
-  fields: {},
+  // The bucket root, with no object key in it -- what generate_presigned_post
+  // returns, and the reason the key has to travel as a field.
+  upload_url: "https://s3.example.test/forge",
+  fields: {
+    key: "files/test",
+    policy: "eyJleHBpcmF0aW9uIjoi",
+    "x-amz-signature": "deadbeef",
+    "Content-Type": "text/plain",
+    "x-amz-server-side-encryption": "AES256",
+  },
   key: "files/test",
   expires_at: "2026-12-31T00:00:00Z",
 };
@@ -121,6 +142,42 @@ describe("FileUploader", () => {
     await waitFor(() => {
       expect(onUploaded).toHaveBeenCalledWith(storedFile);
     });
+  });
+
+  it("POSTs the signed policy fields with the file last, not a raw PUT", async () => {
+    const onUploaded = vi.fn();
+    render(<FileUploader onUploaded={onUploaded} />);
+    const input = getFileInput();
+
+    const file = new File(["content"], "test.txt", { type: "text/plain" });
+    await userEvent.upload(input, file);
+    await waitFor(() => {
+      expect(onUploaded).toHaveBeenCalled();
+    });
+
+    // A runtime check rather than `!` or `as`, same as getFileInput above --
+    // the lint config rejects both assertion styles.
+    const xhr = xhrInstances[0];
+    if (!xhr) {
+      throw new Error("no XMLHttpRequest was created");
+    }
+    expect(xhr.open).toHaveBeenCalledWith("POST", presignResponse.upload_url);
+
+    // Content-Type must NOT be set by hand: the browser owns it here, because
+    // only it knows the multipart boundary it generated. Setting it strips
+    // the boundary and the upload arrives unparseable.
+    expect(xhr.setRequestHeader).not.toHaveBeenCalled();
+
+    const body = xhr.send.mock.calls[0]?.[0] as FormData;
+    expect(body).toBeInstanceOf(FormData);
+    for (const [name, value] of Object.entries(presignResponse.fields)) {
+      expect(body.get(name)).toBe(value);
+    }
+    // The file part goes last. S3 ignores anything after it, so a field
+    // appended afterwards is simply dropped from the signed set.
+    const names = [...body.keys()];
+    expect(names.at(-1)).toBe("file");
+    expect(body.get("file")).toBe(file);
   });
 
   it("shows an upload error when presign fails", async () => {
