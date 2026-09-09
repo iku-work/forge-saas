@@ -1,6 +1,6 @@
 /**
  * Mobile upload orchestration (T-115): picker (camera / library / document)
- * -> presign -> PUT -> confirm, the same three-step flow
+ * -> presign -> POST-policy upload -> confirm, the same three-step flow
  * packages/ui/src/components/FileUploader.tsx implements for web. Progress
  * comes from FileSystem.createUploadTask's callback -- the RN equivalent of
  * the XHR upload.onprogress event the web uploader uses, since RN has no
@@ -215,10 +215,30 @@ export function pickAndUpload(options: PickAndUploadOptions): UploadHandle {
     const task = createUploadTask(
       presigned.upload_url,
       asset.uri,
+      // An S3 POST-policy upload, not a PUT. The server signs a *policy*
+      // (backend/app/modules/storage/backends/s3.py calls
+      // generate_presigned_post), so `upload_url` is the bucket root with no
+      // object key in it and every signed value, the key included, travels as
+      // a form field. PUTting the binary at that URL writes to the bucket
+      // itself, which S3 and MinIO answer 400.
+      //
+      // No `headers` here on purpose. Both platforms set
+      // `multipart/form-data` with the boundary they generated, and on
+      // Android an explicit Content-Type is added to the request builder and
+      // wins over the body's -- stripping the boundary and making the upload
+      // unparseable. The object's own content type is already a signed field.
+      //
+      // S3 also requires the file part last. expo does that on both
+      // platforms: ios/NetworkingHelpers.swift's createMultipartBody writes
+      // every parameter before the file part, and Android's
+      // FileSystemModule.createRequestBody adds the parameters in a loop
+      // before addFormDataPart for the file.
       {
-        httpMethod: "PUT",
-        uploadType: FileSystemUploadType.BINARY_CONTENT,
-        headers: { "Content-Type": asset.mimeType },
+        httpMethod: "POST",
+        uploadType: FileSystemUploadType.MULTIPART,
+        fieldName: "file",
+        mimeType: asset.mimeType,
+        parameters: presigned.fields,
       },
       (data) => {
         if (data.totalBytesExpectedToSend > 0) {
