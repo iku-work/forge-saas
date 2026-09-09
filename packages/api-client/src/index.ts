@@ -1,5 +1,6 @@
 import { client } from "./generated/client.gen";
 import { authRetryInterceptor } from "./authInterceptor";
+import { attachHttpStatus } from "./httpStatus";
 import { orgIdRequestInterceptor } from "./orgInterceptor";
 
 export * from "./generated";
@@ -17,6 +18,7 @@ export {
 } from "./client";
 export { authRetryInterceptor, onSessionExpired } from "./authInterceptor";
 export { orgIdRequestInterceptor } from "./orgInterceptor";
+export { HTTP_STATUS, httpStatusOf, attachHttpStatus } from "./httpStatus";
 export * from "./admin";
 // Re-exported for consumers (apps/mobile/src/lib/api.ts) that need their own
 // Client instance instead of the singleton above -- that singleton is wired
@@ -30,4 +32,7 @@ export type { Client, Config } from "./generated/client";
 // back through client.ts (which client.gen.ts's own createClientConfig
 // depends on).
 client.interceptors.response.use(authRetryInterceptor);
+// The thrown value is the parsed error envelope, which carries no status --
+// this is the one place the Response is still in scope. See httpStatus.ts.
+client.interceptors.error.use(attachHttpStatus);
 client.interceptors.request.use(orgIdRequestInterceptor);

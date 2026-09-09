@@ -133,6 +133,61 @@ template keep their own changes in `CHANGELOG.product.md` (see
   `ServerSideEncryption: AES256`, and a presigned download returning the bytes.
 
 ### Fixed
+- **The SSE slot rewrite could not survive its own deploy.** The keys it
+  replaced were plain counters, and Redis answers `ZCARD` against a string
+  with `WRONGTYPE` — so shipping the sorted-set version over live keys broke
+  every stream request until somebody flushed Redis by hand. A change whose
+  entire purpose was surviving a deploy needed a manual Redis wipe to deploy.
+  The key names now carry a `:v2:` segment, so the old keys are simply never
+  read again and the upgrade is a non-event; the new keys carry a TTL, so this
+  scheme leaves nothing behind either. Pinned by a test that seeds the old
+  counter keys and acquires a slot over them.
+- **A deploy could permanently lock a user out of their own notifications.**
+  SSE connection slots were plain Redis counters: `INCR` in the route handler,
+  `DECR` in the generator's `finally`. That `finally` does not run when the
+  process is killed — which is what a deploy is — so every restart with a
+  stream open left the count one higher, on a key with no expiry and no other
+  way down. Five of those and `_PER_USER_CONNECTION_LIMIT` rejected that user
+  forever; the client backed off correctly and reconnected into a wall, and
+  the only cure was flushing Redis by hand.
+
+  Slots are now sorted sets scored by when each connection last checked in,
+  with the existing 30-second ping doubling as the check-in. A slot is held
+  only while something keeps saying it is there, so one whose process is gone
+  is reclaimed after three missed pings. Two properties come free that a
+  counter could not have: releasing a slot releases *that* connection's slot
+  rather than an anonymous unit, so a double release can no longer take a slot
+  from whoever holds it next.
+
+  The old tests passed throughout because they acquired and released in one
+  process — the path that cannot leak. The new ones cover the path that does:
+  slots orphaned by a killed process are reclaimed, a live stream keeps its
+  place across the staleness window, and a double release leaves other
+  connections alone.
+- **The web app retried requests that could never succeed.** `main.tsx` built
+  its `QueryClient` with no options, so TanStack Query's default `retry: 3`
+  applied to every failure including 4xx. A plan-gated route — storage is
+  gated on `require_feature("storage_gb")`, and an org with no Subscription
+  row has no entitlements — answers 402, so the dashboard issued **four**
+  requests for `/api/v1/files` per mount and repeated them on every window
+  focus, filling the console and the access log with requests whose answer was
+  known before they were sent.
+
+  Retries now skip 4xx, except 408 (a timeout is a "try again" by definition)
+  and 429 (the server asked for a delay rather than refusing). Errors with no
+  status never reached the server at all — a network failure, which is the
+  case retries exist for — and are still retried. Mutations get the same
+  policy, and more strongly: a rejected mutation may have side effects and
+  somebody is waiting on the answer.
+
+  This needed a second fix to be possible at all. The generated client throws
+  the parsed error envelope and nothing else, so the status was gone by the
+  time any caller saw it — no retry predicate could have distinguished a 402
+  from a timeout. `attachHttpStatus` is an error interceptor, the one place
+  the Response and the thrown value both exist, and annotates the error with a
+  non-enumerable symbol so the envelope handed to render code and
+  `JSON.stringify` is unchanged. It handles `response` being undefined, which
+  the generated signature allows and which is exactly the network-error case.
 - **The built image could not render an email or resolve a translation.** The
   image ships two copies of `app/` — one pip-installed under
   `site-packages`, one `COPY`ed to `/app/app` — and which one imports depends
