@@ -14,20 +14,11 @@ a single browser session can hold membership in several orgs at once.
 Concurrency, not request-rate, is what needs capping on a connection that
 stays open indefinitely, so neither this endpoint nor _event_stream go
 through app.middleware.rate_limit's slowapi decorators the way the REST
-endpoints below do. Instead two Redis sorted sets (per-user, and a global one
-bounded by settings.SSE_MAX_CONNECTIONS) gate *opening* a connection --
-checked before the StreamingResponse/generator is even constructed, so a
-rejection returns a normal envelope response rather than ever entering the
-stream.
-
-Sorted sets rather than counters, scored by when each connection last checked
-in, because a counter can only be corrected by the code that incremented it.
-Slots were previously incremented in the route handler and decremented in the
-generator's `finally`, which does not run when the process dies -- so every
-deploy with a stream open left a permanently elevated count on an unexpiring
-key, and five of those locked that user out of their own notifications with
-no cure but flushing Redis. Scoring by last-seen means an abandoned slot is
-reclaimed on its own; see _STALE_AFTER_SECONDS.
+endpoints below do. Instead two plain Redis counters (per-user, and a global
+one from settings.SSE_MAX_CONNECTIONS) gate *opening* a connection -- checked
+and incremented before the StreamingResponse/generator is even constructed,
+so a rejection returns a normal envelope response rather than ever entering
+the stream.
 
 Pinging on a per-message timeout (pubsub.get_message(..., timeout=30)
 returning None) rather than a separate clock task keeps the implementation
@@ -36,7 +27,6 @@ always produces a ": ping" keepalive comment, satisfying both halves of the
 spec's requirement with nothing extra to clean up on disconnect.
 """
 
-import time
 from collections.abc import AsyncGenerator
 from typing import Annotated
 from uuid import UUID, uuid4
@@ -81,27 +71,6 @@ _PING_INTERVAL_SECONDS = 30.0
 _PER_USER_CONNECTION_LIMIT = 5
 _TOTAL_CONNECTIONS_KEY = "notif:sse:conns:total"
 
-# How long a connection may go without checking in before its slot is
-# reclaimed. Three ping intervals: two may be missed to a slow network or a
-# paused event loop without a live stream losing its place.
-#
-# This exists because the previous design could not survive a restart. Slots
-# were plain counters incremented in the route handler and decremented in the
-# generator's `finally` -- so a process that died with a stream open left the
-# count permanently high, with nothing to bring it back down and no expiry on
-# the key. Five of those and that user could never open a stream again; the
-# only cure was flushing Redis by hand. It is not a rare event either: every
-# deploy kills the process with streams open, by definition.
-#
-# Sorted sets scored by last-seen fix that by construction. A slot is held
-# only while something keeps saying it is there, so a slot whose process is
-# gone is reclaimed after this long, and the count is a description of what is
-# connected rather than a tally of what once connected.
-_STALE_AFTER_SECONDS = _PING_INTERVAL_SECONDS * 3
-# Comfortably past _STALE_AFTER_SECONDS: pruning already handles correctness,
-# and this is only so an abandoned key does not sit in Redis forever.
-_KEY_TTL_SECONDS = int(_STALE_AFTER_SECONDS * 4)
-
 
 def _request_id(request: Request) -> str:
     return getattr(request.state, "request_id", None) or str(uuid4())
@@ -130,59 +99,31 @@ def _user_connections_key(user_id: UUID) -> str:
     return f"notif:sse:conns:{user_id}"
 
 
-def _total_member(user_id: UUID, connection_id: str) -> str:
-    return f"{user_id}:{connection_id}"
-
-
-async def _prune_stale(redis: Redis, user_id: UUID, now: float) -> None:
-    cutoff = now - _STALE_AFTER_SECONDS
-    await redis.zremrangebyscore(_user_connections_key(user_id), "-inf", cutoff)
-    await redis.zremrangebyscore(_TOTAL_CONNECTIONS_KEY, "-inf", cutoff)
-
-
-async def _acquire_connection_slot(redis: Redis, user_id: UUID, connection_id: str) -> None:
-    now = time.time()
-    await _prune_stale(redis, user_id, now)
-
-    if await redis.zcard(_user_connections_key(user_id)) >= _PER_USER_CONNECTION_LIMIT:
+async def _acquire_connection_slot(redis: Redis, user_id: UUID) -> None:
+    user_count = await redis.incr(_user_connections_key(user_id))
+    if user_count > _PER_USER_CONNECTION_LIMIT:
+        await redis.decr(_user_connections_key(user_id))
         raise RateLimitError(
             "errors.too_many_notification_streams",
             fallback="Too many open notification streams for this account",
         )
-    if await redis.zcard(_TOTAL_CONNECTIONS_KEY) >= get_settings().SSE_MAX_CONNECTIONS:
+
+    total_count = await redis.incr(_TOTAL_CONNECTIONS_KEY)
+    if total_count > get_settings().SSE_MAX_CONNECTIONS:
+        await redis.decr(_TOTAL_CONNECTIONS_KEY)
+        await redis.decr(_user_connections_key(user_id))
         raise RateLimitError(
             "errors.notification_stream_capacity_exceeded",
             fallback="Notification stream capacity exceeded, try again shortly",
         )
 
-    await _touch_connection_slot(redis, user_id, connection_id, now=now)
+
+async def _release_connection_slot(redis: Redis, user_id: UUID) -> None:
+    await redis.decr(_user_connections_key(user_id))
+    await redis.decr(_TOTAL_CONNECTIONS_KEY)
 
 
-async def _touch_connection_slot(
-    redis: Redis, user_id: UUID, connection_id: str, *, now: float | None = None
-) -> None:
-    """Records this connection as alive, as of now.
-
-    Called on every ping, which is what turns the sets below from a tally
-    that only ever grows into a picture of what is actually connected.
-    """
-    timestamp = time.time() if now is None else now
-    user_key = _user_connections_key(user_id)
-    await redis.zadd(user_key, {connection_id: timestamp})
-    await redis.zadd(_TOTAL_CONNECTIONS_KEY, {_total_member(user_id, connection_id): timestamp})
-    # So a user who never comes back stops costing a key at all. Refreshed on
-    # every ping, so it can only fire once every connection really is gone.
-    await redis.expire(user_key, _KEY_TTL_SECONDS)
-
-
-async def _release_connection_slot(redis: Redis, user_id: UUID, connection_id: str) -> None:
-    await redis.zrem(_user_connections_key(user_id), connection_id)
-    await redis.zrem(_TOTAL_CONNECTIONS_KEY, _total_member(user_id, connection_id))
-
-
-async def _event_stream(
-    redis: Redis, user_id: UUID, connection_id: str
-) -> AsyncGenerator[str, None]:
+async def _event_stream(redis: Redis, user_id: UUID) -> AsyncGenerator[str, None]:
     channel = f"{IN_APP_CHANNEL_PREFIX}{user_id}"
     pubsub = redis.pubsub()
     await pubsub.subscribe(channel)
@@ -199,12 +140,6 @@ async def _event_stream(
                 ignore_subscribe_messages=True, timeout=_PING_INTERVAL_SECONDS
             )
             if message is None:
-                # The ping doubles as the liveness check-in -- a stream that
-                # is still yielding to a client is a stream whose slot should
-                # not be reclaimed. Doing it here rather than on a timer means
-                # a wedged generator stops checking in, which is the whole
-                # point.
-                await _touch_connection_slot(redis, user_id, connection_id)
                 yield ": ping\n\n"
                 continue
             data = message["data"]
@@ -217,7 +152,7 @@ async def _event_stream(
         # dropped connection) -- the only way this stream ever ends.
         await pubsub.unsubscribe(channel)
         await pubsub.aclose()  # type: ignore[no-untyped-call]  # redis-py's PubSub.aclose ships with no return annotation
-        await _release_connection_slot(redis, user_id, connection_id)
+        await _release_connection_slot(redis, user_id)
 
 
 @router.get("/notifications/stream")
@@ -225,12 +160,9 @@ async def stream_notifications(
     user: Annotated[User, Depends(get_current_user)],
     redis: Annotated[Redis, Depends(get_redis)],
 ) -> StreamingResponse:
-    # Identifies this one stream in the sets above, so a slot belongs to a
-    # connection rather than to a number that anybody may decrement.
-    connection_id = str(uuid4())
-    await _acquire_connection_slot(redis, user.id, connection_id)
+    await _acquire_connection_slot(redis, user.id)
     return StreamingResponse(
-        _event_stream(redis, user.id, connection_id),
+        _event_stream(redis, user.id),
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )
