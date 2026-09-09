@@ -1,12 +1,29 @@
 name: CI
 
+# A bare `push:` alongside a bare `pull_request:` ran every commit on a PR
+# branch through the whole matrix TWICE -- measured over 2026-08-21..09-01:
+# 29 commits, 29 of them billed two identical ~90-minute runs. Restricting
+# `push` to main means a branch commit is covered once by `pull_request` and
+# main is covered once by `push`; nothing is covered twice. The tradeoff is
+# that a push to a branch with no open PR gets no CI, which is the point --
+# open the PR (draft is fine) when you want the matrix.
 on:
   push:
+    branches: [main]
   pull_request:
+
+# Three pushes in five minutes used to mean three full runs, and only the
+# last one's result was ever looked at. Superseded runs on a branch are
+# cancelled; main is never cancelled, because every commit that lands there
+# has to be verified on its own.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 jobs:
   lint:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
 
     # Read once here and consumed by `lighthouse` below as a job-level `if:`.
     # A job condition cannot run code, so the value has to come from a job
@@ -151,6 +168,7 @@ jobs:
   test:
     needs: lint
     runs-on: ubuntu-latest
+    timeout-minutes: 45
 
     # Same creds/DB-name baked into backend/.env.test, so that file can be
     # copied as-is to boot the live backend below — no per-step overrides.
@@ -369,7 +387,16 @@ jobs:
   # most likely to want and least likely to have been tested.
   module-matrix:
     needs: test
+    # 45 of the ~88 billed minutes a full CI run costs are these three legs,
+    # and what they check -- that the product still boots and builds under a
+    # different module configuration -- does not change commit to commit on a
+    # feature branch. So they run on what lands, not on every push toward it.
+    # `github.ref` is refs/pull/N/merge on a pull_request event, so this is
+    # true only for a push to main; label a PR `module-matrix` to opt one in
+    # when it touches product config, a module toggle, or a migration.
+    if: github.ref == 'refs/heads/main' || contains(github.event.pull_request.labels.*.name, 'module-matrix')
     runs-on: ubuntu-latest
+    timeout-minutes: 35
 
     name: module-matrix (${{ matrix.id }})
 
@@ -644,6 +671,7 @@ jobs:
   storybook:
     needs: lint
     runs-on: ubuntu-latest
+    timeout-minutes: 20
 
     # Hoisted out of the Chromatic step below because a *step-level* `if:`
     # cannot see the `secrets` context -- only `env` (among others). Reading
@@ -749,6 +777,7 @@ jobs:
     needs: lint
     if: needs.lint.outputs.marketing == 'true'
     runs-on: ubuntu-latest
+    timeout-minutes: 20
 
     steps:
       - uses: actions/checkout@v4
@@ -819,6 +848,7 @@ jobs:
   pgbouncer-prod-compose:
     needs: lint
     runs-on: ubuntu-latest
+    timeout-minutes: 20
 
     env:
       COMPOSE_PROJECT_NAME: forge-pgbouncer
@@ -935,6 +965,7 @@ jobs:
   prod-compose-tls:
     needs: lint
     runs-on: ubuntu-latest
+    timeout-minutes: 20
 
     env:
       COMPOSE_PROJECT_NAME: forge-tls
@@ -954,6 +985,7 @@ jobs:
   security:
     needs: lint
     runs-on: ubuntu-latest
+    timeout-minutes: 20
 
     steps:
       - uses: actions/checkout@v4
@@ -1118,6 +1150,7 @@ jobs:
   build:
     needs: [test, security]
     runs-on: ubuntu-latest
+    timeout-minutes: 30
 
     permissions:
       contents: read
@@ -1272,6 +1305,7 @@ jobs:
     # output the `lighthouse` job gates on.
     needs: [build, lint]
     runs-on: ubuntu-latest
+    timeout-minutes: 30
 
     # Fixes the compose network name (<project>_forge-net) so the ZAP
     # container below can join it by a known name regardless of what the
@@ -1392,6 +1426,7 @@ jobs:
   e2e-web:
     needs: build
     runs-on: ubuntu-latest
+    timeout-minutes: 40
 
     env:
       COMPOSE_PROJECT_NAME: forge-e2e
@@ -1576,6 +1611,7 @@ jobs:
     if: github.ref == 'refs/heads/main'
     needs: build
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     environment: production
 
     permissions:

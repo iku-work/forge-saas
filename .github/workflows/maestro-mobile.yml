@@ -14,14 +14,19 @@
 # it'll fail first.
 name: Maestro Mobile E2E
 
+# Schedule removed 2026-09-09. It had failed every night in the sample --
+# under a minute each time, on a runner billed at 10x -- so it was buying
+# noise, not coverage. The likely cause is the assumption in the header
+# above: GitHub's macos-14 image no longer ships Docker, so the compose
+# stack this needs cannot boot. Restore the `schedule:` block once a manual
+# `workflow_dispatch` run goes green.
 on:
-  schedule:
-    - cron: "0 4 * * *"
   workflow_dispatch:
 
 jobs:
   maestro-mobile:
     runs-on: macos-14
+    timeout-minutes: 45
 
     # Fixes the compose network/project name so container ports (backend,
     # MailHog) are predictable regardless of the checkout directory name --
