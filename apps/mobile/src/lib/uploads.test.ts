@@ -59,12 +59,25 @@ const DENIED = {
   canAskAgain: true,
 } as const;
 
+// A real POST policy. `upload_url` is the bucket root with no object key in
+// it -- that is what generate_presigned_post returns -- and the key travels
+// as a signed field. `fields: {}` was the previous fixture, and an empty
+// policy cannot tell an upload that forwards the fields from one that drops
+// them: the defect below shipped underneath it.
+const POLICY_FIELDS = {
+  key: "org/default/file-1/photo.jpg",
+  policy: "eyJleHBpcmF0aW9uIjoi",
+  "x-amz-signature": "deadbeef",
+  "Content-Type": "image/jpeg",
+  "x-amz-server-side-encryption": "AES256",
+};
+
 const PRESIGN_RESPONSE = {
   data: {
     data: {
       file_id: "file-1",
-      upload_url: "https://storage.example.com/upload",
-      fields: {},
+      upload_url: "https://storage.example.com/forge",
+      fields: POLICY_FIELDS,
       key: "org/default/file-1/photo.jpg",
       expires_at: "2026-01-01T00:00:00Z",
     },
@@ -114,7 +127,7 @@ describe("lib/uploads", () => {
     });
   });
 
-  it("runs presign -> PUT -> confirm for a camera capture", async () => {
+  it("runs presign -> POST-policy upload -> confirm for a camera capture", async () => {
     imagePicker.launchCameraAsync.mockResolvedValue({
       canceled: false,
       assets: [
@@ -141,10 +154,21 @@ describe("lib/uploads", () => {
         },
       }),
     );
+    // The exact options, not objectContaining: what this has to pin is as
+    // much what is absent as what is present. An explicit Content-Type header
+    // is added to the request builder on Android and wins over the multipart
+    // body's, stripping the boundary -- so `headers` being gone is the
+    // assertion, and objectContaining cannot make it.
     expect(fileSystem.createUploadTask).toHaveBeenCalledWith(
-      "https://storage.example.com/upload",
+      "https://storage.example.com/forge",
       "file://photo.jpg",
-      expect.objectContaining({ httpMethod: "PUT" }),
+      {
+        httpMethod: "POST",
+        uploadType: fileSystem.FileSystemUploadType.MULTIPART,
+        fieldName: "file",
+        mimeType: "image/jpeg",
+        parameters: POLICY_FIELDS,
+      },
       expect.any(Function),
     );
     expect(mocks.confirmUploadApiV1FilesFileIdConfirmPost).toHaveBeenCalledWith(
