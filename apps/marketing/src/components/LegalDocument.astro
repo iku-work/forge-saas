@@ -1,0 +1,89 @@
+---
+/**
+ * A legal document, rendered the same way whichever one it is (T-301).
+ *
+ * `/privacy` and `/terms` are two routes over one layout, so the shared part
+ * lives here and the pages are the two lines that differ. That also means the
+ * untranslated-document notice is written once -- a rule this important
+ * should not be able to be true on one page and forgotten on the other.
+ */
+import { localeMeta } from "@forge/i18n";
+import { render } from "astro:content";
+
+import BaseLayout from "../layouts/BaseLayout.astro";
+import { legalDocument, legalLocales } from "../lib/content";
+import { formatDate, isoDate, translator } from "../lib/i18n";
+import { defaultLocale } from "../lib/routing";
+
+interface Props {
+  locale: string;
+  /** The document's file name inside `src/content/legal/<locale>/`. */
+  slug: string;
+}
+
+const { locale, slug } = Astro.props;
+const t = translator(locale);
+
+const document = await legalDocument(locale, slug);
+if (!document) {
+  // Not a 404: a build that produced a site with a footer link to a privacy
+  // policy that does not exist has already failed, it just has not noticed.
+  throw new Error(
+    `apps/marketing: no legal document "${slug}" in src/content/legal/, in "${locale}" or in the default locale. ` +
+      `Every locale's footer links to it, so it cannot be optional.`,
+  );
+}
+
+const { entry, translated } = document;
+const { Content } = await render(entry);
+
+// When the document fell back, the prose is in the default locale while the
+// page around it is not -- so the body carries its own lang/dir. Without
+// this, English terms inside an `ar` page inherit dir="rtl" and render with
+// the punctuation in the wrong place, and a screen reader announces them in
+// the wrong voice.
+const contentLocale = translated ? locale : defaultLocale;
+const contentDir = localeMeta(contentLocale)?.dir ?? "ltr";
+
+// The locales this document was really written in -- not the ones it is
+// reachable in, which is all of them. A fallback copy is the same English
+// prose at a Finnish URL, so it is kept out of the index and out of the
+// hreflang cluster: annotating it `hreflang="fi"` is precisely the claim
+// T-305 exists to stop, and leaving six copies indexable is how one of them
+// outranks the original. <Seo> derives both from these two props.
+const translations = await legalLocales(slug);
+---
+
+<BaseLayout
+  title={entry.data.title}
+  description={entry.data.description}
+  locale={locale}
+  noindex={!translated}
+  alternateLocales={translations}
+>
+  <article class="mx-auto max-w-3xl px-6 py-16">
+    <h1 class="text-balance text-4xl font-semibold tracking-tight">{entry.data.title}</h1>
+    <p class="mt-4 text-sm text-muted-foreground">
+      <time datetime={isoDate(entry.data.effectiveDate)}>
+        {t("marketing.legal.effective_date", {
+          date: formatDate(entry.data.effectiveDate, locale),
+        })}
+      </time>
+    </p>
+
+    {
+      !translated && (
+        <p
+          class="mt-8 rounded-md border border-border bg-muted px-4 py-3 text-sm text-muted-foreground"
+          data-testid="legal-untranslated"
+        >
+          {t("marketing.legal.untranslated_notice")}
+        </p>
+      )
+    }
+
+    <div class="prose mt-10 max-w-none" lang={contentLocale} dir={contentDir}>
+      <Content />
+    </div>
+  </article>
+</BaseLayout>

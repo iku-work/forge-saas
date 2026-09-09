@@ -40,7 +40,8 @@
     "type_file_uploaded": "Un fichier est importé",
     "type_file_infected": "Un fichier que vous avez importé est signalé comme infecté",
     "channel_required": "obligatoire",
-    "required_note": "Nous vous informons toujours par e-mail des problèmes de paiement ; cela ne peut pas être désactivé, sinon vous perdriez l'accès sans avertissement."
+    "required_note": "Nous vous informons toujours par e-mail des problèmes de paiement ; cela ne peut pas être désactivé, sinon vous perdriez l'accès sans avertissement.",
+    "type_webhook_endpoint_disabled": "Un point de terminaison webhook est désactivé après des échecs répétés"
   },
   "types": {
     "member_invited": {
@@ -66,6 +67,10 @@
     "file_infected": {
       "title": "Un fichier que vous avez importé a été signalé comme infecté",
       "body": "{filename} a été supprimé après avoir échoué à l'analyse antivirus."
+    },
+    "webhook_endpoint_disabled": {
+      "title": "Point de terminaison webhook désactivé",
+      "body": "{url} a échoué trop de fois d'affilée et a été désactivé. Corrigez votre consommateur puis réactivez-le."
     }
   }
 }

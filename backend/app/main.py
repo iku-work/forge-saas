@@ -1,3 +1,4 @@
+import logging
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from typing import Annotated, Any
@@ -11,6 +12,7 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import (
     AsyncEngine,  # noqa: TC002 — evaluated at runtime as a local annotation below
 )
+from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
 
 from app.api.v1 import build_router
 from app.core.config import get_settings, validate_stripe_keys
@@ -90,6 +92,33 @@ app.add_middleware(
     # mutating request here sends.
     allow_headers=["Authorization", "Content-Type", "X-Org-ID"],
 )
+# Added last and therefore *outermost*: every middleware above, and every
+# `request.client.host` read below them (rate-limit keys, audit event IPs),
+# must already see the real caller rather than the proxy that forwarded it.
+# See Settings.TRUSTED_PROXY_IPS for what goes wrong when this is unset
+# behind a proxy, which is every deployment of this app.
+if settings.TRUSTED_PROXY_IPS:
+    if settings.TRUSTED_PROXY_IPS.strip() == "*":
+        # Not refused -- a proxy that *replaces* X-Forwarded-For rather than
+        # appending to it makes this safe, and only the operator knows which
+        # they have. But neither proxy this repo ships with is one of those.
+        logging.getLogger(__name__).warning(
+            'TRUSTED_PROXY_IPS="*" makes uvicorn take the leftmost X-Forwarded-For entry, '
+            "which the caller supplies. Unless your proxy replaces that header rather than "
+            "appending to it, anyone can choose their own rate-limit bucket and forge the "
+            "IP on their audit events. Prefer the proxy's actual addresses "
+            "(10.0.0.0/8,172.16.0.0/12,192.168.0.0/16 covers Render and docker-compose)."
+        )
+    app.add_middleware(
+        ProxyHeadersMiddleware,
+        trusted_hosts=[host.strip() for host in settings.TRUSTED_PROXY_IPS.split(",")],
+    )
+elif settings.ENVIRONMENT != "dev":
+    logging.getLogger(__name__).warning(
+        "TRUSTED_PROXY_IPS is unset outside dev: rate limits and audit-event IPs will "
+        "record the reverse proxy's address, not the caller's. Set it to the proxy's "
+        "address, or to '*' when nothing but the proxy can reach this port."
+    )
 app.include_router(build_router())
 init_metrics(app)
 configure_tracing(app, settings)

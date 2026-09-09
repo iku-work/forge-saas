@@ -112,6 +112,8 @@ describe("NotificationsSettingsPage", () => {
         weekly_summary: { email: true, in_app: false, push: false },
         file_uploaded: { email: false, in_app: true, push: false },
         file_infected: { email: true, in_app: true, push: true },
+        // T-321's outbound-webhook auto-disable notice.
+        webhook_endpoint_disabled: { email: true, in_app: true, push: false },
       },
     });
   });

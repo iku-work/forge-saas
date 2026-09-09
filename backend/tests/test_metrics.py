@@ -19,6 +19,7 @@ from prometheus_client import REGISTRY, CollectorRegistry
 from prometheus_fastapi_instrumentator import Instrumentator
 
 from app.core import metrics as metrics_module
+from app.core.config import get_settings
 from app.main import app
 
 
@@ -35,6 +36,10 @@ def test_metrics_endpoint_returns_prometheus_text_format() -> None:
     # Published to Redis by the key-rotation job's own process (T-245), read
     # back here -- same split as forge_active_sessions.
     assert "forge_reencrypt_remaining" in response.text
+    # T-321, same split again: the worker counts pending deliveries and
+    # publishes the number through Redis; this process is the one that has to
+    # answer for it.
+    assert "forge_webhook_queue_depth" in response.text
     assert "forge_stripe_webhook_seconds" in response.text
     assert "forge_emails_sent_total" in response.text
     assert "forge_push_sent_total" in response.text
@@ -76,6 +81,37 @@ def test_gauges_fail_closed_to_zero_when_redis_unreachable(monkeypatch: pytest.M
     assert metrics_module._read_arq_queue_depth() == 0.0
     assert metrics_module._read_active_sessions() == 0.0
     assert metrics_module._read_reencrypt_remaining() == 0.0
+    assert metrics_module._read_webhook_queue_depth() == 0.0
+
+
+class _PublishedRedis:
+    """A Redis that has exactly what a worker published, and nothing else."""
+
+    def __init__(self, values: dict[str, str]) -> None:
+        self._values = values
+
+    def get(self, key: str) -> bytes | None:
+        value = self._values.get(key)
+        return value.encode() if value is not None else None
+
+
+def test_the_webhook_queue_depth_gauge_reads_what_the_worker_published(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """T-321's "visible from the API process, not only inside the worker".
+
+    The count is a query only the worker makes; /metrics is served here. The
+    whole bridge is one Redis key, so this asserts the two halves agree on
+    which one -- a typo on either side would otherwise read as a permanently
+    empty panel.
+    """
+    monkeypatch.setattr(
+        metrics_module,
+        "_get_sync_redis",
+        lambda: _PublishedRedis({metrics_module.WEBHOOK_QUEUE_DEPTH_REDIS_KEY: "42"}),
+    )
+
+    assert metrics_module._read_webhook_queue_depth() == 42.0
 
 
 def test_route_templates_used_not_raw_paths_for_high_cardinality_labels() -> None:
@@ -123,3 +159,65 @@ def test_default_registry_has_no_duplicate_forge_metric_names() -> None:
         if sample.name.startswith("forge_") and sample.name.endswith(("_total", "_count"))
     ]
     assert len(samples) == len(set(samples))
+
+
+class TestMetricsToken:
+    """T-350 follow-up: /metrics no longer depends on an edge to be private.
+
+    The endpoint was registered unauthenticated, and `respond /metrics 404`
+    in the two Caddyfiles was the whole of its protection. That holds only
+    for deployments that put Caddy in front -- on a platform (Render, Fly,
+    Cloud Run) the app is the edge and this answered 200 to the internet.
+    """
+
+    def test_no_token_configured_leaves_the_endpoint_open(self) -> None:
+        """Unchanged behaviour for the compose stack and for dev.
+
+        Settings refuses to boot outside dev unless METRICS_BLOCKED_AT_EDGE
+        is set instead, so "open" here always means "something else is
+        refusing the route".
+        """
+        with TestClient(app) as client:
+            assert client.get("/metrics").status_code == 200
+
+    def test_configured_token_is_required(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        _set_metrics_token(monkeypatch, "a-scrape-token")
+
+        with TestClient(app) as client:
+            assert client.get("/metrics").status_code == 404
+
+    def test_wrong_token_is_refused(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        _set_metrics_token(monkeypatch, "a-scrape-token")
+
+        with TestClient(app) as client:
+            response = client.get("/metrics", headers={"Authorization": "Bearer wrong"})
+
+        # 404 rather than 401: an unauthenticated caller learns nothing about
+        # whether this deployment scrapes metrics at all.
+        assert response.status_code == 404
+
+    def test_correct_token_still_scrapes(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        _set_metrics_token(monkeypatch, "a-scrape-token")
+
+        with TestClient(app) as client:
+            response = client.get("/metrics", headers={"Authorization": "Bearer a-scrape-token"})
+
+        assert response.status_code == 200
+        assert "forge_db_pool_size" in response.text
+
+    def test_scheme_must_be_bearer(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        _set_metrics_token(monkeypatch, "a-scrape-token")
+
+        with TestClient(app) as client:
+            response = client.get("/metrics", headers={"Authorization": "Basic a-scrape-token"})
+
+        assert response.status_code == 404
+
+
+def _set_metrics_token(monkeypatch: pytest.MonkeyPatch, token: str) -> None:
+    """Swap METRICS_TOKEN on the cached Settings the dependency reads.
+
+    get_settings() is lru_cached and app.main resolved it at import time, so
+    setting an environment variable here would change nothing.
+    """
+    monkeypatch.setattr(get_settings(), "METRICS_TOKEN", token)

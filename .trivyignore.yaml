@@ -1,0 +1,79 @@
+# Trivy suppressions (T-350).
+#
+# Same rule as .zap/baseline.conf: every entry carries an owner, a date, and a
+# reason somebody can check. An undocumented ignore is not allowed, and neither
+# is an ignore added instead of reading the finding.
+#
+# `expired_at` is the point of using the YAML format rather than a bare
+# .trivyignore list: a suppression with no end date is a decision nobody
+# revisits. When one expires the scan goes red again and somebody has to look.
+#
+# Nothing *unfixed* belongs here. CI passes `--ignore-unfixed`, so a finding
+# with no fixed version -- metro's `image-size` is the standing example --
+# never reaches this file. Every entry below is therefore a vulnerability that
+# **has** a fix which this repo has a stated reason not to take.
+
+vulnerabilities:
+  # 2026-09-01 iku-work — expires 2026-12-01
+  #
+  # node-tar 6.2.1, reachable only through `@expo/cli>tar`, which
+  # pnpm-workspace.yaml pins to the 6.x line on purpose: @expo/cli@0.22.28's
+  # bundled tar.js does `_interopRequireDefault(require("tar")).default.extract`,
+  # and tar 7 sets `__esModule: true` while exporting no `default`. Verified
+  # against the installed 7.5.x: `.default` is `undefined`, so `expo prebuild`
+  # dies with "Cannot read properties of undefined (reading 'extract')".
+  #
+  # There is no fix on the 6.x line -- the advisory's only fixed version is
+  # 7.5.19 -- so the choice is this suppression or a broken native build. What
+  # is actually exposed: archive extraction during `expo prebuild`, on a
+  # developer's machine, over archives Expo itself fetched. Not a request path,
+  # and not something a user of the deployed product can reach.
+  #
+  # The real fix is a newer @expo/cli, whose own tar range has moved on. Revisit
+  # when the mobile app's Expo SDK is next upgraded; that is what the expiry is
+  # here to force.
+  - id: CVE-2026-59873
+    paths:
+      - "pnpm-lock.yaml"
+    statement: >-
+      node-tar 6.2.1 is pinned for @expo/cli's CJS interop (see
+      pnpm-workspace.yaml). Build-time archive extraction on a developer
+      machine; not reachable from the deployed product.
+    expired_at: 2026-12-01
+
+  # 2026-09-01 iku-work — expires 2026-12-01
+  #
+  # The second advisory against that same pinned node-tar 6.2.1, and the
+  # reason the entry above should be read as a *countdown* rather than a
+  # settled decision: 6.x is end-of-life, so this list grows every time
+  # somebody files against it. Enumerating CVEs one at a time is a treadmill.
+  # The fix that ends it is upgrading @expo/cli, whose own tar range has moved
+  # past 7; that is a mobile-toolchain change with its own testing, which is
+  # why it is not bundled into this task.
+  - id: CVE-2026-23745
+    paths:
+      - "pnpm-lock.yaml"
+    statement: >-
+      Same pinned node-tar 6.2.1 as CVE-2026-59873 above; same reasoning, same
+      expiry. Upgrading @expo/cli is what removes both.
+    expired_at: 2026-12-01
+
+  # 2026-09-01 iku-work — expires 2026-12-01
+  #
+  # The third against the same pin, added in the same afternoon as the first
+  # two. **If you are here to add a fourth, stop and do the real fix instead.**
+  #
+  # The real fix is upgrading `@expo/cli`, whose own tar range has moved past
+  # 7. Patching the installed one was considered and rejected on evidence: its
+  # two call sites use `extract({ onentry, strip, filter, cwd })`, and tar 7
+  # renamed `onentry` to `onReadEntry`, so the interop shim alone would leave
+  # the entry resolver silently not running during template extraction. That
+  # is a worse outcome than this suppression, and it is not verifiable without
+  # a mobile toolchain.
+  - id: CVE-2026-23950
+    paths:
+      - "pnpm-lock.yaml"
+    statement: >-
+      Same pinned node-tar 6.2.1 again. 6.x is end-of-life; the fix is an
+      @expo/cli upgrade, not another line in this file.
+    expired_at: 2026-12-01

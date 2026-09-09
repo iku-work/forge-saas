@@ -1,0 +1,30 @@
+---
+title: What is coming in the next release
+description: A draft, kept in the repository so the drafts mechanism has something to exercise. It renders in development and is absent from a production build.
+publishedAt: 2026-09-30
+author: The ForgeSaaS team
+tags:
+  - product
+draft: true
+---
+
+This post is a **draft**. It exists so that "drafts render in `astro dev` and
+are absent from a production build" is a claim the test suite can check against
+a real file rather than a fixture invented at test time.
+
+If you are reading this on a deployed site, something is wrong: the filter in
+`src/lib/content.ts` keys off `import.meta.env.PROD`, so a production build
+should never have generated this page at all. That is worth investigating
+before anything else.
+
+If you are reading it on `localhost:4321`, everything is working as intended —
+this is what an unfinished post looks like while you are writing it, badge and
+all.
+
+## Keep or replace
+
+A product using this template should replace this file with its own drafts, or
+delete it. What should *not* happen is that it quietly stays here forever: a
+draft dated in the future is exactly the sort of thing that becomes confusing
+six months later, when the date has passed and nobody remembers whether it was
+meant to be published.

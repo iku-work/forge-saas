@@ -1,0 +1,155 @@
+{
+  "nav": {
+    "skip_to_content": "Siirry sisältöön",
+    "primary_label": "Päänavigointi",
+    "sign_in": "Kirjaudu sisään",
+    "features": "Ominaisuudet",
+    "pricing": "Hinnoittelu",
+    "blog": "Blogi",
+    "guides": "Oppaat",
+    "home": "Etusivu",
+    "breadcrumb_label": "Murupolku",
+    "language": "Kieli"
+  },
+  "hero": {
+    "title": "Julkaise tuote, älä putkitusta",
+    "subtitle": "Tilit, tiimit, laskutus ja hallintakonsoli ovat jo valmiina ja testattuina. Aloita siitä, missä työ on kiinnostavaa.",
+    "cta_primary": "Aloita",
+    "cta_secondary": "Kirjaudu sisään"
+  },
+  "highlights": {
+    "heading": "Mistä aloitat",
+    "accounts_title": "Tilit ja tiimit",
+    "accounts_body": "Rekisteröityminen, istunnot, kaksivaiheinen tunnistautuminen, kutsut ja organisaatiokohtaiset roolit – eristettynä vuokralaisittain ensimmäisestä kyselystä alkaen.",
+    "billing_title": "Tilaukset, jotka täsmäävät",
+    "billing_body": "Paketit, kokeilujaksot, päivitykset ja maksumuistutukset sekä webhook-käsittely, joka pysyy oikeana silloinkin, kun sama tapahtuma saapuu kahdesti.",
+    "operations_title": "Ylläpidettävissä ensimmäisestä päivästä",
+    "operations_body": "Rakenteiset lokit, mittarit, auditointijäljet ja runbookit – ensimmäinen häiriötilanne on jotain, josta luetaan, ei jotain, jota arvaillaan."
+  },
+  "features": {
+    "title": "Ominaisuudet",
+    "subtitle": "Kaikki alla oleva on toteutettu, testattu ja kytkettävissä pois. Sammuta moduuli, ja sen reitit, taulut ja käyttöliittymä lähtevät mukana.",
+    "accounts_title": "Tunnistautuminen, joka on nähnyt tuotannon",
+    "accounts_body": "Kirjautuminen salasanalla ja OAuthilla, sähköpostin varmistus, istuntojen mitätöinti, palautuskoodit ja uudelleentunnistautuminen niihin toimiin, jotka sen ansaitsevat.",
+    "teams_title": "Organisaatiot ja roolit",
+    "teams_body": "Jäsenyys useassa organisaatiossa, kutsut, organisaatiokohtaiset oikeudet ja vuokralaiseristys, joka toteutetaan kyselykerroksessa eikä jokaisen päätepisteen muistin varassa.",
+    "billing_title": "Laskutus, joka kestää webhook-myrskyn",
+    "billing_body": "Stripe-kassa, asiakasportaali, pakettirajat, kokeilujaksot ja maksumuistutussarja – kaikki idempotentteja, koska sama tapahtuma saapuu kahdesti.",
+    "files_title": "Tiedostojen tallennus",
+    "files_body": "S3-yhteensopivat lataukset esiallekirjoitetuilla osoitteilla, tarkistettuina ja kokorajattuina, kytkettynä samaan oikeusmalliin kuin kaikki muukin.",
+    "i18n_title": "Kuusi kieltä, yksi lähde",
+    "i18n_body": "Tuote, sähköpostit ja tämä markkinointisivusto lukevat samoja käännöstiedostoja, joten termi ei voi tarkoittaa sovelluksessa yhtä ja hinnoittelusivulla toista.",
+    "operations_title": "Ylläpito, jota ei tarvitse keksiä",
+    "operations_body": "Rakenteinen lokitus, Prometheus-mittarit, auditointijäljet, varmuuskopio- ja avaintenvaihtorunbookit, kuormitustestit ja saavutettavuustarkistus putkessa."
+  },
+  "pricing": {
+    "title": "Hinnoittelu",
+    "subtitle": "Jokainen paketti sisältää koko alustan. Vaihtelee vain se, kuinka paljon sitä käytät.",
+    "period_label": "Laskutusjakso",
+    "monthly": "Kuukausittain",
+    "yearly": "Vuosittain",
+    "per_month": "kuukaudessa",
+    "per_year": "vuodessa",
+    "free": "Maksuton",
+    "yearly_saving": "Säästä {percent} %",
+    "cta": "Aloita paketilla {plan}",
+    "includes": "Sisältää",
+    "empty": "Paketteja ei ole vielä määritetty.",
+    "committed_notice": "Nämä hinnat julkaistiin sivuston mukana ja muuttuvat seuraavassa julkaisussa, eivät seuraavassa tietokantapäivityksessä.",
+    "feature_labels": {
+      "seats": "{count, number} tiimin jäsentä",
+      "storage_gb": "{count, number} Gt tallennustilaa",
+      "api_calls": "{count, number} API-kutsua kuukaudessa"
+    },
+    "feature_flags": {
+      "advanced_reports": "Edistyneet raportit",
+      "file_storage": "Tiedostojen tallennus"
+    },
+    "feature_unknown": "{name}: {value}"
+  },
+  "faq": {
+    "heading": "Usein kysyttyä",
+    "product": {
+      "starting_point": {
+        "question": "Onko tämä kehys vai lähtökohta?",
+        "answer": "Lähtökohta. Saat repositorion ja omistat siitä jokaisen rivin – moduulit ovat tavallista koodia, jota voit lukea, muuttaa tai poistaa, eikä mikään ota meihin yhteyttä ajon aikana."
+      },
+      "modules": {
+        "question": "Voinko poistaa osat, joita en tarvitse?",
+        "answer": "Kyllä. Jokainen valinnainen moduuli on yksi kytkin yhdessä asetustiedostossa, ja sen sammuttaminen vie mukanaan reitit, tietokantataulut ja käyttöliittymän – ei pelkkää valikkokohtaa, joka sinne johti."
+      },
+      "stack": {
+        "question": "Mille se on rakennettu?",
+        "answer": "FastAPI- ja PostgreSQL-taustapalvelu, React- ja TypeScript-verkkosovellus sekä yhteinen komponentti- ja käännöskerros, jota molemmat lukevat. Ei kääreitä, joita et voi avata."
+      },
+      "no_card": {
+        "question": "Tarvitsenko kortin aloittaakseni?",
+        "answer": "Et. Ilmainen taso ei kysy maksutietoja, ja kassan näet vasta kun valitset maksullisen tason."
+      }
+    },
+    "pricing": {
+      "change_plan": {
+        "question": "Voinko vaihtaa tasoa myöhemmin?",
+        "answer": "Milloin tahansa, laskutusportaalista. Korotus astuu voimaan heti, ja jo maksamasi hyvitetään suhteessa jäljellä olevaan aikaan."
+      },
+      "trial": {
+        "question": "Onko kokeilujaksoa?",
+        "answer": "Maksullisella tasolla voi olla kokeilujakso: saat koko tason käyttöösi, sinua ei veloiteta sen aikana, ja saat sähköpostin ennen sen päättymistä eikä vasta jälkeenpäin."
+      },
+      "payment": {
+        "question": "Miten maksaminen hoidetaan?",
+        "answer": "Stripen kautta. Kassa ja laskutusportaali ovat Stripen, joten korttitiedot eivät koskaan päädy palvelimillemme – meille palaa webhook."
+      },
+      "limits": {
+        "question": "Mitä tapahtuu, kun tason raja tulee vastaan?",
+        "answer": "Rajan ylittävä toiminto hylätään, ja viesti kertoo mihin rajaan törmättiin. Mitään ei poisteta eikä pudoteta hiljaisesti; tason korotus nostaa rajaa heti."
+      }
+    }
+  },
+  "blog": {
+    "title": "Blogi",
+    "subtitle": "Mitä muutimme, miksi ja mitä se maksoi.",
+    "empty": "Tällä kielellä ei ole vielä julkaistu mitään.",
+    "read_more": "Lue kirjoitus",
+    "published_on": "Julkaistu {date}",
+    "updated_on": "Päivitetty {date}",
+    "by_author": "kirjoittanut {author}",
+    "tags_label": "Aiheet",
+    "draft_badge": "Luonnos",
+    "back": "Kaikki kirjoitukset"
+  },
+  "guides": {
+    "title": "Oppaat",
+    "subtitle": "Miten tämä pyörii: asennus, määritykset ja ne päätökset, jotka kannattaa tehdä ajoissa.",
+    "empty": "Yhtään opasta ei ole vielä käännetty tälle kielelle."
+  },
+  "legal": {
+    "effective_date": "Voimassa {date} alkaen",
+    "untranslated_notice": "Tätä asiakirjaa ei ole vielä käännetty. Alla oleva teksti on alkuperäinen, ja se on sovellettava versio."
+  },
+  "not_found": {
+    "title": "Sivua ei ole olemassa",
+    "body": "Linkki voi olla vanhentunut tai sivu on siirretty. Muu sivusto on yhä tallella.",
+    "cta": "Takaisin etusivulle"
+  },
+  "redirect": {
+    "heading": "Valitse kielesi",
+    "body": "Sinut ohjataan omalle kielellesi. Jos mitään ei tapahdu, valitse kieli alta."
+  },
+  "footer": {
+    "support": "Ota yhteyttä tukeen",
+    "rights": "© {year} {name}. Kaikki oikeudet pidätetään.",
+    "product_heading": "Tuote",
+    "resources_heading": "Aineistot",
+    "legal_heading": "Lakiasiat",
+    "privacy": "Tietosuojaseloste",
+    "terms": "Käyttöehdot"
+  },
+  "consent": {
+    "region_label": "Evästesuostumus",
+    "body": "Haluaisimme mitata, miten tätä sivustoa käytetään. Se vaatii evästeitä, ja vain suostumuksellasi.",
+    "accept": "Hyväksy",
+    "decline": "Hylkää",
+    "manage": "Evästeasetukset"
+  }
+}

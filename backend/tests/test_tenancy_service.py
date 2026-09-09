@@ -42,8 +42,11 @@ from app.modules.tenancy.repository import (
     OrganizationRepository,
 )
 from app.modules.tenancy.service import _INVITATION_TTL_SECONDS, TenancyService, _slugify
+from tests._module_tables import with_module_hot_path_tables
 
-_TABLES = [
+# Wrapped rather than listed: an enabled optional module reaches for tables
+# this file has no other reason to know about. See tests/_module_tables.py.
+_TABLES = with_module_hot_path_tables(
     User.__table__,
     Plan.__table__,
     Organization.__table__,
@@ -51,7 +54,7 @@ _TABLES = [
     Invitation.__table__,
     AuditEvent.__table__,
     Notification.__table__,
-]
+)
 
 
 def _future(hours: int = 72) -> datetime:

@@ -40,7 +40,8 @@
     "type_file_uploaded": "Se sube un archivo",
     "type_file_infected": "Un archivo que subiste se marca como infectado",
     "channel_required": "obligatorio",
-    "required_note": "Siempre te avisamos por correo de los problemas de facturación, así que eso no se puede desactivar: perderías el acceso sin previo aviso."
+    "required_note": "Siempre te avisamos por correo de los problemas de facturación, así que eso no se puede desactivar: perderías el acceso sin previo aviso.",
+    "type_webhook_endpoint_disabled": "Un endpoint de webhook se desactiva tras fallos repetidos"
   },
   "types": {
     "member_invited": {
@@ -66,6 +67,10 @@
     "file_infected": {
       "title": "Un archivo que subiste fue marcado como infectado",
       "body": "{filename} se eliminó tras no superar el análisis antivirus."
+    },
+    "webhook_endpoint_disabled": {
+      "title": "Endpoint de webhook desactivado",
+      "body": "{url} falló demasiadas veces seguidas y se ha desactivado. Corrige tu consumidor y vuelve a activarlo."
     }
   }
 }

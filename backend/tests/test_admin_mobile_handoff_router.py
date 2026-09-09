@@ -36,6 +36,11 @@ from app.modules.auth.models import User
 from app.modules.auth.repository import UserRepository
 from app.modules.auth.utils import create_access_token, hash_password, verify_access_token
 
+# T-291: this file needs admin enabled -- its routes, its tables, or
+# both. CI's module-matrix job deselects it in the combination that turns
+# every optional module off.
+pytestmark = pytest.mark.module_dependent
+
 _PASSWORD = "Correct-Horse9"
 _REASON = "User reports the upload sheet crashes on iOS, ticket 8812"
 

@@ -15,8 +15,20 @@ node_modules/
 dist/
 .turbo/
 .next/
-packages/api-client/src/generated/
+# packages/api-client/src/generated/ and packages/api-client/openapi.json are
+# deliberately NOT ignored, though both are generated. They are the one
+# generated artefact whose producer is not a Node tool: `gen-client` shells
+# out to backend/scripts/dump_openapi.py, so it needs a Python 3.12 with the
+# whole backend installed. turbo's build task depends on gen-client, which
+# made `apps/web` unbuildable in any Node-only environment -- a Render Static
+# Site, a Vercel/Netlify build, a frontend-only contributor's checkout.
+# Committing them decouples the frontend build from the Python toolchain; CI's
+# `lint` job regenerates and fails on a diff, so they cannot go stale.
 packages/i18n/src/keys.ts
+
+# Astro (T-300) -- apps/marketing/.astro holds the route and content types
+# `astro sync` regenerates on every build and type-check.
+.astro/
 
 # i18n translator export (T-232) -- generated CSV/PO output, not checked in
 packages/i18n/i18n-export/
@@ -28,6 +40,17 @@ coverage/storybook/
 
 # Playwright (T-220)
 playwright-report/
+
+# Caddy site blocks for apps/marketing (T-307) -- written by that app's own
+# build from the dist/ it just produced (the CSP names each inline script by
+# hash, so only a generated copy can be right) and deleted again when
+# modules.marketing is false. The two directories themselves are committed,
+# with a .gitkeep each, because docker-compose bind-mounts them.
+apps/marketing/caddy/*/*.caddy
+
+# Lighthouse CI (T-306) -- collected runs and the HTML/JSON reports the
+# marketing budget job uploads as a build artifact.
+.lighthouseci/
 
 # Expo
 .expo/
@@ -45,6 +68,7 @@ web-build/
 .env.postgres
 .env.pgbouncer
 .env.postgres-exporter
+.env.minio
 
 # OS
 .DS_Store
@@ -62,3 +86,8 @@ zap-reports/
 # k6 load test (T-223) -- generated per-run JSON summaries, not the checked-in
 # tests/load/*.js or tests/load/RESULTS.md trend log
 tests/load/results/
+
+# Internal TLS material for docker-compose.tls.yml (scripts/gen-internal-certs.sh).
+# A private key: never committed, and never in a build context either -- see
+# .dockerignore. Regenerate per environment rather than sharing one.
+certs/

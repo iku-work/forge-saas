@@ -1,0 +1,19 @@
+<!DOCTYPE html>
+<!--
+  A page whose description contains the characters that are legal, unescaped,
+  inside a double-quoted attribute value. Only & and " have to be escaped
+  there, so this markup is correct -- and a checker that scans for a tag with
+  <meta[^>]*> ends the tag at the first > in the content, reads an
+  unterminated attribute, and fails the build over a description that is
+  fine. T-303's JSON-LD found that; this is what holds the fix in place.
+-->
+<html lang="en">
+  <head>
+    <title>Ending a tag early</title>
+    <meta name="description" content="Faster than the alternative -> by a lot, and <em>emphatically</em> so." />
+    <link rel="canonical" href="https://forge.example/angle-brackets/" />
+  </head>
+  <body>
+    <p>Body.</p>
+  </body>
+</html>

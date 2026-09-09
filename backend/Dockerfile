@@ -64,6 +64,16 @@ RUN groupadd --system app \
 
 WORKDIR /app
 
+# Both assets are resolved relative to the *imported* `app` package, and the
+# image has two copies of it: this pip-installed one, and the ./app COPY
+# below. Which wins depends on the working directory, because a console
+# script (`uvicorn`, `arq`) does not put the cwd on sys.path -- so production
+# imports from site-packages while a shell imports from /app. These two
+# variables end the guessing by naming the paths the COPYs below actually
+# use. Without them the image passes every test and cannot render an email or
+# resolve a translation once deployed.
+ENV EMAIL_RENDERER_CLI=/app/email-templates/cli.js     LOCALES_DIR=/app/locales
+
 COPY --from=builder /install /install
 COPY backend/app ./app
 COPY backend/product ./product

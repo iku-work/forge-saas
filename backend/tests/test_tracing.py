@@ -59,6 +59,7 @@ def _settings(**overrides: Any) -> Settings:  # noqa: ANN401 -- forwarded straig
         "PASSWORD_PEPPER": "a-real-pepper",
         "DATABASE_URL": "postgresql+asyncpg://u:p@localhost:5432/db?sslmode=require",
         "REDIS_URL": "rediss://localhost:6379/0",
+        "METRICS_BLOCKED_AT_EDGE": True,
     }
     return Settings(
         _env_file=FIXTURE_ENV_FILE,

@@ -1,0 +1,62 @@
+---
+/**
+ * One `<script type="application/ld+json">` block, serialised safely (T-303).
+ *
+ * The two traps this component exists to handle once, so that no caller has
+ * to think about either:
+ *
+ * **Breaking out of the block.** A `<script>` is a raw-text element, so a
+ * payload containing `</script>` ends it early and spills the rest of the
+ * JSON into the document as markup. `serialiseJsonLd` rewrites every
+ * left angle bracket in the payload as its JSON unicode escape, which closes
+ * that hole and every variant of it -- see the comment on that function.
+ *
+ * **CSP.** T-307 gives marketing its own, simpler header, and this block does
+ * not need an exception in it: a `<script>` whose `type` is not a JavaScript
+ * MIME type is a *data block* in the HTML spec -- the browser never prepares
+ * or executes it -- so `script-src` does not gate it and no nonce or hash is
+ * required. (The plan's note that it "is still a script element and is
+ * subject to script-src" is the widely-believed version; browsers do not
+ * behave that way, and the "Done when: no CSP violation" box is checked by
+ * loading a page with the T-307 header on and watching the console stay
+ * quiet.) What *would* break these blocks is a CSP that forbade inline
+ * markup wholesale, so T-307's header must not do that.
+ *
+ * `is:inline` keeps Astro's script pipeline out of it. Astro bundles
+ * `<script>` contents by default; a JSON-LD payload is not JavaScript, and
+ * being hashed into `_astro/` would take it out of the document a crawler
+ * reads. `set:html` is what stops Astro HTML-escaping the payload it was
+ * just handed -- the escaping that matters here has already happened, in
+ * exactly one place.
+ *
+ * (A note on the wording above, which is otherwise inexplicable: a lone left
+ * angle bracket anywhere in a .astro frontmatter comment stops Astro binding
+ * the file's `Props` interface. `Astro.props` silently becomes an untyped
+ * record and `astro check` reports Props as declared-but-never-used, three
+ * screens away from the comment that caused it. Spell the character out.)
+ */
+import { serialiseJsonLd, type SchemaNode } from "../lib/structured-data";
+
+interface Props {
+  /**
+   * One node or several. Several are emitted as a JSON array in a single
+   * block, which is how a page carries (say) a Product per plan without one
+   * script element per plan.
+   */
+  schema: SchemaNode | SchemaNode[];
+}
+
+const { schema } = Astro.props;
+const nodes = Array.isArray(schema) ? schema : [schema];
+// A single node is emitted as an object rather than a one-element array.
+// Both are valid JSON-LD and every parser reads both, but the object is what
+// every example in Google's documentation looks like, and a validator's
+// error message is easier to follow when the shape matches theirs.
+const payload = nodes.length === 1 ? nodes[0] : nodes;
+---
+
+{
+  payload !== undefined && (
+    <script type="application/ld+json" is:inline set:html={serialiseJsonLd(payload)} />
+  )
+}

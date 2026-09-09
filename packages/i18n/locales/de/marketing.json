@@ -1,0 +1,163 @@
+{
+  "nav": {
+    "skip_to_content": "Zum Inhalt springen",
+    "primary_label": "Hauptnavigation",
+    "sign_in": "Anmelden",
+    "features": "Funktionen",
+    "pricing": "Preise",
+    "blog": "Blog",
+    "guides": "Anleitungen",
+    "home": "Startseite",
+    "breadcrumb_label": "Navigationspfad",
+    "language": "Sprache"
+  },
+  "hero": {
+    "title": "Bauen Sie das Produkt, nicht das Fundament",
+    "subtitle": "Konten, Teams, Abrechnung und eine Admin-Konsole sind bereits gebaut und getestet. Fangen Sie dort an, wo die interessante Arbeit beginnt.",
+    "cta_primary": "Loslegen",
+    "cta_secondary": "Anmelden"
+  },
+  "highlights": {
+    "heading": "Womit Sie starten",
+    "accounts_title": "Konten und Teams",
+    "accounts_body": "Registrierung, Sitzungen, Zwei-Faktor-Authentifizierung, Einladungen und Rollen pro Organisation – ab der ersten Abfrage nach Mandanten getrennt.",
+    "billing_title": "Abonnements, die aufgehen",
+    "billing_body": "Tarife, Testphasen, Upgrades und Mahnläufe – samt Webhook-Verarbeitung, die auch beim doppelten Eintreffen desselben Ereignisses korrekt bleibt.",
+    "operations_title": "Vom ersten Tag an betreibbar",
+    "operations_body": "Strukturierte Logs, Metriken, Audit-Protokolle und Runbooks – damit der erste Vorfall etwas zum Nachlesen ist und nicht zum Raten."
+  },
+  "features": {
+    "title": "Funktionen",
+    "subtitle": "Alles hier ist implementiert, getestet und abschaltbar. Deaktivieren Sie ein Modul, und seine Routen, seine Tabellen und seine Oberfläche verschwinden mit.",
+    "accounts_title": "Authentifizierung, die den Produktivbetrieb kennt",
+    "accounts_body": "Anmeldung per Passwort oder OAuth, E-Mail-Bestätigung, Sitzungswiderruf, Wiederherstellungscodes und erneute Authentifizierung für die Aktionen, die es verdienen.",
+    "teams_title": "Organisationen und Rollen",
+    "teams_body": "Mitgliedschaft in mehreren Organisationen, Einladungen, Berechtigungen pro Organisation und Mandantentrennung, die in der Abfrageschicht durchgesetzt wird, statt sich von jedem Endpunkt gemerkt zu werden.",
+    "billing_title": "Abrechnung, die einen Webhook-Sturm übersteht",
+    "billing_body": "Stripe-Checkout, Kundenportal, Tarifgrenzen, Testphasen und ein Mahnlauf – alles idempotent, denn dasselbe Ereignis wird zweimal eintreffen.",
+    "files_title": "Dateispeicher",
+    "files_body": "S3-kompatible Uploads mit signierten URLs, geprüft und größenbegrenzt, angebunden an dasselbe Berechtigungsmodell wie alles andere.",
+    "i18n_title": "Sechs Sprachen, eine Quelle",
+    "i18n_body": "Das Produkt, die E-Mails und diese Marketing-Website lesen dieselben Übersetzungsdateien – ein Begriff kann in der Anwendung nicht das eine und auf der Preisseite das andere bedeuten.",
+    "operations_title": "Betrieb, den Sie nicht erfinden müssen",
+    "operations_body": "Strukturiertes Logging, Prometheus-Metriken, Audit-Protokolle, Runbooks für Backups und Schlüsselrotation, Lasttests und eine Barrierefreiheitsprüfung in der Pipeline."
+  },
+  "pricing": {
+    "title": "Preise",
+    "subtitle": "Jeder Tarif enthält die gesamte Plattform. Was sich ändert, ist, wie viel davon Sie nutzen.",
+    "period_label": "Abrechnungszeitraum",
+    "monthly": "Monatlich",
+    "yearly": "Jährlich",
+    "per_month": "pro Monat",
+    "per_year": "pro Jahr",
+    "free": "Kostenlos",
+    "yearly_saving": "{percent} % sparen",
+    "cta": "Mit {plan} starten",
+    "includes": "Enthält",
+    "empty": "Es sind noch keine Tarife konfiguriert.",
+    "committed_notice": "Diese Preise wurden mit der Website veröffentlicht und ändern sich beim nächsten Deployment, nicht beim nächsten Datenbank-Update.",
+    "feature_labels": {
+      "seats": "{count, number} Teammitglieder",
+      "storage_gb": "{count, number} GB Speicher",
+      "api_calls": "{count, number} API-Aufrufe pro Monat"
+    },
+    "feature_flags": {
+      "advanced_reports": "Erweiterte Auswertungen",
+      "file_storage": "Dateispeicher"
+    },
+    "feature_unknown": "{name}: {value}"
+  },
+  "faq": {
+    "heading": "Häufige Fragen",
+    "product": {
+      "starting_point": {
+        "question": "Ist das ein Framework oder ein Ausgangspunkt?",
+        "answer": "Ein Ausgangspunkt. Sie bekommen das Repository und besitzen jede Zeile darin – die Module sind ganz normaler Code, den Sie lesen, ändern oder löschen können, und zur Laufzeit meldet sich nichts bei uns."
+      },
+      "modules": {
+        "question": "Kann ich weglassen, was ich nicht brauche?",
+        "answer": "Ja. Jedes optionale Modul ist ein Schalter in einer einzigen Konfigurationsdatei, und ihn umzulegen entfernt die Routen, die Datenbanktabellen und die Oberfläche – nicht nur den Menüeintrag, der dorthin führte."
+      },
+      "stack": {
+        "question": "Worauf ist es gebaut?",
+        "answer": "Ein Backend aus FastAPI und PostgreSQL, eine Web-App aus React und TypeScript und eine gemeinsame Komponenten- und Übersetzungsschicht, aus der beide lesen. Keine Verpackung, die Sie nicht öffnen können."
+      },
+      "no_card": {
+        "question": "Brauche ich zum Start eine Kreditkarte?",
+        "answer": "Nein. Der kostenlose Tarif verlangt keine Zahlungsdaten, und eine Kasse sehen Sie erst, wenn Sie einen bezahlten Tarif wählen."
+      }
+    },
+    "pricing": {
+      "change_plan": {
+        "question": "Kann ich den Tarif später wechseln?",
+        "answer": "Jederzeit, über das Abrechnungsportal. Ein Upgrade gilt sofort, und was Sie bereits bezahlt haben, wird anteilig angerechnet."
+      },
+      "trial": {
+        "question": "Gibt es eine Testphase?",
+        "answer": "Ein bezahlter Tarif kann eine Testphase haben: Sie bekommen den vollen Tarif, werden währenddessen nicht belastet und erhalten eine E-Mail, bevor sie endet – nicht danach."
+      },
+      "payment": {
+        "question": "Wie läuft die Bezahlung?",
+        "answer": "Über Stripe. Kasse und Abrechnungsportal gehören Stripe, deshalb erreichen Kartendaten unsere Server nie – zurück kommt bei uns ein Webhook."
+      },
+      "limits": {
+        "question": "Was passiert, wenn ich ein Tariflimit erreiche?",
+        "answer": "Die Aktion, die es überschreiten würde, wird abgelehnt, und die Meldung benennt das erreichte Limit. Nichts wird gelöscht und nichts stillschweigend verworfen; ein Upgrade hebt das Limit sofort an."
+      }
+    }
+  },
+  "blog": {
+    "title": "Blog",
+    "subtitle": "Was wir geändert haben, warum, und was es gekostet hat.",
+    "empty": "In dieser Sprache wurde noch nichts veröffentlicht.",
+    "read_more": "Beitrag lesen",
+    "published_on": "Veröffentlicht am {date}",
+    "updated_on": "Aktualisiert am {date}",
+    "by_author": "von {author}",
+    "tags_label": "Schlagwörter",
+    "draft_badge": "Entwurf",
+    "back": "Alle Beiträge"
+  },
+  "guides": {
+    "title": "Anleitungen",
+    "subtitle": "Wie Sie das Ganze betreiben: Einrichtung, Konfiguration und die Entscheidungen, die sich früh lohnen.",
+    "empty": "In diese Sprache wurden noch keine Anleitungen übersetzt."
+  },
+  "legal": {
+    "effective_date": "Gültig ab {date}",
+    "untranslated_notice": "Dieses Dokument ist noch nicht übersetzt. Der folgende Text ist das Original und die maßgebliche Fassung."
+  },
+  "not_found": {
+    "title": "Diese Seite gibt es nicht",
+    "body": "Der Link ist vielleicht veraltet, oder die Seite ist umgezogen. Der Rest der Website ist noch da.",
+    "cta": "Zurück zur Startseite"
+  },
+  "redirect": {
+    "heading": "Wählen Sie Ihre Sprache",
+    "body": "Sie werden in Ihre eigene Sprache weitergeleitet. Falls nichts geschieht, wählen Sie unten eine aus."
+  },
+  "footer": {
+    "support": "Support kontaktieren",
+    "rights": "© {year} {name}. Alle Rechte vorbehalten.",
+    "product_heading": "Produkt",
+    "resources_heading": "Ressourcen",
+    "legal_heading": "Rechtliches",
+    "privacy": "Datenschutzerklärung",
+    "terms": "Nutzungsbedingungen"
+  },
+  "consent": {
+    "region_label": "Cookie-Einwilligung",
+    "body": "Wir würden gern messen, wie diese Website genutzt wird. Dafür sind Cookies nötig – und nur mit Ihrer Zustimmung.",
+    "accept": "Zustimmen",
+    "decline": "Ablehnen",
+    "manage": "Cookie-Einstellungen"
+  },
+  "api": {
+    "title": "API-Referenz",
+    "description": "Alles, was ein API-Schlüssel aufrufen kann – erzeugt aus dem laufenden Dienst, nicht von Hand geschrieben.",
+    "version": "Vertragsversion {version}",
+    "endpoints_title": "Endpunkte",
+    "endpoints_empty": "Dieses Deployment veröffentlicht keine öffentlichen Endpunkte.",
+    "scope_required": "Erfordert die Berechtigung {scope}"
+  }
+}

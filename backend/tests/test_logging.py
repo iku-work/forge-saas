@@ -34,6 +34,7 @@ def _staging_settings(admin_audit_log_path: str | None = None) -> Settings:
         PASSWORD_PEPPER="a-real-pepper",
         DATABASE_URL="postgresql+asyncpg://u:p@localhost:5432/db?sslmode=require",
         REDIS_URL="rediss://localhost:6379/0",
+        METRICS_BLOCKED_AT_EDGE=True,
         **kwargs,  # type: ignore[arg-type]
     )
 

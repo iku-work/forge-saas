@@ -152,47 +152,104 @@ writes. Decide how long the soak is before starting, not while deciding.
 
 ## Docker-network TLS (self-hosted path only)
 
-`app.core.config.Settings._enforce_startup_invariants` (T-225) now requires
-`sslmode=require` (or stricter) on `DATABASE_URL` and a `rediss://` scheme
-on `REDIS_URL` outside `dev` — the app refuses to boot otherwise. Since
-T-244 the same requirement covers `MIGRATIONS_DATABASE_URL` when it is set:
-that is a second, independent hop to Postgres (it bypasses pgbouncer), so
-`DATABASE_URL`'s own TLS setting says nothing about it. Render's
-managed Postgres/Redis already satisfy this on their external connection
-strings, so this is a no-op for the Render path. For the self-hosted
-`docker-compose.prod.yml` path, an operator must additionally:
+`app.core.config.Settings._enforce_startup_invariants` (T-225) requires
+`sslmode=require` (or stricter) on `DATABASE_URL` and a `rediss://` scheme on
+`REDIS_URL` outside `dev` — the app refuses to boot otherwise. Since T-244 the
+same requirement covers `MIGRATIONS_DATABASE_URL`: that is a second,
+independent hop to Postgres (it bypasses pgbouncer), so `DATABASE_URL`'s own
+TLS setting says nothing about it. Render's managed Postgres satisfies this on
+its connection string, so this section is the self-hosted path only.
 
-1. **Postgres**: generate a server cert/key (self-signed is fine for
-   container-to-container traffic on a private bridge network — this isn't
-   protecting against an untrusted network path the way the public
-   Caddy-terminated hop is, it's closing the "cleartext on a shared Docker
-   bridge" gap). Mount them into the `postgres` service and set
-   `ssl = on`, `ssl_cert_file`, `ssl_key_file` in `postgresql.conf` (or via
-   the image's `POSTGRES_*` cert env vars, depending on the Postgres image
-   used). Add `sslmode=require` to `DATABASE_URL`'s query string.
-2. **Redis**: Redis 7's built-in TLS support requires starting
-   `redis-server` with `--tls-port 6379 --port 0` plus cert/key/CA file
-   arguments, mounted the same way as Postgres's above. Change
-   `REDIS_URL`'s scheme to `rediss://`.
-3. **PgBouncer** (T-244): the app's `DATABASE_URL` now terminates at the
-   pooler, not at Postgres, so that hop needs its own cert — set
-   `CLIENT_TLS_SSLMODE=require` plus `CLIENT_TLS_KEY_FILE`/
-   `CLIENT_TLS_CERT_FILE` in `.env.pgbouncer`, and mount the material into
-   the `pgbouncer` service. The pooler's *upstream* hop to Postgres is a
-   separate setting: `SERVER_TLS_SSLMODE=require` (plus
-   `SERVER_TLS_CA_FILE`). Configuring only the client side leaves
-   pgbouncer→Postgres in cleartext while `DATABASE_URL` still reads
-   `sslmode=require`, which is the trap worth being explicit about. The
-   direct `MIGRATIONS_DATABASE_URL` hop is covered by step 1 above.
-4. Rotate these certs the same way you'd rotate any other cert in your
-   environment — they aren't ACME-managed the way Caddy's public-facing
-   cert is, so there's no automatic renewal here.
+**This is now one command, not a manual checklist.**
 
-None of the above is wired into `docker-compose.prod.yml` by default: baking
-in auto-generated self-signed certs would need its own rotation story this
-template doesn't own, and the cert material itself shouldn't live in a
-committed compose file. This section is the operator checklist for turning
-it on, not a toggle.
+```sh
+make internal-certs      # writes ./certs/server.{crt,key}, gitignored
+docker compose -f docker-compose.prod.yml -f docker-compose.tls.yml up -d
+```
+
+`docker-compose.tls.yml` is an overlay rather than the default because the
+certificate material must not live in a committed file and has a rotation
+story this template does not own. What it turns on:
+
+| Hop | Mechanism | Verified by |
+|---|---|---|
+| app → pgbouncer | `client_tls_sslmode=require` + cert/key | `SHOW CLIENTS` reports `TLSv1.3/TLS_AES_256_GCM_SHA384` |
+| pgbouncer → Postgres | `server_tls_sslmode=verify-ca` + CA file | `pg_stat_ssl` reports `ssl=true TLSv1.3` |
+| app/worker → Redis | `--tls-port 6379 --port 0`, CA passed on the DSN | `rediss://` ping succeeds; a plaintext connect is reset |
+| Alembic → Postgres | direct DSN, step above | `python -m app.core.migrations` completes |
+
+Run `make prod-compose-tls-check` to reproduce all four against the real
+`docker-compose.prod.yml` with `ENVIRONMENT=prod`. It also asserts the pooling
+contract still holds under TLS: 150 concurrent pooled queries return correct
+results and leave **zero** rows in `pg_prepared_statements`.
+
+### Things that cost time here, so you do not rediscover them
+
+- **`server_tls_sslmode` is not implied by `client_tls_sslmode`.** Setting only
+  the client side leaves pgbouncer → Postgres in cleartext while every DSN
+  still reads `sslmode=require`. Nothing in the application can detect this;
+  `pg_stat_ssl` on the Postgres side is the only honest check.
+- **The pgbouncer image runs as uid 70** and pgbouncer refuses a key file that
+  is group- or world-readable. The overlay starts as root, places the material
+  with the right owner and mode, then drops back. It uses BusyBox `su` —
+  `su-exec` and `gosu` are not in that image, and its `setpriv` has no
+  `--reuid`.
+- **`--port 0` on Redis matters.** Without it the cleartext listener stays open
+  alongside the TLS one, so `rediss://` satisfies the startup invariant while
+  anything on `forge-net` can still connect in the clear.
+- **Never write these commands as a YAML `>` folded scalar.** Continuation
+  lines indented further than the first keep their newlines, so
+  `exec redis-server 
+ --tls-port ...` runs `redis-server` with no arguments
+  at all. The stack then comes up healthy with TLS entirely off — which is
+  exactly the failure this section exists to prevent, arriving disguised as
+  success.
+- **`asyncpg` does not accept `sslmode`.** It takes `ssl=`, and SQLAlchemy
+  passes URL query parameters through verbatim, so `app.core.db.split_ssl_params`
+  translates it. Removing that helper makes every DSN above fail with
+  `TypeError` before a byte reaches Postgres.
+- **`asyncpg` does not accept `sslmode`** — covered above.
+
+### Rotation
+
+```sh
+make check-certs             # days left; non-zero exit inside WARN_DAYS (30)
+make rotate-internal-certs   # replace the material on a running stack
+```
+
+There is no ACME here. Caddy's public certificate renews itself; these do not,
+and when they lapse the stack goes down for a reason that looks nothing like a
+certificate problem from outside — the public certificate is healthy, so the
+obvious suspect is innocent. **Put `check-cert-expiry.sh` in cron**; it exits
+non-zero when anything is inside the warning window, so cron mails you:
+
+```
+0 6 * * *  cd /srv/forge && ./scripts/check-cert-expiry.sh >/dev/null
+```
+
+**Why rotation is three phases and not "regenerate, restart".** Two hops here
+*verify* rather than merely encrypt: pgbouncer checks Postgres against a CA,
+and the app and worker check Redis against one. Replace a server's certificate
+before its verifier trusts the new issuer and that hop fails closed until the
+verifier catches up. So trust widens first and narrows last:
+
+| Phase | `ca.crt` holds | Restarts | Invariant |
+|---|---|---|---|
+| 1 | old + new | pgbouncer, backend, worker | verifiers accept both |
+| 2 | old + new | postgres, redis, pgbouncer | new certificate served, still trusted |
+| 3 | new | pgbouncer, backend, worker | old issuer no longer accepted |
+
+At no point does a service present something a verifier does not already
+accept. This removes the *failure* window, not the restarts — connections
+still drop as containers recreate, and Caddy will 502 briefly.
+
+This is also why `server.crt` and `ca.crt` are separate files even though they
+start out identical. Point trust and identity at one path and the trust set
+cannot be widened without simultaneously changing what is served, which is
+precisely the window the phases exist to remove.
+
+`--force-recreate` rather than `restart`: each container copies the material
+in at start, so a restarted container reuses its stale copy.
 
 ## Verification status
 
@@ -201,11 +258,32 @@ it on, not a toggle.
       UI/API and that a restored instance actually boots the app correctly.
 - [ ] Self-hosted volume backup/restore exercised against a real
       `docker-compose.prod.yml` deployment.
-- [ ] Docker-network TLS steps above exercised end-to-end on the self-hosted
-      path (cert generation through a successful `alembic upgrade head`
-      against the TLS-enabled connection).
+- [x] **Docker-network TLS exercised end-to-end on the self-hosted path
+      (2026-09-03).** `make prod-compose-tls-check` against the real
+      `docker-compose.prod.yml` with `ENVIRONMENT=prod`: certificate
+      generation, `python -m app.core.migrations` over the direct TLS hop,
+      `/health/ready` 200 through the pooler, and all three hops confirmed
+      encrypted from the far side — `pg_stat_ssl` reporting `ssl=true
+      TLSv1.3` for pgbouncer→Postgres, `SHOW CLIENTS` reporting
+      `TLSv1.3/TLS_AES_256_GCM_SHA384` for app→pgbouncer, and a plaintext
+      Redis connect reset. 150 concurrent pooled queries returned correct
+      results leaving zero rows in `pg_prepared_statements`, so ADR-0002's
+      contract holds under TLS.
 
-None of these three are checked off as of T-225 — this repo is a template
-with no live deployment yet (see `docs/runbooks/deploy-render.md`). Check
-one off (with the date and who ran it) the first time each path is actually
-exercised for real.
+- [x] **Certificate rotation exercised on a running stack (2026-09-03).**
+      `make rotate-internal-certs` against the live TLS stack: the served
+      fingerprint changed, `/health/ready` returned 200 afterwards, both
+      Postgres hops still reported TLSv1.3, the trust bundle was pruned back
+      to exactly one certificate matching the new server cert, and a
+      deliberately foreign CA was still rejected with
+      `CERTIFICATE_VERIFY_FAILED` — so verification is genuinely enforced and
+      the phasing is load-bearing rather than decorative. The expiry checker
+      was exercised on its ok, expiring and two-certificate-bundle paths.
+
+      Not covered: any certificate other than the self-signed one the
+      generator writes, and rotation under sustained load (the restarts drop
+      connections; only the verification window is closed).
+
+The first two are not checked off — this repo is a template with no live
+deployment yet (see `docs/runbooks/deploy-render.md`). Check one off (with the
+date and who ran it) the first time each path is actually exercised for real.

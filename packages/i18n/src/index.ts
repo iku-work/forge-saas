@@ -20,6 +20,7 @@ import commonEn from "../locales/en/common.json";
 import emailsEn from "../locales/en/emails.json";
 import errorsEn from "../locales/en/errors.json";
 import filesEn from "../locales/en/files.json";
+import marketingEn from "../locales/en/marketing.json";
 import notificationsEn from "../locales/en/notifications.json";
 import tenancyEn from "../locales/en/tenancy.json";
 import validationEn from "../locales/en/validation.json";
@@ -30,6 +31,7 @@ import commonFi from "../locales/fi/common.json";
 import emailsFi from "../locales/fi/emails.json";
 import errorsFi from "../locales/fi/errors.json";
 import filesFi from "../locales/fi/files.json";
+import marketingFi from "../locales/fi/marketing.json";
 import notificationsFi from "../locales/fi/notifications.json";
 import tenancyFi from "../locales/fi/tenancy.json";
 import validationFi from "../locales/fi/validation.json";
@@ -40,6 +42,7 @@ import commonDe from "../locales/de/common.json";
 import emailsDe from "../locales/de/emails.json";
 import errorsDe from "../locales/de/errors.json";
 import filesDe from "../locales/de/files.json";
+import marketingDe from "../locales/de/marketing.json";
 import notificationsDe from "../locales/de/notifications.json";
 import tenancyDe from "../locales/de/tenancy.json";
 import validationDe from "../locales/de/validation.json";
@@ -50,6 +53,7 @@ import commonEs from "../locales/es/common.json";
 import emailsEs from "../locales/es/emails.json";
 import errorsEs from "../locales/es/errors.json";
 import filesEs from "../locales/es/files.json";
+import marketingEs from "../locales/es/marketing.json";
 import notificationsEs from "../locales/es/notifications.json";
 import tenancyEs from "../locales/es/tenancy.json";
 import validationEs from "../locales/es/validation.json";
@@ -60,6 +64,7 @@ import commonFr from "../locales/fr/common.json";
 import emailsFr from "../locales/fr/emails.json";
 import errorsFr from "../locales/fr/errors.json";
 import filesFr from "../locales/fr/files.json";
+import marketingFr from "../locales/fr/marketing.json";
 import notificationsFr from "../locales/fr/notifications.json";
 import tenancyFr from "../locales/fr/tenancy.json";
 import validationFr from "../locales/fr/validation.json";
@@ -70,6 +75,7 @@ import commonAr from "../locales/ar/common.json";
 import emailsAr from "../locales/ar/emails.json";
 import errorsAr from "../locales/ar/errors.json";
 import filesAr from "../locales/ar/files.json";
+import marketingAr from "../locales/ar/marketing.json";
 import notificationsAr from "../locales/ar/notifications.json";
 import tenancyAr from "../locales/ar/tenancy.json";
 import validationAr from "../locales/ar/validation.json";
@@ -94,6 +100,7 @@ const TRANSLATIONS_BY_LOCALE: Record<SupportedLocale, Translations> = {
     tenancy: tenancyEn,
     billing: billingEn,
     files: filesEn,
+    marketing: marketingEn,
     notifications: notificationsEn,
     emails: emailsEn,
     errors: errorsEn,
@@ -105,6 +112,7 @@ const TRANSLATIONS_BY_LOCALE: Record<SupportedLocale, Translations> = {
     tenancy: tenancyFi,
     billing: billingFi,
     files: filesFi,
+    marketing: marketingFi,
     notifications: notificationsFi,
     emails: emailsFi,
     errors: errorsFi,
@@ -116,6 +124,7 @@ const TRANSLATIONS_BY_LOCALE: Record<SupportedLocale, Translations> = {
     tenancy: tenancyDe,
     billing: billingDe,
     files: filesDe,
+    marketing: marketingDe,
     notifications: notificationsDe,
     emails: emailsDe,
     errors: errorsDe,
@@ -127,6 +136,7 @@ const TRANSLATIONS_BY_LOCALE: Record<SupportedLocale, Translations> = {
     tenancy: tenancyEs,
     billing: billingEs,
     files: filesEs,
+    marketing: marketingEs,
     notifications: notificationsEs,
     emails: emailsEs,
     errors: errorsEs,
@@ -138,6 +148,7 @@ const TRANSLATIONS_BY_LOCALE: Record<SupportedLocale, Translations> = {
     tenancy: tenancyFr,
     billing: billingFr,
     files: filesFr,
+    marketing: marketingFr,
     notifications: notificationsFr,
     emails: emailsFr,
     errors: errorsFr,
@@ -149,6 +160,7 @@ const TRANSLATIONS_BY_LOCALE: Record<SupportedLocale, Translations> = {
     tenancy: tenancyAr,
     billing: billingAr,
     files: filesAr,
+    marketing: marketingAr,
     notifications: notificationsAr,
     emails: emailsAr,
     errors: errorsAr,
@@ -165,7 +177,10 @@ export function loadLocale(locale: string): Translations {
   return TRANSLATIONS_BY_LOCALE[locale];
 }
 
-function resolveKey(translations: Translations, key: string): string | undefined {
+function resolveKey(
+  translations: Translations,
+  key: string,
+): string | undefined {
   const [namespace, ...path] = key.split(".");
   if (!namespace) return undefined;
 
@@ -190,7 +205,8 @@ export function t(
 ): string {
   const effectiveLocale = isSupportedLocale(locale) ? locale : DEFAULT_LOCALE;
   const message =
-    resolveKey(loadLocale(effectiveLocale), key) ?? resolveKey(loadLocale(DEFAULT_LOCALE), key);
+    resolveKey(loadLocale(effectiveLocale), key) ??
+    resolveKey(loadLocale(DEFAULT_LOCALE), key);
 
   if (message === undefined) {
     throw new Error(
@@ -201,5 +217,7 @@ export function t(
   if (!message.includes("{")) {
     return message;
   }
-  return new IntlMessageFormat(message, effectiveLocale).format(params) as string;
+  return new IntlMessageFormat(message, effectiveLocale).format(
+    params,
+  ) as string;
 }

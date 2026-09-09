@@ -1,0 +1,44 @@
+---
+title: Why start from a template at all
+description: The first three months of a SaaS product are mostly work nobody will ever ask you about. This is an argument for not doing them twice.
+publishedAt: 2026-07-02
+author: The ForgeSaaS team
+tags:
+  - product
+  - engineering
+draft: false
+---
+
+Every SaaS product begins with the same six weeks. Sign-up and sign-in. Email
+verification that survives a user clicking the link twice. Sessions that can be
+revoked from another device. An invitation flow. Roles. An organization that
+owns things, and a query layer that will not let one organization read another's
+rows. None of it is what the product is for, and all of it has to be right.
+
+The work is not hard, exactly. It is *detailed*. The interesting failures are
+the ones that only appear under load, or on the second attempt, or when a
+webhook arrives twice because a network hiccuped somewhere upstream. Those are
+the parts a team writes late, under pressure, after the demo has already been
+promised.
+
+## What we decided to do instead
+
+Write it once, carefully, with tests, and treat the result as the floor rather
+than the product. Everything in this template exists because leaving it out
+meant someone would rebuild it three weeks later with less time to think.
+
+That has one uncomfortable consequence, which is worth saying out loud: a
+template accumulates opinions. Ours are written down as architecture decision
+records rather than left implicit in the code, so the ones you disagree with are
+at least easy to find and argue with.
+
+## What it is not
+
+It is not a framework. There is no plugin API to learn and nothing that will
+fight you when you delete a directory. The modules are switched off in a config
+file and take their routes, their tables and their interface with them — which
+is a design constraint the whole codebase is held to, not a feature bolted on
+afterwards.
+
+If your product turns out not to need billing, the honest answer is to turn
+billing off and stop paying for its existence.

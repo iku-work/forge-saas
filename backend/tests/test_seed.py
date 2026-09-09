@@ -12,6 +12,11 @@ from app.modules.billing.models import Plan
 from app.modules.tenancy.models import Organization
 from product import config as product_config
 
+# T-291: this file needs billing enabled -- its routes, its tables, or
+# both. CI's module-matrix job deselects it in the combination that turns
+# every optional module off.
+pytestmark = pytest.mark.module_dependent
+
 
 @pytest.fixture(autouse=True)
 def _clear_modules_cache() -> Generator[None]:

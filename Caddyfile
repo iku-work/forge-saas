@@ -14,7 +14,16 @@ localhost, caddy {
 	# so it targets https://caddy instead. Both hostnames need their own tls
 	# internal leaf cert, which is why they're both site addresses here
 	# rather than "localhost" alone.
-	respond /metrics 404
+	# Inside a `handle`, not a bare `respond /metrics 404`. Caddy sorts
+	# `handle` ahead of `respond` in its default directive order, so with any
+	# handle block present the catch-all matched /metrics first and the
+	# respond never ran -- the rule read correctly and did nothing. Verified
+	# by request, not by reading: it answered 200 with the SPA shell. Handle
+	# blocks are mutually exclusive and evaluated in written order, so this
+	# must stay above the catch-all.
+	handle /metrics {
+		respond 404
+	}
 
 	# T-220: everything the backend actually owns goes to it; everything
 	# else falls through to the SPA below. Without this split, the
@@ -55,3 +64,31 @@ localhost, caddy {
 http://localhost, http://caddy {
 	redir https://{host}{uri} 301
 }
+
+# T-307: apps/marketing, on its own host.
+#
+# `marketing.localhost` locally, the apex domain in production -- separate
+# hosts, not a path split. A path split would mean moving every apps/web route
+# under /app/* (breaking TanStack Router's basepath, every Playwright spec,
+# every invite link and every transactional email URL) or maintaining an
+# allowlist of marketing path prefixes here. Neither is worth it, and keeping
+# `localhost` as the app is what lets every existing E2E spec, ZAP config and
+# k6 target carry on working untouched.
+#
+# **Do not widen the session cookie to a parent domain.** T-220 already lost a
+# session to a cross-origin redirect once. Marketing is static and needs no
+# session at all, so the app's refresh cookie stays scoped to the app host --
+# it is named `__Host-refresh_token` (backend/app/modules/auth/router.py),
+# and the `__Host-` prefix means a browser *rejects* it outright if a Domain
+# attribute is ever added, which is the guard rail rather than the reminder.
+# If marketing ever needs to know whether someone is signed in, that is a
+# public, cacheable endpoint, not a cookie.
+#
+# The block itself is generated -- apps/marketing/scripts/caddy-site.mjs
+# writes it on every `astro build`, because the CSP names each inline script
+# by hash and the locale redirects follow product.config.ts. With
+# `modules.marketing: false` the file is deleted instead, and this glob then
+# matches nothing: Caddy logs a warning and the app host above is unaffected,
+# which is also what happens in any stack that never builds the frontend (the
+# ZAP baseline job, a fresh clone).
+import /etc/caddy/conf.d/*.caddy

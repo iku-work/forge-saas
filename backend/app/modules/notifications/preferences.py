@@ -16,6 +16,12 @@ DEFAULT_PREFERENCES: dict[str, dict[str, bool]] = {
     "weekly_summary": {"email": True, "in_app": False, "push": False},
     "file_uploaded": {"email": False, "in_app": True, "push": False},
     "file_infected": {"email": True, "in_app": True, "push": True},
+    # T-321: an endpoint auto-disabled after repeated failures. Email on by
+    # default because the people who need to know are the org's owners, who
+    # are not necessarily the ones looking at the app -- an integration that
+    # stopped is exactly the thing a product finds out about a week late.
+    # Push off: it is an operations message, not something to wake anyone for.
+    "webhook_endpoint_disabled": {"email": True, "in_app": True, "push": False},
 }
 
 # T-234: (notification type -> channels that stay on no matter what the user

@@ -28,10 +28,10 @@ tenant may read or write it (every route that touches it is behind
 """
 
 from datetime import datetime
-from typing import Any
+from typing import Any, ClassVar
 from uuid import UUID
 
-from sqlalchemy import Column, DateTime
+from sqlalchemy import CheckConstraint, Column, DateTime
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlmodel import Field, SQLModel
 
@@ -46,6 +46,16 @@ SINGLETON_ID = 1
 
 class ProductSettings(SQLModel, table=True):
     __tablename__ = "product_settings"
+    # The singleton rule, as the database enforces it. Declared here as well
+    # as in a7e4c2f91b60 because a constraint the migration creates and the
+    # model does not know about is drift: `alembic check` (and every
+    # `revision --autogenerate`) proposes dropping it, which would quietly
+    # remove the only thing stopping a second settings row from existing.
+    # Alembic reflects CHECK constraints from 1.19 on, so this went unnoticed
+    # until CI ran a newer version than any dev machine had.
+    __table_args__: ClassVar[tuple[CheckConstraint, ...]] = (
+        CheckConstraint(f"id = {SINGLETON_ID}", name="product_settings_singleton"),
+    )
 
     id: int = Field(default=SINGLETON_ID, primary_key=True)
     # JSONB rather than a column per switch: the well-known keys

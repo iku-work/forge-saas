@@ -36,7 +36,7 @@ jobs:
       # a shortcut around this check).
       - name: Verify every script asserts the shared budget thresholds
         run: |
-          for script in tests/load/login-burst.js tests/load/browse.js tests/load/presign.js tests/load/mixed.js; do
+          for script in tests/load/login-burst.js tests/load/browse.js tests/load/presign.js tests/load/mixed.js tests/load/api-key.js; do
             grep -q 'thresholds: THRESHOLDS' "$script" || {
               echo "$script does not use the shared THRESHOLDS (tests/load/lib/config.js)" >&2
               exit 1
@@ -55,8 +55,25 @@ jobs:
         working-directory: backend
         run: cp .env.loadtest .env
 
+      # T-350: api-key.js needs `public_api` on, and the template ships it
+      # off. The phase4 fixture is the same one CI's module-matrix job runs,
+      # so this stack is a configuration already proven to boot and migrate
+      # rather than a bespoke one invented here. The four older scripts are
+      # unaffected -- every module they touch is on in both configurations.
+      - name: Enable the Phase 4 modules (public_api, outbound_webhooks, enterprise_sso)
+        run: |
+          cp backend/tests/fixtures/module_configs/phase4.py backend/product/config.py
+          cp backend/tests/fixtures/module_configs/phase4.config.ts product.config.ts
+
+      # --build, because the `backend` service names an image
+      # (forge-saas-backend-dev) that exists only on a developer's machine.
+      # Without it compose tries the registry first and logs "pull access
+      # denied for forge-saas-backend-dev, repository does not exist" before
+      # falling back to building -- harmless, but it reads exactly like the
+      # cause of a failed run, which is a bad thing for a nightly job's log to
+      # say when something else is actually wrong.
       - name: Boot ephemeral stack (backend + Postgres + Redis + MinIO)
-        run: docker compose up -d postgres redis minio minio-init backend
+        run: docker compose up -d --build postgres redis minio minio-init backend
 
       - name: Wait for backend
         run: |
@@ -83,9 +100,19 @@ jobs:
       - name: Run k6 load scripts
         run: |
           mkdir -p tests/load/results
+          # grafana/k6 runs as its own unprivileged user (uid 12345), not as
+          # root and not as the runner (uid 1001) that just created this
+          # directory -- so the bind-mounted /results is read-only to it and
+          # `--summary-export` dies with "could not open '/results/<x>.json':
+          # permission denied". k6 reports that as a failed run, which marked
+          # every script FAIL even though the thresholds all passed
+          # (checks_failed 0.00%). Widening the mode here rather than adding
+          # `user: root` to the compose service keeps `make load-test` on a
+          # dev machine behaving exactly as it does today.
+          chmod 777 tests/load/results
           : > tests/load/results/status.txt
           overall=0
-          for script in login-burst browse presign mixed; do
+          for script in login-burst browse presign mixed api-key; do
             echo "=== k6: $script ==="
             if docker compose run --rm -T k6 run --summary-export=/results/$script.json /scripts/$script.js; then
               echo "$script PASS" >> tests/load/results/status.txt

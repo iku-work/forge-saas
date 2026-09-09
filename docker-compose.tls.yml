@@ -1,0 +1,107 @@
+# TLS for the container-to-container hops, layered onto docker-compose.prod.yml:
+#
+#   docker compose -f docker-compose.prod.yml -f docker-compose.tls.yml up -d
+#
+# Generate the material first with `make internal-certs` (scripts/gen-internal-certs.sh).
+#
+# Why an overlay rather than the default. `Settings._enforce_startup_invariants`
+# requires sslmode=require on every Postgres DSN and rediss:// on Redis outside
+# dev, so a prod deployment of the compose stack cannot boot without this --
+# but the certificate material must not live in a committed file, and it has a
+# rotation story the template does not own. Keeping it separate means the
+# committed stack stays credential-free while turning it on is one extra `-f`.
+#
+# Every `command:`/`entrypoint:` below is a single-line JSON array on purpose.
+# A YAML `>` folded scalar whose continuation lines are indented further than
+# the first keeps their newlines, which turns `exec redis-server \n --tls-port
+# ...` into `exec redis-server` with no arguments -- the whole stack then comes
+# up looking healthy with TLS silently off. That is not hypothetical; it
+# happened while this file was being written.
+#
+# Each service copies the material to a private path and fixes ownership
+# itself rather than relying on the host, because the required owner differs
+# per image (Postgres and pgbouncer run as uid 70, Redis as 999) and a bind
+# mount cannot express three different owners at once. ./certs therefore only
+# needs to be readable by the Docker daemon.
+
+services:
+  postgres:
+    command:
+      [
+        "sh",
+        "-c",
+        "cp /certs/server.crt /certs/server.key /tmp/ && chown postgres:postgres /tmp/server.crt /tmp/server.key && chmod 600 /tmp/server.key && exec docker-entrypoint.sh postgres -c shared_preload_libraries=pg_stat_statements -c pg_stat_statements.track=all -c ssl=on -c ssl_cert_file=/tmp/server.crt -c ssl_key_file=/tmp/server.key",
+      ]
+    volumes:
+      - ./certs:/certs:ro
+
+  pgbouncer:
+    # The image's own entrypoint generates pgbouncer.ini from the environment
+    # and then execs pgbouncer. It runs as uid 70, and pgbouncer refuses a key
+    # file that anyone else can read -- so this wrapper starts as root, places
+    # the material with the right owner and mode, and drops back to uid 70
+    # before the real entrypoint runs.
+    #
+    # `su` from BusyBox, not su-exec or gosu (neither is in this image) and not
+    # setpriv (BusyBox's build has no --reuid).
+    user: root
+    entrypoint:
+      [
+        "sh",
+        "-c",
+        "cp /certs/server.crt /certs/server.key /certs/ca.crt /etc/pgbouncer/ && chown postgres:postgres /etc/pgbouncer/server.crt /etc/pgbouncer/server.key /etc/pgbouncer/ca.crt && chmod 600 /etc/pgbouncer/server.key && exec su postgres -s /bin/sh -c '/entrypoint.sh /usr/bin/pgbouncer /etc/pgbouncer/pgbouncer.ini'",
+      ]
+    environment:
+      # The hop the application terminates on: DATABASE_URL points here, so
+      # this is what its `sslmode=require` is actually negotiating against.
+      CLIENT_TLS_SSLMODE: require
+      CLIENT_TLS_CERT_FILE: /etc/pgbouncer/server.crt
+      CLIENT_TLS_KEY_FILE: /etc/pgbouncer/server.key
+      # A second, independent hop. Configuring only the client side leaves
+      # pgbouncer->Postgres in cleartext while DATABASE_URL still reads
+      # `sslmode=require`, which is the trap worth stating plainly: the app's
+      # DSN says nothing about what the pooler does upstream.
+      #
+      # verify-ca, not require: `require` encrypts without checking who
+      # answered, and the CA is right here, so there is no reason to accept
+      # less. (Not verify-full -- that additionally matches the hostname
+      # against the certificate, and the SAN list is compose service names.)
+      SERVER_TLS_SSLMODE: verify-ca
+      SERVER_TLS_CA_FILE: /etc/pgbouncer/ca.crt
+    volumes:
+      - ./certs:/certs:ro
+
+  redis:
+    # --port 0 closes the cleartext listener. Leaving it open would mean
+    # `rediss://` satisfies the startup invariant while anything on forge-net
+    # could still connect in the clear.
+    command:
+      [
+        "sh",
+        "-c",
+        "cp /certs/server.crt /certs/server.key /certs/ca.crt /tmp/ && chown redis:redis /tmp/server.crt /tmp/server.key /tmp/ca.crt && chmod 600 /tmp/server.key && exec redis-server --port 0 --tls-port 6379 --tls-cert-file /tmp/server.crt --tls-key-file /tmp/server.key --tls-ca-cert-file /tmp/ca.crt --tls-auth-clients no",
+      ]
+    # The stock healthcheck speaks cleartext to a port that no longer exists.
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "redis-cli --tls --cacert /tmp/ca.crt --cert /tmp/server.crt --key /tmp/server.key ping | grep -q PONG",
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    volumes:
+      - ./certs:/certs:ro
+
+  # The application reads the CA from the DSN itself
+  # (`rediss://redis:6379/0?ssl_ca_certs=/certs/ca.crt`), which redis-py,
+  # the slowapi rate-limit storage and arq all honour -- so the backend and
+  # worker need the material on disk too, at the same path.
+  backend:
+    volumes:
+      - ./certs:/certs:ro
+
+  worker:
+    volumes:
+      - ./certs:/certs:ro

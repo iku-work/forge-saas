@@ -53,11 +53,13 @@ boundary ① — same API, same auth, no separate trust path.
 | # | Boundary | Crosses from → to | Control |
 |---|---|---|---|
 | ① | Public internet → Caddy | Untrusted client → edge | TLS termination, HSTS (`Caddyfile.prod`); `/metrics` blocked externally |
+| ① | Public internet → Caddy, marketing host | Untrusted client → edge | A second public hostname (T-307), serving `apps/marketing/dist` and nothing else: no backend behind it, no session, no `Set-Cookie`. Its own CSP, HSTS and `X-Robots-Tag` come from the site block that app's build generates. The app's refresh cookie is `__Host-` prefixed and host-scoped, so a browser never sends it here — deliberately, and asserted in `backend/tests/test_caddy_config.py` |
 | ① | Caddy → Backend | Edge → application | Plain HTTP, but confined to the docker-internal network (`forge-net`) — never reachable from outside the compose network |
 | ② | Backend/Worker → Postgres/Redis | Application → data store | Credentialed DSNs (`DATABASE_URL`, `REDIS_URL`), required with no default (`backend/app/core/config.py`) — see V1.9.1/V9.2.2 in [ADR-0001](../adr/0001-security-baseline.md) for the TLS-in-transit caveat on this hop |
 | ③ | Backend → Object storage | Application → third-party storage | Files are never proxied through the backend; clients get short-lived presigned URLs (`backend/app/modules/storage/service.py`) and talk to S3/R2/MinIO directly |
 | ④ | Backend/Worker → Stripe/Resend/OAuth providers | Application → third-party API | Outbound only, each authenticated with its own credential (`STRIPE_SECRET_KEY`, `RESEND_API_KEY`, `GOOGLE_CLIENT_SECRET`/`GITHUB_CLIENT_SECRET`); standard TLS cert verification, no `verify=False` anywhere in the codebase |
 | — | Client ↔ Backend, within boundary ① | Anonymous → authenticated | The JWT/refresh-token pair (`backend/app/modules/auth/`); every other boundary in this diagram is reached only after this one is crossed |
+| — | Third party ↔ Backend, within boundary ① | Anonymous → authenticated, **without a user** | An API key on the same `Authorization: Bearer` header, dispatched on the `fk_live_` prefix (`backend/app/core/principal.py`, module `public_api`, default off). A second kind of principal: no session, no person, and no account to disable. Three things bound it — a key reaches an endpoint only where that endpoint declares `require_scope(...)` (the whole surface is two reads, enumerated by a test), it is confined to the organization on its own row, and the module toggle is checked on the auth path so turning `public_api` off stops every existing key even though its row survives |
 | — | Org A ↔ Org B, inside the Backend | Tenant → tenant | Not a network boundary — enforced entirely in application code (`require_permission`, `backend/app/modules/tenancy/service.py`'s `org_id` re-check). This is the boundary `backend/tests/security/test_tenant_isolation.py` exists to guard. |
 
 ## 3. Component notes
@@ -86,6 +88,26 @@ boundary ① — same API, same auth, no separate trust path.
 - **Mobile and web clients are symmetric.** Neither is more trusted than
   the other; both authenticate the same way and are subject to the same
   rate limits and org-scoping.
+- **An API key is not a user, and is deliberately weaker.** It carries a
+  scope set rather than a role, and `require_scope` maps each scope onto the
+  `Permission` a session would need for the same door — so opening a route to
+  keys never widened what a person can do. It cannot reach the management
+  surface that mints keys (nothing under `/api/v1/api-keys` accepts one; a key
+  that could mint a key is a privilege-escalation primitive), and it cannot
+  reach anything under `/api/v1/admin`. Its rate limit is its own
+  (`api_key:{id}`), so a misbehaving integration cannot exhaust the budget of
+  the people who deployed it. What it is *not* bounded by is a person's
+  employment: deactivating a member does not revoke the keys they minted, which
+  is correct — the key belongs to the organization — and is why
+  [`docs/runbooks/api-keys.md`](../runbooks/api-keys.md) makes offboarding an
+  explicit step rather than an assumption.
+- **The marketing site's analytics surface is empty by default (T-308)**, and
+  that is a security property as much as a privacy one: a third-party script is
+  code from someone else's server executing on a first-party origin, changeable
+  without a deploy. Adding one requires an entry in
+  `apps/marketing/src/config/analytics.ts` with a written justification; that
+  entry is simultaneously the build's subresource allowlist and the edge's CSP,
+  so an undeclared host fails the build rather than shipping.
 
 ## 4. Out of scope for this document
 

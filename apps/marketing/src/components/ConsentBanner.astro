@@ -1,0 +1,90 @@
+---
+/**
+ * The cookie banner, pre-rendered (T-308).
+ *
+ * Absent from a default build entirely -- `needsBanner()` is false unless a
+ * product has wired a cookie-setting provider *and* left the `gdpr` module
+ * on. That is the intended state, and it is what makes the default build's
+ * "zero cookies, zero third-party requests" claim testable rather than
+ * aspirational.
+ *
+ * When it is present, three properties are load-bearing and each is a
+ * deliberate rejection of how this is usually built:
+ *
+ * **It is in the HTML, not injected.** A banner appended after paint is a
+ * guaranteed Cumulative Layout Shift, and T-306's Lighthouse budget would
+ * fail on it. This one ships in the document, and it is the *hiding* that is
+ * conditional -- a visitor who already answered gets `hidden` set before
+ * first paint by the inline script below.
+ *
+ * **It is fixed to the bottom, with an explicit height.** Fixed positioning
+ * takes it out of flow, so neither showing nor hiding it moves a single pixel
+ * of the page: CLS is zero by construction rather than by tuning. The height
+ * is reserved on the element itself so the reserved space is real even before
+ * the copy has laid out.
+ *
+ * **Nothing loads before an answer.** The script tag for the provider is
+ * created by `consentScriptSource()` *after* the decision, so a denial is not
+ * "loaded and told to behave" -- the request is never made. That is the
+ * difference between consent mode and consent.
+ *
+ * The script is inline and `is:inline`, so Astro leaves it alone and
+ * `scripts/caddy-site.mjs` picks up its SHA-256 into the CSP automatically.
+ * It has no framework and no imports: it is the smallest thing that can make
+ * two buttons work on a static page, which is the only reason the page can
+ * stay static.
+ */
+import { analytics, needsBanner } from "../config/analytics";
+import { consentScriptSource } from "../lib/consent";
+import { translator } from "../lib/i18n";
+import { modules } from "../lib/product";
+
+interface Props {
+  locale: string;
+}
+
+const { locale } = Astro.props;
+const t = translator(locale);
+const show = needsBanner(analytics, modules.gdpr);
+---
+
+{
+  show && (
+    <>
+      <aside
+        id="consent-banner"
+        role="region"
+        aria-label={t("marketing.consent.region_label")}
+        class="fixed inset-x-0 bottom-0 z-50 min-h-24 border-t border-border bg-background/95 backdrop-blur"
+      >
+        <div class="mx-auto flex max-w-5xl flex-col gap-4 px-6 py-5 sm:flex-row sm:items-center sm:justify-between">
+          <p class="text-sm text-muted-foreground">
+            {t("marketing.consent.body")}
+          </p>
+          {/* Decline first in the DOM, so it is first in the tab order and
+              first for a screen reader. The "accept" button being reachable
+              in one keystroke and "decline" in three is the dark pattern
+              regulators name most often; ordering is the cheapest way not to
+              have it. Visually they sit side by side and neither is dimmed. */}
+          <div class="flex shrink-0 gap-3">
+            <button
+              id="consent-decline"
+              type="button"
+              class="rounded-md border border-border px-4 py-2 text-sm font-medium hover:bg-muted"
+            >
+              {t("marketing.consent.decline")}
+            </button>
+            <button
+              id="consent-accept"
+              type="button"
+              class="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:opacity-90"
+            >
+              {t("marketing.consent.accept")}
+            </button>
+          </div>
+        </div>
+      </aside>
+      <script is:inline set:html={consentScriptSource(analytics)} />
+    </>
+  )
+}

@@ -44,6 +44,11 @@ from app.modules.billing.models import Plan
 from app.modules.notifications.models import Notification, PushToken
 from app.modules.tenancy.models import Membership, Organization
 
+# T-291: this file needs notifications enabled -- its routes, its tables, or
+# both. CI's module-matrix job deselects it in the combination that turns
+# every optional module off.
+pytestmark = pytest.mark.module_dependent
+
 # Plan is here only because Organization.plan_id declares a real FK to it
 # (see app.modules.tenancy.models) -- creating Organization's table without
 # Plan's also existing fails with "relation 'plan' does not exist", same as

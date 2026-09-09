@@ -495,6 +495,10 @@ async def test_create_scheduler_registers_all_jobs_in_utc(redis_client: Redis) -
         "expire_trials_to_inactive",
         "report_usage_to_stripe",
         "prune_old_notifications",
+        # T-321: retention for webhook_delivery, and the safety net that
+        # re-enqueues a due delivery whose deferred ARQ job was lost.
+        "prune_webhook_deliveries",
+        "sweep_due_webhook_deliveries",
         "refresh_active_sessions_gauge",
     }
     assert "hour='*/6'" in repr(jobs_by_id["cleanup_expired_sessions"].trigger)
@@ -505,6 +509,14 @@ async def test_create_scheduler_registers_all_jobs_in_utc(redis_client: Redis) -
     assert "hour=" not in repr(jobs_by_id["expire_data_export_urls"].trigger)
     assert "minute='*/15'" in repr(jobs_by_id["report_usage_to_stripe"].trigger)
     assert "hour='2'" in repr(jobs_by_id["prune_old_notifications"].trigger)
+    # An hour after the notification prune, so the two biggest delete sweeps
+    # never contend for the same window.
+    assert "hour='3'" in repr(jobs_by_id["prune_webhook_deliveries"].trigger)
+    # Every five minutes, not hourly: it only re-enqueues deliveries that are
+    # already due, and the case it exists for (a Redis restart that lost the
+    # deferred jobs) otherwise strands every pending delivery until the next
+    # tick.
+    assert "minute='*/5'" in repr(jobs_by_id["sweep_due_webhook_deliveries"].trigger)
     assert "seconds=60" in repr(jobs_by_id["refresh_active_sessions_gauge"].trigger)
     for job in jobs_by_id.values():
         assert "timezone='UTC'" in repr(job.trigger)

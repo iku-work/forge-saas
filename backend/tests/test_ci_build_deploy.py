@@ -108,7 +108,15 @@ def test_deploy_job_runs_migrations_before_triggering_a_deploy() -> None:
     migrate_index = next(i for i, n in enumerate(step_names) if "Run migrations" in n)
     deploy_index = next(i for i, n in enumerate(step_names) if "Trigger Render deploy" in n)
     assert migrate_index < deploy_index
-    assert "alembic upgrade head" in steps[migrate_index]["run"]
+    # `python -m app.core.migrations`, not `alembic upgrade head`: every
+    # optional module keeps its migrations on its own branch (T-062), so this
+    # tree always has several heads and a bare `head` is ambiguous -- alembic
+    # refuses to run at all. That is why the production migration step could
+    # never have succeeded until it was changed, and asserting the ambiguous
+    # command is *absent* is what stops it coming back.
+    run = steps[migrate_index]["run"]
+    assert "python -m app.core.migrations" in run
+    assert "alembic upgrade head" not in run
 
 
 def test_deploy_job_rolls_back_only_on_smoke_test_failure() -> None:

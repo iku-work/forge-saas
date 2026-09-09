@@ -47,6 +47,11 @@ from app.modules.storage.backend import PresignedUpload
 from app.modules.storage.models import StoredFile
 from app.modules.tenancy.models import Membership, Organization, OrgFeatureFlag
 
+# T-291: this file needs file_storage enabled -- its routes, its tables, or
+# both. CI's module-matrix job deselects it in the combination that turns
+# every optional module off.
+pytestmark = pytest.mark.module_dependent
+
 _TABLES = [
     User.__table__,
     Plan.__table__,

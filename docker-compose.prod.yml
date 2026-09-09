@@ -4,6 +4,7 @@ networks:
 
 volumes:
   postgres_data:
+  minio_data:
   redis_data:
   caddy_data:
   clamav_data:
@@ -183,6 +184,49 @@ services:
     networks:
       - forge-net
 
+  # Object storage on the same box, for a deployment that is not using S3 or
+  # R2. Deliberately publishes no ports: Caddy fronts it on {$STORAGE_DOMAIN}
+  # (see Caddyfile.prod), because presigned URLs are handed to the *browser*
+  # and there is only one AWS_ENDPOINT_URL -- so the endpoint the backend signs
+  # against has to be the one the browser can reach. The console (9001) is
+  # deliberately not exposed at all.
+  minio:
+    image: minio/minio
+    restart: unless-stopped
+    command: server /data
+    # Its own env file (copied from .env.minio.example) for the same reason as
+    # postgres and pgbouncer above -- MINIO_* are not Settings fields.
+    env_file:
+      - ./.env.minio
+    volumes:
+      - minio_data:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    networks:
+      - forge-net
+
+  # Creates the bucket once, then exits. `--ignore-existing` so a restart of
+  # the stack is a no-op rather than an error.
+  minio-init:
+    image: minio/minio
+    restart: "no"
+    env_file:
+      - ./.env.minio
+    entrypoint:
+      [
+        "sh",
+        "-c",
+        "mc alias set local http://minio:9000 \"$$MINIO_ROOT_USER\" \"$$MINIO_ROOT_PASSWORD\" && mc mb --ignore-existing \"local/$$MINIO_BUCKET\"",
+      ]
+    depends_on:
+      minio:
+        condition: service_healthy
+    networks:
+      - forge-net
+
   caddy:
     image: caddy:2-alpine
     restart: unless-stopped
@@ -191,6 +235,17 @@ services:
     volumes:
       - ./Caddyfile.prod:/etc/caddy/Caddyfile
       - caddy_data:/data
+      # apps/web's built output, produced on the host by `pnpm build` before
+      # this stack comes up -- the same requirement apps/marketing/dist below
+      # already has. Nothing served the SPA in production before this.
+      - ./apps/web/dist:/srv/web:ro
+      # T-307: apps/marketing's built output and the site block that serves
+      # it, both produced on the host by `pnpm build` before this stack comes
+      # up. Read-only, and both absent when `modules.marketing` is false --
+      # the Caddyfile imports the directory as a glob, so an empty one leaves
+      # the app's own block above untouched.
+      - ./apps/marketing/dist:/srv/marketing:ro
+      - ./apps/marketing/caddy/prod:/etc/caddy/conf.d:ro
     ports:
       - "80:80"
       - "443:443"

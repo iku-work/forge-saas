@@ -31,6 +31,25 @@ minimumReleaseAgeExclude:
   - '@sentry/expo-upload-sourcemaps@8.17.2'
   - '@sentry/react-native@8.17.2'
 overrides:
+  # Three copies of @types/node were in this tree (22, 24, 26) with nothing
+  # choosing between them, so which one the Astro language server resolved
+  # depended on the shape of the install -- green locally, red on a fresh
+  # `--frozen-lockfile` checkout in CI, on a file nobody had touched.
+  #
+  # 26.0.0 is why it mattered rather than merely being untidy: it changed
+  # `ChildProcess` from `extends EventEmitter` to `implements EventEmitter`
+  # *without declaring any of the members*, so `child.on(...)` stops existing
+  # on the type. apps/marketing/tests/content.test.ts uses it to watch a dev
+  # server start.
+  #
+  # Pinned to the version apps/web already declares and CI's runner already
+  # runs (node-version: "22"), for the same reason backend/pyproject.toml
+  # pins ruff, mypy, pytest and schemathesis: a dependency nobody chose must
+  # not be able to turn a green tree red on its own. A devDependency in
+  # apps/marketing does not fix this -- the language server does not resolve
+  # through that package's node_modules, which is exactly what made the
+  # original resolution a lottery.
+  "@types/node": "22.20.0"
   "@tanstack/react-router": ">=1.170.4"
   "@tanstack/react-router-devtools": ">=1.167.0"
   "@tanstack/router-plugin": ">=1.168.18"
@@ -48,7 +67,49 @@ overrides:
   # satisfies the security job without the 0.9.0 breaking change. Tilde-pinned
   # so a future `pnpm install` can't silently float across that line again.
   "@xmldom/xmldom": "~0.8.13"
-  "tar": ">=7.5.11"
+  # Bumped from >=7.5.11 (T-350): the floor only covers the CVEs known when it
+  # was written, and 7.5.16 resolved under it carries CVE-2026-59873
+  # (CRITICAL, gzip bomb), -59874 and -73566. 7.5.21 is the highest fix line
+  # among them. A floor is a decision with an expiry date -- trivy is what
+  # notices when it has passed.
+  "tar": ">=7.5.21"
+  # CVE-2026-13149 (HIGH), which reaches this tree only through the 1.x line.
+  # Scoped to that line on purpose: an unscoped `>=1.1.16` is satisfied by
+  # 5.0.6, so pnpm hoists *every* consumer onto it -- including `minimatch@3`,
+  # which asks for `^1.1.7`. Forcing a transitive dependency across two major
+  # versions to fix a DoS in one of them trades a known bug for an unknown
+  # one, in glob matching, in the build tooling.
+  "brace-expansion@1": ">=1.1.18 <2"
+  # The 1.x pin above fixed the copy `minimatch@3` asks for; newer consumers
+  # pull their own 5.x, which carries the same advisory and needed its own
+  # floor. A scoped override fixes one line, not the package.
+  "brace-expansion@5": ">=5.0.9 <6"
+  # T-350: the rest of what trivy's HIGH set found once the job could finally
+  # reach this step. All seven are transitive build tooling -- none is a
+  # dependency of apps/web or any packages/* -- and every one is pinned to a
+  # fix on its *own* major, so nothing here moves a consumer across a version
+  # it was written against. The alternative, letting each float to "latest
+  # fixed", is what turned the brace-expansion pin into a minimatch problem.
+  # Upper bounds are not decoration. A key like `js-yaml@3` selects which
+  # *requests* to rewrite, and the value is then free to satisfy them with
+  # anything -- so a bare `>=3.15.0` resolved every `^3` consumer onto 4.x,
+  # which is where `safeLoad` was removed. Each of these stays inside the
+  # major it was asked for.
+  "fast-uri@3": ">=3.1.3 <4"
+  "js-yaml@3": ">=3.15.0 <4"
+  "nanoid@3": ">=3.3.18 <4"
+  "postcss@8": ">=8.5.18 <9"
+  "shell-quote@1": ">=1.9.0 <2"
+  "socket.io-parser@4": ">=4.2.7 <5"
+  # Found by `pnpm audit`, which reads the GitHub advisory database and so
+  # sees a different (larger) set than trivy does. Same rule as above: each
+  # stays inside the major its consumers asked for.
+  # Parent-scoped (`parent>child`), the same form as the @expo/cli>tar entry
+  # below. The `pkg@range` key form does *not* work here -- tried as
+  # `js-yaml@4`, `js-yaml@^4` and unscoped, and pnpm kept resolving 4.2.0 --
+  # whereas naming the parent that asks for it does.
+  "@hey-api/json-schema-ref-parser>js-yaml": ">=4.3.2 <5"
+  "jsdom>undici": ">=7.29.0 <8"
   # Exempted from the blanket tar bump above (T-222): @expo/cli@0.22.28's own
   # bundled tar.js/npm.js do `require('tar').default.extract` -- CJS interop
   # that assumes any `__esModule`-flagged module also has a `.default`. tar's
@@ -59,5 +120,46 @@ overrides:
   # fix the blanket override exists for, so pinning just this edge back to
   # 6.x keeps the security fix everywhere else without breaking native builds.
   "@expo/cli>tar": "^6.2.1"
+auditConfig:
+  # `pnpm audit --audit-level=high` (CI's security job) reads the GitHub
+  # advisory database, which is broader than trivy's -- so this list exists
+  # alongside .trivyignore.yaml / .trivyignore.rego rather than instead of
+  # them. Everything here was checked against npm before being listed: an
+  # advisory whose fix exists and can be taken is fixed in `overrides` above,
+  # not ignored here.
+  #
+  # None of these packages is reachable from the deployed product. They are
+  # the React Native build toolchain and the Lighthouse CI runner.
+  ignoreGhsas:
+    # node-tar, via @expo/cli>tar, pinned to 6.x because tar 7 breaks
+    # `expo prebuild` -- the whole story, including why patching @expo/cli was
+    # rejected, is in .trivyignore.rego. Eight advisories against one
+    # end-of-life pin; the fix that ends them all is an @expo/cli upgrade.
+    - GHSA-23hp-3jrh-7fpw
+    - GHSA-34x7-hfp2-rc4v
+    - GHSA-83g3-92jg-28cx
+    - GHSA-8qq5-rm4j-mr97
+    - GHSA-8x88-c5mf-7j5w
+    - GHSA-9ppj-qmqm-q256
+    - GHSA-qffp-2rhf-9h96
+    - GHSA-r292-9mhp-454m
+    - GHSA-r6q2-hw4h-h46w
+    # image-size, via metro (React Native's bundler). **The advisory's fixed
+    # version does not exist**: it names >=2.0.3 and npm's latest is 2.0.2.
+    # There is nothing to upgrade to, which is also why trivy's scan passes
+    # `--ignore-unfixed` rather than listing it.
+    - GHSA-5p2g-fcmc-qvqq
+    - GHSA-w3rx-r6r6-pgpr
+    # extract-zip, via @lhci/cli>lighthouse>puppeteer-core. Same shape: the
+    # advisory names >=2.0.2 and npm's latest is 2.0.1. The package is
+    # effectively unmaintained, so this is fixed when puppeteer stops using it.
+    - GHSA-jmr9-qjv8-65gv
+    # tmp, via @lhci/cli>inquirer>external-editor. A fix exists (0.2.6) but its
+    # consumers ask for ^0.0.33 and ^0.1.0 -- in 0.x semver those are two
+    # breaking jumps away, forced on a transitive dependency of a dev-only
+    # measurement tool. Not worth the risk of breaking the Lighthouse runner
+    # to silence a temp-file race it reaches only on this machine's own disk.
+    - GHSA-ph9p-34f9-6g65
+
 patchedDependencies:
   expo-localization@16.0.1: patches/expo-localization@16.0.1.patch

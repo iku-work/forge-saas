@@ -31,7 +31,9 @@
     "notifications_hint": "Abre tu lista de notificaciones",
     "reports": "Informes avanzados",
     "logout": "Cerrar sesión",
-    "logout_hint": "Cierra la sesión de esta cuenta en este dispositivo"
+    "logout_hint": "Cierra la sesión de esta cuenta en este dispositivo",
+    "api_keys": "Claves de API",
+    "webhooks": "Webhooks"
   },
   "support": {
     "contact": "Contactar con soporte",

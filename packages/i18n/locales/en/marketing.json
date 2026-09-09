@@ -1,0 +1,163 @@
+{
+  "nav": {
+    "skip_to_content": "Skip to content",
+    "primary_label": "Main navigation",
+    "sign_in": "Sign in",
+    "features": "Features",
+    "pricing": "Pricing",
+    "blog": "Blog",
+    "guides": "Guides",
+    "home": "Home",
+    "breadcrumb_label": "Breadcrumb",
+    "language": "Language"
+  },
+  "hero": {
+    "title": "Ship the product, not the plumbing",
+    "subtitle": "Accounts, teams, billing and an admin console are already built and already tested. Start where the interesting work is.",
+    "cta_primary": "Get started",
+    "cta_secondary": "Sign in"
+  },
+  "highlights": {
+    "heading": "What you start with",
+    "accounts_title": "Accounts and teams",
+    "accounts_body": "Sign-up, sessions, two-factor authentication, invitations and per-organization roles, isolated by tenant from the first query.",
+    "billing_title": "Subscriptions that reconcile",
+    "billing_body": "Plans, trials, upgrades and dunning, with webhook handling that stays correct when the same event arrives twice.",
+    "operations_title": "Operable from day one",
+    "operations_body": "Structured logs, metrics, audit trails and runbooks, so the first incident is something you read about rather than guess at."
+  },
+  "features": {
+    "title": "Features",
+    "subtitle": "Everything below is implemented, tested and switchable. Turn a module off and its routes, its tables and its interface go with it.",
+    "accounts_title": "Authentication that has met production",
+    "accounts_body": "Password and OAuth sign-in, email verification, session revocation, recovery codes and step-up authentication for the actions that deserve it.",
+    "teams_title": "Organizations and roles",
+    "teams_body": "Multi-organization membership, invitations, per-organization permissions, and tenant isolation enforced in the query layer rather than remembered by each endpoint.",
+    "billing_title": "Billing that survives a webhook storm",
+    "billing_body": "Stripe checkout, the customer portal, plan limits, trials and a dunning sequence — all idempotent, because the same event will arrive twice.",
+    "files_title": "File storage",
+    "files_body": "S3-compatible uploads with presigned URLs, scanned and size-limited, wired to the same permission model as everything else.",
+    "i18n_title": "Six locales, one source of truth",
+    "i18n_body": "The product, the emails and this marketing site read the same translation files, so a term cannot mean one thing in the app and another on the pricing page.",
+    "operations_title": "Operations you do not have to invent",
+    "operations_body": "Structured logging, Prometheus metrics, audit trails, backup and key-rotation runbooks, load tests and an accessibility gate in the pipeline."
+  },
+  "pricing": {
+    "title": "Pricing",
+    "subtitle": "Every plan includes the whole platform. What changes is how much of it you use.",
+    "period_label": "Billing period",
+    "monthly": "Monthly",
+    "yearly": "Yearly",
+    "per_month": "per month",
+    "per_year": "per year",
+    "free": "Free",
+    "yearly_saving": "Save {percent}%",
+    "cta": "Start with {plan}",
+    "includes": "Includes",
+    "empty": "No plans are configured yet.",
+    "committed_notice": "These prices were published with the site and change on the next deploy, not the next database update.",
+    "feature_labels": {
+      "seats": "{count, number} team members",
+      "storage_gb": "{count, number} GB of storage",
+      "api_calls": "{count, number} API calls per month"
+    },
+    "feature_flags": {
+      "advanced_reports": "Advanced reporting",
+      "file_storage": "File storage"
+    },
+    "feature_unknown": "{name}: {value}"
+  },
+  "faq": {
+    "heading": "Questions people ask first",
+    "product": {
+      "starting_point": {
+        "question": "Is this a framework or a starting point?",
+        "answer": "A starting point. You get the repository and you own every line in it — the modules are ordinary code you can read, change or delete, and nothing calls home at runtime."
+      },
+      "modules": {
+        "question": "Can I remove the parts I do not need?",
+        "answer": "Yes. Each optional module is one switch in one configuration file, and turning it off takes its routes, its database tables and its interface with it — not just the menu entry that led there."
+      },
+      "stack": {
+        "question": "What is it built on?",
+        "answer": "A FastAPI and PostgreSQL backend, a React and TypeScript web app, and a shared component and translation layer that both of them read from. No wrapper you cannot open."
+      },
+      "no_card": {
+        "question": "Do I need a card to start?",
+        "answer": "No. The free plan asks for no payment details, and you only see a checkout when you choose a paid plan."
+      }
+    },
+    "pricing": {
+      "change_plan": {
+        "question": "Can I change plan later?",
+        "answer": "At any time, from the billing portal. An upgrade applies immediately, and what you have already paid is prorated against it."
+      },
+      "trial": {
+        "question": "Is there a trial?",
+        "answer": "A paid plan can carry a trial period: you get the whole plan, you are not charged while it runs, and you are emailed before it ends rather than after."
+      },
+      "payment": {
+        "question": "How is payment handled?",
+        "answer": "Through Stripe. Checkout and the billing portal are theirs, so card details never reach our servers — what comes back to us is a webhook."
+      },
+      "limits": {
+        "question": "What happens when I reach a plan limit?",
+        "answer": "The action that would exceed it is refused, and the message names the limit it hit. Nothing is deleted and nothing is silently dropped; upgrading raises the limit straight away."
+      }
+    }
+  },
+  "blog": {
+    "title": "Blog",
+    "subtitle": "What we changed, why, and what it cost.",
+    "empty": "Nothing has been published in this language yet.",
+    "read_more": "Read the post",
+    "published_on": "Published {date}",
+    "updated_on": "Updated {date}",
+    "by_author": "by {author}",
+    "tags_label": "Tags",
+    "draft_badge": "Draft",
+    "back": "All posts"
+  },
+  "guides": {
+    "title": "Guides",
+    "subtitle": "How to run this thing: setup, configuration, and the decisions worth making early.",
+    "empty": "No guides have been translated into this language yet."
+  },
+  "legal": {
+    "effective_date": "Effective {date}",
+    "untranslated_notice": "This document has not been translated yet. The text below is the original, and it is the version that applies."
+  },
+  "not_found": {
+    "title": "That page does not exist",
+    "body": "The link may be out of date, or the page may have moved. The rest of the site is still here.",
+    "cta": "Back to the home page"
+  },
+  "redirect": {
+    "heading": "Choose your language",
+    "body": "You are being taken to your own language. If nothing happens, choose one below."
+  },
+  "footer": {
+    "support": "Contact support",
+    "rights": "© {year} {name}. All rights reserved.",
+    "product_heading": "Product",
+    "resources_heading": "Resources",
+    "legal_heading": "Legal",
+    "privacy": "Privacy policy",
+    "terms": "Terms of service"
+  },
+  "consent": {
+    "region_label": "Cookie consent",
+    "body": "We'd like to measure how this site is used. That needs cookies, and only with your agreement.",
+    "accept": "Accept",
+    "decline": "Decline",
+    "manage": "Cookie settings"
+  },
+  "api": {
+    "title": "API reference",
+    "description": "Everything an API key can call, generated from the running service rather than written by hand.",
+    "version": "Contract version {version}",
+    "endpoints_title": "Endpoints",
+    "endpoints_empty": "This deployment publishes no public endpoints.",
+    "scope_required": "Requires the {scope} scope"
+  }
+}

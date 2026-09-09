@@ -11,6 +11,7 @@ from sqlalchemy.sql.schema import SchemaItem
 from sqlmodel import SQLModel
 
 from app.core.config import get_settings
+from app.core.db import split_ssl_params
 from app.core.encrypted_type import EncryptedString
 from app.core.module_loader import get_modules
 
@@ -47,16 +48,15 @@ config.set_main_option("sqlalchemy.url", get_settings().migrations_database_url)
 # physically present in the DB from a time the module was enabled.
 #
 # T-290 registered `public_api` and `enterprise_sso` here ahead of their
-# models: the entries are table *names*, so they cost nothing until T-310 and
-# T-331 add `ApiKey`/`SsoConnection`, and having them already in place means
-# neither task can add a table that autogenerate then proposes for a product
-# that turned the module off. `marketing` owns no tables at all -- it gates a
-# build, not a schema.
+# models, so that neither T-310 nor T-331 could add a table that autogenerate
+# then proposes for a product which turned the module off. Both models exist
+# now. `marketing` owns no tables at all -- it gates a build, not a schema.
 MODULE_TABLES: dict[str, set[str]] = {
     "billing": {"plan", "subscription", "webhook_event", "dunning_campaign", "usage_record"},
     "gdpr": {"consent_record", "data_export_job"},
     "notifications": {"notification", "push_token"},
     "file_storage": {"stored_file"},
+    "outbound_webhooks": {"webhook_endpoint", "webhook_delivery"},
     "public_api": {"api_key"},
     "enterprise_sso": {"sso_connection"},
 }
@@ -88,11 +88,12 @@ def load_models_for_migration() -> None:
         import app.modules.notifications.models  # noqa: PLC0415
     if modules.file_storage.enabled:
         import app.modules.storage.models  # noqa: PLC0415
-    # No branch for public_api / enterprise_sso yet: T-290 added the toggles,
-    # but the models they would import (app.modules.api_keys.models,
-    # app.modules.sso.models) arrive with T-310 and T-331. Their MODULE_TABLES
-    # entries above are already in place -- add the import here at the same
-    # time as the model, or autogenerate will not see the new table at all.
+    if modules.public_api.enabled:
+        import app.modules.api_keys.models  # noqa: PLC0415
+    if modules.outbound_webhooks.enabled:
+        import app.modules.webhooks.models  # noqa: PLC0415
+    if modules.enterprise_sso.enabled:
+        import app.modules.sso.models  # noqa: PLC0415
 
 
 load_models_for_migration()
@@ -202,10 +203,19 @@ def do_run_migrations(connection: Connection) -> None:
 
 
 async def run_async_migrations() -> None:
+    # Same asyncpg/libpq mismatch the application engines have to bridge: an
+    # `sslmode` left on the DSN reaches asyncpg.connect() as an unknown
+    # keyword and raises TypeError. This is the *second* independent hop to
+    # Postgres (see migrations_database_url above), so it needs the
+    # translation in its own right -- and it is the one that runs first in a
+    # deploy, before the app is ever started.
+    section = dict(config.get_section(config.config_ini_section, {}))
+    section["sqlalchemy.url"], ssl_args = split_ssl_params(section["sqlalchemy.url"])
     connectable = async_engine_from_config(
-        config.get_section(config.config_ini_section, {}),
+        section,
         prefix="sqlalchemy.",
         poolclass=pool.NullPool,
+        connect_args=ssl_args,
     )
     async with connectable.connect() as connection:
         await connection.run_sync(do_run_migrations)

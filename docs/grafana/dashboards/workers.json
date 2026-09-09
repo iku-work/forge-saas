@@ -122,6 +122,40 @@
           "refId": "B"
         }
       ]
+    },
+    {
+      "id": 7,
+      "type": "timeseries",
+      "title": "Webhook deliveries — queue depth",
+      "description": "T-321. Deliveries awaiting an attempt, counted in the worker and published through Redis for /metrics to read back — the same split forge_active_sessions lives with. Deliberately not forge_arq_queue_depth: a delivery whose job has been consumed and whose next attempt is two hours away is still work owed to somebody, and the ARQ queue cannot see it. A depth that climbs and never falls is a worker that is not consuming, not a slow consumer.",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 24 },
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": { "defaults": { "unit": "short" }, "overrides": [] },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "expr": "forge_webhook_queue_depth",
+          "legendFormat": "pending deliveries",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 8,
+      "type": "timeseries",
+      "title": "Webhook deliveries — rate by outcome",
+      "description": "T-321. `dead` is the series to alert on: a delivery that exhausted the whole ladder (1 m, 5 m, 30 m, 2 h, 12 h) and will not be retried. `failed` rising while `delivered` holds steady is one consumer having a bad day; both falling to zero together is this product not emitting at all.",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 24 },
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": { "defaults": { "unit": "short" }, "overrides": [] },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "expr": "rate(forge_webhook_deliveries_total[5m])",
+          "legendFormat": "{{outcome}}/s",
+          "refId": "A"
+        }
+      ]
     }
   ]
 }

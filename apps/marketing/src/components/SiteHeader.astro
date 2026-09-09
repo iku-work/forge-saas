@@ -1,0 +1,65 @@
+---
+/**
+ * Markup only, no island. A hamburger that toggles a menu is the textbook
+ * case for hydrating something -- but four short links still wrap onto a
+ * second line on a phone rather than needing one, and `/` is held to zero
+ * script bytes by a test. Whoever adds the fifth link and the breakpoint that
+ * finally needs a toggle should reach for `<details>` before reaching for a
+ * React root.
+ *
+ * The links come from src/lib/nav.ts rather than being written out here, so a
+ * module toggle removes a page from the nav, the footer and (T-304) the
+ * sitemap in one move instead of three.
+ */
+import { buttonVariants } from "@forge/ui";
+
+import { site } from "../config/site";
+import { translator } from "../lib/i18n";
+import { siteLinks } from "../lib/nav";
+import { appLink } from "../lib/product";
+import { defaultLocale, localePath } from "../lib/routing";
+
+interface Props {
+  locale?: string;
+}
+
+const { locale = defaultLocale } = Astro.props;
+const t = translator(locale);
+const links = siteLinks();
+const current = Astro.url.pathname;
+---
+
+<header class="border-b border-border">
+  <div class="mx-auto flex max-w-5xl flex-wrap items-center gap-x-6 gap-y-3 px-6 py-4">
+    <a href={localePath(locale)} class="text-lg font-semibold tracking-tight">{site.name}</a>
+    <nav aria-label={t("marketing.nav.primary_label")} class="flex-1">
+      <ul class="flex flex-wrap items-center gap-x-5 gap-y-2 text-sm">
+        {
+          links.map((link) => {
+            const href = localePath(locale, link.path);
+            // aria-current marks the section a visitor is inside, not only an
+            // exact URL match: /blog/some-post is still "in" Blog.
+            const isCurrent = current === href || current.startsWith(href);
+            return (
+              <li>
+                <a
+                  href={href}
+                  aria-current={isCurrent ? "page" : undefined}
+                  class:list={[
+                    "underline-offset-4 hover:underline",
+                    isCurrent ? "font-medium text-foreground" : "text-muted-foreground",
+                  ]}
+                >
+                  {t(link.labelKey)}
+                </a>
+              </li>
+            );
+          })
+        }
+      </ul>
+    </nav>
+    <a href={appLink("login", locale)} class={buttonVariants({ variant: "ghost", size: "sm" })}>
+      {t("marketing.nav.sign_in")}
+    </a>
+  </div>
+</header>

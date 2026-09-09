@@ -1,0 +1,1637 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="Complete documentation for the ForgeSaaS multi-tenant SaaS template: install, stack rationale, the module system, building your own product, and deploying.">
+<!--
+  Standalone copy of the handbook published at
+  https://claude.ai/code/artifact/39a6a175-56e2-4907-b87e-00dd0bcc7e88
+
+  Open it straight from disk -- it has no build step and no local assets. The
+  only network request is the Google Fonts stylesheet below; without a
+  connection it falls back to the system stacks declared in --sans / --mono /
+  --serif and still reads correctly.
+-->
+<style>
+  /* Baseline the page's own stylesheet assumes. Kept first so the tokens
+     below it win. */
+  body { margin: 0; font: 14px system-ui, -apple-system, "Segoe UI", sans-serif; }
+  img { max-width: 100%; }
+  [hidden] { display: none !important; }
+</style>
+<title>ForgeSaaS Handbook</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Serif:ital,wght@0,400;1,400&display=swap">
+
+<style>
+  /* ---- Tokens: complete light palette on bare :root -------------------- */
+  :root {
+    --paper:        #FCFCFD;
+    --surface:      #FFFFFF;
+    --surface-sunk: #F3F4F7;
+    --ink:          #1A1D23;
+    --ink-soft:     #444B57;
+    --muted:        #626B7A;
+    --rule:         #E2E5EA;
+    --rule-strong:  #CDD2DA;
+    --accent:       #1E6F5C;
+    --accent-soft:  #E7F1EE;
+    --accent-ink:   #14503F;
+    --warn:         #A8562B;
+    --warn-soft:    #F8EFE8;
+    --code-bg:      #F5F6F8;
+    --code-ink:     #223;
+    --shadow:       0 1px 2px rgba(20, 24, 31, .05), 0 8px 24px -12px rgba(20, 24, 31, .12);
+
+    --sans: "IBM Plex Sans", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    --mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    --serif: "IBM Plex Serif", Georgia, "Times New Roman", serif;
+
+    color-scheme: light;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --paper:        #101317;
+      --surface:      #171B21;
+      --surface-sunk: #1C2128;
+      --ink:          #E6E9EE;
+      --ink-soft:     #C2C8D2;
+      --muted:        #8A93A1;
+      --rule:         #262C35;
+      --rule-strong:  #39414D;
+      --accent:       #57BFA2;
+      --accent-soft:  #14261F;
+      --accent-ink:   #8FD9C3;
+      --warn:         #D89A6A;
+      --warn-soft:    #2A1F16;
+      --code-bg:      #1B2027;
+      --code-ink:     #DDE3EC;
+      --shadow:       0 1px 2px rgba(0,0,0,.4), 0 8px 24px -12px rgba(0,0,0,.6);
+      color-scheme: dark;
+    }
+  }
+
+  :root[data-theme="dark"] {
+    --paper:        #101317;
+    --surface:      #171B21;
+    --surface-sunk: #1C2128;
+    --ink:          #E6E9EE;
+    --ink-soft:     #C2C8D2;
+    --muted:        #8A93A1;
+    --rule:         #262C35;
+    --rule-strong:  #39414D;
+    --accent:       #57BFA2;
+    --accent-soft:  #14261F;
+    --accent-ink:   #8FD9C3;
+    --warn:         #D89A6A;
+    --warn-soft:    #2A1F16;
+    --code-bg:      #1B2027;
+    --code-ink:     #DDE3EC;
+    --shadow:       0 1px 2px rgba(0,0,0,.4), 0 8px 24px -12px rgba(0,0,0,.6);
+    color-scheme: dark;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    background: var(--paper);
+    color: var(--ink);
+    font-family: var(--sans);
+    font-size: 16px;
+    line-height: 1.65;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* ---- Shell ----------------------------------------------------------- */
+  .shell { display: grid; grid-template-columns: 282px minmax(0, 1fr); align-items: start; }
+
+  .sidebar {
+    position: sticky; top: 0; height: 100vh; overflow-y: auto;
+    border-right: 1px solid var(--rule);
+    background: var(--surface);
+    padding: 28px 20px 48px 28px;
+    display: flex; flex-direction: column; gap: 22px;
+  }
+
+  .brand { display: flex; flex-direction: column; gap: 5px; }
+  .brand-name {
+    font-weight: 700; font-size: 1.05rem; letter-spacing: -.01em;
+    display: flex; align-items: center; gap: 9px;
+  }
+  .brand-mark {
+    width: 22px; height: 22px; border-radius: 5px; flex: none;
+    background: var(--accent); color: var(--surface);
+    display: grid; place-items: center;
+    font-family: var(--mono); font-size: .72rem; font-weight: 600;
+  }
+  .brand-sub { font-family: var(--mono); font-size: .7rem; color: var(--muted); letter-spacing: .04em; }
+
+  nav.toc { display: flex; flex-direction: column; gap: 3px; }
+  .toc-group {
+    font-family: var(--mono); font-size: .66rem; text-transform: uppercase;
+    letter-spacing: .1em; color: var(--muted); margin: 16px 0 6px;
+  }
+  .toc-group:first-child { margin-top: 0; }
+  nav.toc a {
+    color: var(--ink-soft); text-decoration: none; font-size: .875rem;
+    padding: 5px 10px; border-radius: 6px; border-left: 2px solid transparent;
+    transition: background .12s, color .12s, border-color .12s;
+  }
+  nav.toc a:hover { background: var(--surface-sunk); color: var(--ink); }
+  nav.toc a.active {
+    color: var(--accent-ink); border-left-color: var(--accent);
+    background: var(--accent-soft); font-weight: 500;
+  }
+  nav.toc a:focus-visible, .copy:focus-visible, .theme-toggle:focus-visible {
+    outline: 2px solid var(--accent); outline-offset: 2px;
+  }
+
+  .theme-toggle {
+    margin-top: auto; align-self: flex-start;
+    font-family: var(--mono); font-size: .72rem;
+    background: transparent; color: var(--muted);
+    border: 1px solid var(--rule); border-radius: 6px;
+    padding: 6px 10px; cursor: pointer;
+  }
+  .theme-toggle:hover { color: var(--ink); border-color: var(--rule-strong); }
+
+  main { padding: 56px 48px 120px; max-width: 1180px; }
+  .wrap { max-width: 74ch; }
+
+  /* ---- Type ------------------------------------------------------------ */
+  h1 {
+    font-size: clamp(2rem, 1.4rem + 2vw, 2.9rem); line-height: 1.1;
+    letter-spacing: -.025em; margin: 0 0 14px; text-wrap: balance; font-weight: 700;
+  }
+  .lead {
+    font-family: var(--serif); font-size: 1.2rem; line-height: 1.6;
+    color: var(--ink-soft); margin: 0 0 12px; max-width: 68ch;
+  }
+  h2 {
+    font-size: 1.62rem; letter-spacing: -.018em; line-height: 1.2;
+    margin: 76px 0 8px; padding-top: 22px; border-top: 1px solid var(--rule);
+    text-wrap: balance; font-weight: 600;
+  }
+  h3 { font-size: 1.12rem; letter-spacing: -.008em; margin: 38px 0 6px; font-weight: 600; text-wrap: balance; }
+  h4 { font-size: .95rem; margin: 26px 0 4px; font-weight: 600; }
+  p { margin: 0 0 14px; max-width: 74ch; }
+  ul, ol { margin: 0 0 14px; padding-left: 22px; max-width: 74ch; }
+  li { margin-bottom: 7px; }
+  li > ul, li > ol { margin-top: 7px; }
+  a { color: var(--accent-ink); text-underline-offset: 2px; }
+  strong { font-weight: 600; color: var(--ink); }
+
+  .eyebrow {
+    font-family: var(--mono); font-size: .68rem; text-transform: uppercase;
+    letter-spacing: .13em; color: var(--accent); margin: 0 0 10px; font-weight: 500;
+  }
+  .section-intro { font-family: var(--serif); font-size: 1.04rem; color: var(--ink-soft); max-width: 70ch; }
+
+  code {
+    font-family: var(--mono); font-size: .855em;
+    background: var(--code-bg); color: var(--code-ink);
+    padding: .12em .38em; border-radius: 4px;
+    border: 1px solid var(--rule);
+  }
+
+  .code {
+    position: relative; margin: 16px 0 20px;
+    border: 1px solid var(--rule); border-radius: 9px;
+    background: var(--code-bg); overflow: hidden;
+  }
+  .code-head {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 7px 12px; border-bottom: 1px solid var(--rule);
+    background: var(--surface-sunk);
+    font-family: var(--mono); font-size: .68rem; color: var(--muted);
+    letter-spacing: .05em; text-transform: uppercase;
+  }
+  .code pre {
+    margin: 0; padding: 14px 16px; overflow-x: auto;
+    font-family: var(--mono); font-size: .82rem; line-height: 1.7; color: var(--code-ink);
+  }
+  .code pre code { background: none; border: none; padding: 0; font-size: inherit; }
+  .copy {
+    font-family: var(--mono); font-size: .66rem; text-transform: uppercase; letter-spacing: .06em;
+    background: transparent; border: 1px solid var(--rule-strong); color: var(--muted);
+    border-radius: 5px; padding: 3px 8px; cursor: pointer;
+  }
+  .copy:hover { color: var(--ink); border-color: var(--muted); }
+
+  /* ---- Tables ---------------------------------------------------------- */
+  .table-scroll { overflow-x: auto; margin: 18px 0 22px; border: 1px solid var(--rule); border-radius: 9px; }
+  table { border-collapse: collapse; width: 100%; font-size: .875rem; min-width: 540px; }
+  th, td { text-align: left; padding: 9px 13px; border-bottom: 1px solid var(--rule); vertical-align: top; }
+  th {
+    background: var(--surface-sunk); font-family: var(--mono); font-weight: 500;
+    font-size: .7rem; text-transform: uppercase; letter-spacing: .07em; color: var(--muted);
+  }
+  tbody tr:last-child td { border-bottom: none; }
+  td code { font-size: .82em; }
+
+  .pill {
+    display: inline-block; font-family: var(--mono); font-size: .66rem;
+    padding: 1px 7px; border-radius: 20px; letter-spacing: .04em; white-space: nowrap;
+  }
+  .pill.on  { background: var(--accent-soft); color: var(--accent-ink); border: 1px solid var(--accent); }
+  .pill.off { background: var(--warn-soft); color: var(--warn); border: 1px solid var(--warn); }
+
+  /* ---- Callouts -------------------------------------------------------- */
+  .note, .warn-box {
+    margin: 18px 0 22px; padding: 13px 16px; border-radius: 8px;
+    border: 1px solid var(--rule); background: var(--surface);
+    font-size: .92rem; max-width: 74ch;
+  }
+  .note { border-left: 3px solid var(--accent); }
+  .warn-box { border-left: 3px solid var(--warn); background: var(--warn-soft); }
+  .note p:last-child, .warn-box p:last-child { margin-bottom: 0; }
+  .note-label, .warn-label {
+    font-family: var(--mono); font-size: .66rem; text-transform: uppercase;
+    letter-spacing: .1em; display: block; margin-bottom: 5px; font-weight: 500;
+  }
+  .note-label { color: var(--accent); }
+  .warn-label { color: var(--warn); }
+
+  /* ---- Cards ----------------------------------------------------------- */
+  .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(258px, 1fr)); gap: 14px; margin: 20px 0 26px; }
+  .card {
+    border: 1px solid var(--rule); border-radius: 10px; padding: 16px 18px;
+    background: var(--surface); box-shadow: var(--shadow);
+  }
+  .card h4 { margin: 0 0 5px; font-size: .95rem; }
+  .card p { font-size: .875rem; color: var(--ink-soft); margin: 0; }
+  .card .tech-why { display: block; margin-top: 8px; font-size: .84rem; color: var(--muted); }
+  .card-tag {
+    font-family: var(--mono); font-size: .64rem; text-transform: uppercase;
+    letter-spacing: .09em; color: var(--accent); display: block; margin-bottom: 7px;
+  }
+
+  .tree {
+    font-family: var(--mono); font-size: .8rem; line-height: 1.85;
+    background: var(--code-bg); border: 1px solid var(--rule); border-radius: 9px;
+    padding: 16px 18px; overflow-x: auto; margin: 18px 0 22px; color: var(--code-ink);
+  }
+  .tree .c { color: var(--muted); }
+
+  .steps { counter-reset: step; list-style: none; padding-left: 0; }
+  .steps > li {
+    counter-increment: step; position: relative; padding-left: 40px; margin-bottom: 24px;
+  }
+  .steps > li::before {
+    content: counter(step); position: absolute; left: 0; top: 1px;
+    width: 26px; height: 26px; border-radius: 50%;
+    background: var(--accent-soft); color: var(--accent-ink);
+    border: 1px solid var(--accent);
+    display: grid; place-items: center;
+    font-family: var(--mono); font-size: .76rem; font-weight: 600;
+  }
+  .steps > li > h3 { margin-top: 0; }
+
+  hr.soft { border: none; border-top: 1px solid var(--rule); margin: 34px 0; }
+
+  footer.docs-foot {
+    margin-top: 80px; padding-top: 22px; border-top: 1px solid var(--rule);
+    font-size: .86rem; color: var(--muted); max-width: 74ch;
+  }
+
+  @media (max-width: 940px) {
+    .shell { grid-template-columns: 1fr; }
+    .sidebar {
+      position: static; height: auto; border-right: none;
+      border-bottom: 1px solid var(--rule); padding: 20px 22px 24px;
+    }
+    nav.toc { display: grid; grid-template-columns: repeat(auto-fit, minmax(168px, 1fr)); gap: 2px; }
+    .toc-group { grid-column: 1 / -1; margin: 12px 0 2px; }
+    .theme-toggle { margin-top: 14px; }
+    main { padding: 34px 22px 90px; }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    * { transition: none !important; scroll-behavior: auto !important; }
+  }
+
+  html { scroll-behavior: smooth; }
+  :target { scroll-margin-top: 24px; }
+</style>
+</head>
+<body>
+<div class="shell">
+  <aside class="sidebar">
+    <div class="brand">
+      <span class="brand-name"><span class="brand-mark">F</span> ForgeSaaS</span>
+      <span class="brand-sub">Handbook &middot; template v1</span>
+    </div>
+
+    <nav class="toc" id="toc">
+      <div class="toc-group">Start here</div>
+      <a href="#what">What this is</a>
+      <a href="#install">Install &amp; first run</a>
+      <a href="#layout">Repository layout</a>
+
+      <div class="toc-group">Understand</div>
+      <a href="#stack">The stack, explained</a>
+      <a href="#modules">The module system</a>
+      <a href="#tenancy">Tenancy &amp; auth model</a>
+
+      <div class="toc-group">Build</div>
+      <a href="#daily">Everyday commands</a>
+      <a href="#product">Making your own product</a>
+      <a href="#newmodule">Adding a module</a>
+
+      <div class="toc-group">Ship</div>
+      <a href="#deploy">Deploying</a>
+      <a href="#operate">Operating it</a>
+      <a href="#reference">Reference</a>
+    </nav>
+
+    <button class="theme-toggle" id="themeToggle" type="button">Theme: auto</button>
+  </aside>
+
+  <main>
+    <div class="wrap">
+      <p class="eyebrow">Multi-tenant SaaS template</p>
+      <h1>ForgeSaaS Handbook</h1>
+      <p class="lead">
+        Everything needed to run this template locally, understand what is inside it, turn it into
+        your own product, and deploy it. Written for someone who has not seen the codebase before.
+      </p>
+      <p style="color:var(--muted); font-size:.9rem;">
+        The repository has no README — this document is the entry point. Where a topic has a deeper
+        operational guide, it points at the file rather than repeating it, because a copy in two
+        places is a copy that will be wrong in three months.
+      </p>
+    </div>
+
+    <!-- ============================================================= -->
+    <section id="what" class="wrap">
+      <h2>What this is</h2>
+      <p class="section-intro">
+        A production-shaped, multi-tenant SaaS application that you fork and turn into a product —
+        not a starter kit you read once and outgrow.
+      </p>
+
+      <p>
+        "Multi-tenant" means one running application serves many customer organisations, and every
+        piece of data belongs to exactly one of them. That single idea shapes most of the codebase:
+        every tenant-owned table carries an <code>org_id</code>, and one repository layer applies
+        that filter so no individual query has to remember to.
+      </p>
+
+      <p>What is already built and tested:</p>
+      <ul>
+        <li><strong>Accounts and organisations</strong> — sign-up, email verification, invitations, roles (owner / admin / member), an organisation switcher.</li>
+        <li><strong>Authentication</strong> — passwords (Argon2), TOTP two-factor, WebAuthn security keys, Google/GitHub sign-in, magic links, and optional per-organisation enterprise SSO.</li>
+        <li><strong>Billing</strong> — Stripe checkout, the customer portal, webhooks, plans, subscriptions, dunning, and optional usage metering.</li>
+        <li><strong>The surrounding machinery</strong> — file uploads with virus scanning, in-app/email/push notifications, feature flags, an audit trail, GDPR export and deletion, an admin console, a public API with scoped keys, and outbound webhooks.</li>
+        <li><strong>Four front ends</strong> — a React web app, an Expo mobile app, an Astro marketing site, and transactional email templates.</li>
+      </ul>
+
+      <p>
+        Nearly all of it is optional. Fourteen features are <em>modules</em> you switch on or off with
+        one boolean each, and "off" means the routes return 404 and the database tables are never
+        created — not that a button is hidden. That mechanism is the heart of the template, and
+        <a href="#modules">it has its own section</a>.
+      </p>
+
+      <div class="note">
+        <span class="note-label">The one file to read first</span>
+        <p>
+          <code>TEMPLATE.md</code> is the contract between the template and your product: which files
+          the template owns and will overwrite, and which are yours forever. Reading it before you
+          customise anything saves you a painful merge later.
+        </p>
+      </div>
+    </section>
+
+    <!-- ============================================================= -->
+    <section id="install" class="wrap">
+      <h2>Install &amp; first run</h2>
+      <p class="section-intro">
+        One command brings up the whole stack. The prerequisites are exact — the versions below are
+        the ones CI builds against.
+      </p>
+
+      <h3>Prerequisites</h3>
+      <div class="table-scroll">
+        <table>
+          <thead><tr><th>Tool</th><th>Version</th><th>Why</th></tr></thead>
+          <tbody>
+            <tr><td><strong>Docker</strong> + Compose</td><td>current</td><td>Runs Postgres, Redis, MinIO, Mailhog, Caddy and the backend. Give it 8&nbsp;GB or more — the full stack plus test containers needs it.</td></tr>
+            <tr><td><strong>Python</strong></td><td>3.12+</td><td>The backend. Tests, migrations and scripts run on the host, not in the container.</td></tr>
+            <tr><td><strong>Node.js</strong></td><td>22.13+</td><td>All four front ends and the shared packages.</td></tr>
+            <tr><td><strong>pnpm</strong></td><td>11.8.0</td><td>The package manager. Pinned via <code>packageManager</code>; <code>corepack enable</code> gets you the right one.</td></tr>
+            <tr><td><strong>Make</strong></td><td>any</td><td>Every workflow in this document is a make target.</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3>Setting up</h3>
+      <ol class="steps">
+        <li>
+          <h3>Install dependencies</h3>
+          <div class="code">
+            <div class="code-head"><span>shell</span><button class="copy" type="button">Copy</button></div>
+<pre><code>corepack enable
+pnpm install
+
+cd backend
+python -m venv .venv
+# Windows: .venv\Scripts\activate    macOS/Linux: source .venv/bin/activate
+pip install -e ".[dev]"
+cd ..</code></pre>
+          </div>
+          <p>
+            A virtual environment under <code>backend/.venv</code> is worth creating even if you
+            normally skip them: several scripts look there first when they need an interpreter with
+            the backend installed.
+          </p>
+        </li>
+
+        <li>
+          <h3>Create your environment file</h3>
+          <div class="code">
+            <div class="code-head"><span>shell</span><button class="copy" type="button">Copy</button></div>
+<pre><code>cp backend/.env.example backend/.env</code></pre>
+          </div>
+          <p>
+            The example file has working local defaults for everything except third-party keys. You
+            need a Stripe test key only when you touch billing, and email lands in Mailhog locally,
+            so you do not need a mail provider to start.
+          </p>
+        </li>
+
+        <li>
+          <h3>Start everything</h3>
+          <div class="code">
+            <div class="code-head"><span>shell</span><button class="copy" type="button">Copy</button></div>
+<pre><code>make dev</code></pre>
+          </div>
+          <p>That single target does five things in order:</p>
+          <ol>
+            <li>Builds the email-template CLI (the worker shells out to it, so it must exist on the host first).</li>
+            <li>Brings up the Docker stack.</li>
+            <li>Waits for the backend to answer <code>/health</code>.</li>
+            <li>Runs database migrations.</li>
+            <li>Seeds a starter organisation, plans and a superadmin.</li>
+          </ol>
+        </li>
+
+        <li>
+          <h3>Open it</h3>
+          <p>
+            <strong>https://localhost</strong> — the web app. Your browser will warn once about the
+            certificate: Caddy issues itself a local one, which is correct and expected. Accept it.
+          </p>
+          <p>
+            <strong>https://marketing.localhost</strong> — the marketing site, once you have run
+            <code>pnpm build</code>. It is a separate host, and you may need
+            <code>127.0.0.1 marketing.localhost</code> in your hosts file for it to resolve.
+          </p>
+        </li>
+      </ol>
+
+      <div class="warn-box">
+        <span class="warn-label">If the backend never becomes ready</span>
+        <p>
+          Run <code>docker compose logs backend</code>. The usual cause is a missing or malformed
+          <code>backend/.env</code> — the application refuses to start rather than run with an
+          invalid configuration, and the log line names the field.
+        </p>
+      </div>
+
+      <h3>Supporting services you get locally</h3>
+      <div class="table-scroll">
+        <table>
+          <thead><tr><th>Service</th><th>Address</th><th>What it is</th></tr></thead>
+          <tbody>
+            <tr><td>Web app (via Caddy)</td><td><code>https://localhost</code></td><td>The React app and the API behind one TLS host.</td></tr>
+            <tr><td>Backend</td><td><code>http://localhost:8000</code></td><td>FastAPI directly, bypassing the edge. <code>/docs</code> has the interactive API reference.</td></tr>
+            <tr><td>Mailhog</td><td><code>http://localhost:8025</code></td><td>Catches every outbound email so nothing reaches a real inbox.</td></tr>
+            <tr><td>MinIO</td><td><code>http://localhost:9001</code></td><td>An S3-compatible object store for file uploads.</td></tr>
+            <tr><td>Grafana</td><td><code>http://localhost:3001</code></td><td>Dashboards — only with <code>make observe</code>.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- ============================================================= -->
+    <section id="layout" class="wrap">
+      <h2>Repository layout</h2>
+      <p class="section-intro">
+        A pnpm workspace with a Python backend beside it. Shared code lives in
+        <code>packages/</code> so the four front ends cannot drift apart.
+      </p>
+
+      <div class="tree">
+backend/                  <span class="c"># FastAPI application</span>
+  app/
+    core/                 <span class="c"># config, database, cache, security, module loader</span>
+    models/               <span class="c"># shared table mixins</span>
+    modules/              <span class="c"># one directory per feature — the unit of on/off</span>
+      auth/  tenancy/  billing/  storage/  notifications/
+      admin/  audit/  gdpr/  api_keys/  webhooks/  sso/
+      feature_flags/  product_settings/  _template/
+    middleware/           <span class="c"># security headers, rate limits, maintenance mode</span>
+    workers/              <span class="c"># background jobs (arq) and the scheduler</span>
+  alembic/versions/       <span class="c"># migrations, one directory per module branch</span>
+  tests/                  <span class="c"># ~2,300 tests against real Postgres and Redis</span>
+  product/config.py       <span class="c"># YOUR module toggles + branding</span>
+
+apps/
+  web/                    <span class="c"># React SPA — the product itself</span>
+  marketing/              <span class="c"># Astro static site — the public pages</span>
+  mobile/                 <span class="c"># Expo / React Native app</span>
+
+packages/
+  api-client/             <span class="c"># typed client, generated from the OpenAPI schema</span>
+  ui/                     <span class="c"># component library + design tokens</span>
+  hooks/  utils/          <span class="c"># shared React hooks and helpers</span>
+  i18n/                   <span class="c"># translations, one JSON namespace per area</span>
+  types/  validation/     <span class="c"># shared types and Zod schemas</span>
+  email-templates/        <span class="c"># transactional emails, rendered by a small CLI</span>
+
+docs/
+  adr/                    <span class="c"># architecture decision records — the "why"</span>
+  runbooks/               <span class="c"># operational procedures — the "how, when it breaks"</span>
+
+product.config.ts         <span class="c"># YOUR module toggles + branding (frontend)</span>
+TEMPLATE.md               <span class="c"># the template/product contract</span>
+      </div>
+
+      <p>
+        Two directories deserve emphasis. <strong><code>docs/adr/</code></strong> records why a
+        decision was made and what would change it — read one before arguing with the design.
+        <strong><code>docs/runbooks/</code></strong> holds procedures for when something needs doing
+        or has gone wrong; there are twenty-plus, and they are the most useful thing in the repository
+        when you are on call.
+      </p>
+    </section>
+
+    <!-- ============================================================= -->
+    <section id="stack" class="wrap">
+      <h2>The stack, explained</h2>
+      <p class="section-intro">
+        Every technology here, what it does, and why it was chosen over the obvious alternative. If a
+        name is unfamiliar, this section is written for you.
+      </p>
+
+      <h3>Backend</h3>
+      <div class="cards">
+        <div class="card">
+          <span class="card-tag">Web framework</span>
+          <h4>FastAPI</h4>
+          <p>Handles incoming HTTP requests and routes them to Python functions.</p>
+          <span class="tech-why"><strong>Why:</strong> it derives the API documentation and request validation from ordinary Python type hints, so the schema cannot drift from the code. That generated schema is also what produces the typed frontend client.</span>
+        </div>
+        <div class="card">
+          <span class="card-tag">Database toolkit</span>
+          <h4>SQLModel &amp; SQLAlchemy</h4>
+          <p>Define tables as Python classes and query them without writing SQL by hand.</p>
+          <span class="tech-why"><strong>Why:</strong> SQLModel makes one class serve as both the database table and the validation model. SQLAlchemy underneath is the mature engine that makes the hard queries possible when you need them.</span>
+        </div>
+        <div class="card">
+          <span class="card-tag">Database</span>
+          <h4>PostgreSQL + asyncpg</h4>
+          <p>The database itself, with a driver that does not block while waiting on it.</p>
+          <span class="tech-why"><strong>Why:</strong> Postgres has the JSON support, full-text search and transactional guarantees this needs. "Async" matters because one server process can then serve many requests while queries are in flight.</span>
+        </div>
+        <div class="card">
+          <span class="card-tag">Schema changes</span>
+          <h4>Alembic</h4>
+          <p>Version control for the database schema — every change is a reviewable file.</p>
+          <span class="tech-why"><strong>Why:</strong> each optional module keeps its migrations on its own <em>branch</em>, so a module you never enable never creates its tables at all. That is what makes "off means gone" true.</span>
+        </div>
+        <div class="card">
+          <span class="card-tag">Background jobs</span>
+          <h4>arq + APScheduler</h4>
+          <p>Work that happens outside a request: sending email, scanning uploads, delivering webhooks.</p>
+          <span class="tech-why"><strong>Why:</strong> a user should not wait for an email to send. arq runs queued jobs on Redis; APScheduler handles recurring ones like pruning old records.</span>
+        </div>
+        <div class="card">
+          <span class="card-tag">Cache &amp; queue</span>
+          <h4>Redis</h4>
+          <p>Fast in-memory storage for caches, rate-limit counters and the job queue.</p>
+          <span class="tech-why"><strong>Why:</strong> one dependency covers three needs. Cache keys are centralised in one file so an invalidation is never forgotten.</span>
+        </div>
+        <div class="card">
+          <span class="card-tag">Passwords</span>
+          <h4>Argon2</h4>
+          <p>The algorithm that turns a password into something safe to store.</p>
+          <span class="tech-why"><strong>Why:</strong> it is deliberately expensive in memory as well as time, which is what makes stolen hashes impractical to crack. It won the competition held to find exactly this.</span>
+        </div>
+        <div class="card">
+          <span class="card-tag">Tokens</span>
+          <h4>joserfc &amp; python-jose</h4>
+          <p>Signing and verifying the tokens that prove who a request is from.</p>
+          <span class="tech-why"><strong>Why:</strong> sessions are RS256-signed JWTs — signed with a private key, verifiable with a public one. joserfc is the maintained library used for verifying identity-provider tokens in enterprise SSO.</span>
+        </div>
+      </div>
+
+      <h3>Web front end</h3>
+      <div class="cards">
+        <div class="card">
+          <span class="card-tag">UI</span>
+          <h4>React + Vite</h4>
+          <p>The component model, and the build tool that serves it instantly while you edit.</p>
+          <span class="tech-why"><strong>Why:</strong> the largest ecosystem and hiring pool. Vite over older bundlers because a reload takes milliseconds, not seconds.</span>
+        </div>
+        <div class="card">
+          <span class="card-tag">Routing &amp; data</span>
+          <h4>TanStack Router + Query</h4>
+          <p>Router maps URLs to screens; Query fetches, caches and refreshes server data.</p>
+          <span class="tech-why"><strong>Why:</strong> the router is fully type-safe — a typo in a link is a build error. Query removes almost all hand-written loading and caching logic.</span>
+        </div>
+        <div class="card">
+          <span class="card-tag">Generated client</span>
+          <h4>@forge/api-client</h4>
+          <p>A typed function for every API endpoint, generated from the backend's schema.</p>
+          <span class="tech-why"><strong>Why:</strong> rename a field in Python and the frontend stops compiling. It is generated offline with every module switched on, so the types exist whatever your product enables.</span>
+        </div>
+        <div class="card">
+          <span class="card-tag">Forms &amp; validation</span>
+          <h4>react-hook-form + Zod</h4>
+          <p>Form state, with validation rules shared between frontend and backend.</p>
+          <span class="tech-why"><strong>Why:</strong> the rules live once in <code>@forge/validation</code>, so the browser and the server cannot disagree about what a valid email is.</span>
+        </div>
+      </div>
+
+      <h3>Marketing site &amp; mobile</h3>
+      <div class="cards">
+        <div class="card">
+          <span class="card-tag">Marketing</span>
+          <h4>Astro</h4>
+          <p>Builds the public pages to plain HTML with no JavaScript unless a component needs it.</p>
+          <span class="tech-why"><strong>Why:</strong> marketing pages are judged on load speed and search ranking. Astro ships zero JS by default and lets one interactive piece — the pricing toggle — become an "island" of React on an otherwise static page. See <code>docs/adr/0004</code>.</span>
+        </div>
+        <div class="card">
+          <span class="card-tag">Mobile</span>
+          <h4>Expo / React Native</h4>
+          <p>One codebase producing real iOS and Android apps.</p>
+          <span class="tech-why"><strong>Why:</strong> it reuses the same API client, validation and translations as the web app. Expo removes most of the native build toolchain pain.</span>
+        </div>
+        <div class="card">
+          <span class="card-tag">Styling</span>
+          <h4>Tailwind CSS</h4>
+          <p>Styling written as utility classes in the markup.</p>
+          <span class="tech-why"><strong>Why:</strong> design tokens live in <code>@forge/ui</code> and both the app and the marketing site consume them, so a brand change happens once.</span>
+        </div>
+        <div class="card">
+          <span class="card-tag">Translation</span>
+          <h4>i18next + ICU</h4>
+          <p>Text in six locales, including right-to-left Arabic.</p>
+          <span class="tech-why"><strong>Why:</strong> retrofitting translation is expensive; starting with it is nearly free. Note that placeholders use ICU syntax — <code>{name}</code>, single braces.</span>
+        </div>
+      </div>
+
+      <h3>Infrastructure &amp; operations</h3>
+      <div class="cards">
+        <div class="card">
+          <span class="card-tag">Edge</span>
+          <h4>Caddy</h4>
+          <p>The web server in front of everything: TLS, security headers, static files.</p>
+          <span class="tech-why"><strong>Why:</strong> it obtains and renews HTTPS certificates automatically, including locally. The marketing site is served as a second host from a generated config block.</span>
+        </div>
+        <div class="card">
+          <span class="card-tag">Connection pooling</span>
+          <h4>pgbouncer</h4>
+          <p>Sits between the app and Postgres, reusing a small pool of connections.</p>
+          <span class="tech-why"><strong>Why:</strong> Postgres connections are expensive and finite. In production only — see <code>docs/adr/0002</code> for the trade-offs it brings.</span>
+        </div>
+        <div class="card">
+          <span class="card-tag">Observability</span>
+          <h4>Prometheus, Grafana, Sentry, OpenTelemetry</h4>
+          <p>Metrics, dashboards, error reports and request traces.</p>
+          <span class="tech-why"><strong>Why:</strong> when something is slow or broken in production, you need numbers rather than guesses. All four are wired up and off by default locally.</span>
+        </div>
+        <div class="card">
+          <span class="card-tag">Services</span>
+          <h4>Stripe, Resend, ClamAV</h4>
+          <p>Payments, transactional email, virus scanning for uploads.</p>
+          <span class="tech-why"><strong>Why:</strong> each is replaceable behind an interface. Email has a local backend so development never sends anything real.</span>
+        </div>
+      </div>
+
+      <h3>Quality gates</h3>
+      <p>
+        These run in CI on every push, and you can run all of them locally. They are worth knowing
+        because they will be what stops your first pull request.
+      </p>
+      <div class="table-scroll">
+        <table>
+          <thead><tr><th>Tool</th><th>Checks</th></tr></thead>
+          <tbody>
+            <tr><td><strong>ruff</strong></td><td>Python linting and formatting. Pinned exactly — a new release must not turn a green tree red on its own.</td></tr>
+            <tr><td><strong>mypy --strict</strong></td><td>Python types. Strict means no untyped functions anywhere in <code>app/</code>.</td></tr>
+            <tr><td><strong>ESLint + TypeScript</strong></td><td>The same for the front ends.</td></tr>
+            <tr><td><strong>pytest</strong></td><td>~2,300 tests against real Postgres and Redis in throwaway containers — not mocks.</td></tr>
+            <tr><td><strong>Playwright</strong></td><td>Browser tests of real user journeys, plus accessibility (axe) and visual snapshots.</td></tr>
+            <tr><td><strong>Trivy, Semgrep, Bandit, Gitleaks, pip-audit</strong></td><td>Dependency vulnerabilities, insecure code patterns and committed secrets.</td></tr>
+            <tr><td><strong>OWASP ZAP</strong></td><td>Scans the running application for common web vulnerabilities, on both hosts.</td></tr>
+            <tr><td><strong>k6</strong></td><td>Load tests that assert latency budgets rather than producing a graph nobody reads.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- ============================================================= -->
+    <section id="modules" class="wrap">
+      <h2>The module system</h2>
+      <p class="section-intro">
+        The central idea. Fourteen features, each one boolean. Off means the routes 404, the tables
+        are never created and the UI is absent — not that something is hidden behind a flag.
+      </p>
+
+      <p>
+        Toggles live in two files that must agree: <code>backend/product/config.py</code> and
+        <code>product.config.ts</code>. Both belong to your product and are never overwritten by a
+        template update.
+      </p>
+
+      <div class="code">
+        <div class="code-head"><span>backend/product/config.py</span><button class="copy" type="button">Copy</button></div>
+<pre><code>MODULES = EnabledModules(
+    billing=ModuleConfig(enabled=True),
+    notifications=ModuleConfig(enabled=True),
+    public_api=ModuleConfig(enabled=True),      # turn one on
+    enterprise_sso=ModuleConfig(enabled=False),
+)</code></pre>
+      </div>
+
+      <div class="table-scroll">
+        <table>
+          <thead><tr><th>Module</th><th>Default</th><th>Requires</th><th>What it is</th></tr></thead>
+          <tbody>
+            <tr><td><code>billing</code></td><td><span class="pill on">on</span></td><td>—</td><td>Stripe checkout, portal, webhooks, plans and subscriptions.</td></tr>
+            <tr><td><code>notifications</code></td><td><span class="pill on">on</span></td><td><code>billing</code></td><td>In-app, email and push notifications with per-user preferences.</td></tr>
+            <tr><td><code>file_storage</code></td><td><span class="pill on">on</span></td><td><code>billing</code></td><td>Uploads to S3/MinIO, with virus scanning.</td></tr>
+            <tr><td><code>feature_flags</code></td><td><span class="pill on">on</span></td><td>—</td><td>Per-organisation flags and their admin toggles.</td></tr>
+            <tr><td><code>gdpr</code></td><td><span class="pill on">on</span></td><td>—</td><td>Data export, consent records, self-serve deletion.</td></tr>
+            <tr><td><code>admin</code></td><td><span class="pill on">on</span></td><td>—</td><td>The internal admin console and its API.</td></tr>
+            <tr><td><code>oauth</code></td><td><span class="pill on">on</span></td><td>—</td><td>Google and GitHub sign-in, account linking.</td></tr>
+            <tr><td><code>totp_2fa</code></td><td><span class="pill on">on</span></td><td>—</td><td>Authenticator-app two-factor and step-up prompts.</td></tr>
+            <tr><td><code>multi_org</code></td><td><span class="pill on">on</span></td><td>—</td><td>The organisation switcher. Off pins each user to one org.</td></tr>
+            <tr><td><code>marketing</code></td><td><span class="pill on">on</span></td><td>—</td><td>The Astro site and the Caddy block that serves it.</td></tr>
+            <tr><td><code>usage_metering</code></td><td><span class="pill off">off</span></td><td><code>billing</code></td><td>Usage records and metered pricing.</td></tr>
+            <tr><td><code>outbound_webhooks</code></td><td><span class="pill off">off</span></td><td><code>billing</code></td><td>Customer-facing webhooks with retries, replay and a delivery log.</td></tr>
+            <tr><td><code>public_api</code></td><td><span class="pill off">off</span></td><td>—</td><td>Org-scoped API keys with scopes and per-key rate limits.</td></tr>
+            <tr><td><code>enterprise_sso</code></td><td><span class="pill off">off</span></td><td><code>oauth</code></td><td>Per-organisation OIDC sign-in, optionally enforced.</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3>Dependencies are enforced, not documented</h3>
+      <p>
+        The <code>Requires</code> column is declared by the template, not by your config. Enabling
+        <code>enterprise_sso</code> with <code>oauth</code> off raises a <code>RuntimeError</code> at
+        boot naming both modules. A half-configured stack fails loudly at start rather than quietly
+        at the first request.
+      </p>
+
+      <h3>Turning one on</h3>
+      <div class="code">
+        <div class="code-head"><span>shell</span><button class="copy" type="button">Copy</button></div>
+<pre><code>make migrate-plan   # shows which module branches will be applied
+make migrate        # creates that module's tables
+make dev            # restart</code></pre>
+      </div>
+      <p>
+        <code>docs/runbooks/module-toggle-guide.md</code> walks through each toggle in both
+        directions, including the ones with consequences worth knowing before you flip them twice.
+      </p>
+
+      <div class="warn-box">
+        <span class="warn-label">Turning one off keeps the data</span>
+        <p>
+          Disabling a module does not drop its tables — your customers' rows survive so the switch is
+          reversible. Two cases deserve care: an API key stops authenticating the moment
+          <code>public_api</code> goes off even though its row remains, and disabling
+          <code>enterprise_sso</code> un-enforces SSO for every organisation at once, which matters if
+          those users have no password.
+        </p>
+      </div>
+
+      <h3>The matrix that keeps it honest</h3>
+      <p>
+        CI runs the whole suite in three configurations: the shipped defaults, every optional module
+        off, and the Phase&nbsp;4 modules on. This is not ceremony — the first time it ran it found
+        86 failures, two of which were real defects that only appear when a module is enabled. If you
+        add a code path that queries something only when a module is on, that job is what will catch
+        the test file you forgot.
+      </p>
+    </section>
+
+    <!-- ============================================================= -->
+    <section id="tenancy" class="wrap">
+      <h2>Tenancy &amp; auth model</h2>
+      <p class="section-intro">
+        Two rules explain most of the backend. Understanding them prevents the two most expensive
+        classes of bug in a multi-tenant product.
+      </p>
+
+      <h3>Rule one: <code>org_id</code> is sacred</h3>
+      <p>
+        Every tenant-owned table carries an <code>org_id</code>, and <code>BaseRepository</code>
+        applies that filter to everything it builds. You do not write the filter per query — you
+        inherit it. A dedicated test sweep probes every org-scoped endpoint from the wrong
+        organisation and fails the build if any of them answers.
+      </p>
+      <p>
+        The database is shared, with row-level separation. <code>docs/adr/0007</code> explains why
+        that was chosen over a schema per tenant, names PostgreSQL row-level security as the next
+        step if stronger assurance is ever required, and lists the five measurable thresholds that
+        would reopen the question.
+      </p>
+
+      <h3>Rule two: there are two kinds of caller</h3>
+      <p>
+        A <strong>session</strong> is a person: a short-lived signed token plus a refresh token in a
+        cookie. An <strong>API key</strong> is a program: a long-lived credential with explicit
+        scopes and its own rate limit. Both arrive on the same <code>Authorization</code> header and
+        are told apart by prefix.
+      </p>
+      <p>
+        The important asymmetry: an endpoint accepts a key <em>only</em> if it explicitly declares a
+        scope. Every other endpoint refuses one, including everything under
+        <code>/api/v1/api-keys</code> — a key that could mint another key would be a
+        privilege-escalation primitive.
+      </p>
+
+      <h3>What a user can be</h3>
+      <ul>
+        <li><strong>Roles</strong> — owner, admin, member, per organisation. A user can hold different roles in different organisations.</li>
+        <li><strong>Superadmin</strong> — a platform-level flag for the admin console, requiring two-factor.</li>
+        <li><strong>Impersonation</strong> — support staff can act as a user, with every destructive action blocked and the whole session audited. A CI sweep requires every mutating route to either carry the guard or an explicit written exemption.</li>
+      </ul>
+    </section>
+
+    <!-- ============================================================= -->
+    <section id="daily" class="wrap">
+      <h2>Everyday commands</h2>
+      <p class="section-intro">
+        Every workflow is a make target. These are the ones you will use weekly.
+      </p>
+
+      <div class="table-scroll">
+        <table>
+          <thead><tr><th>Command</th><th>What it does</th></tr></thead>
+          <tbody>
+            <tr><td><code>make dev</code></td><td>Build emails, start the stack, migrate, seed, open the app.</td></tr>
+            <tr><td><code>make down</code></td><td>Stop everything.</td></tr>
+            <tr><td><code>make test</code></td><td>Backend suite with coverage, plus web, i18n and email-template tests.</td></tr>
+            <tr><td><code>make lint</code></td><td>ruff, ESLint, TypeScript and the docs shape check.</td></tr>
+            <tr><td><code>make migrate</code></td><td>Apply migrations for the modules you have enabled.</td></tr>
+            <tr><td><code>make migrate-plan</code></td><td>Show what <em>would</em> be applied, without touching the database.</td></tr>
+            <tr><td><code>make gen-client</code></td><td>Regenerate the typed API client after changing an endpoint. Runs offline.</td></tr>
+            <tr><td><code>make seed</code></td><td>Reseed the starter organisation, plans and superadmin.</td></tr>
+            <tr><td><code>make new-module NAME=invoices</code></td><td>Scaffold a new module plus its test file, and print the manual follow-ups.</td></tr>
+            <tr><td><code>make observe</code></td><td>Start Prometheus and Grafana against the running stack.</td></tr>
+            <tr><td><code>make load-test</code></td><td>Run the k6 load suite against a stack you already started.</td></tr>
+            <tr><td><code>make check-docs</code></td><td>Verify ADR and runbook structure. <code>ARGS=--write</code> regenerates the ADR index.</td></tr>
+            <tr><td><code>make install-hooks</code></td><td>Install pre-commit hooks so problems surface before CI does.</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3>The loop when you add an endpoint</h3>
+      <ol>
+        <li>Write the route, schema and repository method in <code>backend/app/modules/&lt;module&gt;/</code>.</li>
+        <li>Write the test. The suite uses a real database, so tests describe real behaviour.</li>
+        <li><code>make gen-client</code> — the frontend now has a typed function for it.</li>
+        <li>Use it in <code>apps/web</code>. A wrong field name is a compile error, not a runtime surprise.</li>
+        <li><code>make lint &amp;&amp; make test</code>.</li>
+      </ol>
+
+      <div class="note">
+        <span class="note-label">If a just-generated symbol "does not exist"</span>
+        <p>
+          The generated client is gitignored and built on demand, and the build cache has been known
+          to serve a stale copy. Run <code>make gen-client</code> then
+          <code>pnpm build</code> before believing the error.
+        </p>
+      </div>
+    </section>
+
+    <!-- ============================================================= -->
+    <section id="product" class="wrap">
+      <h2>Making your own product</h2>
+      <p class="section-intro">
+        The template is designed to be forked once and then kept up to date for years. That only
+        works if both sides respect one boundary.
+      </p>
+
+      <h3>The contract</h3>
+      <p>
+        <strong>Your product owns these files. A template update never touches them:</strong>
+      </p>
+      <ul>
+        <li><code>product.config.py</code> and <code>product.config.ts</code> — toggles and branding</li>
+        <li><code>.env.product.example</code> — your own environment variables</li>
+        <li><code>apps/web/src/routes/_product/</code> — your own screens</li>
+        <li><code>backend/app/modules/&lt;your-module&gt;/</code> — your own features</li>
+        <li><code>CHANGELOG.product.md</code> and <code>README.md</code></li>
+        <li><code>apps/web/src/features/support/SupportWidget.tsx</code>, if you wire up a support tool</li>
+      </ul>
+      <p>
+        <strong>Everything else belongs to the template</strong> and will be overwritten. If you must
+        change a template file, record why in <code>CHANGELOG.product.md</code> so the next merge
+        conflict has an explanation attached.
+      </p>
+
+      <h3>Starting a product</h3>
+      <ol class="steps">
+        <li>
+          <h3>Fork, and keep the template as a remote</h3>
+          <div class="code">
+            <div class="code-head"><span>shell</span><button class="copy" type="button">Copy</button></div>
+<pre><code>git clone &lt;your-fork&gt; my-product
+cd my-product
+git remote add upstream &lt;forgesaas-template-url&gt;
+git fetch upstream</code></pre>
+          </div>
+          <p>Without the second remote you cannot pull improvements later — do it now, not when you need it.</p>
+        </li>
+        <li>
+          <h3>Choose your modules</h3>
+          <p>
+            Edit <code>backend/product/config.py</code> and <code>product.config.ts</code> together.
+            Turning things <em>off</em> is as valuable as turning them on: less surface to secure,
+            fewer tables, a smaller app.
+          </p>
+        </li>
+        <li>
+          <h3>Claim a migration prefix</h3>
+          <p>
+            Migrations are numbered so template and product changes never collide. The template owns
+            <code>0001–0099</code>; your product takes <code>0100–0199</code>. Record it in the table
+            in <code>TEMPLATE.md</code>, and put your migrations under
+            <code>backend/alembic/versions/product/</code>.
+          </p>
+        </li>
+        <li>
+          <h3>Brand it</h3>
+          <p>
+            Product name, colours and support details come from the two config files, and design
+            tokens live in <code>packages/ui</code>. Changing them once updates the app, the
+            marketing site and the emails.
+          </p>
+        </li>
+        <li>
+          <h3>Build your first feature</h3>
+          <p>
+            <code>make new-module NAME=invoices</code>, then see <a href="#newmodule">the next
+            section</a>.
+          </p>
+        </li>
+      </ol>
+
+      <h3>Pulling template updates</h3>
+      <div class="code">
+        <div class="code-head"><span>shell</span><button class="copy" type="button">Copy</button></div>
+<pre><code>make check-template-drift          # what has landed upstream since you forked
+make update-from-template          # fetch + merge
+# resolve conflicts, taking the template version unless you have a written reason
+make dev &amp;&amp; make test              # verify before pushing</code></pre>
+      </div>
+      <div class="warn-box">
+        <span class="warn-label">Merge a tag, not a branch</span>
+        <p>
+          Always merge a released tag (<code>upstream/vX.Y.Z</code>) rather than
+          <code>upstream/main</code>. A tag is a state someone verified; main is whatever landed an
+          hour ago.
+        </p>
+      </div>
+    </section>
+
+    <!-- ============================================================= -->
+    <section id="newmodule" class="wrap">
+      <h2>Adding a module</h2>
+      <p class="section-intro">
+        A module is a directory with a fixed shape. The generator writes the shape and tells you what
+        it cannot do for you.
+      </p>
+
+      <div class="code">
+        <div class="code-head"><span>shell</span><button class="copy" type="button">Copy</button></div>
+<pre><code>make new-module NAME=invoices</code></pre>
+      </div>
+
+      <p>That creates <code>backend/app/modules/invoices/</code> containing:</p>
+      <div class="table-scroll">
+        <table>
+          <thead><tr><th>File</th><th>Responsibility</th></tr></thead>
+          <tbody>
+            <tr><td><code>models.py</code></td><td>Database tables. Tenant-owned ones carry <code>org_id</code>.</td></tr>
+            <tr><td><code>schemas.py</code></td><td>Request and response shapes. Never expose a model directly.</td></tr>
+            <tr><td><code>repository.py</code></td><td>The <em>only</em> layer allowed to build queries. Org scoping lives here.</td></tr>
+            <tr><td><code>service.py</code></td><td>Business logic. Does not commit — the router owns the transaction.</td></tr>
+            <tr><td><code>router.py</code></td><td>HTTP endpoints, permissions and rate limits.</td></tr>
+            <tr><td><code>README.md</code></td><td>Why this module exists and what to know before editing it.</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <p>The generator prints the manual follow-ups with file and line pointers. They are:</p>
+      <ol>
+        <li>Add the toggle to <code>EnabledModules</code> and both product config files.</li>
+        <li>Register the router conditionally in <code>build_router()</code>.</li>
+        <li>Add the Alembic branch and its tables to the migration map, then write the first migration.</li>
+        <li>Add the module's routes to the surface map so the toggle matrix tests it.</li>
+      </ol>
+
+      <div class="note">
+        <span class="note-label">Two rules the build enforces</span>
+        <p>
+          Every list endpoint needs an entry in the query-budget suite — a missing one fails the
+          build, which is how N+1 queries are caught before review. And every mutating route needs
+          either the impersonation guard or a written <code># impersonation-ok:</code> reason.
+        </p>
+      </div>
+    </section>
+
+    <!-- ============================================================= -->
+    <section id="deploy" class="wrap">
+      <h2>Deploying</h2>
+      <p class="section-intro">
+        Two paths: run the production compose stack yourself, or push the built image to a managed
+        platform. Both use the same container.
+      </p>
+
+      <h3>What production adds</h3>
+      <div class="table-scroll">
+        <table>
+          <thead><tr><th>Service</th><th>Role</th></tr></thead>
+          <tbody>
+            <tr><td><code>caddy</code></td><td>TLS termination, security headers, both hosts.</td></tr>
+            <tr><td><code>backend</code></td><td>The API.</td></tr>
+            <tr><td><code>worker</code></td><td>Background jobs and the scheduler. Its own process, its own metrics endpoint.</td></tr>
+            <tr><td><code>postgres</code> + <code>pgbouncer</code></td><td>The database, behind a connection pool. Transaction mode.</td></tr>
+            <tr><td><code>redis</code></td><td>Cache, rate limits, job queue.</td></tr>
+            <tr><td><code>clamav</code></td><td>Virus scanning for uploads.</td></tr>
+            <tr><td><code>postgres-exporter</code></td><td>Database metrics for Prometheus.</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3>Rehearse it locally first</h3>
+      <div class="code">
+        <div class="code-head"><span>shell</span><button class="copy" type="button">Copy</button></div>
+<pre><code>make prod-compose-check</code></pre>
+      </div>
+      <p>
+        This boots the production compose file — the only stack that routes through pgbouncer —
+        migrates, checks readiness and inspects the connection pool. It <strong>overwrites
+        <code>backend/.env</code></strong>; restore yours afterwards.
+      </p>
+
+      <h3>Configuration that differs in production</h3>
+      <p>
+        The application refuses to boot outside development without TLS on
+        <code>DATABASE_URL</code> and <code>REDIS_URL</code> and a <code>PASSWORD_PEPPER</code> set.
+        This is deliberate: a <code>.env</code> that works locally is not one that works in
+        production, and the failure is at startup rather than at the first request.
+      </p>
+      <div class="table-scroll">
+        <table>
+          <thead><tr><th>Variable</th><th>Notes</th></tr></thead>
+          <tbody>
+            <tr><td><code>DATABASE_URL</code></td><td>Must use TLS. Point at pgbouncer where you run one.</td></tr>
+            <tr><td><code>REDIS_URL</code></td><td>Must use TLS.</td></tr>
+            <tr><td><code>JWT_PRIVATE_KEY</code> / <code>JWT_PUBLIC_KEY</code></td><td>An RS256 keypair. Generate a real one; never reuse the example.</td></tr>
+            <tr><td><code>PASSWORD_PEPPER</code></td><td>A secret mixed into password hashing. Required outside dev.</td></tr>
+            <tr><td><code>ENCRYPTION_KEY</code></td><td>Encrypts secret columns. Rotatable — see the key-rotation runbook.</td></tr>
+            <tr><td><code>ENVIRONMENT</code></td><td>Drives the startup checks and error verbosity.</td></tr>
+            <tr><td><code>DOMAIN</code> / <code>MARKETING_DOMAIN</code></td><td>The two hosts Caddy serves.</td></tr>
+            <tr><td><code>PRODUCTION_ORIGIN</code></td><td>Indexing is opt-in: without it, the marketing site tells crawlers to stay away.</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3>Deploying to your own server</h3>
+      <p>
+        A worked example, start to finish: one VPS running the whole stack behind Caddy, on a
+        domain with Cloudflare DNS. This was written by doing it, so the traps in it are real
+        ones rather than anticipated ones. Roughly &euro;5&ndash;8 a month.
+      </p>
+
+      <div class="warn-box">
+        <span class="warn-label">Pick an x86 server, not ARM</span>
+        <p>
+          CI builds <code>linux/amd64</code> only &mdash; a plain <code>docker build</code>, no
+          buildx and no <code>--platform</code>. ARM instances are around half the price and
+          tempting, and the image will not run on them. Adding multi-arch to the build job is a
+          small change if you want that saving; make it <em>before</em> you provision.
+        </p>
+      </div>
+
+      <p>
+        <strong>4&nbsp;GB of RAM is enough</strong> provided the frontend is built somewhere else
+        &mdash; in CI, or in a container as below. The running stack is about 900&nbsp;MB
+        (Postgres, pgbouncer, Redis, MinIO, backend, worker, Caddy); it is
+        <code>pnpm build</code> that is memory-hungry, not serving.
+      </p>
+
+      <ol class="steps">
+        <li>
+          <h4>Point three DNS records at the box</h4>
+          <p>
+            Three hosts, because the app and the marketing site are separate origins and object
+            storage needs a public one of its own. Keep them <strong>DNS-only</strong> (grey cloud
+            in Cloudflare) for the first deploy: Caddy needs a clear path to Let's Encrypt, and a
+            proxy in front changes both the challenge and the client IP handling.
+          </p>
+          <div class="table-scroll">
+            <table>
+              <thead><tr><th>Record</th><th>Serves</th><th>Set by</th></tr></thead>
+              <tbody>
+                <tr><td><code>@</code></td><td>The marketing site</td><td><code>MARKETING_DOMAIN</code></td></tr>
+                <tr><td><code>app</code></td><td>The SPA <em>and</em> the API, one origin</td><td><code>DOMAIN</code></td></tr>
+                <tr><td><code>storage</code></td><td>MinIO, proxied by Caddy</td><td><code>STORAGE_DOMAIN</code></td></tr>
+              </tbody>
+            </table>
+          </div>
+          <p>
+            All three must resolve <em>before</em> the stack first starts. Caddy orders a
+            certificate per hostname at boot and backs off on failure, so a missing record costs
+            minutes of unavailability rather than a clean error.
+          </p>
+          <p>
+            The SPA and API sharing one origin is deliberate: no CORS, and the
+            <code>__Host-refresh_token</code> cookie needs no special handling. Splitting them
+            across two registrable domains breaks the session in a way that only shows up on the
+            second token refresh.
+          </p>
+        </li>
+
+        <li>
+          <h4>Prepare the machine</h4>
+          <div class="code">
+            <div class="code-head"><span>shell &mdash; as root</span><button class="copy" type="button">Copy</button></div>
+<pre><code>apt update &amp;&amp; apt upgrade -y &amp;&amp; apt install -y make git
+curl -fsSL https://get.docker.com | sh
+
+adduser --disabled-password --gecos "" forge
+usermod -aG docker forge
+mkdir -p /home/forge/.ssh &amp;&amp; cp ~/.ssh/authorized_keys /home/forge/.ssh/
+chown -R forge:forge /home/forge/.ssh &amp;&amp; chmod 700 /home/forge/.ssh
+
+# swap: cloud images ship with none, and the frontend build OOMs without it
+fallocate -l 2G /swapfile &amp;&amp; chmod 600 /swapfile
+mkswap /swapfile &amp;&amp; swapon /swapfile
+echo '/swapfile none swap sw 0 0' &gt;&gt; /etc/fstab</code></pre>
+          </div>
+          <p>
+            Open only <strong>22, 80 and 443</strong> inbound. Nothing else is published: the
+            backend, Postgres, Redis and MinIO are reachable only on the compose network. That is
+            what makes <code>TRUSTED_PROXY_IPS</code> and <code>METRICS_BLOCKED_AT_EDGE</code>
+            truthful rather than aspirational.
+          </p>
+          <p>Everything from here runs as <code>forge</code>, never root.</p>
+        </li>
+
+        <li>
+          <h4>Clone</h4>
+          <div class="code">
+            <div class="code-head"><span>shell</span><button class="copy" type="button">Copy</button></div>
+<pre><code>ssh-keygen -t ed25519 -f ~/.ssh/id_ed25519 -N "" -C "forge-prod-deploy"
+ssh-keyscan github.com &gt;&gt; ~/.ssh/known_hosts 2&gt;/dev/null
+cat ~/.ssh/id_ed25519.pub   # add as a read-only Deploy key on the repo
+
+git clone git@github.com:YOU/YOUR-REPO.git ~/forge &amp;&amp; cd ~/forge</code></pre>
+          </div>
+        </li>
+
+        <li>
+          <h4>Edit the one committed setting</h4>
+          <p>
+            <code>PRODUCTION_ORIGIN</code> in
+            <code>apps/marketing/src/config/indexing.ts</code> ships as
+            <code>https://example.com</code>. It is committed source, not configuration, because
+            indexing is opt-in &mdash; a fresh clone tells crawlers nothing until somebody states
+            where production is. Change it to your apex and push, <em>then</em> pull on the box.
+          </p>
+        </li>
+
+        <li>
+          <h4>Generate the configuration</h4>
+          <p>
+            Run this on the server so the secrets are created where they will be used and never
+            travel. Replace the three hostnames.
+          </p>
+          <div class="code">
+            <div class="code-head"><span>shell</span><button class="copy" type="button">Copy</button></div>
+<pre><code>cd ~/forge
+APEX=example.com          # your apex
+APP=app.$APEX
+STORAGE=storage.$APEX
+
+PGPASS="$(openssl rand -hex 24)"
+MINIOPASS="$(openssl rand -hex 24)"
+MINIOKMS="forge-prod:$(openssl rand -base64 32)"
+PEPPER="$(openssl rand -base64 36 | tr -d '=+/' | cut -c1-43)"
+FERNET="$(openssl rand -base64 32)"
+openssl genrsa -out /tmp/jwt.pem 2048 2&gt;/dev/null
+JWT_PRIV="$(cat /tmp/jwt.pem)"
+JWT_PUB="$(openssl rsa -in /tmp/jwt.pem -pubout 2&gt;/dev/null)"
+rm -f /tmp/jwt.pem
+
+cat &gt; .env.postgres &lt;&lt;EOF
+POSTGRES_USER=postgres
+POSTGRES_PASSWORD=$PGPASS
+POSTGRES_DB=forge
+EOF
+
+sed -e "s|^DATABASE_URL=.*|DATABASE_URL=postgres://postgres:$PGPASS@postgres:5432/forge|" \
+    -e "s|^PGPASSWORD=.*|PGPASSWORD=$PGPASS|" \
+    .env.pgbouncer.example &gt; .env.pgbouncer
+
+sed -e "s|^MINIO_ROOT_PASSWORD=.*|MINIO_ROOT_PASSWORD=$MINIOPASS|" \
+    -e "s|^MINIO_KMS_SECRET_KEY=.*|MINIO_KMS_SECRET_KEY=$MINIOKMS|" \
+    .env.minio.example &gt; .env.minio
+
+cat &gt; backend/.env &lt;&lt;EOF
+ENVIRONMENT=prod
+LOG_LEVEL=INFO
+FORCE_HTTPS=true
+
+DOMAIN=$APP
+MARKETING_DOMAIN=$APEX
+STORAGE_DOMAIN=$STORAGE
+FRONTEND_URL=https://$APP
+ALLOWED_ORIGINS=["https://$APP"]
+
+DATABASE_URL=postgresql+asyncpg://postgres:$PGPASS@pgbouncer:6432/forge?sslmode=require
+MIGRATIONS_DATABASE_URL=postgresql+asyncpg://postgres:$PGPASS@postgres:5432/forge?sslmode=require
+PGBOUNCER_ENABLED=true
+REDIS_URL=rediss://redis:6379/0?ssl_ca_certs=/certs/ca.crt
+
+TRUSTED_PROXY_IPS=10.0.0.0/8,172.16.0.0/12,192.168.0.0/16
+METRICS_BLOCKED_AT_EDGE=true
+
+JWT_PRIVATE_KEY="$JWT_PRIV"
+JWT_PUBLIC_KEY="$JWT_PUB"
+ENCRYPTION_KEY=$FERNET
+PASSWORD_PEPPER=$PEPPER
+
+STORAGE_BACKEND=minio
+AWS_BUCKET_NAME=forge
+AWS_REGION=us-east-1
+AWS_ACCESS_KEY_ID=forge
+AWS_SECRET_ACCESS_KEY=$MINIOPASS
+AWS_ENDPOINT_URL=https://$STORAGE
+
+VIRUS_SCANNER=virustotal
+VIRUSTOTAL_API_KEY=
+
+STRIPE_SECRET_KEY=sk_test_placeholder
+STRIPE_WEBHOOK_SECRET=whsec_placeholder
+
+RESEND_API_KEY=re_placeholder
+EMAIL_FROM_ADDRESS=YourProduct &lt;noreply@$APEX&gt;
+EMAIL_BACKEND=resend
+EOF
+
+chmod 600 backend/.env .env.postgres .env.pgbouncer .env.minio
+echo "BACK UP OFF THE BOX: $PEPPER / $FERNET / $MINIOKMS / $PGPASS"</code></pre>
+          </div>
+          <div class="warn-box">
+            <span class="warn-label">Three of those are unrecoverable</span>
+            <p>
+              Changing <code>PASSWORD_PEPPER</code> invalidates every password hash ever written.
+              Losing <code>ENCRYPTION_KEY</code> loses the encrypted columns. Losing
+              <code>MINIO_KMS_SECRET_KEY</code> loses every uploaded file. Put all three somewhere
+              off the machine before you continue.
+            </p>
+          </div>
+        </li>
+
+        <li>
+          <h4>Certificates for the internal hops</h4>
+          <div class="code">
+            <div class="code-head"><span>shell</span><button class="copy" type="button">Copy</button></div>
+<pre><code>bash scripts/gen-internal-certs.sh ./certs</code></pre>
+          </div>
+          <p>
+            Not the public certificate &mdash; Caddy gets that from Let's Encrypt on its own.
+            These encrypt the container-to-container hops, which the startup checks require
+            outside development. Rotate with <code>make rotate-internal-certs</code>, and put
+            <code>scripts/check-cert-expiry.sh</code> in cron: nothing renews these, and when they
+            lapse the public certificate is still perfectly healthy, so the obvious suspect is
+            innocent.
+          </p>
+        </li>
+
+        <li>
+          <h4>Build</h4>
+          <div class="code">
+            <div class="code-head"><span>shell</span><button class="copy" type="button">Copy</button></div>
+<pre><code>docker run --rm -v "$PWD":/repo -w /repo \
+  -e PUBLIC_SITE_URL=https://$APEX \
+  -e PUBLIC_APP_URL=https://$APP \
+  -e VITE_API_URL=https://$APP \
+  node:22-slim sh -c "corepack enable &amp;&amp; pnpm install --frozen-lockfile \
+    &amp;&amp; pnpm build &amp;&amp; chown -R $(id -u):$(id -g) /repo"
+
+docker compose -f docker-compose.prod.yml build backend</code></pre>
+          </div>
+          <p>
+            In a container so the host needs no Node, and as root inside it because
+            <code>corepack</code> requires that &mdash; ownership is handed back at the end. No
+            Python is needed: the generated API client is committed.
+          </p>
+          <p>
+            <strong>All three variables matter.</strong> <code>PUBLIC_SITE_URL</code> must equal
+            <code>PRODUCTION_ORIGIN</code> exactly or the site ships <code>Disallow: /</code>.
+            <code>PUBLIC_APP_URL</code> is every link into the app &mdash; Sign in, Register, the
+            pricing CTA &mdash; and without it they all point at <code>localhost</code> on a page
+            that otherwise looks perfect. That one shipped for real; a build gate now refuses it.
+          </p>
+        </li>
+
+        <li>
+          <h4>Migrate, then start</h4>
+          <div class="code">
+            <div class="code-head"><span>shell</span><button class="copy" type="button">Copy</button></div>
+<pre><code>C="docker compose -f docker-compose.prod.yml -f docker-compose.tls.yml"
+
+$C up -d postgres pgbouncer redis minio minio-init
+$C ps                       # wait for healthy, not merely running
+
+$C run --rm backend python -m app.core.migrations
+
+$C up -d backend worker caddy
+$C logs -f caddy            # watch three certificates be issued</code></pre>
+          </div>
+          <p>
+            <code>python -m app.core.migrations</code>, never <code>alembic upgrade head</code>:
+            each optional module branches off the core trunk with its own label, so there is no
+            single head and that command cannot succeed here.
+          </p>
+          <p>
+            pgbouncer reporting <em>healthy</em> is the first real signal &mdash; its healthcheck
+            opens a genuine pooled connection through to Postgres, so it means TLS on both hops is
+            working.
+          </p>
+        </li>
+
+        <li>
+          <h4>Verify by request</h4>
+          <div class="code">
+            <div class="code-head"><span>shell</span><button class="copy" type="button">Copy</button></div>
+<pre><code>for u in https://$APP/health/ready https://$APP/metrics \
+         https://$APP/settings/billing https://$APEX/en/ \
+         https://$STORAGE/ http://$APP/; do
+  printf '%-46s %s\n' "$u" "$(curl -s -o /dev/null -w '%{http_code}' "$u")"
+done</code></pre>
+          </div>
+          <div class="table-scroll">
+            <table>
+              <thead><tr><th>Check</th><th>Expect</th><th>What a wrong answer means</th></tr></thead>
+              <tbody>
+                <tr><td><code>/health/ready</code></td><td>200</td><td>503 is Postgres or Redis unreachable, not a dead process.</td></tr>
+                <tr><td><code>/metrics</code></td><td>404</td><td>200 means the edge is not refusing it and your metrics are public.</td></tr>
+                <tr><td><code>/settings/billing</code></td><td>200</td><td>404 means deep links are not reaching the SPA shell.</td></tr>
+                <tr><td>apex <code>/en/</code></td><td>200</td><td>The marketing site.</td></tr>
+                <tr><td>storage host</td><td>403</td><td>403 is correct &mdash; MinIO's AccessDenied proves it is reachable over TLS.</td></tr>
+                <tr><td>plain HTTP</td><td>301</td><td>Redirect to HTTPS.</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <p>
+            Then the parts curl cannot answer: register an account and confirm the email arrives,
+            log in and wait past the fifteen-minute access-token expiry to confirm the session
+            survives, and upload a file. Session problems only appear on the <em>second</em>
+            refresh.
+          </p>
+        </li>
+
+        <li>
+          <h4>Keep it running</h4>
+          <div class="code">
+            <div class="code-head"><span>shell</span><button class="copy" type="button">Copy</button></div>
+<pre><code># internal certificates expire and nothing renews them
+(crontab -l 2&gt;/dev/null; echo "0 6 * * * cd ~/forge &amp;&amp; bash scripts/check-cert-expiry.sh &gt;/dev/null") | crontab -
+
+# old images accumulate on every rebuild and fill the disk before your data does
+echo 'docker image prune -af --filter "until=168h"' | sudo tee /etc/cron.weekly/docker-prune
+sudo chmod +x /etc/cron.weekly/docker-prune</code></pre>
+          </div>
+          <p>
+            Turn on your provider's snapshots. Postgres and MinIO both live in Docker volumes on
+            that disk, so until you have something better, the snapshot <em>is</em> your recovery
+            story. <code>docs/runbooks/backup-restore.md</code> is the something better.
+          </p>
+        </li>
+      </ol>
+
+      <div class="note">
+        <span class="note-label">Three placeholders the stack boots with</span>
+        <p>
+          <code>RESEND_API_KEY</code> is the one that blocks real use: every authentication email
+          goes through the job queue, so without it nobody can complete a signup. An empty
+          <code>VIRUSTOTAL_API_KEY</code> makes uploads fail at the scan step, and placeholder
+          Stripe keys make billing endpoints fail. The app starts with all three &mdash; only the
+          first stops you having users.
+        </p>
+      </div>
+
+      <h3>Deploying to a managed platform</h3>
+      <p>
+        <code>docs/runbooks/deploy-render.md</code> is the worked example. The shape is:
+      </p>
+      <ol>
+        <li>CI builds and pushes an image to the GitHub container registry on every green <code>main</code>.</li>
+        <li>Create a <strong>web service</strong> and a <strong>background worker</strong> from that same image — the worker's start command is <code>arq app.workers.main.WorkerSettings</code>.</li>
+        <li>Add managed Postgres and Redis.</li>
+        <li>Point the health check at <code>/health/ready</code>, which verifies dependencies rather than just process liveness.</li>
+        <li>Set the deployment secrets so CI can trigger a deploy and run migrations.</li>
+      </ol>
+      <div class="warn-box">
+        <span class="warn-label">Before your first real deploy</span>
+        <p>
+          Walk <code>docs/runbooks/phase4-verification.md</code>. It is the integrated acceptance
+          pass — eleven numbered steps covering the marketing site, SEO, consent, API keys,
+          webhooks, SSO, module toggles, a security re-scan and load. It is written to be run by
+          somebody who did not build the system.
+        </p>
+      </div>
+    </section>
+
+    <!-- ============================================================= -->
+    <section id="operate" class="wrap">
+      <h2>Operating it</h2>
+      <p class="section-intro">
+        The runbooks are the most valuable documentation here. Each is a procedure with a trigger,
+        pre-checks, steps, verification, rollback and escalation.
+      </p>
+
+      <div class="cards">
+        <div class="card">
+          <span class="card-tag">When something breaks</span>
+          <h4>degraded-mode &middot; slow-queries &middot; account-recovery</h4>
+          <p>What to do when a dependency is down, the database is slow, or a user cannot get in.</p>
+        </div>
+        <div class="card">
+          <span class="card-tag">Routine</span>
+          <h4>backup-restore &middot; encryption-key-rotation &middot; maintenance-mode</h4>
+          <p>Drills and scheduled operations. Practise the restore before you need it.</p>
+        </div>
+        <div class="card">
+          <span class="card-tag">Feature setup</span>
+          <h4>sso-onboarding &middot; api-keys &middot; outbound-webhooks &middot; stripe-usage-pricing</h4>
+          <p>Connecting a customer's identity provider, issuing keys, wiring webhooks, metered billing.</p>
+        </div>
+        <div class="card">
+          <span class="card-tag">Acceptance</span>
+          <h4>phase1–4-verification</h4>
+          <p>Integrated passes that gate each phase of the build. Run before a first deploy.</p>
+        </div>
+      </div>
+
+      <h3>Operator switches that need no deploy</h3>
+      <ul>
+        <li><strong>Maintenance mode</strong> — turns the product read-only with an exemption list, so you can still work while customers cannot write.</li>
+        <li><strong>A global banner</strong> — for telling everyone about an incident.</li>
+        <li><strong>Kill switches</strong> — disable an expensive subsystem without shipping code.</li>
+      </ul>
+      <p>See <code>docs/adr/0005</code> for why these live in the database rather than in environment variables.</p>
+
+      <h3>What CI runs</h3>
+      <p>
+        Thirteen jobs. <code>lint</code>, <code>test</code> and <code>security</code> gate everything
+        else; then <code>build</code> produces the image, and <code>module-matrix</code>,
+        <code>e2e-web</code>, <code>zap-baseline</code>, <code>lighthouse</code> and
+        <code>storybook</code> run against it. Nightly workflows cover load testing, the aggressive
+        security scan and the mobile end-to-end suite.
+      </p>
+      <div class="note">
+        <span class="note-label">One job is currently red, on purpose</span>
+        <p>
+          <code>e2e-web</code>'s visual-regression baselines were generated in a local container and
+          do not match the CI runner's rendering. Regenerating them from whatever CI produced would
+          make the job green and the test meaningless, so it is left failing until someone compares
+          the artifacts and decides what the baselines should be.
+        </p>
+      </div>
+    </section>
+
+    <!-- ============================================================= -->
+    <section id="reference" class="wrap">
+      <h2>Reference</h2>
+
+      <h3>Where to look for what</h3>
+      <div class="table-scroll">
+        <table>
+          <thead><tr><th>Question</th><th>File</th></tr></thead>
+          <tbody>
+            <tr><td>What may I edit in my product?</td><td><code>TEMPLATE.md</code></td></tr>
+            <tr><td>Why is it built this way?</td><td><code>docs/adr/</code></td></tr>
+            <tr><td>How do I do X operationally?</td><td><code>docs/runbooks/</code></td></tr>
+            <tr><td>What does this module do?</td><td><code>backend/app/modules/&lt;name&gt;/README.md</code></td></tr>
+            <tr><td>What settings exist?</td><td><code>backend/.env.example</code> — 51 documented fields</td></tr>
+            <tr><td>What changed?</td><td><code>CHANGELOG.md</code></td></tr>
+            <tr><td>What is the API?</td><td><code>http://localhost:8000/docs</code></td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3>Traps worth knowing before you hit them</h3>
+      <ul>
+        <li><strong>Translation placeholders are ICU</strong> — <code>{name}</code>, not <code>{{name}}</code>. The double-brace form throws at render time and takes the page down.</li>
+        <li><strong>Generated files are gitignored</strong> — the API client, its OpenAPI document and the i18n key types. Regenerate after pulling.</li>
+        <li><strong>The marketing test suite owns <code>dist/</code></strong> — do not run it alongside anything else that builds the site, or roughly twenty tests fail for no real reason.</li>
+        <li><strong>A test can pass alone and fail in the suite</strong> — usually a logging config that disables loggers process-wide, or settings bound at import time before the test environment applies.</li>
+        <li><strong>Never patch <code>httpx.AsyncClient</code> globally in a backend test</strong> — the suite's own client is one, so the patch redirects the test's own requests and produces a baffling empty 404.</li>
+      </ul>
+
+      <h3>Suggested reading order</h3>
+      <ol>
+        <li>This page.</li>
+        <li><code>TEMPLATE.md</code> — the contract.</li>
+        <li><code>docs/runbooks/module-toggle-guide.md</code> — the central mechanism, in depth.</li>
+        <li><code>backend/app/modules/_template/</code> — a module with nothing in it but the shape.</li>
+        <li>Any ADR whose title sounds like a decision you would have questioned.</li>
+      </ol>
+
+      <footer class="docs-foot">
+        <p>
+          Written against the state of the repository on 1 September 2026. Where this page and a file
+          in the repository disagree, the file is right — and the disagreement is worth fixing here.
+        </p>
+      </footer>
+    </section>
+  </main>
+</div>
+
+<script>
+  (function () {
+    "use strict";
+
+    /* Theme toggle: auto -> light -> dark -> auto */
+    var order = ["auto", "light", "dark"];
+    var btn = document.getElementById("themeToggle");
+    var mode = "auto";
+    try {
+      var saved = localStorage.getItem("forge-docs-theme");
+      if (saved && order.indexOf(saved) !== -1) { mode = saved; }
+    } catch (e) { /* private mode, blocked storage: keep auto */ }
+
+    function apply() {
+      if (mode === "auto") {
+        document.documentElement.removeAttribute("data-theme");
+      } else {
+        document.documentElement.setAttribute("data-theme", mode);
+      }
+      btn.textContent = "Theme: " + mode;
+    }
+    apply();
+
+    btn.addEventListener("click", function () {
+      mode = order[(order.indexOf(mode) + 1) % order.length];
+      apply();
+      try { localStorage.setItem("forge-docs-theme", mode); } catch (e) { /* ignore */ }
+    });
+
+    /* Copy buttons */
+    Array.prototype.forEach.call(document.querySelectorAll(".copy"), function (button) {
+      button.addEventListener("click", function () {
+        var block = button.closest(".code");
+        var code = block && block.querySelector("pre");
+        if (!code || !navigator.clipboard) { return; }
+        navigator.clipboard.writeText(code.innerText).then(function () {
+          var original = button.textContent;
+          button.textContent = "Copied";
+          setTimeout(function () { button.textContent = original; }, 1400);
+        }, function () { /* clipboard denied: leave the label alone */ });
+      });
+    });
+
+    /* Scroll spy */
+    var links = Array.prototype.slice.call(document.querySelectorAll("#toc a"));
+    var sections = links
+      .map(function (a) { return document.getElementById(a.getAttribute("href").slice(1)); })
+      .filter(Boolean);
+
+    if ("IntersectionObserver" in window && sections.length) {
+      var visible = new Set();
+      var observer = new IntersectionObserver(function (entries) {
+        entries.forEach(function (entry) {
+          if (entry.isIntersecting) { visible.add(entry.target.id); }
+          else { visible.delete(entry.target.id); }
+        });
+        var current = null;
+        for (var i = 0; i < sections.length; i++) {
+          if (visible.has(sections[i].id)) { current = sections[i].id; break; }
+        }
+        links.forEach(function (a) {
+          a.classList.toggle("active", a.getAttribute("href") === "#" + current);
+        });
+      }, { rootMargin: "-10% 0px -70% 0px", threshold: 0 });
+      sections.forEach(function (s) { observer.observe(s); });
+    }
+  })();
+</script>
+</body>
+</html>

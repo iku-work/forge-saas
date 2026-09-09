@@ -50,6 +50,37 @@ deletes either:
   * trial expiry sweep ............... workers.jobs.billing.expire_trials_to_inactive
   * feature-flag override toggled .... feature_flags.service.set_override / delete_override
 
+api_key_lookup_key -- the ApiKey row behind T-311's authentication path,
+keyed by the *prefix* the caller presented (never by the secret, and never by
+anything derived from it -- a Redis key is not a secret store, and this one
+appears in SLOWLOG and in `KEYS` output). It is the hottest read in the
+public API: every request that presents a key resolves this before anything
+else runs. Busted by every write that changes whether a key authenticates, or
+with what:
+  * key created ...................... api_keys.service.ApiKeyService.create_key
+  * key revoked ...................... api_keys.service.ApiKeyService.revoke_key
+  * rate-limit override changed ...... api_keys.service.ApiKeyService.set_rate_limit
+  * key erased with its org's user ... workers.jobs.gdpr.purge_user_data
+  (`last_used_at` is deliberately *not* on this list -- the throttled touch
+  writes a column nothing about authentication reads, so busting the entry
+  for it would turn a once-a-minute write into a once-a-request cache miss,
+  which is the whole cost this cache exists to avoid. The cached payload
+  therefore carries a `last_used_at` that lags by up to the TTL, and nothing
+  reads it from there.)
+
+sso_discovery_key / sso_jwks_key -- T-331's OIDC discovery document and the
+signing keys behind it, keyed by URL rather than by connection id: two orgs
+pointed at the same IdP tenant share both documents, and the URL is what
+makes that true without either of them knowing about the other. Neither is a
+copy of a row -- they are copies of *another system's* state, which is the
+one case in this module where "invalidate on write" is not the whole story:
+  * connection created / edited / deleted ... sso.service.SsoConnectionService
+    (both keys, via sso.discovery.invalidate)
+  * the IdP rotated its signing keys ..... nothing here can know. The
+    validator re-fetches the JWKS **once** when a signature fails against the
+    cached set (sso.oidc.verify_id_token), which is what stops a rotation
+    from locking an organization out for the rest of the TTL.
+
 product_settings_key -- T-263's global singleton row, as a whole dict rather
 than a key at a time (it is one row, and the maintenance middleware reads it
 on every request, so one Redis GET has to answer every question about it):
@@ -62,6 +93,7 @@ on every request, so one Redis GET has to answer every question about it):
   because a stale maintenance flag is an outage that outlives the fix.)
 """
 
+from hashlib import sha256
 from uuid import UUID
 
 # Namespaces, kept as constants so tests/test_cache_keys.py can assert no
@@ -73,6 +105,8 @@ INVOICES_NAMESPACE = "invoices"
 NOTIFICATIONS_NAMESPACE = "notif"
 STORAGE_NAMESPACE = "storage"
 PRODUCT_SETTINGS_NAMESPACE = "product_settings"
+API_KEY_NAMESPACE = "api_key"
+SSO_NAMESPACE = "sso"
 
 CACHE_NAMESPACES: tuple[str, ...] = (
     USER_NAMESPACE,
@@ -82,6 +116,8 @@ CACHE_NAMESPACES: tuple[str, ...] = (
     NOTIFICATIONS_NAMESPACE,
     STORAGE_NAMESPACE,
     PRODUCT_SETTINGS_NAMESPACE,
+    API_KEY_NAMESPACE,
+    SSO_NAMESPACE,
 )
 
 
@@ -130,3 +166,35 @@ def product_settings_key() -> str:
     key is a function anyway so it lives under the same no-inline-literals
     rule tests/test_cache_keys.py enforces for every other key here."""
     return f"{PRODUCT_SETTINGS_NAMESPACE}:all"
+
+
+def _digest(value: str) -> str:
+    """A short, stable, filename-safe stand-in for a URL.
+
+    Sixteen hex characters -- 64 bits -- because the only thing at stake in a
+    collision is that two IdPs would share a cache entry, and the inputs are
+    a handful of operator-configured URLs rather than anything an attacker
+    supplies."""
+    return sha256(value.encode()).hexdigest()[:16]
+
+
+def sso_discovery_key(discovery_url: str) -> str:
+    """T-331. Hashed rather than embedded: a discovery URL can be longer than
+    is comfortable in a Redis key, it appears in SLOWLOG and `KEYS` output,
+    and it is an identifier rather than a secret -- so the digest is for
+    length and tidiness, not for confidentiality."""
+    return f"{SSO_NAMESPACE}:discovery:{_digest(discovery_url)}"
+
+
+def sso_jwks_key(jwks_uri: str) -> str:
+    """T-331. Keyed on the `jwks_uri` from the discovery document, not on the
+    discovery URL: an IdP is free to serve one key set behind several
+    discovery documents, and caching per-JWKS is what makes that one fetch."""
+    return f"{SSO_NAMESPACE}:jwks:{_digest(jwks_uri)}"
+
+
+def api_key_lookup_key(prefix: str) -> str:
+    """T-310/T-311. Keyed by the clear-text prefix, which is what the
+    authentication path has in hand before it has a row -- see the
+    invalidation matrix above for why `last_used_at` does not bust it."""
+    return f"{API_KEY_NAMESPACE}:{prefix}"

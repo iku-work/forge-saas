@@ -100,11 +100,29 @@ def demo_table() -> Generator[Table, None, None]:
 
 
 def _tables_under_test() -> list[Table]:
-    # Derived from discovery rather than hardcoded, so a newly encrypted
-    # column doesn't silently stop being covered here. FK targets of these
-    # tables have to be in the list too; today the only one (totp_secret ->
-    # user) is itself an encrypted table, so it comes along for free.
+    """Every table this file has to create: the encrypted ones, plus whatever
+    they point at.
+
+    Derived from discovery rather than hardcoded, so a newly encrypted column
+    does not silently stop being covered here. The FK closure used to be
+    implicit -- the only reference was `totp_secret -> user`, and `user` is
+    itself encrypted, so it came along for free. T-320's `webhook_endpoint`
+    broke that: it is encrypted, and it references `organization`, which is
+    not. Walking the references to a fixed point is the version that does not
+    need revisiting the next time.
+    """
     names = {target.table for target in discover_encrypted_columns()} | {"job_record"}
+    while True:
+        referenced = {
+            key.column.table.name
+            for name in names
+            for key in SQLModel.metadata.tables[name].foreign_keys
+        }
+        if referenced <= names:
+            break
+        names |= referenced
+    # create_all sorts by dependency itself, so the order here is only for a
+    # stable, readable list.
     return [SQLModel.metadata.tables[name] for name in sorted(names)]
 
 
@@ -207,6 +225,16 @@ def test_discovery_finds_every_encrypted_column() -> None:
     assert {target.label for target in discovered} == {
         "user.full_name",
         "totp_secret.secret_encrypted",
+        # T-320. Both are the *same* signing secret at different ages, and
+        # both have to be re-encrypted: a rotation that moved only the current
+        # one would silently strand every consumer still verifying with the
+        # previous one during its overlap window.
+        "webhook_endpoint.secret",
+        "webhook_endpoint.secret_previous",
+        # T-331. An IdP client secret has to be *presented* to the IdP, so it
+        # is encrypted rather than hashed -- and therefore rotates with
+        # everything else here.
+        "sso_connection.client_secret",
         DEMO_LABEL,
     }
     # ...paged on each table's own PK, which is not `id` everywhere.
@@ -301,8 +329,11 @@ async def test_rotation_moves_every_row_onto_the_new_key(
     assert records[0].result is not None
     assert records[0].result["done_columns"] == [
         DEMO_LABEL,
+        "sso_connection.client_secret",
         "totp_secret.secret_encrypted",
         "user.full_name",
+        "webhook_endpoint.secret",
+        "webhook_endpoint.secret_previous",
     ]
     assert records[0].result["cursor"] is None
 
@@ -608,7 +639,14 @@ async def test_throttle_defaults_come_from_settings(
     assert records[0].payload == {
         "batch_size": 1,
         "throttle_seconds": 0.25,
-        "columns": [DEMO_LABEL, "totp_secret.secret_encrypted", "user.full_name"],
+        "columns": [
+            DEMO_LABEL,
+            "sso_connection.client_secret",
+            "totp_secret.secret_encrypted",
+            "user.full_name",
+            "webhook_endpoint.secret",
+            "webhook_endpoint.secret_previous",
+        ],
     }
 
 

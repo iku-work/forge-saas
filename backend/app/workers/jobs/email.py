@@ -44,6 +44,7 @@ language, not the server's default.
 import asyncio
 import json
 import logging
+import os
 import smtplib
 from email.message import EmailMessage
 from pathlib import Path
@@ -76,8 +77,27 @@ _PACKAGE_EMAIL_RENDERER_CLI = (
 )
 _BAKED_EMAIL_RENDERER_CLI = Path(__file__).resolve().parents[3] / "email-templates" / "cli.js"
 
+# The image ships two copies of `app/` -- one pip-installed under
+# /install/lib/python3.12/site-packages, one COPYed to /app/app -- and which
+# one imports depends on the working directory, because a console script
+# (`arq`, `uvicorn`) does not put the cwd on sys.path the way `python -c` and
+# pytest do. So `parents[3]` above lands on /app in a shell and on
+# site-packages in production, and only the first has the assets beside it.
+# The result was an image that passed every test and could not render a single
+# email once deployed.
+#
+# EMAIL_RENDERER_CLI removes the guesswork: backend/Dockerfile sets it to the
+# path it actually copied to, so the answer no longer depends on how the
+# process was started. Read per call rather than at import, because a value
+# bound at import time is read before tests can set it -- the trap
+# app.middleware.rate_limit documents at length.
+_RENDERER_CLI_ENV = "EMAIL_RENDERER_CLI"
+
 
 def _email_renderer_cli_path() -> Path:
+    override = os.environ.get(_RENDERER_CLI_ENV)
+    if override:
+        return Path(override)
     if _PACKAGE_EMAIL_RENDERER_CLI.is_file():
         return _PACKAGE_EMAIL_RENDERER_CLI
     return _BAKED_EMAIL_RENDERER_CLI

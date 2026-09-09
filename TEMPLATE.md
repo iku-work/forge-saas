@@ -46,14 +46,55 @@ at boot, whether or not you spelled the `requires` out yourself.
 | `totp_2fa` | on | — | TOTP enrolment and step-up prompts |
 | `multi_org` | on | — | The org switcher; users stay pinned to one organisation |
 | `usage_metering` | off | `billing` | Usage records and metered/reported quantities |
-| `outbound_webhooks` | off | `billing` | Customer-facing webhook endpoints and deliveries |
-| `marketing` | on | — | The `apps/marketing` build and the Caddy block serving it (T-290) |
-| `public_api` | off | — | API keys as a second kind of principal, `/api/v1/api-keys`, `api_key` (T-290) |
-| `enterprise_sso` | off | `oauth` | Per-org OIDC/SAML sign-in, and `python3-saml`'s native `libxmlsec1` from the image (T-290) |
+| `outbound_webhooks` | off | `billing` | Customer-facing webhook endpoints, the delivery log and its retry/replay surface at `/api/v1/webhooks`, the `webhook_endpoint` + `webhook_delivery` tables, and the delivery job (T-320–T-322) |
+| `marketing` | on | — | The `apps/marketing` build, and the generated Caddy block that serves it on its own host (T-290, T-307) |
+| `public_api` | off | — | Org-scoped API keys, their management surface at `/api/v1/api-keys`, the `api_key` table, and the ability of a key to authenticate at all (T-290, T-310–T-312) |
+| `enterprise_sso` | off | `oauth` | Per-org OIDC sign-in at `/api/v1/auth/sso`, the `sso_connection` table, and the ability of an organisation to *refuse* password logins (T-331) |
+
+`public_api` is the one whose toggle does something a routing table cannot
+show. Turning it off removes `/api/v1/api-keys` like any other module — but
+the two endpoints a key can *call* (`GET /api/v1/orgs/{org_id}` and its
+members list) belong to `tenancy` and stay registered, because a key is a
+second way to authenticate against endpoints the product already serves
+rather than a parallel API. What the toggle removes there is the key's ability
+to authenticate: `app/core/principal.py` checks it on the auth path, so a key
+minted while the module was on stops working the moment it is turned off, even
+though its row is still in a table that still exists.
+
+`outbound_webhooks` has the same shape of subtlety from the other side. Its
+routes go with the toggle like any module's, and so does the *delivery*: the
+job checks `is_enabled` before it sends, so a delivery queued while the module
+was on is dropped rather than pushed to a third party after it is switched
+off. Its rows survive, like every disabled module's, which means turning it
+back on resumes delivery for everything still `pending` — worth knowing
+before you flip it twice.
+
+`enterprise_sso` is the third of these, and the one whose off-switch reaches
+furthest. Its own routes go with the toggle as usual, but so does a check on
+the *password* login path: `sso.enforcement.password_login_blocked` returns
+`None` before it queries anything when the module is off, so a product that
+never enables it pays nothing on the busiest path in the product. Turning it
+off also un-enforces every enforcing connection at once — deliberately, since
+the alternative is a product-wide flag that can lock every customer out — and
+the rows survive to enforce again when it comes back. It requires `oauth`, and
+`validate_modules()` refuses the boot on the illegal pair rather than letting
+a login find half a stack.
 
 `marketing` is the only one that gates a *build* rather than a router:
 `apps/marketing`'s `build` script exits 0 without producing a `dist`, so a
-repo-root `turbo build` stays green for a product that turned it off.
+repo-root `turbo build` stays green for a product that turned it off. It also
+removes the Caddy site block that build generates, so the edge comes up with no
+marketing host and an app host that is completely unaffected — absence, rather
+than a host that exists and 404s.
+
+Your combination is tested, not assumed. CI's `module-matrix` job runs three
+of them from scratch — migrate from an empty database, boot, `GET
+/api/v1/config`, `pytest -m "not module_dependent"`, then `pnpm build && lint
+&& type-check`. One of the three is **your** `product.config.py` exactly as
+you edited it; the other two are template fixtures in
+`backend/tests/fixtures/module_configs/`. If your product ends up on a
+configuration you want permanently covered, add a fixture pair there and a
+leg to that job's matrix.
 
 ## Migration prefix convention
 
@@ -74,8 +115,9 @@ later. Branch per module:
 |---|---|---|
 | `core` | always applied | auth, tenancy, audit, job records, product settings |
 | `billing` / `gdpr` / `notifications` / `file_storage` | the matching module | shipped |
-| `public_api` | `public_api` | arrives with the `api_key` table (T-310) |
-| `enterprise_sso` | `enterprise_sso` | arrives with the `sso_connection` table (T-331) |
+| `public_api` | `public_api` | shipped (T-310, the `api_key` table) |
+| `outbound_webhooks` | `outbound_webhooks` | shipped (T-320, the `webhook_endpoint` + `webhook_delivery` tables) |
+| `enterprise_sso` | `enterprise_sso` | shipped (T-331, the `sso_connection` table) |
 | `product` | yours | use your prefix range from the table above |
 
 A new branch needs three edits together: the directory listed in
@@ -83,6 +125,26 @@ A new branch needs three edits together: the directory listed in
 `backend/app/core/migrations.py`'s `MODULE_BRANCHES`, and the module's tables
 in `backend/alembic/env.py`'s `MODULE_TABLES`. `marketing` gets none of them —
 it owns no tables.
+
+**`alembic check` on a product with a module turned off.** It will refuse:
+`Target database is not up to date`. That is not drift — it is alembic
+declining to compare anything while a *script* head is missing from
+`alembic_version`, and a disabled module's branch is a head `make migrate`
+deliberately never applies. Apply the disabled branches first, then check:
+
+```bash
+cd backend
+python -m alembic upgrade public_api@head          # each branch your
+python -m alembic upgrade outbound_webhooks@head   # product has off
+python -m alembic upgrade enterprise_sso@head
+python -m alembic check
+```
+
+The extra tables that leaves behind are not drift either — `alembic/env.py`'s
+`include_object` excludes a disabled module's tables from the comparison,
+which is the same rule that lets you turn a module off without dropping its
+data. `backend/tests/test_conditional_migrations.py` does exactly this, for
+exactly this reason.
 
 Products: assign yourself a prefix block and document it here when you fork:
 

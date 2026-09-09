@@ -7,6 +7,7 @@
 # autogenerate. This file is for everything else: the app always runs with
 # every module's model class importable, regardless of product.config.py --
 # only routes and migrations are actually conditional.
+from app.modules.api_keys import models as api_keys_models  # noqa: F401
 from app.modules.audit import models as audit_models  # noqa: F401
 from app.modules.auth import models as auth_models  # noqa: F401
 from app.modules.billing import models as billing_models  # noqa: F401

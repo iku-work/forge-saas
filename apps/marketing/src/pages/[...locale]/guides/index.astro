@@ -1,0 +1,85 @@
+---
+/**
+ * The guides index, grouped by the `section` field and ordered by `order`.
+ *
+ * `/guides`, not `/docs`: the repo-root Caddyfile routes `/docs*` to the
+ * backend's Swagger UI, and while T-307 puts marketing on its own host --
+ * which technically frees the path -- a template whose product docs and API
+ * docs differ only by hostname is a trap for whoever arrives next. The
+ * collection is called `guides` too, so the name is the same all the way
+ * down.
+ */
+import BaseLayout from "../../../layouts/BaseLayout.astro";
+import { guideSections } from "../../../lib/content";
+import { translator } from "../../../lib/i18n";
+import { localePath, localeStaticPaths } from "../../../lib/routing";
+
+export const getStaticPaths = localeStaticPaths;
+
+const { locale } = Astro.props;
+const t = translator(locale);
+const sections = await guideSections(locale);
+---
+
+<BaseLayout
+  title={t("marketing.guides.title")}
+  description={t("marketing.guides.subtitle")}
+  locale={locale}
+>
+  <section class="mx-auto max-w-3xl px-6 py-16">
+    <h1 class="text-4xl font-semibold tracking-tight">{t("marketing.guides.title")}</h1>
+    <p class="mt-4 text-pretty text-lg text-muted-foreground">
+      {t("marketing.guides.subtitle")}
+    </p>
+
+    {/* T-314's API reference is a *route*, not a content entry — it is
+        generated from the live public OpenAPI document rather than written —
+        so it cannot appear in the sections below, which are built from the
+        `guides` collection. Linked here explicitly rather than left findable
+        only by URL: a published contract nobody can navigate to is a
+        contract nobody reads. */}
+    <a
+      class="mt-10 block rounded-lg border p-5 transition-colors hover:bg-muted/50"
+      href={localePath(locale, "guides/api")}
+      data-testid="guides-api-link"
+    >
+      <span class="font-medium underline-offset-4">{t("marketing.api.title")}</span>
+      <span class="mt-1 block text-sm text-pretty text-muted-foreground">
+        {t("marketing.api.description")}
+      </span>
+    </a>
+
+    {
+      sections.length === 0 ? (
+        <p class="mt-12 text-muted-foreground" data-testid="guides-empty">
+          {t("marketing.guides.empty")}
+        </p>
+      ) : (
+        <div class="mt-12 space-y-10">
+          {sections.map((section) => (
+            <section>
+              <h2 class="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
+                {section.section}
+              </h2>
+              <ul class="mt-4 space-y-4">
+                {section.guides.map(({ slug, entry }) => (
+                  <li>
+                    <a
+                      class="font-medium underline-offset-4 hover:underline"
+                      href={localePath(locale, `guides/${slug}`)}
+                    >
+                      {entry.data.title}
+                    </a>
+                    <p class="mt-1 text-sm text-pretty text-muted-foreground">
+                      {entry.data.description}
+                    </p>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          ))}
+        </div>
+      )
+    }
+  </section>
+</BaseLayout>

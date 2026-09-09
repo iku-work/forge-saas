@@ -18,7 +18,7 @@
     "build": "tsup",
     "dev": "tsup --watch",
     "type-check": "tsc --noEmit",
-    "generate": "openapi-ts"
+    "generate": "node ./scripts/dump-openapi.mjs && openapi-ts"
   },
   "dependencies": {
     "@tanstack/react-query": "^5.101.1"

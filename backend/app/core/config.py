@@ -66,6 +66,18 @@ class Settings(BaseSettings):
     AUTH_RATE_LIMIT: str = "5/minute"
     SENSITIVE_RATE_LIMIT: str = "3/minute"
     API_RATE_LIMIT: str = "100/minute"
+    # T-312: the per-minute budget an API key gets, before any per-key
+    # override (ApiKey.rate_limit_per_minute). An integer rather than a
+    # slowapi limit string because this limit is not applied by slowapi's
+    # decorator -- app.modules.api_keys.rate_limit consumes it directly, from
+    # a dependency that already knows which key is calling. Read through
+    # get_settings() at request time, never bound at import: see that
+    # module's docstring, and app/middleware/rate_limit.py's, for the trap.
+    #
+    # 600/minute rather than API_RATE_LIMIT's 100: a server-to-server
+    # integration is not a browser, and a limit tuned for one person clicking
+    # is the limit an integration hits on its first backfill.
+    API_KEY_RATE_LIMIT_PER_MINUTE: int = 600
 
     # App
     ENVIRONMENT: Literal["dev", "staging", "prod"] = "dev"
@@ -95,7 +107,45 @@ class Settings(BaseSettings):
     DB_MAX_OVERFLOW: int = 15
     ALLOWED_ORIGINS: list[str] = []
     LOG_LEVEL: str = "INFO"
+    # T-350: where the *worker* serves its own /metrics. Prometheus scrapes
+    # the API and the worker separately because they are separate processes
+    # with separate registries -- see metrics.start_worker_metrics_server.
+    # Not published to the host by docker-compose: like the API's own
+    # /metrics (T-202), this is an inside-the-network endpoint.
+    WORKER_METRICS_PORT: int = 9100
     DOMAIN: str = "localhost"  # used by Caddyfile.prod ($DOMAIN) and link generation
+    # T-307: the *marketing* host, which is a different one -- the apex, with
+    # the app on `app.`. Read by Caddyfile.prod's generated marketing block
+    # ($MARKETING_DOMAIN) and nothing in this process, but it has to be
+    # declared here all the same: the caddy service loads backend/.env, and
+    # Settings forbids extra keys, so an undeclared MARKETING_DOMAIN in that
+    # file would stop the *backend* from booting.
+    #
+    # Never blank. Caddy substitutes an env var that is set-but-empty as the
+    # empty string rather than falling back to the `{$MARKETING_DOMAIN:...}`
+    # default, which leaves a site block with no address -- and Caddy then
+    # reads its opening brace as a global-options block and refuses to start
+    # the *whole* edge, app host included (measured, not assumed). The default
+    # here is a `.localhost` name so that the failure mode of forgetting this
+    # setting is a marketing host nobody can resolve.
+    MARKETING_DOMAIN: str = "marketing.localhost"
+    # The object-storage host, for a self-hosted deployment that runs MinIO on
+    # the same box (docker-compose.prod.yml). Declared here for exactly the
+    # reason MARKETING_DOMAIN above is -- Caddy reads it from backend/.env and
+    # this process never does, but an undeclared key in that file would stop
+    # the backend booting.
+    #
+    # It needs a public hostname rather than an internal one because there is
+    # only one AWS_ENDPOINT_URL: the presigned upload and download URLs handed
+    # to the *browser* are built from the same endpoint the backend uses
+    # server-side, and a SigV4 download signature covers the Host header, so
+    # the browser cannot be pointed somewhere else after the fact.
+    #
+    # Blank when storage is a managed service (S3, R2) -- then there is no
+    # local MinIO, AWS_ENDPOINT_URL points at the provider, and the generated
+    # site block below is simply not imported. Same never-empty rule as
+    # MARKETING_DOMAIN applies when it *is* in use.
+    STORAGE_DOMAIN: str = "storage.localhost"
     FRONTEND_URL: str = "http://localhost:5173"  # base URL for links in transactional emails
     # T-261: the custom URL scheme the mobile app registers (apps/mobile/app.json's
     # `expo.scheme`). Only the impersonation handoff deep link is built from it
@@ -118,6 +168,82 @@ class Settings(BaseSettings):
     SMTP_PORT: int = 1025
     SENTRY_DSN: str | None = None
     SENTRY_TRACES_SAMPLE_RATE: float = 0.1
+
+    # /metrics exposure. Until now the *only* thing that ever kept the
+    # Prometheus endpoint off the public internet was `respond /metrics 404`
+    # in both Caddyfiles -- app.core.metrics registered it with no
+    # authentication at all. That holds exactly as long as every deployment
+    # puts Caddy in front of the app, which a platform deployment (Render,
+    # Fly, Cloud Run) does not: there the app *is* the edge, and /metrics
+    # answers 200 to anyone with the URL, handing out route inventory,
+    # traffic volumes, pool saturation and active session counts.
+    #
+    # So one of these two must be a deliberate answer outside dev, enforced
+    # in _enforce_startup_invariants below:
+    #   METRICS_TOKEN            -- require `Authorization: Bearer <token>`
+    #                               on /metrics (Prometheus: `bearer_token`
+    #                               in the scrape config).
+    #   METRICS_BLOCKED_AT_EDGE  -- assert a reverse proxy already refuses
+    #                               the route, which is the docker-compose
+    #                               posture and is verified for those two
+    #                               files by tests/test_caddy_config.py.
+    METRICS_TOKEN: str | None = None
+    METRICS_BLOCKED_AT_EDGE: bool = False
+
+    # Which peer addresses are allowed to speak for a client via
+    # X-Forwarded-For / X-Forwarded-Proto. Comma-separated; CIDR accepted.
+    #
+    # **Almost never "*".** X-Forwarded-For is a list that each proxy
+    # *appends* to -- Caddy's reverse_proxy does, and so does Render's router,
+    # which does not reset a client-supplied value. So a request arriving with
+    # a forged header produces `<forged>, <real client>`. Given a real list of
+    # trusted addresses, uvicorn walks the list from the **right** and takes
+    # the first untrusted entry, which is the address the last proxy actually
+    # observed. Given "*" it takes the **leftmost** entry instead -- the one
+    # the caller supplied -- so every attacker picks their own rate-limit
+    # bucket and writes whatever they like into the audit trail. Measured;
+    # "*" is worse than leaving this unset, not better.
+    #
+    # The proxy reaches this app over a private network in every deployment
+    # here (Render's router, Caddy on forge-net), so the private ranges are
+    # the right answer and are what .env.example ships:
+    #   10.0.0.0/8,172.16.0.0/12,192.168.0.0/16
+    # Add your CDN's published ranges too if one sits in front, or its egress
+    # address becomes the rightmost untrusted entry and every caller behind it
+    # shares a bucket again.
+    #
+    # Empty (the default) means the app believes the socket, which is right
+    # for local dev and wrong behind *any* reverse proxy -- and this app is
+    # never deployed without one. Getting it wrong is quiet and expensive:
+    # `request.client.host` is what app.middleware.rate_limit keys an
+    # unauthenticated limit on, so every caller on the internet collapses
+    # into one shared bucket (one attacker locks out every user), and it is
+    # also the `ip` recorded on every audit event (core/dependencies.py,
+    # modules/auth/router.py, modules/admin/router.py) -- so the security
+    # audit trail records the proxy for every action ever taken.
+    #
+    # uvicorn has its own --forwarded-allow-ips for this, defaulting to
+    # 127.0.0.1, which no containerised proxy ever is. It is applied here
+    # instead of in the start command so it travels with the configuration
+    # rather than with however the process happened to be launched.
+    TRUSTED_PROXY_IPS: str = ""
+
+    # Whether REDIS_URL is allowed to be plain `redis://` outside dev.
+    #
+    # The rule it relaxes (ASVS V9.2.2, T-225) exists because Redis carries
+    # sessions, rate-limit counters, the job queue and cached rows -- none of
+    # which should cross an untrusted network in the clear. But "encrypted"
+    # and "not on an untrusted network" are two ways of satisfying the same
+    # requirement, and some managed offerings only give you the second:
+    # Render's Key Value exposes `redis://red-xxx:6379` on its private network
+    # and reserves TLS for the *external* URL, which costs an IP allowlist and
+    # a public-internet round trip for every session lookup.
+    #
+    # Default false, so the strict behaviour is unchanged unless a deployment
+    # says otherwise. Setting it true is a claim about the network, and it is
+    # only true if nothing but your own services can route to that instance.
+    # It does not relax the Postgres DSNs -- those keep `sslmode` regardless.
+    REDIS_ON_PRIVATE_NETWORK: bool = False
 
     # Social OAuth (T-023) — blank disables that provider's /auth/oauth/{provider} route
     GOOGLE_CLIENT_ID: str = ""
@@ -160,6 +286,17 @@ class Settings(BaseSettings):
 
     # Notifications (T-103) — global cap on open SSE streams, to bound memory
     SSE_MAX_CONNECTIONS: int = 10000
+
+    # Outbound webhooks (T-321). `webhook_delivery` is the fastest-growing
+    # table this template adds — one row per event per endpoint, each carrying
+    # a stored payload — so the retention window is a setting rather than a
+    # decision deferred until the disk fills. The prune job
+    # (app.workers.jobs.webhooks.prune_webhook_deliveries) deletes in batches.
+    WEBHOOK_DELIVERY_RETENTION_DAYS: int = 30
+    # Connect *and* read timeout for one delivery attempt. One slow consumer
+    # must never occupy a worker; ten seconds is generous for a request whose
+    # only job is to return 200 and enqueue something.
+    WEBHOOK_TIMEOUT_SECONDS: float = 10.0
 
     # Virus scanning (T-113) — "clamav" | "virustotal" | "noop". "noop" (the
     # dev default) marks every uploaded file "clean" immediately.
@@ -236,6 +373,13 @@ class Settings(BaseSettings):
                 )
             if not self.PASSWORD_PEPPER:
                 raise RuntimeError("PASSWORD_PEPPER must be set outside dev")
+            if not self.METRICS_TOKEN and not self.METRICS_BLOCKED_AT_EDGE:
+                raise RuntimeError(
+                    "/metrics would be publicly readable. Set METRICS_TOKEN to require a "
+                    "bearer token on it, or METRICS_BLOCKED_AT_EDGE=true if a reverse "
+                    "proxy in front of this app already refuses the route (both Caddyfiles "
+                    "in this repo do). See app/core/metrics.py."
+                )
             self._validate_transport_tls()
         self._validate_encryption_key()
         return self
@@ -270,8 +414,12 @@ class Settings(BaseSettings):
                 raise RuntimeError(
                     "READ_REPLICA_URL must set sslmode=require (or stricter) outside dev"
                 )
-        if self.REDIS_URL.scheme != "rediss":
-            raise RuntimeError("REDIS_URL must use the rediss:// scheme outside dev")
+        if self.REDIS_URL.scheme != "rediss" and not self.REDIS_ON_PRIVATE_NETWORK:
+            raise RuntimeError(
+                "REDIS_URL must use the rediss:// scheme outside dev. Set "
+                "REDIS_ON_PRIVATE_NETWORK=true only if that instance is reachable from "
+                "nothing but your own services -- see that field's docstring."
+            )
 
     def _validate_encryption_key(self) -> None:
         try:

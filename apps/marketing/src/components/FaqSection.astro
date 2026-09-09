@@ -1,0 +1,53 @@
+---
+/**
+ * A page's frequently-asked questions, rendered and described at once (T-303).
+ *
+ * The component emits the visible `<dl>` **and** the `FAQPage` JSON-LD from
+ * the same array, in the same file. That is the whole point of it existing:
+ * Google's rule for FAQ structured data is that every question and answer in
+ * the markup must be visible on the page, and the way that rule is usually
+ * broken is a hand-maintained JSON-LD block drifting away from copy someone
+ * edited. Here there is nothing to drift -- one array, two renderings.
+ *
+ * A `<dl>` rather than a `<details>` accordion: these lists are four
+ * questions long, an accordion would be four more things to tab through for
+ * no gain, and answers a reader has to open are answers a reader does not
+ * read. It also keeps the page at zero bytes of JavaScript, which
+ * tests/build.test.ts pins for the landing page.
+ */
+import { faqPageSchema, type FaqItem } from "../lib/structured-data";
+import type { Translate } from "../lib/i18n";
+import type { FaqKeys } from "../lib/faq";
+import JsonLd from "./JsonLd.astro";
+
+interface Props {
+  /** Which questions to ask, from src/lib/faq.ts. */
+  questions: FaqKeys[];
+  /** The page's translator, so this component does not resolve a locale twice. */
+  t: Translate;
+}
+
+const { questions, t } = Astro.props;
+
+const items: FaqItem[] = questions.map((question) => ({
+  question: t(question.questionKey),
+  answer: t(question.answerKey),
+}));
+---
+
+{
+  items.length > 0 && (
+    <section class="mx-auto max-w-3xl px-6 py-16">
+      <h2 class="text-2xl font-semibold tracking-tight">{t("marketing.faq.heading")}</h2>
+      <dl class="mt-8 space-y-8">
+        {items.map((item) => (
+          <div>
+            <dt class="font-medium">{item.question}</dt>
+            <dd class="mt-2 text-pretty text-muted-foreground">{item.answer}</dd>
+          </div>
+        ))}
+      </dl>
+      <JsonLd schema={faqPageSchema(items)} />
+    </section>
+  )
+}

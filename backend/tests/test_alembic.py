@@ -84,6 +84,10 @@ def test_autogenerate_produces_valid_sql_for_mixin_columns(alembic_config: Confi
     assert "def downgrade" in script
 
 
+# The round trip walks every enabled module's branch, so what it actually
+# exercises depends on product/config.py -- with billing off there is no
+# billing chain to downgrade. The other two tests here read the scripts.
+@pytest.mark.module_dependent
 def test_upgrade_downgrade_upgrade_round_trip(alembic_config: Config) -> None:
     command.revision(alembic_config, message="mixin columns", autogenerate=True)
 

@@ -42,6 +42,16 @@ _DEFAULT_SAMPLE_RATIO = 0.1
 
 
 def _sample_ratio() -> float:
+    # The project's no-os-environ rule advises "add it to Settings", which is
+    # wrong here: the SDK reads this variable from the environment itself, so
+    # a mirrored setting could disagree with it and the env var would still
+    # win. See the module docstring.
+    #
+    # Bare `nosemgrep`, not `nosemgrep: semgrep.no-os-environ`. The `semgrep.`
+    # prefix is how the CLI *displays* a rule loaded from `--config semgrep/`,
+    # not an id inline suppression matches on -- qualified that way it is
+    # silently ignored and the finding still blocks the build.
+    # nosemgrep
     return float(os.environ.get(_OTEL_TRACES_SAMPLER_ARG_ENV, _DEFAULT_SAMPLE_RATIO))
 
 
@@ -56,6 +66,9 @@ def _build_tracer_provider(settings: Settings) -> TracerProvider:
         ),
         sampler=ParentBased(TraceIdRatioBased(_sample_ratio())),
     )
+    # See above. OTLPSpanExporter() below takes no arguments precisely because
+    # it reads this same variable itself.
+    # nosemgrep
     if os.environ.get(_OTEL_EXPORTER_OTLP_ENDPOINT_ENV):
         # OTLPSpanExporter() with no args reads OTEL_EXPORTER_OTLP_ENDPOINT
         # (and friends) itself -- no need to pass the value along here.

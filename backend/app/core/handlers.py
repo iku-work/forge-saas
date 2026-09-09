@@ -26,9 +26,16 @@ def _locale(request: Request) -> str:
     return locale or get_default_locale()
 
 
-def _envelope_response(request: Request, status_code: int, error: ErrorBody) -> JSONResponse:
+def _envelope_response(
+    request: Request,
+    status_code: int,
+    error: ErrorBody,
+    headers: dict[str, str] | None = None,
+) -> JSONResponse:
     envelope = Envelope[None](error=error, meta=Meta(request_id=_request_id(request)))
-    return JSONResponse(status_code=status_code, content=envelope.model_dump(mode="json"))
+    return JSONResponse(
+        status_code=status_code, content=envelope.model_dump(mode="json"), headers=headers
+    )
 
 
 def _translate_or_fallback(message_key: str, locale: str, fallback: str, **params: str) -> str:
@@ -45,7 +52,11 @@ async def domain_error_handler(request: Request, exc: Exception) -> JSONResponse
     error = ErrorBody(
         code=exc.code, message_key=exc.message_key, message=message, details=exc.details
     )
-    return _envelope_response(request, exc.status_code, error)
+    # T-312: a 429 carries Retry-After and the X-RateLimit-* trio. They are
+    # part of the error's meaning and are read by the client's HTTP layer
+    # rather than by its JSON parser, which is why they cannot live in the
+    # envelope. Every other DomainError leaves `headers` None.
+    return _envelope_response(request, exc.status_code, error, exc.headers)
 
 
 async def validation_error_handler(request: Request, exc: Exception) -> JSONResponse:

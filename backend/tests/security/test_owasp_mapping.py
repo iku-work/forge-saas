@@ -8,6 +8,15 @@ test runs) already holds every test node for this run -- reading their
 time this test executes the "Backend tests" CI step is already running the
 suite with `-x`, so a category's marked test failing anywhere else in the
 run fails the whole step before this one even reports its own result.
+
+That same property makes this test sensitive to *deselection*: a `-m` filter
+removes items from `request.session.items` too. T-291's `module_dependent`
+marker is the one filter in play (CI's module-matrix job runs `-m "not
+module_dependent"`), and every OWASP category currently keeps at least one
+unmarked test, so the claim survives there. If a category ever fails here
+during that job and nowhere else, this is why: its last remaining
+`@pytest.mark.owasp` test became module-dependent, and the category now needs
+a proof that holds with every optional module off.
 """
 
 import re

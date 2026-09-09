@@ -34,6 +34,9 @@ def _clear_caches() -> Generator[None]:
     module_loader.get_support_config.cache_clear()
 
 
+# Asserts the committed defaults verbatim; test_reflects_disabled_modules
+# below is the same endpoint read from whatever config is active.
+@pytest.mark.module_dependent
 async def test_returns_branding_and_default_module_config(
     client: httpx.AsyncClient,
 ) -> None:

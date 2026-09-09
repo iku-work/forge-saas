@@ -1,0 +1,55 @@
+---
+title: Going to production
+description: The things that are different in production, and the order to do them in.
+section: Deploying
+order: 3
+---
+
+Production differs from your laptop in four ways that matter. Everything else
+is the same code.
+
+## 1. Secrets are not in a file
+
+Local development reads `backend/.env`. Production reads its environment, and
+the values come from your platform's secret store. The application refuses to
+start if a required secret is missing rather than falling back to a
+development default — a server that boots with the wrong signing key is much
+worse than one that does not boot.
+
+## 2. Connections go through a pooler
+
+The production stack puts pgBouncer in transaction mode in front of Postgres.
+That has one consequence worth knowing before you debug something strange:
+prepared statements have to be disabled on the application side, because a
+transaction-mode pooler does not guarantee you the same backend connection
+twice.
+
+Migrations are the exception. They connect directly, not through the pooler:
+
+```bash
+make migrate-prod
+```
+
+## 3. The static sites are directories
+
+Both the web app and this marketing site build to a directory of files that
+the web server hands out. There is no Node process serving them, which means
+there is nothing there to fall over, and also that a change is only live once
+something has rebuilt and re-copied the directory.
+
+## 4. Backups are a drill, not a setting
+
+Turning on automated backups is the easy part. The runbook in `docs/runbooks/`
+walks through restoring one into a scratch database and checking the row
+counts, which is the part that tells you whether the backups are real. Do it
+once before launch and once a quarter afterwards.
+
+## The order
+
+1. Provision the database, Redis and the object store.
+2. Load the secrets.
+3. Run the migrations, directly.
+4. Deploy the API, then the static bundles.
+5. Run the restore drill.
+
+Steps four and five are the two people skip. The first one is usually fine.

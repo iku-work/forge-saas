@@ -207,6 +207,9 @@ async def test_config_stays_reachable_and_reports_the_window(
     }
 
 
+# The three tests marked below reach for an admin route or the billing kill
+# switch; the middleware itself, which is what this file is about, is core.
+@pytest.mark.module_dependent
 async def test_admin_endpoints_stay_reachable_so_the_window_can_be_ended(
     superadmin_client: httpx.AsyncClient, session: AsyncSession, redis: Redis
 ) -> None:
@@ -218,6 +221,7 @@ async def test_admin_endpoints_stay_reachable_so_the_window_can_be_ended(
     assert response.json()["data"]["settings"][keys.MAINTENANCE_MODE] is True
 
 
+@pytest.mark.module_dependent
 async def test_admin_endpoints_are_exempt_from_the_switch_not_from_authorization(
     authed_client: httpx.AsyncClient, session: AsyncSession, redis: Redis
 ) -> None:
@@ -315,6 +319,7 @@ async def test_a_module_kill_switch_503s_only_that_modules_routes(
     assert untouched.status_code == 200
 
 
+@pytest.mark.module_dependent
 async def test_a_kill_switch_set_to_false_changes_nothing(
     authed_client: httpx.AsyncClient, session: AsyncSession, redis: Redis
 ) -> None:

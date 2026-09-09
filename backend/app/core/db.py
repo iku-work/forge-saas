@@ -1,3 +1,4 @@
+import ssl
 from collections.abc import AsyncGenerator, AsyncIterator
 from contextlib import asynccontextmanager
 from typing import Annotated, Any
@@ -5,6 +6,7 @@ from uuid import uuid4
 
 from fastapi import Depends
 from loguru import logger
+from sqlalchemy.engine.url import make_url
 from sqlalchemy.ext.asyncio import (
     AsyncEngine,
     AsyncSession,
@@ -69,7 +71,58 @@ def build_connect_args(settings: Settings) -> dict[str, Any]:
     }
 
 
+# libpq spells TLS as query parameters on the DSN; asyncpg spells it as a
+# single `ssl` connect argument. SQLAlchemy's asyncpg dialect does not bridge
+# the two -- create_connect_args() does a bare `opts.update(url.query)` and
+# hands every query parameter straight to asyncpg.connect(), which has no
+# `sslmode` keyword and raises TypeError before a single byte reaches
+# Postgres. So a DSN carrying the `sslmode=require` that
+# Settings._enforce_startup_invariants *requires* outside dev could never
+# connect. See tests/test_db_ssl.py.
+_SSL_QUERY_KEYS = ("sslmode", "sslrootcert")
+
+
+def split_ssl_params(url: str) -> tuple[str, dict[str, Any]]:
+    """Move libpq TLS parameters off the DSN and into asyncpg connect args.
+
+    Returns the DSN with those parameters removed, plus the connect-args
+    fragment that reproduces them. asyncpg's own `ssl` argument accepts a
+    libpq sslmode string and applies the documented semantics for it
+    (`require` encrypts without verifying, `verify-ca` checks the chain,
+    `verify-full` also checks the hostname), so the mode is passed through
+    verbatim rather than reinterpreted here -- with one exception: a
+    `sslrootcert` alongside it has to become a real SSLContext, because
+    asyncpg only reads that parameter when it parses a DSN itself, which it
+    never gets to do under SQLAlchemy.
+    """
+    parsed = make_url(url)
+    present = {key: parsed.query[key] for key in _SSL_QUERY_KEYS if key in parsed.query}
+    if not present:
+        return url, {}
+
+    # render_as_string(hide_password=False), never str(url): SQLAlchemy's
+    # __str__ renders the password as literal "***", so round-tripping a DSN
+    # through it silently replaces the credential and every connection then
+    # fails authentication.
+    stripped = parsed.difference_update_query(_SSL_QUERY_KEYS).render_as_string(hide_password=False)
+    sslmode = str(present.get("sslmode", "prefer"))
+    sslrootcert = present.get("sslrootcert")
+    if sslrootcert is None:
+        return stripped, {"ssl": sslmode}
+
+    # verify-ca / verify-full with an explicit CA bundle -- the self-hosted
+    # posture in docs/runbooks/backup-restore.md, and the stricter of the two
+    # settings the startup invariant accepts.
+    context = ssl.create_default_context(cafile=str(sslrootcert))
+    context.check_hostname = sslmode == "verify-full"
+    if sslmode in ("disable", "allow", "prefer"):
+        context.check_hostname = False
+        context.verify_mode = ssl.CERT_NONE
+    return stripped, {"ssl": context}
+
+
 def create_engine_for(url: str, settings: Settings) -> AsyncEngine:
+    url, ssl_args = split_ssl_params(url)
     return create_async_engine(
         url,
         pool_size=settings.DB_POOL_SIZE,
@@ -83,7 +136,7 @@ def create_engine_for(url: str, settings: Settings) -> AsyncEngine:
         # buildup that build_connect_args and server_reset_query_always
         # already prevent, and would trade that for a full TCP+auth handshake
         # on every checkout.
-        connect_args=build_connect_args(settings),
+        connect_args={**build_connect_args(settings), **ssl_args},
     )
 
 

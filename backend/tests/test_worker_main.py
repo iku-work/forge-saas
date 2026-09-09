@@ -122,6 +122,10 @@ async def test_worker_startup_wires_redis_and_starts_scheduler() -> None:
             "expire_trials_to_inactive",
             "report_usage_to_stripe",
             "prune_old_notifications",
+            # T-321: retention for webhook_delivery, and the safety net that
+            # re-enqueues a due delivery whose deferred ARQ job was lost.
+            "prune_webhook_deliveries",
+            "sweep_due_webhook_deliveries",
             "refresh_active_sessions_gauge",
         }
     finally:

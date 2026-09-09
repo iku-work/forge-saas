@@ -28,6 +28,12 @@ _ALL_NOTIFICATION_TYPES = {
     "weekly_summary",
     "file_uploaded",
     "file_infected",
+    # T-321: an outbound-webhook endpoint switched off after repeated failed
+    # deliveries. Written out here rather than derived from DEFAULT_PREFERENCES
+    # on purpose -- that would make the assertion below a tautology, and this
+    # list is the second opinion that catches a type added to the code and
+    # nowhere else (packages/types, the settings page's labels, five locales).
+    "webhook_endpoint_disabled",
 }
 
 

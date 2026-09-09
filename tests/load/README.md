@@ -11,7 +11,7 @@ thresholds: {
 ```
 
 Every script in this directory (`login-burst.js`, `browse.js`, `presign.js`,
-`mixed.js`) declares the identical two thresholds above -- checked by a CI
+`mixed.js`, `api-key.js`) declares the identical two thresholds above -- checked by a CI
 grep (see `.github/workflows/load-test.yml`) so a script can't quietly drop
 the budget it's supposed to be asserting.
 
@@ -21,6 +21,25 @@ the budget it's supposed to be asserting.
 | `browse.js`       | Authenticated list pagination: members, notifications, files        |
 | `presign.js`      | File presign -> real upload to MinIO -> confirm, the full round trip |
 | `mixed.js`        | 80% reads / 15% writes / 5% auth, ramping 0 -> 35 VUs, held 3 min    |
+| `api-key.js`      | The **key**-authenticated read path (T-350) -- a different hot path from the four above |
+
+`api-key.js` is the odd one out twice over. It is the only script whose
+credential is not a session token, and it is the only one that needs a module
+turned on: `public_api` ships off, so a default stack answers 404 and its
+`setup()` says so rather than reporting a budget it never measured. The
+nightly workflow copies `backend/tests/fixtures/module_configs/phase4.py`
+over `backend/product/config.py` before booting, which is the same
+configuration CI's `module-matrix` job already proves boots and migrates.
+
+It earns its own script rather than a branch inside `mixed.js` because key
+auth is genuinely a different code path: a session token costs one signature
+check, while a key costs a lookup by prefix plus a constant-time digest
+comparison **per request**, before any handler runs. That is the shape of
+path T-223 found the argon2-on-the-event-loop bug hiding in, and averaging it
+into a mixed workload is how a regression there goes unnoticed. It also mints
+its key with `rate_limit_per_minute: 100000` on purpose -- with T-312's
+default budget in place the run would measure the rate limiter refusing it,
+not the cost of authenticating.
 
 `lib/` holds the shared helpers every script imports (login, session
 caching, the list/upload workloads) -- see that directory's own files for

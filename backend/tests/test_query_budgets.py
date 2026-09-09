@@ -28,7 +28,7 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 from typing import Any
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import httpx
 import pytest
@@ -38,8 +38,10 @@ from redis.asyncio import Redis
 from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.routing import BaseRoute
 
+from app.core.module_loader import is_enabled
 from app.main import app
 from app.models._mixins import utcnow
+from app.modules.api_keys.models import ApiKey
 from app.modules.audit.models import AuditEvent
 from app.modules.auth.models import OAuthAccount, User, WebAuthnCredential
 from app.modules.auth.models import Session as SessionModel
@@ -57,7 +59,15 @@ from app.modules.tenancy.repository import (
     MembershipRepository,
     OrganizationRepository,
 )
+from app.modules.webhooks.events import ALL_EVENT_TYPES
+from app.modules.webhooks.models import WebhookDelivery, WebhookEndpoint
 from tests.fixtures.query_counter import QueryLog, count_queries
+
+# T-291: this file needs every module that owns a list endpoint -- the shared
+# seed alone writes a Plan, and half of ENDPOINTS is module-owned. CI's
+# module-matrix job deselects it in the combination that turns every optional
+# module off.
+pytestmark = pytest.mark.module_dependent
 
 _PASSWORD = "Correct-Horse9"
 
@@ -92,8 +102,14 @@ BUDGETS: dict[str, int] = {
     "list_my_orgs": 3,
     # Org-scoped: + the org row and the membership (the tenant-isolation
     # check, deliberately never cached -- see get_current_org).
-    "list_members": 5,
     "list_invitations": 5,
+    # One fewer than its neighbours, and the difference is T-311's: this route
+    # now resolves its principal through `require_scope`, which reads the
+    # membership (the isolation check) but *not* the Organization row -- which
+    # the endpoint never used. Opening a route to API keys made it cheaper for
+    # sessions too, which is the sort of thing worth noticing rather than
+    # absorbing.
+    "list_members": 4,
     "list_notifications": 5,
     # + the org's subscription/plan behind the feature-flag map.
     "list_feature_flags": 6,
@@ -113,6 +129,35 @@ BUDGETS: dict[str, int] = {
     "list_users": 2,
     "list_admin_audit_feed": 4,
 }
+
+# T-310. `public_api` ships off, so at the committed configuration
+# `list_api_keys` is not a route in this process and must not have a budget --
+# `test_every_budget_has_a_covering_endpoint_spec` pairs BUDGETS with ENDPOINTS
+# exactly, and an entry for a route that does not exist would be a spec that
+# can never run. In a product that turns the module on (and in CI's
+# module-matrix combination C) the route *is* registered, the meta-check below
+# demands a budget for it, and this is where it comes from. One condition
+# rather than two: the endpoint spec is added under the same `if` further
+# down, so the two halves cannot drift.
+if is_enabled("public_api"):
+    # Same shape as list_members: the maintenance check, get_current_user, the
+    # org row and the membership behind require_permission, and the page.
+    BUDGETS["list_api_keys"] = 5
+
+# T-320, and the same conditional for the same reason: `outbound_webhooks`
+# ships off, so at the committed configuration neither route is registered in
+# this process and neither may carry a budget.
+if is_enabled("outbound_webhooks"):
+    # As list_api_keys.
+    BUDGETS["list_endpoints"] = 5
+    # + the endpoint row, read before the log is paged so a delivery list is
+    # not reachable by guessing an endpoint id (§0.2). The property this file
+    # defends is that it stays 6 for 10,000 deliveries as well as for 3.
+    BUDGETS["list_deliveries"] = 6
+    # The event catalogue is rendered from a dict in code and touches no table
+    # of its own -- only the maintenance check, get_current_user, the org row
+    # and the membership. That it is *not* higher is the point of listing it.
+    BUDGETS["list_event_types"] = 4
 
 _SEED_FIRST = 3
 _SEED_SECOND = 27  # 3 + 27 = 30, past the default page cap of 20
@@ -322,6 +367,89 @@ async def _seed_notifications(world: World, n: int) -> None:
     await world.session.commit()
 
 
+async def _seed_api_keys(world: World, n: int) -> None:
+    """T-310. Rows are written directly rather than through ApiKeyService so
+    the seed costs one insert per key instead of a digest and a Redis round
+    trip -- what is being measured is the *read* path."""
+    for index in range(n):
+        world.session.add(
+            ApiKey(
+                org_id=world.org.id,
+                name=f"key {index}",
+                prefix=uuid4().hex[:12],
+                key_hash="0" * 64,
+                scopes=["orgs:read"],
+                created_by=world.owner.id,
+            )
+        )
+    await world.session.commit()
+
+
+# T-320. Deliveries need an endpoint to hang off, and the endpoint has to
+# exist before the first delivery is seeded -- a module-level fixture cannot
+# hold it (the org is built per test), so the seeds share this lazily-created
+# one through the World they are handed.
+_WEBHOOK_ENDPOINTS: dict[UUID, WebhookEndpoint] = {}
+
+
+async def _webhook_endpoint(world: World) -> WebhookEndpoint:
+    existing = _WEBHOOK_ENDPOINTS.get(world.org.id)
+    if existing is not None:
+        return existing
+    endpoint = WebhookEndpoint(
+        org_id=world.org.id,
+        url="https://consumer.example.com/hook",
+        secret="whsec_seed",
+        event_types=["member.invited"],
+        created_by=world.owner.id,
+    )
+    world.session.add(endpoint)
+    await world.session.commit()
+    _WEBHOOK_ENDPOINTS[world.org.id] = endpoint
+    return endpoint
+
+
+async def _seed_webhook_endpoints(world: World, n: int) -> None:
+    for index in range(n):
+        world.session.add(
+            WebhookEndpoint(
+                org_id=world.org.id,
+                url=f"https://consumer.example.com/hook/{index}",
+                secret=f"whsec_seed_{index}",
+                event_types=["member.invited"],
+                created_by=world.owner.id,
+            )
+        )
+    await world.session.commit()
+
+
+async def _seed_webhook_deliveries(world: World, n: int) -> None:
+    endpoint = await _webhook_endpoint(world)
+    for _ in range(n):
+        world.session.add(
+            WebhookDelivery(
+                org_id=world.org.id,
+                endpoint_id=endpoint.id,
+                event_type="member.invited",
+                payload={"id": str(uuid4()), "type": "member.invited"},
+                status="delivered",
+                delivery_id=uuid4(),
+            )
+        )
+    await world.session.commit()
+
+
+async def _seed_event_types(world: World, n: int) -> None:  # noqa: ARG001 -- fixed catalogue
+    """The event catalogue is a constant in code, so there is nothing to seed.
+
+    Left as a real (empty) seeder rather than special-casing the sweep: the
+    endpoint still has to prove it issues a constant number of queries, and
+    the "the seed reached the response" assertion is satisfied because the
+    catalogue is always longer than the seed count.
+    """
+    return
+
+
 async def _seed_files(world: World, n: int) -> None:
     for _ in range(n):
         world.session.add(
@@ -479,6 +607,36 @@ ENDPOINTS: list[ListEndpoint] = [
         "list_admin_audit_feed", "/api/v1/admin/audit", _seed_audit_events, as_superadmin=True
     ),
 ]
+
+if is_enabled("public_api"):
+    ENDPOINTS.append(ListEndpoint("list_api_keys", "/api/v1/api-keys", _seed_api_keys))
+
+if is_enabled("outbound_webhooks"):
+    ENDPOINTS.extend(
+        [
+            ListEndpoint("list_endpoints", "/api/v1/webhooks/endpoints", _seed_webhook_endpoints),
+            ListEndpoint(
+                "list_event_types",
+                "/api/v1/webhooks/event-types",
+                _seed_event_types,
+                # The catalogue is a constant in code, so it returns the same
+                # rows however much data exists -- which is exactly what
+                # `page_cap` means here, and what lets the sweep's "the seed
+                # reached the response" assertion hold for an endpoint with
+                # nothing to seed. Derived from the registry rather than
+                # written as a number, so registering an event does not fail
+                # this file.
+                page_cap=len(ALL_EVENT_TYPES),
+            ),
+            ListEndpoint(
+                "list_deliveries",
+                lambda w: (
+                    f"/api/v1/webhooks/endpoints/{_WEBHOOK_ENDPOINTS[w.org.id].id}/deliveries"
+                ),
+                _seed_webhook_deliveries,
+            ),
+        ]
+    )
 
 
 # --- measurement ------------------------------------------------------------

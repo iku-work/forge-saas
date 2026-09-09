@@ -31,7 +31,9 @@
     "notifications_hint": "Ouvre votre liste de notifications",
     "reports": "Rapports avancés",
     "logout": "Se déconnecter",
-    "logout_hint": "Déconnecte ce compte sur cet appareil"
+    "logout_hint": "Déconnecte ce compte sur cet appareil",
+    "api_keys": "Clés d'API",
+    "webhooks": "Webhooks"
   },
   "support": {
     "contact": "Contacter le support",

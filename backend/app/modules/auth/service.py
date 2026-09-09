@@ -36,6 +36,7 @@ from app.core.exceptions import (
     AuthenticationError,
     ConflictError,
     NotFoundError,
+    PermissionDeniedError,
     RateLimitError,
 )
 from app.core.urls import frontend_url
@@ -65,6 +66,7 @@ from app.modules.auth.utils import (
     verify_url_token,
 )
 from app.modules.notifications.preferences import normalize
+from app.modules.sso import enforcement as sso_enforcement
 
 logger = logging.getLogger(__name__)
 
@@ -149,6 +151,12 @@ def _match_totp_step(secret: str, code: str) -> int | None:
 
 class AuthService:
     def __init__(self, session: AsyncSession) -> None:
+        # The unit of work itself, not only repositories built from it: T-331's
+        # enforcement check is a cross-module query this service delegates
+        # rather than owns (app.modules.sso.enforcement), and handing it a
+        # repository would mean building one here for a table this module has
+        # no other business with.
+        self._db = session
         self._users = UserRepository(session)
         self._sessions = SessionRepository(session)
         self._email_verification_tokens = EmailVerificationTokenRepository(session)
@@ -270,6 +278,35 @@ class AuthService:
             )
 
         await self._users.reset_failed_login(user.id)
+
+        # T-331: an organization that enforces SSO does not accept passwords
+        # from its members. Checked *after* the password, deliberately -- an
+        # enforcement check before it would answer "is this address in an SSO
+        # organization" to anyone who can type an email, which is the same
+        # leak `domain_hint_enabled` exists to make opt-in. It costs nothing
+        # (not even a query) when `enterprise_sso` is off.
+        blocked = await sso_enforcement.password_login_blocked(self._db, user.id)
+        if blocked is not None:
+            await self._audit.log(
+                action="user.password_login_refused_sso",
+                resource_type="user",
+                resource_id=str(user.id),
+                org_id=None,
+                actor_id=user.id,
+                ip=ip,
+                ua=user_agent,
+            )
+            raise PermissionDeniedError(
+                "errors.sso_required",
+                fallback=(
+                    f"Your organization signs in with {blocked.provider_label}. "
+                    "Use single sign-on instead of a password."
+                ),
+                params={
+                    "provider": blocked.provider_label,
+                    "org_slug": blocked.org_slug,
+                },
+            )
 
         # §T-217: a registered security key is treated as an alternative to
         # TOTP at this same gate, not an additional required factor -- a user
@@ -500,6 +537,73 @@ class AuthService:
                 await self._enqueue_security_notification_email(
                     user, "oauth_linked", provider=provider
                 )
+
+        return await self._create_session(user, ip, user_agent)
+
+    async def sso_login(  # noqa: PLR0913 -- the identity's four parts plus ip/ua
+        self,
+        user: User,
+        ip: str,
+        user_agent: str,
+        *,
+        provider: str,
+        provider_user_id: str,
+        mfa_asserted: bool,
+    ) -> tuple[str, str, User] | TwoFactorChallenge:
+        """Issue a session for an identity an IdP has already proven (T-331).
+
+        The caller (`app.modules.sso.service.SsoLoginService`) owns the
+        protocol and has verified the ID token's signature, issuer, audience,
+        expiry and nonce, and that the email is in the connection's own
+        domain. This method owns everything that makes it a *session in this
+        product*: the account link, the refresh-token chain, `auth_time`, the
+        audit event, and the second-factor decision.
+
+        **It is deliberately not `oauth_login`.** Two differences, and both
+        are T-331 asking for something the social path does not do:
+
+        - TOTP still applies unless the IdP said it checked a second factor.
+          `oauth_login` skips the challenge entirely, which is defensible for
+          Google or GitHub (the account *is* the factor) and is not what an
+          enterprise wants from an IdP that may or may not enforce MFA.
+        - the link is scoped to a *connection*, so the same person at two
+          organizations is two links and neither one lets the other's IdP
+          sign them in.
+        """
+        link = await self._oauth_accounts.get_by_provider_account(provider, provider_user_id)
+        if link is None:
+            await self._oauth_accounts.create(
+                user_id=user.id, provider=provider, provider_user_id=provider_user_id
+            )
+        elif link.user_id != user.id:
+            # The IdP's `sub` is stable and belongs to one person. Seeing it
+            # against a different local account means the two have been
+            # merged or re-pointed somewhere upstream, and guessing which is
+            # right is how an account takeover gets automated.
+            raise AuthenticationError(
+                "errors.sso_subject_conflict",
+                fallback="That identity is already linked to a different account",
+            )
+
+        await self._audit.log(
+            action="user.sso_login",
+            resource_type="user",
+            resource_id=str(user.id),
+            org_id=None,
+            actor_id=user.id,
+            ip=ip,
+            ua=user_agent,
+        )
+
+        if user.totp_enabled and not mfa_asserted:
+            # Same shape as the password path's challenge: the IdP has proven
+            # who they are, which is not yet enough to issue real tokens for
+            # an account whose owner asked for a second factor.
+            temp_token = sign_url_token(
+                {"user_id": str(user.id), "purpose": _TOTP_LOGIN_PURPOSE},
+                _TOTP_LOGIN_TOKEN_TTL_SECONDS,
+            )
+            return TwoFactorChallenge(temp_token=temp_token)
 
         return await self._create_session(user, ip, user_agent)
 
@@ -1057,6 +1161,14 @@ class AuthService:
                 # detection in refresh() (T-019): a counter that goes
                 # backwards means this credential was cloned, so every
                 # session gets revoked, not just this login attempt.
+                # Semgrep's logger-credential-disclosure rule fires on the
+                # word "credential" in the format string below. What is
+                # logged is a user id and `record.id` -- the primary key of
+                # the webauthn_credential row -- not the credential itself,
+                # which is a public key this code never logs anywhere.
+                # Suppressed at the line rather than by disabling the rule,
+                # which is worth keeping for what it is actually looking for.
+                # nosemgrep
                 logger.warning(
                     "auth.webauthn: sign-count regression detected (user_id=%s, credential_id=%s)",
                     user_id,

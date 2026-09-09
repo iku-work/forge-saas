@@ -36,6 +36,7 @@ from app.modules.gdpr.repository import DataExportJobRepository
 from app.modules.notifications.repository import NotificationRepository
 from app.workers.jobs.billing import expire_trials_to_inactive, notify_expiring_trials
 from app.workers.jobs.usage import report_usage_to_stripe
+from app.workers.jobs.webhooks import prune_webhook_deliveries, sweep_due_webhook_deliveries
 
 logger = logging.getLogger(__name__)
 
@@ -170,6 +171,27 @@ def create_scheduler(redis_client: Redis) -> AsyncIOScheduler:
         prune_old_notifications,
         "prune_old_notifications",
         CronTrigger(hour=2, minute=0, timezone="UTC"),
+    )
+    # T-321, alongside the T-036 purge job at the same hour: `webhook_delivery`
+    # is the fastest-growing table this template adds, and a delivery log with
+    # no retention policy is a disk-full incident with a date on it.
+    _add_locked_job(
+        scheduler,
+        redis_client,
+        prune_webhook_deliveries,
+        "prune_webhook_deliveries",
+        CronTrigger(hour=3, minute=0, timezone="UTC"),
+    )
+    # Every five minutes rather than hourly: this only re-enqueues deliveries
+    # that are already *due*, and the case it exists for -- a Redis restart
+    # that lost the deferred jobs -- otherwise leaves every pending delivery
+    # stranded until the next tick.
+    _add_locked_job(
+        scheduler,
+        redis_client,
+        sweep_due_webhook_deliveries,
+        "sweep_due_webhook_deliveries",
+        CronTrigger(minute="*/5", timezone="UTC"),
     )
 
     async def _run_refresh_active_sessions_gauge() -> None:

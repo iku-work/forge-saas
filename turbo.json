@@ -1,12 +1,30 @@
 {
   "$schema": "https://turbo.build/schema.json",
+  // T-300: product.config.ts lives at the repo root, so it is not part of any
+  // package's inputs -- turbo would happily replay a cached build from before
+  // a module toggle flipped. It is a global dependency because it genuinely
+  // is one: apps/marketing builds or does not build according to it, and from
+  // T-301 its pages and sitemap follow it too.
+  "globalDependencies": ["product.config.ts"],
   "tasks": {
     "gen-client": {
       "cache": false,
       "outputs": ["src/generated/**"]
     },
     "build": {
-      "dependsOn": ["gen-client", "^build"],
+      // Deliberately NOT dependsOn gen-client, though build consumes its
+      // output. That task shells out to backend/scripts/dump_openapi.py, so
+      // depending on it made every frontend build -- apps/web, apps/marketing,
+      // every package -- require a Python 3.12 with the whole backend
+      // installed. That is fine on a developer machine and in CI, and
+      // impossible in a Node-only build environment: a Render Static Site, a
+      // Vercel/Netlify build, a frontend-only contributor's checkout.
+      //
+      // The generated client is committed instead (see .gitignore), so the
+      // output this task would produce is already on disk, and CI's `lint`
+      // job regenerates it and fails on a diff so it cannot drift. Run
+      // `pnpm gen-client` by hand after changing a backend route.
+      "dependsOn": ["^build"],
       "outputs": ["dist/**"]
     },
     "test": {

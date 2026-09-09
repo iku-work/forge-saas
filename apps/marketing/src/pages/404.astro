@@ -1,0 +1,49 @@
+---
+/**
+ * The 404 page.
+ *
+ * Deliberately *not* under `[...locale]`. A static site has exactly one file
+ * a server can fall back to for an unmatched path, and the path is unmatched
+ * precisely because nothing parsed a locale out of it -- so this renders in
+ * the default locale, and T-307's Caddy points `handle_errors` at it. A
+ * locale-aware 404 needs a server that can look at `Accept-Language`, which
+ * `output: "static"` is the decision not to have.
+ *
+ * `noindex` because a 404 that gets indexed is a 404 that gets linked to.
+ *
+ * It is also where a *locale-less* URL lands (T-305). `/pricing` matches no
+ * built page now that every page is prefixed, so a static host falls back to
+ * this file -- and <LocaleRedirect> turns that into `/en/pricing/` rather
+ * than a dead end, which is what `$.tsx` does for the same URLs in the app.
+ * A path that already carries a locale is left alone, so `/en/nope` is still
+ * a real 404 and this page is what it says it is.
+ */
+import { buttonVariants } from "@forge/ui";
+
+import LocaleRedirect from "../components/LocaleRedirect.astro";
+import BaseLayout from "../layouts/BaseLayout.astro";
+import { translator } from "../lib/i18n";
+import { defaultLocale, localePath } from "../lib/routing";
+
+const locale = defaultLocale;
+const t = translator(locale);
+---
+
+<BaseLayout
+  title={t("marketing.not_found.title")}
+  description={t("marketing.not_found.body")}
+  locale={locale}
+  noindex={true}
+>
+  <LocaleRedirect />
+
+  <section class="mx-auto max-w-3xl px-6 py-24">
+    <h1 class="text-balance text-4xl font-semibold tracking-tight">
+      {t("marketing.not_found.title")}
+    </h1>
+    <p class="mt-4 text-pretty text-lg text-muted-foreground">{t("marketing.not_found.body")}</p>
+    <a class={`${buttonVariants({ size: "lg" })} mt-10`} href={localePath(locale)}>
+      {t("marketing.not_found.cta")}
+    </a>
+  </section>
+</BaseLayout>

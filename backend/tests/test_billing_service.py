@@ -37,8 +37,11 @@ from app.modules.billing.repository import (
 from app.modules.billing.service import BillingService
 from app.modules.feature_flags.service import FeatureFlagService
 from app.modules.tenancy.models import Organization, OrgFeatureFlag
+from tests._module_tables import with_module_hot_path_tables
 
-_TABLES = [
+# Wrapped rather than listed: an enabled optional module reaches for tables
+# this file has no other reason to know about. See tests/_module_tables.py.
+_TABLES = with_module_hot_path_tables(
     Plan.__table__,
     Subscription.__table__,
     WebhookEvent.__table__,
@@ -46,7 +49,7 @@ _TABLES = [
     Organization.__table__,
     OrgFeatureFlag.__table__,
     DunningCampaign.__table__,
-]
+)
 
 
 @pytest.fixture(scope="module")

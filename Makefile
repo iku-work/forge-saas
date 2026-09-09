@@ -1,4 +1,4 @@
-.PHONY: dev test lint migrate migrate-plan gen-client seed pentest-accounts seed-load load-test prod-compose-check new-module check-docs install-hooks down update-from-template check-template-drift observe
+.PHONY: dev test lint migrate migrate-plan gen-client seed pentest-accounts seed-load load-test prod-compose-check prod-compose-tls-check internal-certs rotate-internal-certs check-certs new-module check-docs install-hooks down update-from-template check-template-drift observe
 
 TEMPLATE_VERSION ?= main
 
@@ -19,6 +19,12 @@ dev:
 	@(command -v open >/dev/null 2>&1 && open https://localhost) || \
 	 (command -v xdg-open >/dev/null 2>&1 && xdg-open https://localhost) || \
 	 echo "Visit https://localhost (self-signed cert — your browser will warn once)"
+	# T-307: apps/marketing is a second host, served from its own bind mount.
+	# Only there once `pnpm build` has produced apps/marketing/dist and the
+	# site block beside it -- same as apps/web/dist, and silent when the
+	# marketing module is off.
+	@[ -f apps/marketing/caddy/dev/marketing.caddy ] && \
+	 echo "Marketing: https://marketing.localhost (add '127.0.0.1 marketing.localhost' to your hosts file if it does not resolve)" || true
 
 down:
 	docker compose down
@@ -52,15 +58,15 @@ migrate:
 migrate-plan:
 	cd backend && python -m app.core.migrations plan
 
+# T-313: no Docker, no port, no running backend. The schema is dumped offline
+# from an all-modules-on build of the app (backend/scripts/dump_openapi.py),
+# so the generated client is the union of every module -- which is what
+# apps/web already assumes, since it gates modules at runtime from
+# /api/v1/config rather than at compile time. Needs the backend's Python
+# dependencies installed; the wrapper prefers backend/.venv and says which
+# interpreters it tried if it cannot find one.
 gen-client:
-	docker compose up -d backend
-	@echo "Waiting for backend..."
-	@for i in $$(seq 1 30); do \
-		curl -sf http://localhost:8000/health >/dev/null 2>&1 && exit 0; \
-		sleep 1; \
-	done; \
-	echo "backend did not become ready" >&2; docker compose down; exit 1
-	pnpm --filter @forge/api-client generate; status=$$?; docker compose down; exit $$status
+	pnpm --filter @forge/api-client generate
 
 seed:
 	cd backend && python -m app.core.seed
@@ -93,6 +99,7 @@ prod-compose-check:
 	sed 's/change-me/postgres/' .env.postgres.example > .env.postgres
 	sed 's/change-me/postgres/' .env.pgbouncer.example > .env.pgbouncer
 	cp .env.postgres-exporter.example .env.postgres-exporter
+	sed 's/change-me/a-real-password-here/' .env.minio.example > .env.minio
 	docker compose -f docker-compose.prod.yml up -d --build postgres pgbouncer redis backend
 	@for i in $$(seq 1 30); do \
 		docker compose -f docker-compose.prod.yml exec -T backend \
@@ -106,6 +113,40 @@ prod-compose-check:
 	docker compose -f docker-compose.prod.yml exec -T pgbouncer sh -c \
 		'psql -h 127.0.0.1 -p 6432 -U "$$DB_USER" -d pgbouncer -c "SHOW POOLS"'
 	docker compose -f docker-compose.prod.yml down -v
+
+internal-certs:
+	bash scripts/gen-internal-certs.sh ./certs
+
+# Replace the internal TLS material on a running stack. Trust widens before
+# the certificate changes and narrows after, so no hop ever presents something
+# its verifier does not already accept -- see the script's header.
+rotate-internal-certs:
+	bash scripts/rotate-internal-certs.sh
+
+# Days left on the internal material. Non-zero exit when anything is inside
+# WARN_DAYS (default 30) or already expired, so it works as a cron job.
+check-certs:
+	bash scripts/check-cert-expiry.sh
+
+# The prod stack as it would actually run outside dev: ENVIRONMENT=prod, so
+# every startup invariant is live, and TLS on all three container-to-container
+# hops. `prod-compose-check` above deliberately stays on ENVIRONMENT=dev to
+# isolate pgbouncer's pooling behaviour; this one proves the configuration a
+# self-hosted deployment really uses, which nothing did until now.
+prod-compose-tls-check: internal-certs
+	sed -e 's|^ENVIRONMENT=.*|ENVIRONMENT=prod|' 	    -e 's|^FORCE_HTTPS=.*|FORCE_HTTPS=true|' 	    -e 's|^VIRUS_SCANNER=.*|VIRUS_SCANNER=virustotal|' 	    -e 's|^PASSWORD_PEPPER=.*|PASSWORD_PEPPER=local-check-pepper|' 	    -e 's|^DATABASE_URL=.*|DATABASE_URL=postgresql+asyncpg://postgres:postgres@pgbouncer:6432/forge?sslmode=require|' 	    -e 's|^MIGRATIONS_DATABASE_URL=.*|MIGRATIONS_DATABASE_URL=postgresql+asyncpg://postgres:postgres@postgres:5432/forge?sslmode=require|' 	    -e 's|^REDIS_URL=.*|REDIS_URL=rediss://redis:6379/0?ssl_ca_certs=/certs/ca.crt|' 	    backend/.env.prod-compose > backend/.env
+	sed 's/change-me/postgres/' .env.postgres.example > .env.postgres
+	sed 's/change-me/postgres/' .env.pgbouncer.example > .env.pgbouncer
+	cp .env.postgres-exporter.example .env.postgres-exporter
+	sed 's/change-me/a-real-password-here/' .env.minio.example > .env.minio
+	docker compose -f docker-compose.prod.yml -f docker-compose.tls.yml up -d --build 		postgres pgbouncer redis backend
+	@for i in $$(seq 1 45); do 		docker compose -f docker-compose.prod.yml -f docker-compose.tls.yml exec -T backend 			python -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')" 			>/dev/null 2>&1 && break; 		sleep 2; 	done
+	docker compose -f docker-compose.prod.yml -f docker-compose.tls.yml exec -T backend 		python -m app.core.migrations
+	docker compose -f docker-compose.prod.yml -f docker-compose.tls.yml exec -T backend python -c 		"import urllib.request; r=urllib.request.urlopen('http://localhost:8000/health/ready'); print('health/ready:', r.status, r.read().decode())"
+	@echo "--- both hops must report TLS, not just the one the app can see ---"
+	docker compose -f docker-compose.prod.yml -f docker-compose.tls.yml exec -T postgres 		psql -U postgres -d forge -tAc 		"SELECT 'pgbouncer->postgres ssl=' || s.ssl || ' ' || coalesce(s.version,'') FROM pg_stat_ssl s JOIN pg_stat_activity a USING (pid) WHERE a.datname='forge' AND a.backend_type='client backend' AND a.client_addr IS NOT NULL LIMIT 1"
+	docker compose -f docker-compose.prod.yml -f docker-compose.tls.yml exec -T pgbouncer 		psql "postgres://postgres:postgres@127.0.0.1:6432/pgbouncer?sslmode=require" -tAc "SHOW POOLS"
+	docker compose -f docker-compose.prod.yml -f docker-compose.tls.yml down -v
 
 # T-251: all of the logic lives in Python -- validation, substitution, and the
 # follow-up checklist's file:line pointers are all things shell would do badly.

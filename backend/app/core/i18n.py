@@ -18,6 +18,7 @@ backend.
 from __future__ import annotations
 
 import json
+import os
 import re
 from functools import lru_cache
 from pathlib import Path
@@ -38,7 +39,21 @@ _PACKAGE_LOCALES_DIR = Path(__file__).resolve().parents[3] / "packages" / "i18n"
 _BAKED_LOCALES_DIR = Path(__file__).resolve().parents[2] / "locales"
 
 
+# Same trap as app.workers.jobs.email's renderer path, and it bites here more
+# quietly. The image holds two copies of `app/` -- pip-installed under
+# site-packages, and COPYed to /app/app -- and a console script (`uvicorn`,
+# `arq`) does not put the cwd on sys.path, so production imports the
+# site-packages one while `parents[2]` was written for the other. Missing
+# locales raise nothing at startup: `load_translations()` just caches empty
+# catalogs, and the failure surfaces later as a KeyError from `t()` on
+# whichever request first needs a translated string.
+_LOCALES_DIR_ENV = "LOCALES_DIR"
+
+
 def _locales_dir() -> Path:
+    override = os.environ.get(_LOCALES_DIR_ENV)
+    if override:
+        return Path(override)
     if _PACKAGE_LOCALES_DIR.is_dir():
         return _PACKAGE_LOCALES_DIR
     return _BAKED_LOCALES_DIR

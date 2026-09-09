@@ -106,7 +106,7 @@ questionnaire) — evidence links point at real files, not at task IDs.
 
 | ID | Requirement | Status | Evidence |
 |---|---|---|---|
-| V1.9.1 | Encrypted communication between components across containers/sites | met | Client-facing traffic is TLS-terminated at Caddy (`Caddyfile.prod`). `Settings._enforce_startup_invariants` (`backend/app/core/config.py`, T-225) now refuses to boot outside dev unless `DATABASE_URL` sets `sslmode=require`+ and `REDIS_URL` uses `rediss://`. Render's managed Postgres/Redis satisfy this by default; self-hosted `docker-compose.prod.yml` deployers must complete the cert setup in `docs/runbooks/backup-restore.md`'s "Docker-network TLS" section or the app won't start. |
+| V1.9.1 | Encrypted communication between components across containers/sites | met | Client-facing traffic is TLS-terminated at Caddy (`Caddyfile.prod`). `Settings._enforce_startup_invariants` (`backend/app/core/config.py`, T-225) now refuses to boot outside dev unless `DATABASE_URL` sets `sslmode=require`+ and `REDIS_URL` uses `rediss://`. Render's managed Postgres satisfies this (append `sslmode=require`; `app.core.db.split_ssl_params` translates it for asyncpg, which takes `ssl=` and not `sslmode`). Render's **Key Value does not** — its internal URL is plain `redis://` and TLS is reserved for the external URL, so that deployment claims the requirement via network isolation instead, with `REDIS_ON_PRIVATE_NETWORK=true`. Self-hosted `docker-compose.prod.yml` deployers must complete the cert setup in `docs/runbooks/backup-restore.md`'s "Docker-network TLS" section or the app won't start. |
 | V1.9.2 | Components verify authenticity of each side of a communication link | met | Outbound calls to Stripe/Resend/OAuth providers use standard HTTP-client TLS certificate verification (no `verify=False` found anywhere in the codebase). |
 
 #### V1.10 Malicious Software Architecture
@@ -340,7 +340,7 @@ questionnaire) — evidence links point at real files, not at task IDs.
 | V5.2.3 | Input sanitized before mail systems (SMTP/IMAP injection) | met | `backend/app/workers/jobs/email.py` — prod path sends via the Resend HTTP API (`_send_via_resend`); dev path (`EMAIL_BACKEND=smtp`, MailHog) uses `smtplib.SMTP.send_message` with Python's `email` library building the MIME message, not raw string concatenation into SMTP commands. Neither path is injectable by user-controlled header values. |
 | V5.2.4 | No `eval()`/dynamic code execution on user input | met | No `eval`/`exec` use in application code; enforced by the bandit CI gate. |
 | V5.2.5 | Template injection protection | n/a | No server-side HTML templating engine renders user input (JSON-only API). |
-| V5.2.6 | SSRF protection via allow-listed protocols/domains/ports | partial | `backend/app/core/url_guard.py` `validate_outbound_url()` implements exactly this (rejects private/loopback/reserved IPs, DNS rebinding, non-http(s) schemes) but has zero callers today — same gap [T-212](../security/owasp-top10.md) already flagged for OWASP A10. Follow-up: existing task T-320 (outbound webhooks, first caller). |
+| V5.2.6 | SSRF protection via allow-listed protocols/domains/ports | met | `backend/app/core/url_guard.py` `validate_outbound_url()` rejects private/loopback/reserved IPs, DNS rebinding and non-http(s) schemes. T-320 gave it its first caller: the outbound-webhook module calls it when an endpoint is saved *and* again immediately before each delivery, because a hostname that resolved publicly yesterday can resolve to the metadata address today. |
 | V5.2.7 | User-supplied SVG sanitized/sandboxed | n/a | `image/svg+xml` is not in the upload content-type allow-list (`backend/app/modules/storage/service.py:39-53`); no SVG rendering surface exists. |
 | V5.2.8 | User-supplied scriptable template content (Markdown/CSS/XSL) sandboxed | n/a | No Markdown/CSS/XSL rendering of user-submitted content in the backend. |
 
@@ -494,7 +494,7 @@ questionnaire) — evidence links point at real files, not at task IDs.
 | ID | Requirement | Status | Evidence |
 |---|---|---|---|
 | V9.2.1 | Trusted TLS certs between servers, restrict self-signed | met | Caddy auto-obtains Let's Encrypt certificates (`Caddyfile.prod`); outbound calls to Stripe/Resend/OAuth providers use their publicly-trusted CA certs. |
-| V9.2.2 | Encrypted connections for all inbound/outbound (incl. DB, mgmt) | met | Same enforcement as V1.9.1 — `Settings._enforce_startup_invariants` (T-225) requires `sslmode=require`+ on `DATABASE_URL` and `rediss://` on `REDIS_URL` outside dev. |
+| V9.2.2 | Encrypted connections for all inbound/outbound (incl. DB, mgmt) | met | Same enforcement as V1.9.1 — `Settings._enforce_startup_invariants` (T-225) requires `sslmode=require`+ on `DATABASE_URL` and `rediss://` on `REDIS_URL` outside dev, the latter unless `REDIS_ON_PRIVATE_NETWORK` explicitly claims network isolation instead (see V1.9.1). |
 | V9.2.3 | Encrypted external connections carrying sensitive data are authenticated | met | `backend/app/core/config.py` — `STRIPE_SECRET_KEY`, `RESEND_API_KEY`, `GOOGLE_CLIENT_SECRET`/`GITHUB_CLIENT_SECRET` are required for their respective clients; every encrypted external call is also credential-authenticated. |
 | V9.2.4 | Certificate revocation checking (OCSP stapling) configured | met | Caddy enables OCSP stapling by default for ACME-issued certs — no explicit config is needed to turn it on. T-225 confirmed this is Caddy's documented default behavior rather than adding a no-op config line. |
 
@@ -543,7 +543,7 @@ questionnaire) — evidence links point at real files, not at task IDs.
 
 | ID | Requirement | Status | Evidence |
 |---|---|---|---|
-| V12.6.1 | Server configured with an allow-list for outbound resource requests | partial | Same gap as V5.2.6 — `backend/app/core/url_guard.py` exists but has no caller yet. Follow-up: existing task T-320. |
+| V12.6.1 | Server configured with an allow-list for outbound resource requests | met | As V5.2.6 — the guard is called at save time and at delivery time by `backend/app/workers/jobs/webhooks.py`, which is the only place this product fetches a URL somebody else chose. |
 
 ### V13 — API and Web Service
 

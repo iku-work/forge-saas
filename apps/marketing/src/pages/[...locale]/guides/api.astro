@@ -1,0 +1,138 @@
+---
+/**
+ * The published API reference (T-314).
+ *
+ * A "public API" with no defined surface is half a feature, and this is the
+ * other half: the page a developer reads *before* they have an account, so
+ * they can decide whether to integrate. Everything on it is derived —
+ * `src/lib/api-docs.ts` fetches `/api/v1/openapi-public.json` at build time
+ * (falling back to a committed snapshot), and that document is itself derived
+ * from which routes declare a `require_scope`. Nothing here is a list
+ * somebody maintains, which is why it cannot quietly stop being true.
+ *
+ * A static route file next to `[...slug].astro`, which is legal and
+ * deliberate: Astro resolves static segments before dynamic ones, so
+ * `/en/guides/api` lands here rather than in the content collection. The
+ * alternative — an `api.mdx` guide — would mean a hand-written endpoint
+ * table, i.e. the thing this page exists not to be.
+ *
+ * The whole page is `marketing`-gated by construction: with that module off
+ * this app produces no `dist/` at all (T-300), so there is nothing to serve.
+ * The *document* is still served by the backend either way, which is the
+ * split T-314 asks for.
+ */
+import Breadcrumbs from "../../../components/Breadcrumbs.astro";
+import BaseLayout from "../../../layouts/BaseLayout.astro";
+import { loadApiReference, plainText } from "../../../lib/api-docs";
+import { translator } from "../../../lib/i18n";
+import { localePath, localeStaticPaths } from "../../../lib/routing";
+
+export const getStaticPaths = localeStaticPaths;
+
+const { locale } = Astro.props;
+const t = translator(locale);
+const reference = await loadApiReference();
+
+const crumbs = [
+  { name: t("marketing.nav.home"), path: localePath(locale) },
+  { name: t("marketing.guides.title"), path: localePath(locale, "guides") },
+  { name: t("marketing.api.title") },
+];
+
+// The document's own `info.description` is Markdown written on the backend
+// (app/api/v1/public_openapi.py). Rendering it as HTML here would mean
+// shipping a Markdown runtime to a static page for one string, and pulling
+// in `set:html` — which this repo bans outright. Splitting on the headings
+// keeps it structured, readable, and plain text all the way down.
+const description = plainText(reference.description).trim();
+// The text before the first `##` is the lede: it has no heading of its own,
+// so rendering it as one would put the document's opening sentence in an
+// <h2>. Decided by *where the split lands*, not by matching its first words —
+// the prose lives on the backend and is free to be rewritten.
+const startsWithHeading = description.startsWith("## ");
+const chunks = description
+  .split(/^## /m)
+  .map((chunk) => chunk.trim())
+  .filter(Boolean);
+const lede = startsWithHeading ? undefined : chunks.shift();
+const sections = chunks.map((chunk) => {
+  // `split` always yields at least one element, but `noUncheckedIndexedAccess`
+  // does not know that -- hence the default rather than a non-null assertion.
+  const [heading = "", ...rest] = chunk.split("\n");
+  return { heading: heading.trim(), body: rest.join("\n").trim() };
+});
+---
+
+<BaseLayout
+  title={t("marketing.api.title")}
+  description={t("marketing.api.description")}
+  locale={locale}
+>
+  <article class="mx-auto max-w-3xl px-6 py-16">
+    <Breadcrumbs crumbs={crumbs} label={t("marketing.nav.breadcrumb_label")} />
+
+    <h1 class="mt-6 text-balance text-4xl font-semibold tracking-tight">
+      {t("marketing.api.title")}
+    </h1>
+    <p class="mt-4 text-pretty text-lg text-muted-foreground">
+      {t("marketing.api.description")}
+    </p>
+    <p class="mt-2 text-sm text-muted-foreground" data-testid="api-version">
+      {t("marketing.api.version", { version: reference.version })}
+    </p>
+
+    <section class="mt-10 space-y-6" data-testid="api-guide">
+      {
+        lede ? (
+          <p class="whitespace-pre-line text-pretty leading-relaxed text-muted-foreground">
+            {lede}
+          </p>
+        ) : null
+      }
+      {
+        sections.map((section) => (
+          <section>
+            <h2 class="text-xl font-semibold tracking-tight">{section.heading}</h2>
+            <p class="mt-2 whitespace-pre-line text-pretty leading-relaxed text-muted-foreground">
+              {section.body}
+            </p>
+          </section>
+        ))
+      }
+    </section>
+
+    <section class="mt-12">
+      <h2 class="text-xl font-semibold tracking-tight">
+        {t("marketing.api.endpoints_title")}
+      </h2>
+      {
+        reference.operations.length === 0 ? (
+          <p class="mt-4 text-muted-foreground" data-testid="api-endpoints-empty">
+            {t("marketing.api.endpoints_empty")}
+          </p>
+        ) : (
+          <ul class="mt-4 space-y-6" data-testid="api-endpoints">
+            {reference.operations.map((operation) => (
+              <li class="rounded-lg border p-4">
+                <p class="font-mono text-sm">
+                  <span class="font-semibold">{operation.method}</span>
+                  {` ${operation.path}`}
+                </p>
+                {operation.scope ? (
+                  <p class="mt-2 text-sm text-muted-foreground">
+                    {t("marketing.api.scope_required", { scope: operation.scope })}
+                  </p>
+                ) : null}
+                {operation.description ? (
+                  <p class="mt-2 text-pretty text-sm leading-relaxed text-muted-foreground">
+                    {plainText(operation.description)}
+                  </p>
+                ) : null}
+              </li>
+            ))}
+          </ul>
+        )
+      }
+    </section>
+  </article>
+</BaseLayout>

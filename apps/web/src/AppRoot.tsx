@@ -11,6 +11,7 @@ import { AppErrorBoundary } from "./layouts/AppErrorBoundary";
 import { ImpersonationBanner } from "./layouts/ImpersonationBanner";
 import { localeOf, withLocale } from "./lib/locale-url";
 import { setSentryUser } from "./lib/sentry";
+import { useConsentSync } from "./lib/useConsentSync";
 import type { AppRouter } from "./router";
 
 interface AppRootProps {
@@ -60,6 +61,15 @@ export function AppRoot({ router, queryClient }: AppRootProps) {
   useEffect(() => {
     setSentryUser(user ? { id: user.id } : null);
   }, [user]);
+
+  // T-308: an analytics decision made anonymously on the marketing site
+  // belongs in `consent_record` once there is an account to attach it to.
+  // Here rather than in the login mutation because a session appears through
+  // five different code paths (password, OAuth, magic link, mobile handoff, a
+  // refresh on a page nobody left) and only one of them is a login call.
+  // Does nothing at all in the template's default configuration, which
+  // configures no analytics and therefore writes no cookie.
+  useConsentSync();
 
   return (
     <AppErrorBoundary>

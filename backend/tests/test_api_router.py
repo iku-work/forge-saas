@@ -52,6 +52,9 @@ def _paths() -> set[str]:
     return set(app.openapi()["paths"])
 
 
+# The two `..._present_when_enabled` tests below are the only ones here that
+# need a module on; every other test in this file supplies its own override.
+@pytest.mark.module_dependent
 def test_billing_routes_present_when_enabled() -> None:
     assert "/api/v1/billing/plans" in _paths()
 
@@ -83,6 +86,7 @@ def test_gdpr_routes_absent_when_disabled(monkeypatch: pytest.MonkeyPatch) -> No
     assert "/api/v1/me/notification-preferences" in paths
 
 
+@pytest.mark.module_dependent
 def test_notifications_routes_present_when_enabled() -> None:
     paths = _paths()
 

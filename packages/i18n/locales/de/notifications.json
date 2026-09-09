@@ -40,7 +40,8 @@
     "type_file_uploaded": "Eine Datei wird hochgeladen",
     "type_file_infected": "Eine von Ihnen hochgeladene Datei wird als infiziert eingestuft",
     "channel_required": "erforderlich",
-    "required_note": "Über Zahlungsprobleme informieren wir Sie immer per E-Mail; das lässt sich nicht abschalten — sonst würden Sie den Zugang ohne Vorwarnung verlieren."
+    "required_note": "Über Zahlungsprobleme informieren wir Sie immer per E-Mail; das lässt sich nicht abschalten — sonst würden Sie den Zugang ohne Vorwarnung verlieren.",
+    "type_webhook_endpoint_disabled": "Ein Webhook-Endpunkt wird nach wiederholten Fehlern deaktiviert"
   },
   "types": {
     "member_invited": {
@@ -66,6 +67,10 @@
     "file_infected": {
       "title": "Eine von Ihnen hochgeladene Datei wurde als infiziert eingestuft",
       "body": "{filename} wurde nach einem fehlgeschlagenen Virenscan entfernt."
+    },
+    "webhook_endpoint_disabled": {
+      "title": "Webhook-Endpunkt deaktiviert",
+      "body": "{url} ist zu oft hintereinander fehlgeschlagen und wurde deaktiviert. Beheben Sie den Fehler und aktivieren Sie ihn erneut."
     }
   }
 }

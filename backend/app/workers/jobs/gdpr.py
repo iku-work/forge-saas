@@ -47,8 +47,11 @@ from sqlmodel import SQLModel
 from app.core.config import get_settings
 from app.core.db import async_session_factory
 from app.core.dependencies import invalidate_org_cache, invalidate_user_cache
+from app.core.module_loader import is_enabled
 from app.core.tracing import trace_job
 from app.models._mixins import utcnow
+from app.modules.api_keys.models import ApiKey
+from app.modules.api_keys.schemas import ApiKeyPublic
 from app.modules.audit.models import AuditEvent
 from app.modules.auth.models import (
     EmailVerificationToken,
@@ -119,6 +122,18 @@ async def purge_user_data(
         await session.execute(
             update(Membership).where(membership.invited_by == user_id).values(invited_by=None)
         )
+
+        # T-310: an API key this user minted belongs to their *organization*,
+        # not to them. Erasure nulls `created_by` and leaves the credential
+        # alive -- deleting it would take an integration down because a
+        # colleague exercised a right that has nothing to do with it. The
+        # column is nullable for exactly this, and the offboarding runbook
+        # says so out loud, because the natural assumption is the opposite.
+        if is_enabled("public_api"):
+            api_key = cast("Any", ApiKey)
+            await session.execute(
+                update(ApiKey).where(api_key.created_by == user_id).values(created_by=None)
+            )
 
         await session.execute(delete(User).where(cast("Any", User).id == user_id))
         await session.commit()
@@ -249,6 +264,21 @@ async def _collect_export_payload(session: AsyncSession, user: User) -> dict[str
         .all()
     )
 
+    # T-310/T-037: the keys this user minted. Read through ApiKeyPublic, not
+    # the row -- an export is a file a person downloads and forwards, and
+    # `key_hash` has no business in one. Gated on the module because the
+    # table only physically exists where `public_api` has been enabled at
+    # least once (MODULE_TABLES), and selecting from a table that was never
+    # created is an error, not an empty list.
+    api_key_rows: list[ApiKey] = []
+    if is_enabled("public_api"):
+        api_key = cast("Any", ApiKey)
+        api_key_rows = list(
+            (await session.execute(select(ApiKey).where(api_key.created_by == user.id)))
+            .scalars()
+            .all()
+        )
+
     return {
         # UserPublic, not User.model_dump() -- excludes hashed_password,
         # failed_login_count, locked_until, same exclusions T-015 mandates
@@ -259,6 +289,9 @@ async def _collect_export_payload(session: AsyncSession, user: User) -> dict[str
         "consent_records": [row.model_dump(mode="json") for row in consent_rows],
         "audit_events": [row.model_dump(mode="json") for row in audit_rows],
         "memberships": [row.model_dump(mode="json") for row in membership_rows],
+        "api_keys": [
+            ApiKeyPublic.model_validate(row).model_dump(mode="json") for row in api_key_rows
+        ],
     }
 
 

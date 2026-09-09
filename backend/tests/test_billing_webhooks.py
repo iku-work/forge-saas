@@ -46,6 +46,11 @@ from app.modules.billing.models import Plan, Subscription, WebhookEvent
 from app.modules.billing.repository import WebhookEventRepository
 from app.modules.billing.service import BillingService
 
+# T-291: this file needs billing enabled -- its routes, its tables, or
+# both. CI's module-matrix job deselects it in the combination that turns
+# every optional module off.
+pytestmark = pytest.mark.module_dependent
+
 _TABLES = [Plan.__table__, Subscription.__table__, WebhookEvent.__table__]
 
 

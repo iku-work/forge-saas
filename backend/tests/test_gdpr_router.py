@@ -39,6 +39,11 @@ from app.modules.auth.models import User
 from app.modules.auth.utils import create_access_token
 from app.modules.gdpr.models import ConsentRecord, DataExportJob
 
+# T-291: this file needs gdpr enabled -- its routes, its tables, or
+# both. CI's module-matrix job deselects it in the combination that turns
+# every optional module off.
+pytestmark = pytest.mark.module_dependent
+
 _TABLES = [User.__table__, ConsentRecord.__table__, DataExportJob.__table__, AuditEvent.__table__]
 
 

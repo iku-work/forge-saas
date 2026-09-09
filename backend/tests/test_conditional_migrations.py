@@ -112,6 +112,11 @@ def test_migration_targets_includes_only_enabled_optional_branches(
     assert "gdpr@head" in targets
 
 
+# The five tests marked below read the *committed* product/config.py rather
+# than supplying their own override, which is exactly what CI's module-matrix
+# job replaces. Everything else in this file monkeypatches MODULES itself and
+# is therefore independent of what the product actually ships.
+@pytest.mark.module_dependent
 def test_migration_targets_includes_all_enabled_branches_by_default() -> None:
     targets = migration_runner.migration_targets()
 
@@ -165,6 +170,7 @@ def test_billing_disabled_creates_no_billing_tables(
     assert "consent_record" in tables  # gdpr stays enabled -- unaffected by billing toggle
 
 
+@pytest.mark.module_dependent
 def test_billing_enabled_creates_billing_tables(real_config: Config) -> None:
     migration_runner.upgrade(real_config)  # default product config: billing enabled
 
@@ -172,6 +178,7 @@ def test_billing_enabled_creates_billing_tables(real_config: Config) -> None:
     assert {"plan", "subscription", "webhook_event"} <= tables
 
 
+@pytest.mark.module_dependent
 def test_the_migrations_build_exactly_what_the_models_declare(real_config: Config) -> None:
     """No drift between `alembic upgrade` and the models.
 
@@ -195,8 +202,32 @@ def test_the_migrations_build_exactly_what_the_models_declare(real_config: Confi
     test therefore passed alone and failed in a full run -- which is also
     exactly what a developer gets, since a fresh `alembic` CLI imports only
     app models. Checking the way the CLI does keeps the answer honest.
+
+    **Every branch is applied first, including the disabled modules'** -- and
+    that is a statement about alembic rather than about this product. `alembic
+    check` refuses to compare anything at all while a *script* head is missing
+    from `alembic_version` ("Target database is not up to date"), and a module
+    that ships off (T-310's `public_api`, T-331's `enterprise_sso`) has a head
+    that `migration_runner.upgrade()` deliberately never applies. Without this
+    loop the check does not report drift, it reports that it declined to look.
+
+    The extra tables that leaves in the database are not drift either:
+    `alembic/env.py`'s `include_object` excludes a disabled module's tables
+    from the comparison, which is exactly the situation it was written for --
+    a table physically present from a time the module was enabled. So this
+    test asserts the same property it always did for every enabled module, and
+    now also proves that a disabled module's branch applies cleanly on top of
+    a fully-migrated database.
+
+    Note for anyone running `alembic check` by hand on a product with a module
+    turned off: they will hit the same refusal, and the fix is the same one --
+    apply the disabled branch first. TEMPLATE.md's migration section says so.
     """
     migration_runner.upgrade(real_config)
+    # The branches migration_targets() skipped, so `alembic check` has
+    # something it is willing to compare. See the docstring.
+    for branch in migration_runner.MODULE_BRANCHES.values():
+        command.upgrade(real_config, f"{branch}@head")
 
     # DATABASE_URL is already pointed at this test's container by real_config's
     # monkeypatch.setenv, so the child inherits it.
@@ -212,6 +243,102 @@ def test_the_migrations_build_exactly_what_the_models_declare(real_config: Confi
         "alembic check reported drift between the migrations and the models:\n"
         f"{result.stdout}\n{result.stderr}"
     )
+
+
+def test_deleting_an_organization_takes_its_credentials_with_it(real_config: Config) -> None:
+    """T-310's rule, checked against the schema `alembic upgrade` actually
+    builds, for every table that stores a credential.
+
+    "A live credential outliving its tenant is the worst orphan this schema
+    could produce" is `ApiKey.org_id`'s own comment, and three tables now hold
+    one: `api_key` (a digest), `webhook_endpoint` (an HMAC signing secret) and
+    `sso_connection` (an IdP client secret). All three ship in modules that
+    are **off** by default, so this runs after every branch is applied.
+
+    Behavioural rather than a read of `pg_constraint`, because what has to be
+    true is that the delete *happens*, and because `alembic check` cannot see
+    this class of drift at all: autogenerate compares a foreign key's columns
+    and target, not its ON DELETE rule, so a model saying CASCADE over a
+    migration that forgot it is invisible to the drift test above. That is
+    exactly what had happened to both webhook tables (T-350).
+
+    There is no org-delete endpoint -- the only thing that can remove that row
+    is an operator at a psql prompt -- which is the reason to enforce it in
+    the database rather than in a service that such a person never runs.
+    """
+    migration_runner.upgrade(real_config)
+    for branch in migration_runner.MODULE_BRANCHES.values():
+        command.upgrade(real_config, f"{branch}@head")
+
+    url = (real_config.get_main_option("sqlalchemy.url") or "").replace("+asyncpg", "")
+
+    async def _run() -> dict[str, int]:
+        conn = await asyncpg.connect(url)
+        try:
+            org_id = await conn.fetchval(
+                "insert into organization (id, name, slug, settings, created_at, "
+                "updated_at) values (gen_random_uuid(), 'Doomed', 'doomed', "
+                "'{}'::jsonb, now(), now()) returning id"
+            )
+            await conn.execute(
+                "insert into api_key (id, org_id, name, prefix, key_hash, scopes, "
+                "created_at, updated_at) values (gen_random_uuid(), $1, 'k', 'pfx', "
+                "'digest', '[]'::jsonb, now(), now())",
+                org_id,
+            )
+            endpoint_id = await conn.fetchval(
+                "insert into webhook_endpoint (id, org_id, url, secret, event_types, "
+                "enabled, consecutive_failures, created_at, updated_at) values "
+                "(gen_random_uuid(), $1, 'https://x.example/h', 'enc', '[]'::jsonb, "
+                "true, 0, now(), now()) returning id",
+                org_id,
+            )
+            await conn.execute(
+                "insert into webhook_delivery (id, org_id, endpoint_id, event_type, "
+                "payload, status, attempt_count, delivery_id, created_at, updated_at) "
+                "values (gen_random_uuid(), $1, $2, 'x.y', '{}'::jsonb, 'pending', 0, "
+                "gen_random_uuid(), now(), now())",
+                org_id,
+                endpoint_id,
+            )
+            await conn.execute(
+                "insert into sso_connection (id, org_id, provider_label, issuer, "
+                "discovery_url, client_id, client_secret, email_domain, jit_provisioning, "
+                "default_role, group_role_mappings, enforced, domain_hint_enabled, enabled, "
+                "created_at, updated_at) values (gen_random_uuid(), $1, 'IdP', "
+                "'https://idp.example', 'https://idp.example/.well-known/openid-configuration', "
+                "'cid', 'enc', 'example.com', true, 'MEMBER', '{}'::jsonb, false, false, true, "
+                "now(), now())",
+                org_id,
+            )
+
+            # What an operator does. If any of these foreign keys lacks its ON
+            # DELETE rule this raises ForeignKeyViolationError rather than
+            # leaving an orphan -- safe, but it means "remove this customer"
+            # is a puzzle instead of a DELETE, which is the bug this catches.
+            await conn.execute("delete from organization where id = $1", org_id)
+
+            return {
+                table: await conn.fetchval(
+                    f"select count(*) from {table} where org_id = $1",  # noqa: S608
+                    org_id,
+                )
+                for table in (
+                    "api_key",
+                    "webhook_endpoint",
+                    "webhook_delivery",
+                    "sso_connection",
+                )
+            }
+        finally:
+            await conn.close()
+
+    assert asyncio.run(_run()) == {
+        "api_key": 0,
+        "webhook_endpoint": 0,
+        "webhook_delivery": 0,
+        "sso_connection": 0,
+    }
 
 
 def test_round_trip_up_down_up_with_billing_disabled(
@@ -288,6 +415,7 @@ def _creates_table(script: str, table_name: str) -> bool:
     return re.search(rf"""create_table\(\s*['"]{table_name}['"]""", script) is not None
 
 
+@pytest.mark.module_dependent
 def test_autogenerate_includes_billing_tables_when_enabled(blank_alembic_config: Config) -> None:
     # Blank DB, billing enabled (default product config) -- the very first
     # autogenerated revision must propose billing's tables alongside core's.
@@ -313,6 +441,7 @@ def test_autogenerate_excludes_billing_tables_when_disabled(
     assert _creates_table(script, "consent_record")  # gdpr unaffected
 
 
+@pytest.mark.module_dependent
 def test_autogenerate_does_not_drop_billing_tables_once_disabled(
     blank_alembic_config: Config, monkeypatch: pytest.MonkeyPatch
 ) -> None:

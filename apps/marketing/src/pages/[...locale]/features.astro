@@ -1,0 +1,58 @@
+---
+/**
+ * The features page: static markup, no island, module-aware.
+ *
+ * Each entry is gated on the module that implements it, for the same reason
+ * the landing page's highlights are: a features page that advertises billing
+ * to a product built with `billing: false` is a promise the build cannot
+ * keep.
+ */
+import { Card, CardContent, CardHeader, CardTitle } from "@forge/ui";
+
+import BaseLayout from "../../layouts/BaseLayout.astro";
+import { translator } from "../../lib/i18n";
+import { modules } from "../../lib/product";
+import { localeStaticPaths } from "../../lib/routing";
+
+export const getStaticPaths = localeStaticPaths;
+
+const { locale } = Astro.props;
+const t = translator(locale);
+
+const features = [
+  { key: "accounts", enabled: true },
+  { key: "teams", enabled: modules.multiOrg },
+  { key: "billing", enabled: modules.billing },
+  { key: "files", enabled: modules.fileStorage },
+  { key: "i18n", enabled: true },
+  { key: "operations", enabled: true },
+].filter((feature) => feature.enabled);
+---
+
+<BaseLayout
+  title={t("marketing.features.title")}
+  description={t("marketing.features.subtitle")}
+  locale={locale}
+>
+  <section class="mx-auto max-w-5xl px-6 py-16">
+    <h1 class="text-4xl font-semibold tracking-tight">{t("marketing.features.title")}</h1>
+    <p class="mt-4 max-w-2xl text-pretty text-lg text-muted-foreground">
+      {t("marketing.features.subtitle")}
+    </p>
+
+    <div class="mt-12 grid gap-6 sm:grid-cols-2">
+      {
+        features.map((feature) => (
+          <Card className="h-full">
+            <CardHeader>
+              <CardTitle>{t(`marketing.features.${feature.key}_title`)}</CardTitle>
+            </CardHeader>
+            <CardContent className="text-sm text-muted-foreground">
+              {t(`marketing.features.${feature.key}_body`)}
+            </CardContent>
+          </Card>
+        ))
+      }
+    </div>
+  </section>
+</BaseLayout>

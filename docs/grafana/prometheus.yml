@@ -9,6 +9,16 @@ scrape_configs:
     metrics_path: /metrics
     static_configs:
       - targets: ["backend:8000"]
+  # T-350: the worker is a separate process with its own registry, so
+  # anything it counts -- webhook deliveries by outcome, emails and pushes
+  # sent -- is invisible unless Prometheus scrapes it directly. The gauges it
+  # publishes (queue depth) still travel through Redis and are served by the
+  # backend target above, deliberately: those have to be readable when the
+  # worker is down, which is exactly when this target is not answering.
+  - job_name: forge-worker
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["worker:9100"]
   # T-205: prometheuscommunity/postgres-exporter (docker-compose.yml's
   # observability profile) exposing pg_stat_statements per statement.
   - job_name: forge-postgres

@@ -66,6 +66,11 @@ export const NOTIFICATION_TYPES = [
   // a row for it and the one notification type most worth muting or routing
   // to push had no controls at all.
   "file_infected",
+  // T-321: an outbound-webhook endpoint auto-disabled after repeated failed
+  // deliveries. Mirrors DEFAULT_PREFERENCES in
+  // backend/app/modules/notifications/preferences.py, which
+  // test_notification_preferences_mirror.py pins to this list.
+  "webhook_endpoint_disabled",
 ] as const;
 export type NotificationType = (typeof NOTIFICATION_TYPES)[number];
 
@@ -78,6 +83,7 @@ export const DEFAULT_NOTIFICATION_PREFERENCES: Readonly<
   weekly_summary: { email: true, in_app: false, push: false },
   file_uploaded: { email: false, in_app: true, push: false },
   file_infected: { email: true, in_app: true, push: true },
+  webhook_endpoint_disabled: { email: true, in_app: true, push: false },
 };
 
 /**

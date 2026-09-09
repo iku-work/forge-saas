@@ -198,6 +198,11 @@ make gen-client
 ```
 
 The new endpoints appear in `@forge/api-client`, typed, for web and mobile.
+No stack has to be running: since T-313 the schema is dumped offline by
+`backend/scripts/dump_openapi.py`, from an app built with **every** module
+enabled. That last part matters for a module that ships off — its routes are
+in the generated client either way, and `useModules()` is what decides
+whether the UI can reach them.
 From there it is a feature directory under `apps/web/src/features/invoices/`
 and TanStack Query:
 
@@ -234,8 +239,10 @@ Plus the things only a running stack shows:
 
 - `curl localhost:8000/api/v1/config` — if the module is optional, it appears
   in `modules` with the right value.
-- `curl localhost:8000/openapi.json | grep invoices` — the routes are in the
-  schema, which is what `make gen-client` reads.
+- `make gen-client`, then `grep invoices packages/api-client/openapi.json` —
+  that document is what the client is generated from, and it is written with
+  every module enabled. (`curl localhost:8000/openapi.json` answers the
+  different question of whether *this* configuration serves the routes.)
 - A cross-tenant probe against a real second org returns `404`, not `403` and
   not `200`. The generated test covers this against the module's own routes;
   it is worth confirming once through the real app, with real auth.

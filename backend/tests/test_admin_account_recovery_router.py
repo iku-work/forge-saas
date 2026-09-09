@@ -26,6 +26,11 @@ from app.modules.auth.schemas import LoginRequest
 from app.modules.auth.service import AuthService
 from app.modules.auth.utils import create_access_token, hash_password
 
+# T-291: this file needs admin enabled -- its routes, its tables, or
+# both. CI's module-matrix job deselects it in the combination that turns
+# every optional module off.
+pytestmark = pytest.mark.module_dependent
+
 _PASSWORD = "Correct-Horse9"
 
 

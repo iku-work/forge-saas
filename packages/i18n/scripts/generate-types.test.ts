@@ -36,12 +36,15 @@ describe("locale JSON files", () => {
         "emails.json",
         "errors.json",
         "files.json",
+        "marketing.json",
         "notifications.json",
         "tenancy.json",
         "validation.json",
       ]);
       for (const file of files) {
-        expect(() => JSON.parse(readFileSync(`${dir}${file}`, "utf-8"))).not.toThrow();
+        expect(() =>
+          JSON.parse(readFileSync(`${dir}${file}`, "utf-8")),
+        ).not.toThrow();
       }
     }
   });
