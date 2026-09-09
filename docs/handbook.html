@@ -1293,8 +1293,34 @@ EMAIL_FROM_ADDRESS=YourProduct &lt;noreply@$APEX&gt;
 EMAIL_BACKEND=resend
 EOF
 
+cat &gt; .env &lt;&lt;EOF
+STORAGE_DOMAIN=$STORAGE
+EOF
+
 chmod 600 backend/.env .env.postgres .env.pgbouncer .env.minio
 echo "BACK UP OFF THE BOX: $PEPPER / $FERNET / $MINIOKMS / $PGPASS"</code></pre>
+          </div>
+          <div class="warn-box">
+            <span class="warn-label">That last file is not a duplicate</span>
+            <p>
+              <code>.env</code> at the repo root is <em>Compose's own</em> environment, and the
+              only place it reads <code>${...}</code> from. <code>backend/.env</code> is handed to
+              containers as <code>env_file:</code> and is never consulted for interpolation, so a
+              variable a compose file expands has to be in the root file or it silently becomes
+              its default.
+            </p>
+            <p>
+              What it buys: <code>docker-compose.prod.yml</code> gives the caddy service
+              <code>STORAGE_DOMAIN</code> as a <em>network alias</em>, so the backend and worker
+              resolve the storage hostname to a container. They have to use the public name &mdash;
+              there is one <code>AWS_ENDPOINT_URL</code> and the presigned URLs built from it go to
+              a browser &mdash; so without the alias every server-side S3 call leaves the machine,
+              crosses whatever CDN or WAF fronts the domain, and comes back. When that was
+              Cloudflare, its bot protection answered 403 to roughly 7&nbsp;% of them, and the only
+              symptom was uploads failing at the confirm step with a stack trace pointing at
+              HeadObject. The backend logs a warning at startup if this hostname resolves to a
+              public address.
+            </p>
           </div>
           <div class="warn-box">
             <span class="warn-label">Three of those are unrecoverable</span>

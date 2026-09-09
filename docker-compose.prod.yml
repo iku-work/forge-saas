@@ -254,4 +254,26 @@ services:
       backend:
         condition: service_healthy
     networks:
-      - forge-net
+      forge-net:
+        aliases:
+          # The backend and worker reach MinIO through this same public
+          # hostname, because there is only one AWS_ENDPOINT_URL and the
+          # presigned URLs built from it go to a browser (see
+          # Settings.STORAGE_DOMAIN). Without this alias that name resolves
+          # publicly, so a call between two containers on this host leaves
+          # the machine, crosses whatever CDN or WAF fronts the domain, and
+          # comes back -- which on 2026-09-09 meant Cloudflare intermittently
+          # answering 403 to botocore and every upload failing at the confirm
+          # step, ~7% of HeadObject calls in a measured sample.
+          #
+          # The alias keeps the hostname identical, so presigned signatures
+          # and TLS SNI are unaffected: Caddy still selects the storage site
+          # block and serves its certificate for that name. Only the route
+          # changes.
+          #
+          # Interpolated from the compose project's own .env (see
+          # .env.example at the repo root) -- NOT backend/.env, which compose
+          # reads only as `env_file` for container environments. Left at the
+          # default when storage is a managed service (S3, R2) and there is
+          # no local MinIO to reach.
+          - ${STORAGE_DOMAIN:-storage.localhost}
