@@ -1437,6 +1437,112 @@ sudo chmod +x /etc/cron.weekly/docker-prune</code></pre>
         </p>
       </div>
 
+      <h3>Updating a running deployment</h3>
+      <p>
+        The first deploy is ten steps. An update is four, and three of them are conditional
+        &mdash; the work is deciding which apply, not running them.
+      </p>
+
+      <div class="code">
+        <div class="code-head"><span>shell</span><button class="copy" type="button">Copy</button></div>
+<pre><code>cd ~/forge
+export APEX=example.com APP=app.example.com   # a fresh SSH session has these empty
+
+git fetch origin
+git checkout main          # first time only, if the box was pinned to a branch
+git pull --ff-only
+
+# 1. frontend -- only if apps/ or packages/ changed
+docker run --rm -v "$PWD":/repo -w /repo   -e PUBLIC_SITE_URL=https://$APEX   -e PUBLIC_APP_URL=https://$APP   -e VITE_API_URL=https://$APP   node:22-slim sh -c "corepack enable &amp;&amp; pnpm install --frozen-lockfile     &amp;&amp; pnpm build &amp;&amp; chown -R $(id -u):$(id -g) /repo"
+
+# 2. backend -- only if backend/ changed
+docker compose -f docker-compose.prod.yml build backend
+
+C="docker compose -f docker-compose.prod.yml -f docker-compose.tls.yml"
+
+# 3. migrations -- only if backend/app/**/migrations/ gained a file
+$C run --rm backend python -m app.core.migrations
+
+# 4. restart what you rebuilt
+$C up -d backend worker caddy</code></pre>
+      </div>
+
+      <p>
+        <code>git diff --stat HEAD@{1}</code> after the pull answers all three conditions at once.
+        If only <code>docs/</code> or <code>.github/</code> moved, there is nothing to do on the
+        box at all.
+      </p>
+
+      <div class="warn-box">
+        <span class="warn-label">Do not reach for <code>--force-recreate</code></span>
+        <p>
+          Plain <code>up -d</code> recreates only the containers whose image or configuration
+          actually changed, which is what you want. <code>--force-recreate</code> restarts
+          everything, and a restart is a process kill: any cleanup written in a
+          <code>finally</code> block does not run. Six of those in one afternoon is what leaked
+          the SSE connection counters and made the app answer 429 to every notification stream.
+          Use it only when you have changed something Compose cannot see, and know what you are
+          interrupting.
+        </p>
+      </div>
+
+      <div class="note">
+        <span class="note-label">The environment variables are not optional on a rebuild</span>
+        <p>
+          <code>PUBLIC_APP_URL</code> and friends are shell variables, not stored anywhere, so a
+          new SSH session starts without them. Rebuilding the frontend with them empty is how
+          every link into the app once shipped pointing at <code>localhost</code>. A build gate
+          refuses that now &mdash; the build fails rather than the site lying &mdash; but the
+          failure is easier to read if you know why it happened.
+        </p>
+      </div>
+
+      <h4>Worked example: the free-tier storage change</h4>
+      <p>
+        Useful because it exercises the conditionals rather than all four steps. That change
+        edited <code>backend/</code> and one comment in <code>apps/web</code>, and added no
+        migration:
+      </p>
+      <div class="code">
+        <div class="code-head"><span>shell</span><button class="copy" type="button">Copy</button></div>
+<pre><code>cd ~/forge &amp;&amp; git checkout main &amp;&amp; git pull --ff-only
+
+docker compose -f docker-compose.prod.yml build backend
+C="docker compose -f docker-compose.prod.yml -f docker-compose.tls.yml"
+$C up -d backend worker
+
+# it is in the image now, not in the database
+$C exec -T backend python -c   "from app.modules.billing.dependencies import _FREE_PLAN; print(_FREE_PLAN.features)"</code></pre>
+      </div>
+      <p>
+        No frontend rebuild (a comment does not change behaviour), no migration, no seed.
+        <code>_FREE_PLAN</code> is a Python object built at import time, so its numbers ship
+        inside the image and take effect when the process restarts &mdash; there is no row to
+        update and nothing to run.
+      </p>
+      <p>
+        Nor is there a cache to wait out, which is worth knowing because the instinct is
+        wrong. Entitlements <em>are</em> cached for sixty seconds, but what gets cached is the
+        org's Subscription and Plan <em>rows</em>. A free org has neither, so the cached payload
+        is two nulls and the resolver falls through to the in-memory <code>_FREE_PLAN</code>
+        every time. The new caps apply on the first request after the restart.
+      </p>
+      <p>
+        Then confirm it from outside: log in as an org that has never paid and set an avatar.
+        <code>GET /api/v1/files</code> answering 200 instead of 402 is the same signal without
+        the browser.
+      </p>
+
+      <div class="note">
+        <span class="note-label">Going back</span>
+        <p>
+          <code>git checkout &lt;previous-sha&gt;</code> and repeat whichever of the four steps
+          you ran. Rolling back a migration is the exception &mdash; that needs
+          <code>docs/runbooks/</code>, not this list, which is a good reason to deploy schema
+          changes on their own rather than bundled with code.
+        </p>
+      </div>
+
       <h3>Deploying to a managed platform</h3>
       <p>
         <code>docs/runbooks/deploy-render.md</code> is the worked example. The shape is:
