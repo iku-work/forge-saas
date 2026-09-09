@@ -1,16 +1,16 @@
+import { QueryClient } from "@tanstack/react-query";
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 
 import "./index.css";
 import { AppRoot } from "./AppRoot";
 import { initI18n } from "./i18n";
-import { createQueryClient } from "./lib/queryClient";
 import { initSentry } from "./lib/sentry";
 import { createAppRouter } from "./router";
 
 initSentry();
 
-const queryClient = createQueryClient();
+const queryClient = new QueryClient();
 const router = createAppRouter(queryClient);
 
 const rootElement = document.getElementById("root");
