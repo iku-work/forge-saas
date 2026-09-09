@@ -123,7 +123,11 @@ export function FileUploader({
   async function uploadOne(localId: string, file: File): Promise<void> {
     patchItem(localId, { status: "uploading", progress: 0 });
 
-    let presignResult: { file_id: string; upload_url: string } | null = null;
+    let presignResult: {
+      file_id: string;
+      upload_url: string;
+      fields: Record<string, string>;
+    } | null = null;
     try {
       const res = await presignUploadApiV1FilesPresignPost({
         throwOnError: true,
@@ -135,7 +139,12 @@ export function FileUploader({
         },
       });
       const d = res.data?.data;
-      if (d) presignResult = { file_id: d.file_id, upload_url: d.upload_url };
+      if (d)
+        presignResult = {
+          file_id: d.file_id,
+          upload_url: d.upload_url,
+          fields: d.fields,
+        };
     } catch {
       // fall through to null check below
     }
@@ -147,17 +156,32 @@ export function FileUploader({
       });
       return;
     }
-    const { file_id: fileId, upload_url: uploadUrl } = presignResult;
+    const { file_id: fileId, upload_url: uploadUrl, fields } = presignResult;
+
+    // An S3 POST-policy upload, not a PUT. The server signs a *policy*
+    // (backends/s3.py calls generate_presigned_post), which means `upload_url`
+    // is the bucket root -- there is no object key in it -- and every signed
+    // value, the key included, travels as a form field. PUTting the body
+    // straight at that URL is a write to the bucket itself, which S3 and
+    // MinIO both answer 400.
+    //
+    // Two ordering rules come from the S3 POST API, and both are silent when
+    // broken: the file part must be appended LAST, after every field, and the
+    // request must NOT set Content-Type by hand -- the browser has to write
+    // `multipart/form-data` with its own boundary. The object's own
+    // Content-Type is already one of the signed fields.
+    //
+    // tests/load/lib/workloads.js and backend/tests/test_storage_backend.py
+    // drive this same flow against a real S3-API backend and agree.
+    const form = new FormData();
+    for (const [name, value] of Object.entries(fields)) form.append(name, value);
+    form.append("file", file);
 
     try {
       await new Promise<void>((resolve, reject) => {
         const xhr = new XMLHttpRequest();
         patchItem(localId, { xhr });
-        xhr.open("PUT", uploadUrl);
-        xhr.setRequestHeader(
-          "Content-Type",
-          file.type || "application/octet-stream",
-        );
+        xhr.open("POST", uploadUrl);
         xhr.upload.onprogress = (e) => {
           if (e.lengthComputable) {
             patchItem(localId, {
@@ -171,7 +195,7 @@ export function FileUploader({
         };
         xhr.onerror = () => reject(new Error("network"));
         xhr.onabort = () => reject(new Error("abort"));
-        xhr.send(file);
+        xhr.send(form);
       });
     } catch (e) {
       if (e instanceof Error && e.message === "abort") {

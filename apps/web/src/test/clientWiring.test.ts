@@ -32,11 +32,23 @@ describe("the assembled api client", () => {
   it("still refreshes and replays a 401, with the error interceptor registered", async () => {
     setAccessToken("expired");
     let served = 0;
+    let replayAuth: string | null = null;
     vi.stubGlobal(
       "fetch",
-      vi.fn((url: string) => {
-        if (String(url).includes("/auth/refresh")) {
+      // The two calls arrive in different shapes, which is why this reads
+      // both. openapi-fetch issues a Request; authRetryInterceptor's replay
+      // is a bare `fetch(request.url, { headers })`. Annotating this
+      // parameter `string` and matching on `String(url)` yields
+      // "[object Request]", so the refresh branch never fired and this test
+      // passed without ever exercising the path it names.
+      vi.fn((input: Request | URL | string, init?: RequestInit) => {
+        const url =
+          typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
+        if (url.includes("/auth/refresh")) {
           return Promise.resolve(jsonResponse(200, envelope({ access_token: "fresh" })));
+        }
+        if (served === 1) {
+          replayAuth = new Headers(init?.headers).get("Authorization");
         }
         served += 1;
         // First call is the expired token; the replay carries the new one.
@@ -52,6 +64,10 @@ describe("the assembled api client", () => {
 
     expect(result.error).toBeUndefined();
     expect(result.data).toEqual(envelope({ ok: true }));
+    // The point of a refresh is the *new* token on the replay. Asserting only
+    // that the retry succeeded cannot tell a working refresh from a second
+    // attempt with the same dead credential.
+    expect(replayAuth).toBe("Bearer fresh");
   });
 
   it("annotates a failure with its status without disturbing the envelope", async () => {
