@@ -1,10 +1,7 @@
 import logging
-import socket
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
-from ipaddress import ip_address
 from typing import Annotated, Any
-from urllib.parse import urlparse
 
 from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -28,6 +25,7 @@ from app.core.logging import configure_logging
 from app.core.metrics import init_metrics
 from app.core.module_loader import get_modules
 from app.core.sentry import init_sentry
+from app.core.storage_endpoint import enforce_storage_endpoint_is_reachable_internally
 from app.core.tracing import configure_tracing
 from app.middleware.impersonation import ImpersonationContextMiddleware
 from app.middleware.locale import LocaleMiddleware
@@ -41,6 +39,10 @@ from app.middleware.security_headers import SecurityHeadersMiddleware
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     settings = get_settings()
     get_shared_fernet()  # validates ENCRYPTION_KEY at boot — fails loudly, not on first DB write
+    # In the lifespan rather than at import: this resolves DNS, and importing
+    # app.main (dump_openapi.py, the test suite) must not depend on the
+    # network. Serving without it would.
+    enforce_storage_endpoint_is_reachable_internally(settings)
     app.state.engine = write_engine
     app.state.redis = Redis.from_url(str(settings.REDIS_URL))
     try:
@@ -123,55 +125,6 @@ elif settings.ENVIRONMENT != "dev":
         "address, or to '*' when nothing but the proxy can reach this port."
     )
 
-
-def _warn_if_storage_endpoint_leaves_the_host() -> None:
-    """A self-hosted MinIO reached over the public internet is a latent outage.
-
-    The backend and worker talk to MinIO through the same public hostname the
-    browser gets, because there is only one AWS_ENDPOINT_URL and presigned
-    URLs are built from it. docker-compose.prod.yml therefore aliases the
-    caddy service to that hostname so the name resolves to a container. When
-    that alias is missing -- STORAGE_DOMAIN absent from the compose project's
-    .env is all it takes, since compose interpolates from there and not from
-    backend/.env -- the name resolves publicly instead, and every server-side
-    S3 call leaves the machine and crosses whatever CDN or WAF fronts the
-    domain. Cloudflare's bot protection answered 403 to roughly 7% of them in
-    a measured sample, which surfaces as uploads failing at the confirm step
-    and nowhere else.
-
-    The stack still boots and mostly works, so nothing else would report it.
-    """
-    if settings.ENVIRONMENT == "dev" or not settings.STORAGE_DOMAIN:
-        # No STORAGE_DOMAIN means storage is a managed service (S3, R2) and a
-        # public address is the only kind there is.
-        return
-    endpoint = settings.AWS_ENDPOINT_URL
-    if not endpoint:
-        return
-    host = urlparse(endpoint).hostname
-    if not host:
-        return
-    try:
-        addresses = {info[4][0] for info in socket.getaddrinfo(host, None)}
-    except OSError:
-        # Unresolvable is a different problem, and one the first S3 call will
-        # report far more clearly than a warning here could.
-        return
-    if any(not ip_address(addr).is_private for addr in addresses):
-        logging.getLogger(__name__).warning(
-            "AWS_ENDPOINT_URL (%s) resolves to a public address %s, so this process reaches "
-            "its own object storage over the internet rather than across the container "
-            "network. Every server-side S3 call then crosses whatever CDN or WAF fronts that "
-            "domain, and a WAF that challenges non-browser clients will fail some of them -- "
-            "visible only as uploads failing to confirm. Set STORAGE_DOMAIN in the compose "
-            "project's .env (not backend/.env) so docker-compose.prod.yml can alias caddy to "
-            "this name.",
-            endpoint,
-            sorted(addresses),
-        )
-
-
-_warn_if_storage_endpoint_leaves_the_host()
 
 app.include_router(build_router())
 init_metrics(app)

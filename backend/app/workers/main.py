@@ -15,6 +15,7 @@ from app.core.config import get_settings
 from app.core.db import dispose_engine
 from app.core.jobs import redis_settings as build_redis_settings
 from app.core.metrics import start_worker_metrics_server
+from app.core.storage_endpoint import enforce_storage_endpoint_is_reachable_internally
 from app.workers.jobs.billing import send_dunning_email
 from app.workers.jobs.email import send_email
 from app.workers.jobs.encryption import rotate_encryption_keys_job
@@ -27,6 +28,10 @@ from app.workers.scheduler import create_scheduler
 
 async def worker_startup(ctx: dict[str, Any]) -> None:
     settings = get_settings()
+    # This process makes S3 calls of its own (virus_scan fetches the object),
+    # so it needs the same route the API needs -- and it is the process most
+    # likely to be restarted alone, without anyone watching the API's boot.
+    enforce_storage_endpoint_is_reachable_internally(settings)
     # T-350: this process has its own Prometheus registry, so anything it
     # counts is invisible until something scrapes *it*. See
     # metrics.start_worker_metrics_server for why a counter cannot take the

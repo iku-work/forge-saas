@@ -1318,8 +1318,14 @@ echo "BACK UP OFF THE BOX: $PEPPER / $FERNET / $MINIOKMS / $PGPASS"</code></pre>
               crosses whatever CDN or WAF fronts the domain, and comes back. When that was
               Cloudflare, its bot protection answered 403 to roughly 7&nbsp;% of them, and the only
               symptom was uploads failing at the confirm step with a stack trace pointing at
-              HeadObject. The backend logs a warning at startup if this hostname resolves to a
-              public address.
+              HeadObject.
+            </p>
+            <p>
+              The backend and worker <strong>refuse to start</strong> when this hostname resolves
+              to a public address, rather than warning &mdash; the configuration it prevents is
+              invisible while it is happening, so a log line would not be a defence. If a public
+              address really is right for your deployment (MinIO on its own host, say), set
+              <code>ALLOW_PUBLIC_STORAGE_ENDPOINT=true</code> in <code>backend/.env</code>.
             </p>
           </div>
           <div class="warn-box">
