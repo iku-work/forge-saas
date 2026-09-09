@@ -22,6 +22,7 @@ stream route.
 """
 
 import asyncio
+import time
 from collections.abc import AsyncGenerator, Callable, Iterator
 from uuid import uuid4
 
@@ -199,7 +200,7 @@ async def test_event_stream_delivers_published_message_within_one_second(
 ) -> None:
     user_id = uuid4()
     channel = f"{IN_APP_CHANNEL_PREFIX}{user_id}"
-    gen = sse_module._event_stream(redis_client, user_id)
+    gen = sse_module._event_stream(redis_client, user_id, "conn-under-test")
     try:
         task = asyncio.create_task(gen.__anext__())
         await _wait_for_subscriber(redis_client, channel)
@@ -216,7 +217,7 @@ async def test_event_stream_yields_ping_when_no_message_arrives(
     redis_client: Redis, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setattr(sse_module, "_PING_INTERVAL_SECONDS", 0.1)
-    gen = sse_module._event_stream(redis_client, uuid4())
+    gen = sse_module._event_stream(redis_client, uuid4(), "conn-under-test")
     try:
         first = await asyncio.wait_for(gen.__anext__(), timeout=1.0)
         assert first == ": ping\n\n"
@@ -235,17 +236,17 @@ async def test_event_stream_close_unsubscribes_and_releases_connection_slot(
     user_id = uuid4()
     channel = f"{IN_APP_CHANNEL_PREFIX}{user_id}"
     # Simulates the route's _acquire_connection_slot having already run.
-    await redis_client.incr(sse_module._user_connections_key(user_id))
-    await redis_client.incr(sse_module._TOTAL_CONNECTIONS_KEY)
+    connection_id = "conn-under-test"
+    await sse_module._acquire_connection_slot(redis_client, user_id, connection_id)
 
-    gen = sse_module._event_stream(redis_client, user_id)
+    gen = sse_module._event_stream(redis_client, user_id, connection_id)
     await asyncio.wait_for(gen.__anext__(), timeout=1.0)  # let subscribe() actually run
     await gen.aclose()
 
     [(_, subscriber_count)] = await redis_client.pubsub_numsub(channel)
     assert subscriber_count == 0
-    assert await redis_client.get(sse_module._user_connections_key(user_id)) in (None, b"0")
-    assert await redis_client.get(sse_module._TOTAL_CONNECTIONS_KEY) in (None, b"0")
+    assert await redis_client.zcard(sse_module._user_connections_key(user_id)) == 0
+    assert await redis_client.zcard(sse_module._TOTAL_CONNECTIONS_KEY) == 0
 
 
 # --- connection caps -----------------------------------------------------------------
@@ -253,34 +254,34 @@ async def test_event_stream_close_unsubscribes_and_releases_connection_slot(
 
 async def test_acquire_connection_slot_rejects_sixth_for_same_user(redis_client: Redis) -> None:
     user_id = uuid4()
-    for _ in range(5):
-        await sse_module._acquire_connection_slot(redis_client, user_id)
+    for i in range(5):
+        await sse_module._acquire_connection_slot(redis_client, user_id, f"conn-{i}")
 
     with pytest.raises(RateLimitError):
-        await sse_module._acquire_connection_slot(redis_client, user_id)
+        await sse_module._acquire_connection_slot(redis_client, user_id, "conn-6")
 
-    # Rejection rolls back the increment -- the user's count stays at 5, not 6.
-    assert await redis_client.get(sse_module._user_connections_key(user_id)) == b"5"
+    # A rejection adds nothing -- the held set stays at five, not six.
+    assert await redis_client.zcard(sse_module._user_connections_key(user_id)) == 5
 
 
 async def test_acquire_connection_slot_per_user_caps_are_independent(redis_client: Redis) -> None:
     saturated_user, other_user = uuid4(), uuid4()
-    for _ in range(5):
-        await sse_module._acquire_connection_slot(redis_client, saturated_user)
+    for i in range(5):
+        await sse_module._acquire_connection_slot(redis_client, saturated_user, f"conn-{i}")
 
     # A different user isn't blocked by another user's exhausted cap.
-    await sse_module._acquire_connection_slot(redis_client, other_user)
+    await sse_module._acquire_connection_slot(redis_client, other_user, "conn-0")
 
 
 async def test_acquire_connection_slot_rejects_when_total_capacity_exceeded(
     redis_client: Redis, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setattr(sse_module, "get_settings", lambda: _FakeSettings(sse_max_connections=2))
-    await sse_module._acquire_connection_slot(redis_client, uuid4())
-    await sse_module._acquire_connection_slot(redis_client, uuid4())
+    await sse_module._acquire_connection_slot(redis_client, uuid4(), "conn-a")
+    await sse_module._acquire_connection_slot(redis_client, uuid4(), "conn-b")
 
     with pytest.raises(RateLimitError):
-        await sse_module._acquire_connection_slot(redis_client, uuid4())
+        await sse_module._acquire_connection_slot(redis_client, uuid4(), "conn-c")
 
 
 # --- HTTP-level: only outcomes that complete without entering the stream -----------
@@ -295,7 +296,8 @@ async def test_stream_requires_auth(client: httpx.AsyncClient) -> None:
 async def test_stream_rejects_when_per_user_limit_already_reached(
     client: httpx.AsyncClient, redis_client: Redis, user: User
 ) -> None:
-    await redis_client.set(sse_module._user_connections_key(user.id), 5)
+    for i in range(5):
+        await sse_module._acquire_connection_slot(redis_client, user.id, f"conn-{i}")
 
     response = await client.get("/api/v1/notifications/stream", headers=_auth_header(user))
 
@@ -312,3 +314,99 @@ async def test_stream_rejects_when_total_capacity_reached(
 
     assert response.status_code == 429
     assert response.json()["error"]["code"] == "rate_limited"
+
+
+# --- the failure this design replaced -------------------------------------------------
+
+
+async def test_slot_left_behind_by_a_killed_process_is_reclaimed(
+    redis_client: Redis, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A deploy kills the process with streams open, so `finally` never runs.
+
+    Under the previous counter this was unrecoverable: the count stayed high
+    on a key with no expiry, and five such deploys locked the user out of
+    their own notifications until somebody flushed Redis by hand. Scoring by
+    last-seen means nobody has to notice.
+    """
+    user_id = uuid4()
+    for i in range(5):
+        await sse_module._acquire_connection_slot(redis_client, user_id, f"orphan-{i}")
+
+    # Nothing released them -- the process is simply gone.
+    with pytest.raises(RateLimitError):
+        await sse_module._acquire_connection_slot(redis_client, user_id, "new-tab")
+
+    # Once they stop checking in, their slots come back on their own.
+    later = time.time() + sse_module._STALE_AFTER_SECONDS + 1
+    monkeypatch.setattr(sse_module.time, "time", lambda: later)
+    await sse_module._acquire_connection_slot(redis_client, user_id, "new-tab")
+
+    assert await redis_client.zcard(sse_module._user_connections_key(user_id)) == 1
+
+
+async def test_a_live_stream_keeps_its_slot_across_the_staleness_window(
+    redis_client: Redis, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The other half: checking in must actually protect a slot, or a busy
+    stream would lose its place to its own keepalive interval."""
+    user_id = uuid4()
+    await sse_module._acquire_connection_slot(redis_client, user_id, "long-lived")
+
+    later = time.time() + sse_module._STALE_AFTER_SECONDS + 1
+    monkeypatch.setattr(sse_module.time, "time", lambda: later)
+    await sse_module._touch_connection_slot(redis_client, user_id, "long-lived")
+
+    # A fresh acquire prunes first; the touched slot must survive that pass.
+    await sse_module._acquire_connection_slot(redis_client, user_id, "second-tab")
+
+    held = await redis_client.zrange(sse_module._user_connections_key(user_id), 0, -1)
+    assert sorted(m.decode() if isinstance(m, bytes) else m for m in held) == [
+        "long-lived",
+        "second-tab",
+    ]
+
+
+async def test_releasing_one_connection_leaves_the_others_alone(redis_client: Redis) -> None:
+    """A counter could not tell whose slot it was giving back."""
+    user_id = uuid4()
+    await sse_module._acquire_connection_slot(redis_client, user_id, "tab-a")
+    await sse_module._acquire_connection_slot(redis_client, user_id, "tab-b")
+
+    await sse_module._release_connection_slot(redis_client, user_id, "tab-a")
+
+    held = await redis_client.zrange(sse_module._user_connections_key(user_id), 0, -1)
+    assert [m.decode() if isinstance(m, bytes) else m for m in held] == ["tab-b"]
+    assert await redis_client.zcard(sse_module._TOTAL_CONNECTIONS_KEY) == 1
+
+
+async def test_a_double_release_cannot_free_somebody_elses_slot(redis_client: Redis) -> None:
+    """The counter's worst property: decrementing twice took a slot from
+    whoever held it next, and nothing detected that."""
+    user_id = uuid4()
+    await sse_module._acquire_connection_slot(redis_client, user_id, "tab-a")
+    await sse_module._acquire_connection_slot(redis_client, user_id, "tab-b")
+
+    await sse_module._release_connection_slot(redis_client, user_id, "tab-a")
+    await sse_module._release_connection_slot(redis_client, user_id, "tab-a")
+
+    assert await redis_client.zcard(sse_module._user_connections_key(user_id)) == 1
+
+
+async def test_upgrading_over_the_old_counter_keys_does_not_break(redis_client: Redis) -> None:
+    """The keys these replaced were plain counters, and Redis answers ZCARD
+    against a string with WRONGTYPE.
+
+    Deploying the sorted-set change over live keys therefore broke every
+    stream request until somebody flushed Redis by hand -- a change whose
+    whole purpose was surviving a deploy, unable to survive its own. The
+    version segment in the key name is what makes the upgrade a non-event.
+    """
+    user_id = uuid4()
+    # Exactly what the previous release left behind.
+    await redis_client.set(f"notif:sse:conns:{user_id}", 3)
+    await redis_client.set("notif:sse:conns:total", 3)
+
+    await sse_module._acquire_connection_slot(redis_client, user_id, "after-upgrade")
+
+    assert await redis_client.zcard(sse_module._user_connections_key(user_id)) == 1
