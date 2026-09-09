@@ -54,6 +54,14 @@ from app.modules.tenancy.models import Membership, Organization
 _GRACE_PERIOD = timedelta(days=7)
 _ENTITLED_STATUSES = frozenset({"active", "trialing"})
 
+# These numbers are CAPS, not entitlements, and the difference matters since
+# the storage routes stopped gating on feature *presence*: a key that is
+# absent from `features` is a limit nobody checks, i.e. unlimited. Leaving
+# this `{}` is what used to make a free org unable to set an avatar; leaving
+# it `{}` now would make a free org able to fill the disk. Keep it in step
+# with the "Free" row in app.core.seed and COMMITTED_PLANS in
+# apps/marketing/src/content/pricing.ts -- three separate places, nothing
+# cross-checks them, and this is the only one a real free org ever reads.
 _FREE_PLAN = Plan(
     name="Free",
     slug="free",
@@ -61,7 +69,7 @@ _FREE_PLAN = Plan(
     stripe_price_id_yearly="",
     price_monthly=0,
     price_yearly=0,
-    features={},
+    features={"storage_gb": 1, "max_upload_mb": 10},
 )
 
 
@@ -132,6 +140,25 @@ async def get_current_org_subscription(
 ) -> OrgSubscription:
     org, _ = org_and_membership
     return await resolve_org_subscription(org, session, redis)
+
+
+async def get_optional_org_subscription(
+    org_and_membership: Annotated[tuple[Organization, Membership], Depends(get_current_org)],
+    session: Annotated[AsyncSession, Depends(get_session)],
+    redis: Annotated[Redis, Depends(get_redis)],
+) -> OrgSubscription | None:
+    """The org's plan for a route that *meters* rather than gates.
+
+    require_feature answers "may this org be here at all" and raises when the
+    answer is no. A route that only wants to know the org's numeric limits --
+    to compare a quota against them -- needs the OrgSubscription without that
+    yes/no, and needs the same short-circuit require_feature does: when the
+    billing module is off there are no Plan/Subscription tables to read
+    (T-062/T-065), so the answer is None and the caller applies no limits.
+    """
+    if not is_enabled("billing"):
+        return None
+    return await get_current_org_subscription(org_and_membership, session, redis)
 
 
 def require_feature(

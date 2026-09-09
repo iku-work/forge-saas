@@ -1,10 +1,33 @@
 """
 HTTP layer for the file storage module (T-112): presign/confirm/list/download/
-delete. Every route is gated on require_feature("storage_gb") (denies free
-plans with no storage entitlement at all) on top of the usual FILES_READ/
-FILES_MANAGE permission gate -- matches billing/router.py's own pattern of
-declaring get_current_org directly alongside require_permission when a route
-needs the resolved Organization/Membership themselves, not just a yes/no.
+delete. Gated on the usual FILES_READ/FILES_MANAGE permission -- matches
+billing/router.py's own pattern of declaring get_current_org directly
+alongside require_permission when a route needs the resolved Organization/
+Membership themselves, not just a yes/no.
+
+These routes used to carry require_feature("storage_gb") as well, which
+denied any org without a Stripe subscription. That made the plan a paywall
+in front of file storage, and since apps/web posts an avatar through this
+same module (bucket="avatars"), it also put a paywall in front of setting
+your profile picture -- for free orgs, and equally for a paying customer
+whose card lapsed past the dunning grace period. The dashboard's unfiltered
+GET /files then answered 402 on every page load for a user who could not
+possibly satisfy it.
+
+The quota is the gate now. StorageService._check_quota already reads
+per-plan numbers (max_upload_mb, storage_gb, max_files) and enforces them
+at presign, so "how much" subsumes "whether" for a product where storage
+supports the thing being sold rather than being it. presign therefore still
+resolves the org's plan -- via get_optional_org_subscription, which returns
+the same OrgSubscription without the yes/no -- while the four routes that
+only ever took it for the gate no longer ask for it at all.
+
+To sell storage as a plan feature later, put require_feature("storage_gb")
+back on the routes that should be paid-only. Leaving avatars reachable then
+means gating on the bucket, which the model already anticipates
+(StoredFile.bucket is documented as the seam for plan-quota counting) but
+which no quota code reads yet; a route-level dependency cannot see
+`body.bucket`, so that check belongs in the service.
 """
 
 from typing import Annotated
@@ -24,7 +47,7 @@ from app.core.dependencies import (
 from app.core.envelope import Envelope, Meta
 from app.middleware.rate_limit import api_limit
 from app.modules.auth.permissions import Permission
-from app.modules.billing.dependencies import OrgSubscription, require_feature
+from app.modules.billing.dependencies import OrgSubscription, get_optional_org_subscription
 from app.modules.storage.schemas import (
     DownloadUrlResponse,
     PresignUploadRequest,
@@ -50,7 +73,7 @@ async def presign_upload(  # noqa: PLR0913 — org_sub on top of the usual permi
     membership: Annotated[  # noqa: ARG001 — required to gate on FILES_MANAGE
         Membership, Depends(require_permission(Permission.FILES_MANAGE))
     ],
-    org_sub: Annotated[OrgSubscription | None, Depends(require_feature("storage_gb"))],
+    org_sub: Annotated[OrgSubscription | None, Depends(get_optional_org_subscription)],
     session: Annotated[AsyncSession, Depends(get_session)],
     redis: Annotated[Redis, Depends(get_redis)],
 ) -> Envelope[PresignUploadResponse]:
@@ -73,15 +96,12 @@ async def presign_upload(  # noqa: PLR0913 — org_sub on top of the usual permi
     "/{file_id}/confirm", dependencies=[Depends(reject_during_impersonation("data_mutation"))]
 )
 @api_limit
-async def confirm_upload(  # noqa: PLR0913 — org_sub on top of the usual permission + session + redis params
+async def confirm_upload(  # noqa: PLR0913 — file_id on top of the usual permission + session + redis params
     request: Request,
     file_id: UUID,
     org_and_membership: Annotated[tuple[Organization, Membership], Depends(get_current_org)],
     membership: Annotated[  # noqa: ARG001 — required to gate on FILES_MANAGE
         Membership, Depends(require_permission(Permission.FILES_MANAGE))
-    ],
-    org_sub: Annotated[  # noqa: ARG001 — required to deny free plans with no storage entitlement
-        OrgSubscription | None, Depends(require_feature("storage_gb"))
     ],
     session: Annotated[AsyncSession, Depends(get_session)],
     redis: Annotated[Redis, Depends(get_redis)],
@@ -105,9 +125,6 @@ async def list_files(  # noqa: PLR0913 — cursor pagination (§0.3) needs after
     membership: Annotated[  # noqa: ARG001 — required to gate on FILES_READ
         Membership, Depends(require_permission(Permission.FILES_READ))
     ],
-    org_sub: Annotated[  # noqa: ARG001 — required to deny free plans with no storage entitlement
-        OrgSubscription | None, Depends(require_feature("storage_gb"))
-    ],
     session: Annotated[AsyncSession, Depends(get_session)],
     redis: Annotated[Redis, Depends(get_redis)],
     after: Annotated[UUID | None, Query()] = None,
@@ -128,15 +145,12 @@ async def list_files(  # noqa: PLR0913 — cursor pagination (§0.3) needs after
 
 @router.get("/{file_id}/download")
 @api_limit
-async def download_file(  # noqa: PLR0913 — org_sub on top of the usual permission + session + redis params
+async def download_file(  # noqa: PLR0913 — file_id on top of the usual permission + session + redis params
     request: Request,
     file_id: UUID,
     org_and_membership: Annotated[tuple[Organization, Membership], Depends(get_current_org)],
     membership: Annotated[  # noqa: ARG001 — required to gate on FILES_READ
         Membership, Depends(require_permission(Permission.FILES_READ))
-    ],
-    org_sub: Annotated[  # noqa: ARG001 — required to deny free plans with no storage entitlement
-        OrgSubscription | None, Depends(require_feature("storage_gb"))
     ],
     session: Annotated[AsyncSession, Depends(get_session)],
     redis: Annotated[Redis, Depends(get_redis)],
@@ -151,15 +165,12 @@ async def download_file(  # noqa: PLR0913 — org_sub on top of the usual permis
 
 @router.delete("/{file_id}", dependencies=[Depends(reject_during_impersonation("data_mutation"))])
 @api_limit
-async def delete_file(  # noqa: PLR0913 — org_sub on top of the usual permission + session + redis params
+async def delete_file(  # noqa: PLR0913 — file_id on top of the usual permission + session + redis params
     request: Request,
     file_id: UUID,
     org_and_membership: Annotated[tuple[Organization, Membership], Depends(get_current_org)],
     membership: Annotated[  # noqa: ARG001 — required to gate on FILES_MANAGE
         Membership, Depends(require_permission(Permission.FILES_MANAGE))
-    ],
-    org_sub: Annotated[  # noqa: ARG001 — required to deny free plans with no storage entitlement
-        OrgSubscription | None, Depends(require_feature("storage_gb"))
     ],
     session: Annotated[AsyncSession, Depends(get_session)],
     redis: Annotated[Redis, Depends(get_redis)],

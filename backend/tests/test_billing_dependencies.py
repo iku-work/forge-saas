@@ -169,7 +169,12 @@ async def test_no_subscription_resolves_to_free_plan(session: AsyncSession, redi
 
     assert org_sub.subscription is None
     assert org_sub.plan.slug == "free"
-    assert org_sub.plan.features == {}
+    # Not `== {}`. An empty features dict is how the free tier used to be
+    # defined, and every quota check skips a key that is absent -- so an
+    # empty _FREE_PLAN would now grant unlimited storage rather than none.
+    # The caps are the free tier; asserting they exist is the point.
+    assert org_sub.plan.features["storage_gb"] > 0
+    assert org_sub.plan.features["max_upload_mb"] > 0
 
 
 async def test_active_subscription_resolves_to_its_plan(

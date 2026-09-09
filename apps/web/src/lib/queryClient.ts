@@ -9,11 +9,14 @@ import { QueryClient } from "@tanstack/react-query";
  * tried again. It is the wrong default for a 4xx, which is the server saying
  * the request itself is unacceptable. Retrying that cannot change the answer.
  *
- * This was not theoretical. Every plan-gated route -- storage is gated on
- * `require_feature("storage_gb")` -- answers 402 for an org with no
- * entitlement, and the dashboard requested `/api/v1/files` four times per
- * mount and again on every window focus, filling the console and the access
- * log with requests whose outcome was known in advance.
+ * This was not theoretical. The storage routes used to sit behind
+ * `require_feature("storage_gb")` and answered 402 for any org without a
+ * subscription, while the dashboard requested `/api/v1/files` four times per
+ * mount and again on every window focus -- filling the console and the access
+ * log with requests whose outcome was known in advance. That gate is gone
+ * (the quota replaced it, so a free org is no longer refused for existing),
+ * but 402 has not: exceed the plan's storage_gb, max_upload_mb or max_files
+ * and the answer is still Payment Required, and still not worth four tries.
  *
  * Two statuses are deliberately still retried. 408 is a timeout, which is a
  * "try again" by definition, and 429 means the server asked for a delay

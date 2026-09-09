@@ -261,8 +261,10 @@ async def org(session: AsyncSession, owner: User, plan: Plan) -> Organization:
 
 @pytest.fixture
 async def free_org(session: AsyncSession, owner: User) -> Organization:
-    # No Subscription row -> resolves to the in-memory free plan, which has
-    # no `storage_gb` feature -- require_feature("storage_gb") denies it.
+    # No Subscription row -> resolves to the in-memory _FREE_PLAN. That used
+    # to mean "denied": the routes gated on require_feature("storage_gb") and
+    # its features dict was empty. It now carries real caps instead, so this
+    # org can upload -- within them.
     organization = Organization(name="Freebie", slug=f"freebie-{uuid4().hex[:8]}")
     session.add(organization)
     await session.flush()
@@ -325,10 +327,33 @@ async def test_presign_member_without_files_manage_returns_403(
     assert response.status_code == 403
 
 
-async def test_presign_free_plan_returns_402(
+async def test_presign_free_plan_is_allowed_within_its_quota(
     client: httpx.AsyncClient, owner: User, free_org: Organization
 ) -> None:
+    """An org that has never paid can still upload.
+
+    This asserted 402 until the storage routes stopped gating on
+    require_feature("storage_gb"). A paywall in front of this module was also
+    a paywall in front of the avatar apps/web posts through it, which is not
+    a thing to charge for -- and it fired for a lapsed paying customer too,
+    not only a free one.
+    """
     response = await _presign(client, owner, free_org)
+
+    assert response.status_code == 200
+
+
+async def test_presign_free_plan_still_enforces_its_per_file_cap(
+    client: httpx.AsyncClient, owner: User, free_org: Organization
+) -> None:
+    """Removing the gate did not remove the limit.
+
+    _FREE_PLAN sets max_upload_mb=10. The teeth matter: with `features={}` a
+    quota key is absent, and _check_quota skips an absent key -- so an empty
+    free plan would now mean *unlimited*, the opposite of the old bug and a
+    worse one.
+    """
+    response = await _presign(client, owner, free_org, size_bytes=11_000_000)
 
     assert response.status_code == 402
 
