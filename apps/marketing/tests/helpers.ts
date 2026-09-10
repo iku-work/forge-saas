@@ -46,8 +46,24 @@ export interface BuildOptions {
 }
 
 /** The committed config is the *absence* of the override, not an override pointing back at it. */
+/**
+ * The app origin every test build is given, exported so a test asserting on
+ * app links states that dependency rather than hardcoding a host it happens
+ * to observe.
+ */
+export const TEST_APP_ORIGIN = "https://app.example.com";
+
 function envFor(options: BuildOptions): NodeJS.ProcessEnv {
   const env = { ...process.env, ...options.env };
+  // Every build here goes through check-app-links, which fails the build when
+  // a link points at localhost -- the gate that exists because exactly that
+  // shipped once. A test build inherits no PUBLIC_APP_URL, so appLink() falls
+  // back to the local Caddy host and the gate fires, failing suites that have
+  // nothing to do with app links (tests/indexing.test.ts among them). Giving
+  // it the value a real build would have is not a bypass: the gate is still
+  // live for anything that sets one badly, and app-links.test.ts drives
+  // findLocalLinks against fixtures rather than a build, so it is unaffected.
+  env["PUBLIC_APP_URL"] ??= TEST_APP_ORIGIN;
   if (options.productConfig) {
     env["FORGE_PRODUCT_CONFIG"] = options.productConfig;
   } else {

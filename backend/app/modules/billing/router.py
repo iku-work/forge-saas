@@ -49,16 +49,26 @@ def _request_id(request: Request) -> str:
     return getattr(request.state, "request_id", None) or str(uuid4())
 
 
+# Deliberately NOT gated on require_recent_auth, though it was until
+# 2026-09-10. Ask what a stolen session gains here: a Stripe-hosted URL on
+# which the attacker would have to enter their own card, to add a paid plan
+# to somebody else's account. No theft, no disclosure -- while the cost was
+# real, because auth_time is not advanced by a silent token refresh (see
+# Session.auth_time), so anyone whose tab had been open more than five
+# minutes was told to sign in again to upgrade. That is a checkout
+# interruption in exchange for approximately nothing.
+#
+# The control moved to /portal-session below rather than being deleted. That
+# is where the damage a hijacked session can do actually lives.
 @router.post("/checkout-session", dependencies=[Depends(reject_during_impersonation("billing"))])
 @api_limit
-async def create_checkout_session(  # noqa: PLR0913 — T-120/T-218 add redis+step-up on top of the existing 5
+async def create_checkout_session(  # noqa: PLR0913 — T-120 adds redis on top of the existing 5
     request: Request,
     body: CheckoutSessionRequest,
     org_and_membership: Annotated[tuple[Organization, Membership], Depends(get_current_org)],
     membership: Annotated[  # noqa: ARG001 — required to gate on BILLING_MANAGE
         Membership, Depends(require_permission(Permission.BILLING_MANAGE))
     ],
-    _recent_auth: Annotated[None, Depends(require_recent_auth(max_age_minutes=5))],
     session: Annotated[AsyncSession, Depends(get_session)],
     redis: Annotated[Redis, Depends(get_redis)],
 ) -> Envelope[CheckoutSessionResponse]:
@@ -72,6 +82,13 @@ async def create_checkout_session(  # noqa: PLR0913 — T-120/T-218 add redis+st
     )
 
 
+# T-218 lives here now, not on checkout. The Stripe Customer Portal is the
+# billing surface with something worth stealing behind it: the payment
+# instrument on file, the invoice history, and -- when the portal is
+# configured to allow it -- cancelling the subscription outright. Unlike
+# starting a checkout, every one of those is damage a hijacked session can do
+# on its own, so proving the session was established recently is worth an
+# interruption here.
 @router.post("/portal-session", dependencies=[Depends(reject_during_impersonation("billing"))])
 @api_limit
 async def create_portal_session(
@@ -80,6 +97,7 @@ async def create_portal_session(
     membership: Annotated[  # noqa: ARG001 — required to gate on BILLING_MANAGE
         Membership, Depends(require_permission(Permission.BILLING_MANAGE))
     ],
+    _recent_auth: Annotated[None, Depends(require_recent_auth(max_age_minutes=5))],
     session: Annotated[AsyncSession, Depends(get_session)],
     redis: Annotated[Redis, Depends(get_redis)],
 ) -> Envelope[PortalSessionResponse]:

@@ -14,6 +14,7 @@ two drift.
 
 from app.core.locales import EnabledLocales, LocaleConfig
 from app.core.modules import EnabledModules, ModuleConfig
+from app.core.plans import PlanDefinition
 from app.core.support import SupportTool
 
 # ── Module toggles ──────────────────────────────────────────────────────────
@@ -61,3 +62,31 @@ LOCALES = EnabledLocales(
     ar=LocaleConfig(enabled=True),
 )
 DEFAULT_LOCALE = "en"
+
+
+# ── Billing plans ───────────────────────────────────────────────────────────
+# What each plan GRANTS. What it COSTS, and what it is called, live in Stripe
+# -- these are joined by `lookup_key`, a stable name you set on the Stripe
+# Price, so no opaque `price_1AbC...` id is ever typed into this repo. Run
+# `make sync-plans` after editing this list or after changing prices in the
+# Stripe dashboard; it resolves each lookup key and writes the ids into the
+# plan table. See app/core/plans.py for why the split falls here.
+#
+# Only paid plans belong here. "Free" is not a Stripe product and never needs
+# one -- an org with no subscription resolves to the in-memory _FREE_PLAN in
+# app/modules/billing/dependencies.py, which is where the free tier's own
+# limits are set.
+PLANS = [
+    PlanDefinition(
+        slug="pro",
+        lookup_key_monthly="pro_monthly",
+        lookup_key_yearly="pro_yearly",
+        features={
+            "seats": 25,
+            "storage_gb": 50,
+            "api_calls": 100000,
+            "advanced_reports": True,
+            "file_storage": True,
+        },
+    ),
+]

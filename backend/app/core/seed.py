@@ -66,6 +66,18 @@ async def _ensure_mobile_e2e_user(users: UserRepository) -> User:
 
 async def seed(session: AsyncSession) -> None:
     if is_enabled("billing"):
+        # DEVELOPMENT PLANS ONLY. `price_free_monthly` and friends are not
+        # Stripe ids and never will be -- a dev machine has no Stripe account
+        # to hold real ones, and these exist so the billing UI has rows to
+        # render. Seeding a real deployment with them is how a production
+        # database ends up unable to sell anything: checkout answers 502, and
+        # the webhook logs `billing.webhook_unknown_price` and returns,
+        # stranding a paying customer on the free tier.
+        #
+        # Real environments use `make sync-plans` (app.core.sync_plans), which
+        # resolves the lookup keys in product/config.py's PLANS against Stripe
+        # and overwrites these rows with the ids it finds. It is safe to run
+        # over a seeded database and is the documented deploy step.
         plans = PlanRepository(session)
         await _ensure_plan(
             plans,

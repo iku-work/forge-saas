@@ -112,5 +112,7 @@
   "sso_discovery_invalid": "Das Discovery-Dokument des Identitätsanbieters war kein gültiges JSON.",
   "sso_jwks_empty": "Der Identitätsanbieter hat keine Signaturschlüssel veröffentlicht.",
   "sso_unsafe_url": "Diese URL kann nicht abgerufen werden: {reason}",
-  "sso_delete_while_enforced": "Deaktivieren Sie die Erzwingung, bevor Sie diese Verbindung löschen."
+  "sso_delete_while_enforced": "Deaktivieren Sie die Erzwingung, bevor Sie diese Verbindung löschen.",
+  "card_declined": "Ihre Karte wurde abgelehnt.",
+  "payment_provider_error": "Der Zahlungsanbieter konnte diese Anfrage nicht abschließen. Wenn das Problem weiterhin besteht, wenden Sie sich an den Support."
 }

@@ -1,4 +1,4 @@
-.PHONY: dev test lint migrate migrate-plan gen-client seed pentest-accounts seed-load load-test prod-compose-check prod-compose-tls-check internal-certs rotate-internal-certs check-certs new-module check-docs install-hooks down update-from-template check-template-drift observe
+.PHONY: dev test lint migrate migrate-plan gen-client seed sync-plans pentest-accounts seed-load load-test prod-compose-check prod-compose-tls-check internal-certs rotate-internal-certs check-certs new-module check-docs install-hooks down update-from-template check-template-drift observe
 
 TEMPLATE_VERSION ?= main
 
@@ -70,6 +70,9 @@ gen-client:
 
 seed:
 	cd backend && python -m app.core.seed
+
+sync-plans:
+	cd backend && python -m app.core.sync_plans
 
 pentest-accounts:
 	cd backend && python -m app.core.seed_pentest

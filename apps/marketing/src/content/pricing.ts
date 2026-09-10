@@ -50,14 +50,28 @@ export interface MarketingPlan {
   features: Record<string, number | boolean>;
 }
 
+/**
+ * The free tier, which is deliberately not a Stripe product.
+ *
+ * An organisation with no subscription resolves to the in-memory `_FREE_PLAN`
+ * in `backend/app/modules/billing/dependencies.py` -- there is no plan row and
+ * no price, because nothing about it is ever billed. So it can never arrive
+ * from `/api/v1/billing/plans`, and `lib/plans.ts` adds it to whatever that
+ * endpoint returns rather than expecting it there.
+ *
+ * `storage_gb` here must match `_FREE_PLAN.features`; the rest is copy, not
+ * an enforced limit.
+ */
+export const FREE_PLAN: MarketingPlan = {
+  slug: "free",
+  name: "Free",
+  priceMonthly: 0,
+  priceYearly: 0,
+  features: { seats: 3, storage_gb: 1, api_calls: 1000 },
+};
+
 export const COMMITTED_PLANS: MarketingPlan[] = [
-  {
-    slug: "free",
-    name: "Free",
-    priceMonthly: 0,
-    priceYearly: 0,
-    features: { seats: 3, storage_gb: 1, api_calls: 1000 },
-  },
+  FREE_PLAN,
   {
     slug: "pro",
     name: "Pro",
