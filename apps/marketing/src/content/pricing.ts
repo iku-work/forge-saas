@@ -29,19 +29,22 @@
  * page anyone building without a reachable API will see, including every CI
  * run, since CI has no backend during the frontend build.
  *
- * Amounts are USD cents, the same convention `PlanPublic.price_monthly` uses
- * and the same one `apps/web`'s BillingSettingsPage formats — there is no
- * currency field on a plan.
+ * Amounts are minor units of the plan's own `currency`, the same convention
+ * `PlanPublic` uses. Before 2026-09-10 there was no currency field anywhere
+ * and everything assumed USD, so a EUR catalogue advertised “$49” for a price
+ * Stripe charged in euros.
  */
 
 /** A plan as the marketing site needs it: the public catalogue, no Stripe ids. */
 export interface MarketingPlan {
   slug: string;
   name: string;
-  /** USD cents. */
+  /** Minor units of `currency`. */
   priceMonthly: number;
-  /** USD cents. `0` on a plan that is not sold yearly. */
+  /** Minor units of `currency`. `0` on a plan that is not sold yearly. */
   priceYearly: number;
+  /** ISO 4217, lowercase, as Stripe reports it — `PlanPublic.currency`. */
+  currency: string;
   /**
    * `PlanPublic.features` verbatim: a numeric limit, or a boolean for a
    * feature that is simply included. `dict[str, int]` on the Python side
@@ -67,6 +70,9 @@ export const FREE_PLAN: MarketingPlan = {
   name: "Free",
   priceMonthly: 0,
   priceYearly: 0,
+  // Zero is zero in any currency, but the field is not optional and a card
+  // that renders “0” still picks a symbol from it.
+  currency: "usd",
   features: { seats: 3, storage_gb: 1, api_calls: 1000 },
 };
 
@@ -77,6 +83,7 @@ export const COMMITTED_PLANS: MarketingPlan[] = [
     name: "Pro",
     priceMonthly: 4900,
     priceYearly: 49000,
+    currency: "usd",
     features: {
       seats: 25,
       storage_gb: 50,

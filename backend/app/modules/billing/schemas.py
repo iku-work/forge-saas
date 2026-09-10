@@ -48,6 +48,8 @@ class PlanPublic(AppBaseModel):
     slug: str
     price_monthly: int
     price_yearly: int
+    # Without this the client has to guess, and both of ours guessed "USD".
+    currency: str
     features: dict[str, int]
 
 

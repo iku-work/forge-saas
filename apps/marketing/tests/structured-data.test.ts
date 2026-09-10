@@ -209,7 +209,7 @@ describe("what a rich-results validator would call an error", () => {
         for (const property of REQUIRED[type] ?? []) {
           const value = at(node, property);
           expect(
-            value === undefined || value === "" ,
+            value === undefined || value === "",
             `${page}: ${type} is missing ${property}`,
           ).toBe(false);
         }
@@ -294,7 +294,10 @@ describe("the pricing page", () => {
       ]);
 
       for (const product of products) {
-        const offers = product["offers"] as { price: string }[];
+        const offers = product["offers"] as {
+          price: string;
+          priceCurrency: string;
+        }[];
         expect(offers.length, `${path}: ${String(product["name"])}`).toBe(2);
 
         for (const offer of offers) {
@@ -308,7 +311,15 @@ describe("the pricing page", () => {
           expect(
             rendered,
             `${path}: ${String(product["name"])} at ${offer.price}`,
-          ).toContain(normalizeSpaces(formatPlanPrice(cents, locale)));
+          ).toContain(
+            // The currency comes off the offer itself, so this now asserts
+            // that the JSON-LD and the visible card agree on it -- not just
+            // on the number. They did not: the block hardcoded USD while the
+            // catalogue could be in any currency.
+            normalizeSpaces(
+              formatPlanPrice(cents, offer.priceCurrency, locale),
+            ),
+          );
         }
       }
     }
@@ -324,7 +335,9 @@ describe("the pricing page", () => {
     // "49 dollars" and "49 dollars a month" are different claims, and only
     // one of them is true.
     expect(
-      offers.map((offer) => offer.priceSpecification.referenceQuantity.unitCode),
+      offers.map(
+        (offer) => offer.priceSpecification.referenceQuantity.unitCode,
+      ),
     ).toEqual(["MON", "ANN"]);
     expect(offers[0]?.priceCurrency).toBe("USD");
   });
@@ -365,7 +378,10 @@ describe("a blog post", () => {
   });
 
   it("reports an untouched post as modified when it was published", () => {
-    const [post] = jsonLdOfType(readPath("/en/blog/why-a-template/"), "BlogPosting");
+    const [post] = jsonLdOfType(
+      readPath("/en/blog/why-a-template/"),
+      "BlogPosting",
+    );
 
     expect(post?.["dateModified"]).toBe(post?.["datePublished"]);
   });
@@ -397,7 +413,10 @@ describe("a guide", () => {
     // bug T-220 fixed once, in the form a crawler sees it.
     for (const item of items.slice(0, -1)) {
       const path = String(item.item).slice(SITE_URL.length);
-      expect(() => readPath(path), `dead crumb ${String(item.item)}`).not.toThrow();
+      expect(
+        () => readPath(path),
+        `dead crumb ${String(item.item)}`,
+      ).not.toThrow();
     }
     // ...and the last carries no URL, because it is this page.
     expect(items.at(-1)?.item).toBeUndefined();

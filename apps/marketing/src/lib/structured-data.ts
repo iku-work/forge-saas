@@ -49,11 +49,18 @@ export type SchemaNode = WithContext<Thing>;
 const CONTEXT = "https://schema.org";
 
 /**
- * Plans are USD at the data model level -- `PlanPublic` has no currency field.
- * Same constant, same reason, as src/lib/plan-view.ts, which formats the
- * prices these offers quote.
+ * The currency an `AggregateOffer` quotes, taken from the plans it
+ * aggregates rather than assumed. It was a hardcoded "USD" until
+ * 2026-09-10, which published a structured-data block contradicting the page
+ * it sat on -- the exact failure this file's header calls worse than no block
+ * at all, since a search engine will happily index the wrong one.
+ *
+ * An AggregateOffer carries one currency for the whole range, so a catalogue
+ * genuinely mixing currencies would need per-plan `Offer`s instead. Taking
+ * the first plan's is right for the single-currency catalogue this supports;
+ * `make sync-plans` already refuses a plan whose own two prices disagree.
  */
-const CURRENCY = "USD";
+const DEFAULT_CURRENCY = "USD";
 
 /**
  * UN/CEFACT Recommendation 20 unit codes, which is what schema.org's
@@ -148,7 +155,7 @@ export function softwareApplicationSchema(options: {
     monthly.length > 0 && pricingUrl
       ? {
           "@type": "AggregateOffer",
-          priceCurrency: CURRENCY,
+          priceCurrency: (plans[0]?.currency ?? DEFAULT_CURRENCY).toUpperCase(),
           lowPrice: offerPrice(Math.min(...monthly)),
           highPrice: offerPrice(Math.max(...monthly)),
           offerCount: plans.length,
@@ -185,18 +192,24 @@ function offerPrice(cents: number): string {
  * is a page the price is not on is exactly the mismatch this file exists to
  * avoid.
  */
-function planOffer(cents: number, unitCode: string, url: string): Offer {
+function planOffer(
+  cents: number,
+  currency: string,
+  unitCode: string,
+  url: string,
+): Offer {
   const price = offerPrice(cents);
+  const priceCurrency = currency.toUpperCase();
   return {
     "@type": "Offer",
     price,
-    priceCurrency: CURRENCY,
+    priceCurrency,
     availability: "https://schema.org/InStock",
     url,
     priceSpecification: {
       "@type": "UnitPriceSpecification",
       price,
-      priceCurrency: CURRENCY,
+      priceCurrency,
       referenceQuantity: {
         "@type": "QuantitativeValue",
         value: 1,
@@ -226,8 +239,8 @@ export function planProductSchemas(
     name: plan.name,
     brand: { "@id": organizationId(astroSite) },
     offers: [
-      planOffer(plan.priceMonthly, UNIT_MONTH, url),
-      planOffer(plan.priceYearly, UNIT_YEAR, url),
+      planOffer(plan.priceMonthly, plan.currency, UNIT_MONTH, url),
+      planOffer(plan.priceYearly, plan.currency, UNIT_YEAR, url),
     ],
   }));
 }

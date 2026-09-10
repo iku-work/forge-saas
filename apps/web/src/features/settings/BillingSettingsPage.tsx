@@ -44,32 +44,41 @@ import { getErrorMessage } from "../auth/getErrorMessage";
 // and symbol placement (e.g. "$10.00" vs "10,00 $"), so it's threaded
 // through rather than hardcoded as the implicit en-US formatting `$${...}`
 // used to produce.
-function formatPrice(cents: number, locale: string): string {
-  return new Intl.NumberFormat(locale, {
-    style: "currency",
-    currency: "USD",
-  }).format(cents / 100);
-}
-
-// Unlike Plan (always USD, see formatPrice above), an InvoiceDTO carries its
-// own Stripe `currency` -- lowercase per Stripe's convention
-// (Intl.NumberFormat requires the uppercase ISO 4217 code).
-function formatInvoiceAmount(cents: number, currency: string, locale: string): string {
+function formatPrice(cents: number, currency: string, locale: string): string {
   return new Intl.NumberFormat(locale, {
     style: "currency",
     currency: currency.toUpperCase(),
   }).format(cents / 100);
 }
 
-// Usage prices are stored in micros (1,000,000 micros = $1 USD, see
-// Plan.usage_prices_micros / docs/runbooks/stripe-usage-pricing.md) rather
-// than cents -- a plain cents field can't represent sub-cent per-unit
-// pricing like $0.0001/API call. Same USD assumption as formatPrice above
-// (Plan has no currency field).
-function formatMicros(micros: number, locale: string): string {
+// An InvoiceDTO carries its own Stripe `currency` -- lowercase per Stripe's
+// convention (Intl.NumberFormat requires the uppercase ISO 4217 code). So
+// does Plan, since 2026-09-10: before that this whole file assumed USD, and
+// a EUR catalogue rendered "$49" for a price Stripe charged in euros.
+function formatInvoiceAmount(
+  cents: number,
+  currency: string,
+  locale: string,
+): string {
   return new Intl.NumberFormat(locale, {
     style: "currency",
-    currency: "USD",
+    currency: currency.toUpperCase(),
+  }).format(cents / 100);
+}
+
+// Usage prices are stored in micros (1,000,000 micros = one major unit, see
+// Plan.usage_prices_micros / docs/runbooks/stripe-usage-pricing.md) rather
+// than cents -- a plain cents field can't represent sub-cent per-unit
+// pricing like 0.0001 per API call. The currency is the plan's, same as
+// formatPrice: these amounts are denominated by the plan that priced them.
+function formatMicros(
+  micros: number,
+  currency: string,
+  locale: string,
+): string {
+  return new Intl.NumberFormat(locale, {
+    style: "currency",
+    currency: currency.toUpperCase(),
     maximumFractionDigits: 6,
   }).format(micros / 1_000_000);
 }
@@ -293,7 +302,10 @@ export function BillingSettingsPage() {
             ) : usageQuery.isError ? (
               <Alert variant="destructive">
                 <AlertDescription>
-                  {getErrorMessage(usageQuery.error, "billing.usage.error_load")}
+                  {getErrorMessage(
+                    usageQuery.error,
+                    "billing.usage.error_load",
+                  )}
                 </AlertDescription>
               </Alert>
             ) : (
@@ -318,7 +330,17 @@ export function BillingSettingsPage() {
                             {t("billing.usage.no_price_configured")}
                           </span>
                         ) : (
-                          formatMicros(item.estimated_cost_micros, i18n.language)
+                          formatMicros(
+                            item.estimated_cost_micros,
+                            // The plan that priced this usage. Falls back to
+                            // the catalogue's first plan when the org has no
+                            // subscription -- there is no metered usage in
+                            // that state, so the value is never rendered.
+                            currentPlan?.currency ??
+                              plans[0]?.currency ??
+                              "usd",
+                            i18n.language,
+                          )
                         )}
                       </TableCell>
                     </TableRow>
@@ -353,7 +375,11 @@ export function BillingSettingsPage() {
                   <div>
                     <p className="font-medium">{plan.name}</p>
                     <p className="text-sm text-muted-foreground">
-                      {formatPrice(plan.price_monthly, i18n.language)}
+                      {formatPrice(
+                        plan.price_monthly,
+                        plan.currency,
+                        i18n.language,
+                      )}
                       {t("billing.available_plans.per_month")}
                     </p>
                   </div>
@@ -386,7 +412,10 @@ export function BillingSettingsPage() {
           ) : invoicesQuery.isError ? (
             <Alert variant="destructive">
               <AlertDescription>
-                {getErrorMessage(invoicesQuery.error, "billing.invoices.error_load")}
+                {getErrorMessage(
+                  invoicesQuery.error,
+                  "billing.invoices.error_load",
+                )}
               </AlertDescription>
             </Alert>
           ) : invoices.length === 0 ? (

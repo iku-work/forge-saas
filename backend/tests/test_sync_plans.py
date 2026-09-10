@@ -35,18 +35,20 @@ class _FakeRecurring:
 
 
 class _FakePrice:
-    def __init__(
+    def __init__(  # noqa: PLR0913 -- one argument per Stripe field this reads
         self,
         price_id: str,
         unit_amount: int,
         product: str,
         interval: str = "month",
         interval_count: int = 1,
+        currency: str = "usd",
     ) -> None:
         self.id = price_id
         self.unit_amount = unit_amount
         self.product = _FakeProduct(product)
         self.recurring = _FakeRecurring(interval, interval_count)
+        self.currency = currency
 
 
 class _FakeList:
@@ -95,6 +97,8 @@ async def test_writes_the_resolved_ids_and_keeps_entitlements_local(
     assert plan.price_monthly == 1200
     # ...entitlements never do. Stripe has no notion of `storage_gb`.
     assert plan.features == {"seats": 25, "storage_gb": 50}
+    # Stripe's, not a guess. Before this column every consumer assumed USD.
+    assert plan.currency == "usd"
 
 
 async def test_a_missing_lookup_key_writes_nothing_at_all(
@@ -272,3 +276,44 @@ async def test_a_monthly_price_billed_quarterly_is_refused(
 
     with pytest.raises(PlanSyncError, match="not every 1 month"):
         await sync_plans(session, [PlanDefinition(slug="team", lookup_key_monthly="team_monthly")])
+
+
+async def test_the_currency_comes_from_stripe(
+    session: AsyncSession, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The amounts are meaningless without it, and the template used to
+    assume USD everywhere -- so a EUR catalogue advertised "$49" for a price
+    Stripe charged in euros."""
+    _stub_stripe(
+        monkeypatch,
+        {
+            "pro_monthly": _FakePrice("price_m", 4900, "Pro", currency="eur"),
+            "pro_yearly": _FakePrice("price_y", 30000, "Pro", interval="year", currency="eur"),
+        },
+    )
+
+    await sync_plans(session, [PRO])
+
+    plan = await PlanRepository(session).get_by_slug("pro")
+    assert plan is not None
+    assert plan.currency == "eur"
+
+
+async def test_a_plan_whose_two_prices_disagree_on_currency_is_refused(
+    session: AsyncSession, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Plan carries one currency for both amounts, and Stripe will happily
+    hold a EUR monthly beside a USD yearly. Storing either mislabels the
+    other on every page that renders it."""
+    _stub_stripe(
+        monkeypatch,
+        {
+            "pro_monthly": _FakePrice("price_m", 4900, "Pro", currency="eur"),
+            "pro_yearly": _FakePrice("price_y", 30000, "Pro", interval="year", currency="usd"),
+        },
+    )
+
+    with pytest.raises(PlanSyncError, match="one currency for both"):
+        await sync_plans(session, [PRO])
+
+    assert await PlanRepository(session).get_by_slug("pro") is None

@@ -14,12 +14,12 @@ import { FEATURE_ORDER, type MarketingPlan } from "../content/pricing";
 import type { Translate } from "./i18n";
 
 /**
- * Plans are USD-denominated at the data model level -- `PlanPublic` has no
- * currency field, the same assumption `apps/web`'s BillingSettingsPage
- * formats under. The locale still governs grouping, the decimal separator and
- * where the symbol goes ("$49.00" vs "49,00 $").
+ * The currency comes from the plan (`PlanPublic.currency`, populated by
+ * `make sync-plans` from the Stripe price). It used to be a hardcoded "USD",
+ * which meant a EUR catalogue rendered "$49" on a page whose checkout then
+ * charged euros. The locale still governs grouping, the decimal separator and
+ * where the symbol goes ("€49.00" vs "49,00 €").
  */
-const CURRENCY = "USD";
 
 /** The feature keys the template ships a label for. See `featureLine` for why `en`. */
 const FEATURE_COUNT_LABELS: Record<string, string> =
@@ -34,12 +34,16 @@ const FEATURE_FLAG_LABELS: Record<string, string> =
  * the JSON-LD ever stops coming from the same cents, the formatted string
  * stops appearing on the page.
  */
-export function formatPlanPrice(cents: number, locale: string): string {
+export function formatPlanPrice(
+  cents: number,
+  currency: string,
+  locale: string,
+): string {
   return new Intl.NumberFormat(locale, {
     style: "currency",
-    currency: CURRENCY,
-    // Whole-dollar prices read better without ".00" on a pricing page, but a
-    // $4.99 plan must not silently become $5.
+    currency: currency.toUpperCase(),
+    // Whole-unit prices read better without ".00" on a pricing page, but a
+    // 4.99 plan must not silently become 5.
     minimumFractionDigits: cents % 100 === 0 ? 0 : 2,
   }).format(cents / 100);
 }
@@ -115,9 +119,13 @@ export function toPricingPlanView(
     name: plan.name,
     price: {
       monthly:
-        plan.priceMonthly === 0 ? free : formatPlanPrice(plan.priceMonthly, locale),
+        plan.priceMonthly === 0
+          ? free
+          : formatPlanPrice(plan.priceMonthly, plan.currency, locale),
       yearly:
-        plan.priceYearly === 0 ? free : formatPlanPrice(plan.priceYearly, locale),
+        plan.priceYearly === 0
+          ? free
+          : formatPlanPrice(plan.priceYearly, plan.currency, locale),
     },
     cadence: {
       monthly:

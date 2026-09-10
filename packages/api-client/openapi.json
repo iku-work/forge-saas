@@ -3133,6 +3133,10 @@
       },
       "PlanPublic": {
         "properties": {
+          "currency": {
+            "title": "Currency",
+            "type": "string"
+          },
           "features": {
             "additionalProperties": {
               "type": "integer"
@@ -3168,6 +3172,7 @@
           "slug",
           "price_monthly",
           "price_yearly",
+          "currency",
           "features"
         ],
         "title": "PlanPublic",

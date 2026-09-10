@@ -55,6 +55,7 @@ class _ResolvedPrice:
     price_id: str
     unit_amount: int
     product_name: str
+    currency: str
     interval: str | None
     interval_count: int
 
@@ -83,12 +84,49 @@ def _resolve(lookup_key: str) -> _ResolvedPrice | None:
         price_id=price.id,
         unit_amount=price.unit_amount or 0,
         product_name=getattr(product, "name", None) or str(product),
+        currency=price.currency,
         interval=recurring.interval if recurring else None,
         interval_count=recurring.interval_count if recurring else 0,
     )
 
 
 _Resolved = dict[str, tuple[_ResolvedPrice, _ResolvedPrice | None]]
+
+
+def _disagreements(
+    definition: PlanDefinition, monthly: _ResolvedPrice, yearly: _ResolvedPrice | None
+) -> list[str]:
+    """Ways a resolved pair can contradict what the definition claims.
+
+    Stripe will hold every one of these happily; nothing downstream would
+    question them either, because BillingService only picks a column and the
+    frontends only render what the row says. This is the one place they can
+    be caught.
+    """
+    problems: list[str] = []
+
+    # A "yearly" price that actually recurs monthly bills twelve times what
+    # the customer agreed to. interval_count matters as much as interval:
+    # every 3 months is not monthly.
+    for label, price, want in (("monthly", monthly, "month"), ("yearly", yearly, "year")):
+        if price is None:
+            continue
+        if price.interval != want or price.interval_count != 1:
+            problems.append(
+                f"{definition.slug}: the {label} price ({price.price_id}) is billed "
+                f"{_cadence(price)}, not every 1 {want}"
+            )
+
+    # One plan, one currency: Plan carries a single `currency` for both
+    # amounts, so a EUR monthly beside a USD yearly would misprice whichever
+    # one lost.
+    if yearly is not None and yearly.currency != monthly.currency:
+        problems.append(
+            f"{definition.slug}: monthly is {monthly.currency.upper()} but yearly is "
+            f"{yearly.currency.upper()} -- a plan carries one currency for both"
+        )
+
+    return problems
 
 
 def _resolve_all(definitions: list[PlanDefinition]) -> _Resolved:
@@ -113,23 +151,7 @@ def _resolve_all(definitions: list[PlanDefinition]) -> _Resolved:
                 )
                 continue
 
-        # The interval is not cosmetic: BillingService picks between these
-        # two columns from the caller's `interval`, so a "yearly" price that
-        # actually recurs monthly bills twelve times what the customer agreed
-        # to, and nothing downstream would question it. Stripe is perfectly
-        # happy to hold such a price; only this check stands between it and a
-        # subscription.
-        for label, price, want in (
-            ("monthly", monthly, "month"),
-            ("yearly", yearly, "year"),
-        ):
-            if price is None:
-                continue
-            if price.interval != want or price.interval_count != 1:
-                mismatched.append(
-                    f"{definition.slug}: the {label} price ({price.price_id}) is billed "
-                    f"{_cadence(price)}, not every 1 {want}"
-                )
+        mismatched.extend(_disagreements(definition, monthly, yearly))
 
         resolved[definition.slug] = (monthly, yearly)
 
@@ -166,6 +188,7 @@ def _blank_plan(slug: str) -> Plan:
         stripe_price_id_yearly="",
         price_monthly=0,
         price_yearly=0,
+        currency="usd",
         features={},
     )
 
@@ -190,6 +213,7 @@ async def sync_plans(session: AsyncSession, definitions: list[PlanDefinition]) -
         target.name = monthly.product_name
         target.price_monthly = monthly.unit_amount
         target.price_yearly = yearly.unit_amount if yearly else 0
+        target.currency = monthly.currency
         target.stripe_price_id_monthly = monthly.price_id
         target.stripe_price_id_yearly = yearly.price_id if yearly else ""
         target.features = dict(definition.features)
@@ -200,9 +224,10 @@ async def sync_plans(session: AsyncSession, definitions: list[PlanDefinition]) -
             session.add(target)
         written.append(target)
         logger.info(
-            "plans.synced: slug=%s name=%r monthly=%s yearly=%s",
+            "plans.synced: slug=%s name=%r currency=%s monthly=%s yearly=%s",
             slug,
             target.name,
+            target.currency.upper(),
             monthly.price_id,
             yearly.price_id if yearly else "-",
         )

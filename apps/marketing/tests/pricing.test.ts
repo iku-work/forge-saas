@@ -27,6 +27,10 @@ const LIVE_PLANS = [
     name: "Solo",
     price_monthly: 1200,
     price_yearly: 12000,
+    // Not USD on purpose: this site hardcoded a "$" until 2026-09-10, and a
+    // dollar fixture cannot tell a page that reads the plan's currency from
+    // one that assumes its own.
+    currency: "eur",
     features: { seats: 1, storage_gb: 5 },
   },
   {
@@ -35,6 +39,7 @@ const LIVE_PLANS = [
     name: "Studio",
     price_monthly: 9900,
     price_yearly: 99000,
+    currency: "eur",
     features: { seats: 50, advanced_reports: true, custom_metric: 7 },
   },
 ];
@@ -147,12 +152,12 @@ describe("the build-time plan fetch", () => {
     expect(requested).toContain("/api/v1/billing/plans");
     expect(html).toContain("Solo");
     expect(html).toContain("Studio");
-    expect(html).toContain("$99");
+    expect(html).toContain("€99");
 
     // The committed catalogue's prices, not its plan *names* -- "Pro" is a
     // substring of "Product", the footer heading, so a name check here would
     // pass for the wrong reason and fail for another.
-    expect(html).not.toContain("$490");
+    expect(html).not.toContain("€490");
     expect(html).not.toContain("100,000 API calls per month");
 
     // Fetched data is current data, so the staleness notice is not shown.

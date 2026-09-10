@@ -60,6 +60,7 @@ interface PlanPublic {
   name: string;
   price_monthly: number;
   price_yearly: number;
+  currency: string;
   features: Record<string, number | boolean>;
 }
 
@@ -72,6 +73,12 @@ function isPlanPublic(value: unknown): value is PlanPublic {
     typeof plan.name === "string" &&
     typeof plan.price_monthly === "number" &&
     typeof plan.price_yearly === "number" &&
+    // Checked rather than assumed: a backend older than the currency column
+    // would send prices with no way to say what they are denominated in, and
+    // rendering them under this site's own guess is the bug the column was
+    // added to end. Falling back to the committed catalogue is the honest
+    // answer there.
+    typeof plan.currency === "string" &&
     typeof plan.features === "object" &&
     plan.features !== null
   );
@@ -83,6 +90,7 @@ function toMarketingPlan(plan: PlanPublic): MarketingPlan {
     name: plan.name,
     priceMonthly: plan.price_monthly,
     priceYearly: plan.price_yearly,
+    currency: plan.currency,
     features: plan.features,
   };
 }
