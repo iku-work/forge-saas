@@ -55,6 +55,17 @@ class PlanRepository:
         result = await self.session.execute(stmt)
         return result.scalar_one_or_none()
 
+    async def get_by_slug_including_inactive(self, slug: str) -> Plan | None:
+        """get_by_slug's counterpart for app.core.sync_plans, which must see
+        a row it previously deactivated. Slug is unique, so a plan dropped
+        from PLANS and later restored has to be found and reactivated -- the
+        active-only lookup would miss it and try to insert the same slug
+        twice."""
+        m = cast("Any", Plan)
+        stmt = select(Plan).where(m.slug == slug, m.deleted_at.is_(None))
+        result = await self.session.execute(stmt)
+        return result.scalar_one_or_none()
+
     async def list_active(self) -> list[Plan]:
         m = cast("Any", Plan)
         stmt = (

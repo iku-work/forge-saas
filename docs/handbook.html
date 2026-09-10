@@ -1409,6 +1409,44 @@ $C logs -f caddy            # watch three certificates be issued</code></pre>
         </li>
 
         <li>
+          <h4>Point the plans at real Stripe prices</h4>
+          <div class="code">
+            <div class="code-head"><span>shell</span><button class="copy" type="button">Copy</button></div>
+<pre><code>$C exec -T backend python -m app.core.sync_plans</code></pre>
+          </div>
+          <p>
+            Skip this and billing cannot sell anything. <code>make seed</code> writes
+            <em>development</em> plans whose price ids &mdash; <code>price_pro_monthly</code> and
+            friends &mdash; are placeholders, not Stripe ids, because a dev machine has no Stripe
+            account to hold real ones.
+          </p>
+          <div class="warn-box">
+            <span class="warn-label">The half that fails silently</span>
+            <p>
+              A wrong price id breaks billing in <em>both</em> directions. Checkout answers 502,
+              which you will notice. The webhook does not: <code>_handle_subscription_upserted</code>
+              resolves the incoming subscription back to a plan by that same id, and on a miss it
+              logs <code>billing.webhook_unknown_price</code> and returns &mdash; leaving a customer
+              who has just paid sitting on the free tier, with nothing in the UI to say so.
+            </p>
+          </div>
+          <p>
+            You never type a price id. <code>product/config.py</code>'s <code>PLANS</code> names a
+            <strong>lookup key</strong> for each price &mdash; a stable name you set on the price in
+            Stripe (Product &rarr; the price &rarr; Edit &rarr; Advanced &rarr; Lookup key) &mdash;
+            and this command resolves those to ids and writes them in. Stripe owns the name and the
+            amount; the repo owns the entitlements, which Stripe knows nothing about. Re-run it
+            after any price change, and once per environment: test-mode and live-mode ids differ
+            while the lookup keys do not.
+          </p>
+          <p>
+            It resolves everything before writing anything, so a missing lookup key aborts the run
+            naming every key it could not find and leaves the database untouched. Locally the same
+            thing is <code>make sync-plans</code>.
+          </p>
+        </li>
+
+        <li>
           <h4>Verify by request</h4>
           <div class="code">
             <div class="code-head"><span>shell</span><button class="copy" type="button">Copy</button></div>
