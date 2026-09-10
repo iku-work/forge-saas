@@ -159,6 +159,21 @@ describe("the build-time plan fetch", () => {
     expect(html).not.toContain("These prices were published with the site");
   });
 
+  it("still shows the free tier, which the API can never return", async () => {
+    // Free is not a Stripe product: an org with no subscription resolves to
+    // the backend's in-memory _FREE_PLAN, so no plan row and no price exist
+    // for it. Before lib/plans.ts added it explicitly, pointing the build at
+    // a real API dropped the Free card off the pricing page entirely -- which
+    // is what happened the first time `make sync-plans` ran.
+    await buildAsync({ env: { PUBLIC_API_URL: origin } });
+    const html = readPath("/en/pricing/");
+
+    expect(html).toContain("Free");
+    // ...alongside the API's own plans, not instead of them.
+    expect(html).toContain("Solo");
+    expect(html).toContain("Studio");
+  });
+
   it("labels a feature key it has no translation for rather than dropping it", () => {
     // `features` is open JSON from the plan row. A bullet that silently
     // vanished would let a plan advertise less than it sells.

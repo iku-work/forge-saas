@@ -26,7 +26,11 @@
  * see `src/content/pricing.ts` for the staleness contract that makes that an
  * acceptable trade.
  */
-import { COMMITTED_PLANS, type MarketingPlan } from "../content/pricing";
+import {
+  COMMITTED_PLANS,
+  FREE_PLAN,
+  type MarketingPlan,
+} from "../content/pricing";
 
 export type PlanSource = "api" | "committed";
 
@@ -130,7 +134,21 @@ async function fetchPlans(): Promise<PlanCatalogue> {
       throw new Error("the API returned an empty plan catalogue");
     }
 
-    return { plans: data.map(toMarketingPlan), source: "api" };
+    // The free tier is never in that response and never can be: it has no
+    // Stripe price and no plan row, because an org with no subscription
+    // resolves to the backend's in-memory _FREE_PLAN. Advertising only what
+    // Stripe sells would drop the Free card off the pricing page the moment
+    // the API became reachable -- which is exactly what happened the first
+    // time `make sync-plans` ran against a real catalogue.
+    //
+    // Guarded rather than unconditional: a product that really does sell a
+    // "free" plan row keeps whatever the API said about it.
+    const fromApi = data.map(toMarketingPlan);
+    const plans = fromApi.some((plan) => plan.slug === FREE_PLAN.slug)
+      ? fromApi
+      : [FREE_PLAN, ...fromApi];
+
+    return { plans, source: "api" };
   } catch (error) {
     const reason = error instanceof Error ? error.message : String(error);
     console.warn(
