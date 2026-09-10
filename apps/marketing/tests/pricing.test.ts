@@ -177,6 +177,12 @@ describe("the build-time plan fetch", () => {
     // ...alongside the API's own plans, not instead of them.
     expect(html).toContain("Solo");
     expect(html).toContain("Studio");
+
+    // And it adopts the catalogue's currency. The card shows the word
+    // "Free" rather than a symbol, but its JSON-LD Offer still declares
+    // one, and a stray USD offer beside EUR ones is a structured-data block
+    // contradicting its own page.
+    expect(html).not.toContain('"priceCurrency":"USD"');
   });
 
   it("labels a feature key it has no translation for rather than dropping it", () => {
