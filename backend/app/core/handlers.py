@@ -2,6 +2,7 @@ import logging
 from uuid import uuid4
 
 import sentry_sdk
+import stripe
 from fastapi import FastAPI, Request
 from fastapi.encoders import jsonable_encoder
 from fastapi.exception_handlers import http_exception_handler as _default_http_exception_handler
@@ -91,6 +92,61 @@ async def http_exception_handler(request: Request, exc: Exception) -> Response:
     return await _default_http_exception_handler(request, exc)
 
 
+async def stripe_error_handler(request: Request, exc: Exception) -> JSONResponse:
+    """Stripe refusing us is not "an unexpected error occurred".
+
+    Without this, every StripeError fell through to the unhandled handler: a
+    500, a generic message, and a Sentry event filed as an application bug.
+    The most likely cause is not a bug at all -- it is a Plan row whose
+    stripe_price_id_* does not exist in the connected account, which is
+    exactly what app.core.seed ships (`price_pro_monthly` is a placeholder,
+    not an ID). That produced a 500 on POST /billing/checkout-session with
+    nothing in the response to suggest looking at the price.
+
+    A CardError is the one kind the *caller* can act on, and Stripe writes
+    `user_message` for exactly that purpose, so it is passed through with a
+    402. Everything else is our problem, not theirs: the caller gets a
+    generic 502 while the operator gets the code, the message and Stripe's
+    request id in the log.
+    """
+    assert isinstance(exc, stripe.StripeError)  # noqa: S101 — Starlette dispatches by registered class
+    stripe_request_id = getattr(exc, "request_id", None)
+    stripe_code = getattr(exc, "code", None)
+
+    if isinstance(exc, stripe.CardError):
+        logger.warning(
+            "Stripe declined a card: code=%s request_id=%s", stripe_code, stripe_request_id
+        )
+        message = exc.user_message or _translate_or_fallback(
+            "errors.card_declined", _locale(request), "Your card was declined."
+        )
+        error = ErrorBody(code="card_declined", message_key="errors.card_declined", message=message)
+        return _envelope_response(request, 402, error)
+
+    # Deliberately logged, not raised on to Sentry as an application error:
+    # this is an upstream refusal or a misconfiguration, and the detail an
+    # operator needs is the Stripe message, which never reaches the client.
+    logger.error(
+        "Stripe call failed: %s code=%s request_id=%s message=%s",
+        type(exc).__name__,
+        stripe_code,
+        stripe_request_id,
+        exc.user_message or str(exc),
+    )
+    message = _translate_or_fallback(
+        "errors.payment_provider_error",
+        _locale(request),
+        "The payment provider could not complete this request. If it keeps happening, "
+        "contact support.",
+    )
+    error = ErrorBody(
+        code="payment_provider_error",
+        message_key="errors.payment_provider_error",
+        message=message,
+    )
+    return _envelope_response(request, 502, error)
+
+
 async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONResponse:
     sentry_sdk.capture_exception(exc)
     message = _translate_or_fallback(
@@ -102,6 +158,9 @@ async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONR
 
 def register_exception_handlers(app: FastAPI) -> None:
     app.add_exception_handler(DomainError, domain_error_handler)
+    # Before the catch-all Exception handler below, which would otherwise
+    # turn an upstream refusal into a 500 filed as an application bug.
+    app.add_exception_handler(stripe.StripeError, stripe_error_handler)
     app.add_exception_handler(RequestValidationError, validation_error_handler)
     app.add_exception_handler(StarletteHTTPException, http_exception_handler)
     app.add_exception_handler(Exception, unhandled_exception_handler)

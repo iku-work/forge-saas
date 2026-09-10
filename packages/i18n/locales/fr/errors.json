@@ -112,5 +112,7 @@
   "sso_discovery_invalid": "Le document de découverte du fournisseur d'identité n'était pas du JSON valide.",
   "sso_jwks_empty": "Le fournisseur d'identité n'a publié aucune clé de signature.",
   "sso_unsafe_url": "Cette URL ne peut pas être récupérée : {reason}",
-  "sso_delete_while_enforced": "Désactivez l'obligation avant de supprimer cette connexion."
+  "sso_delete_while_enforced": "Désactivez l'obligation avant de supprimer cette connexion.",
+  "card_declined": "Votre carte a été refusée.",
+  "payment_provider_error": "Le prestataire de paiement n'a pas pu traiter cette demande. Si le problème persiste, contactez le support."
 }

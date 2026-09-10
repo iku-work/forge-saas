@@ -112,5 +112,7 @@
   "sso_discovery_invalid": "The identity provider's discovery document wasn't valid JSON.",
   "sso_jwks_empty": "The identity provider published no signing keys.",
   "sso_unsafe_url": "That URL can't be fetched: {reason}",
-  "sso_delete_while_enforced": "Turn enforcement off before deleting this connection."
+  "sso_delete_while_enforced": "Turn enforcement off before deleting this connection.",
+  "card_declined": "Your card was declined.",
+  "payment_provider_error": "The payment provider could not complete this request. If it keeps happening, contact support."
 }

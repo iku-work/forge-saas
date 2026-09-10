@@ -112,5 +112,7 @@
   "sso_discovery_invalid": "El documento de descubrimiento del proveedor de identidad no era JSON válido.",
   "sso_jwks_empty": "El proveedor de identidad no publicó claves de firma.",
   "sso_unsafe_url": "No se puede acceder a esa URL: {reason}",
-  "sso_delete_while_enforced": "Desactiva la obligatoriedad antes de eliminar esta conexión."
+  "sso_delete_while_enforced": "Desactiva la obligatoriedad antes de eliminar esta conexión.",
+  "card_declined": "Tu tarjeta fue rechazada.",
+  "payment_provider_error": "El proveedor de pagos no pudo completar esta solicitud. Si el problema persiste, contacta con soporte."
 }

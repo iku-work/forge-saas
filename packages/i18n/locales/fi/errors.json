@@ -85,5 +85,7 @@
   "api_key_limit_reached": "Tällä organisaatiolla voi olla enintään {limit} API-avainta.",
   "api_key_expiry_in_the_past": "Vanhenemispäivän on oltava tulevaisuudessa.",
   "api_key_rate_limited": "Tämä API-avain on ylittänyt rajan {limit} pyyntöä minuutissa.",
-  "invalid_org_header": "X-Org-ID ei ole kelvollinen tunniste."
+  "invalid_org_header": "X-Org-ID ei ole kelvollinen tunniste.",
+  "card_declined": "Korttisi hylättiin.",
+  "payment_provider_error": "Maksupalveluntarjoaja ei voinut suorittaa tätä pyyntöä. Jos ongelma jatkuu, ota yhteyttä tukeen."
 }

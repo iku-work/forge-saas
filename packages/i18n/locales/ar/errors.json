@@ -112,5 +112,7 @@
   "sso_discovery_invalid": "لم يكن مستند اكتشاف مزوّد الهوية بصيغة JSON صالحة.",
   "sso_jwks_empty": "لم ينشر مزوّد الهوية أي مفاتيح توقيع.",
   "sso_unsafe_url": "تعذّر جلب هذا الرابط: {reason}",
-  "sso_delete_while_enforced": "عطّل الإلزام قبل حذف هذا الاتصال."
+  "sso_delete_while_enforced": "عطّل الإلزام قبل حذف هذا الاتصال.",
+  "card_declined": "تم رفض بطاقتك.",
+  "payment_provider_error": "تعذّر على مزوّد الدفع إكمال هذا الطلب. إذا استمرت المشكلة، فاتصل بالدعم."
 }
