@@ -96,6 +96,7 @@ export const fixturePlan: PlanPublic = {
   slug: "free",
   price_monthly: 0,
   price_yearly: 0,
+  currency: "usd",
   features: {},
 };
 

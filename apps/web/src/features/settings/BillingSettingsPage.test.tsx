@@ -29,6 +29,7 @@ const freePlan: PlanPublic = {
   slug: "free",
   price_monthly: 0,
   price_yearly: 0,
+  currency: "usd",
   features: {},
 };
 
@@ -38,6 +39,10 @@ const proPlan: PlanPublic = {
   slug: "pro",
   price_monthly: 2900,
   price_yearly: 29000,
+  // Deliberately not USD: this page hardcoded "$" until 2026-09-10, so a
+  // fixture in dollars cannot tell a page that reads the plan's currency
+  // from one that assumes its own.
+  currency: "eur",
   features: { seats: 10 },
 };
 
@@ -110,7 +115,10 @@ describe("BillingSettingsPage", () => {
 
     renderPage();
 
-    expect(await screen.findByText("$29.00/mo")).toBeInTheDocument();
+    // Euro, because proPlan is priced in euro. The invoice assertions below
+    // stay in dollars -- an InvoiceDTO carries its own currency, and that one
+    // was always threaded through. The plan's was not.
+    expect(await screen.findByText("€29.00/mo")).toBeInTheDocument();
     // Neither catalog plan matches a (nonexistent) subscription's plan_id,
     // so both rows render an "Upgrade" action rather than "Current plan".
     expect(

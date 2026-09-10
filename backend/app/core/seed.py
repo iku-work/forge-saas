@@ -89,6 +89,7 @@ async def seed(session: AsyncSession) -> None:
                 stripe_price_id_yearly="price_free_yearly",
                 price_monthly=0,
                 price_yearly=0,
+                currency="usd",
                 features={"seats": 3, "storage_gb": 1, "api_calls": 1000},
             ),
         )
@@ -102,6 +103,7 @@ async def seed(session: AsyncSession) -> None:
                 stripe_price_id_yearly="price_pro_yearly",
                 price_monthly=4900,
                 price_yearly=49000,
+                currency="usd",
                 features={
                     "seats": 25,
                     "storage_gb": 50,

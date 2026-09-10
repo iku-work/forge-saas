@@ -1391,6 +1391,10 @@ export type PasswordResetRequest = {
  */
 export type PlanPublic = {
     /**
+     * Currency
+     */
+    currency: string;
+    /**
      * Features
      */
     features: {

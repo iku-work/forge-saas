@@ -20,8 +20,15 @@ class Plan(UUIDPKMixin, TimestampMixin, SoftDeleteMixin, SQLModel, table=True):
     slug: str = Field(unique=True, index=True)
     stripe_price_id_monthly: str
     stripe_price_id_yearly: str
-    price_monthly: int  # cents
-    price_yearly: int  # cents
+    price_monthly: int  # minor units of `currency`
+    price_yearly: int  # minor units of `currency`
+    # ISO 4217, lowercase, as Stripe reports it on the Price. Carried because
+    # the amounts above are meaningless without it: before this column the
+    # whole stack assumed USD and hardcoded a "$", so a EUR catalogue
+    # advertised "$49" on the pricing page and charged EUR 49 at the till.
+    # app.core.sync_plans reads it straight off the resolved price and
+    # refuses a plan whose monthly and yearly prices disagree.
+    currency: str = Field(default="usd", max_length=3)
     # e.g. {"seats": 5, "storage_gb": 10, "api_calls": 10000} — consulted by
     # billing.dependencies.require_feature (T-031).
     features: dict[str, int] = Field(sa_column=Column(JSONB, nullable=False))
