@@ -153,6 +153,18 @@ export function BillingSettingsPage() {
       return data;
     },
   });
+  // The step-up gate lives on this one, not on `checkout` above -- it moved
+  // there on 2026-09-10, because interrupting an upgrade to demand a fresh
+  // sign-in cost conversions and protected nothing (a stolen session reaching
+  // checkout only earns a Stripe URL the attacker must put their own card
+  // into). The portal is the surface worth protecting: payment instrument,
+  // invoice history, cancellation.
+  //
+  // So a session idling past five minutes surfaces here as
+  // errors.step_up_auth_required, shown through getErrorMessage's normal
+  // code->copy mapping like any other error rather than a dedicated re-auth
+  // prompt -- the same convention SecuritySettingsPage's change-email flow
+  // already follows.
   const portal = useMutation({
     mutationFn: async () => {
       const { data } = await createPortalSessionApiV1BillingPortalSessionPost({

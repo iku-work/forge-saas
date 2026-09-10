@@ -235,6 +235,18 @@ def _headers(user: User, org: Organization) -> dict[str, str]:
     return {"Authorization": f"Bearer {token}", "X-Org-ID": str(org.id)}
 
 
+def _stale_headers(user: User, org: Organization) -> dict[str, str]:
+    """A session that is perfectly valid but was not established recently.
+
+    This is the ordinary state of a tab left open: the access token is fresh
+    (silently refreshed), while auth_time still points at the last *real*
+    sign-in, because a refresh deliberately does not advance it. See
+    Session.auth_time.
+    """
+    token = create_access_token(user.id, None, (), auth_time=datetime.now(UTC) - timedelta(hours=1))
+    return {"Authorization": f"Bearer {token}", "X-Org-ID": str(org.id)}
+
+
 class _FakeCustomer:
     def __init__(self, customer_id: str) -> None:
         self.id = customer_id
@@ -316,6 +328,42 @@ async def test_checkout_session_owner_happy_path(
     assert response.json()["data"]["url"] == "https://checkout.stripe.com/test"
 
 
+async def test_checkout_session_does_not_require_a_recent_sign_in(
+    client: httpx.AsyncClient,
+    session: AsyncSession,
+    owner: User,
+    org: Organization,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """An hour-old sign-in can still start an upgrade.
+
+    This route carried require_recent_auth(5 minutes) until 2026-09-10, which
+    meant any tab open longer than that answered 403 step_up_auth_required to
+    "Upgrade" -- a checkout interruption bought with approximately no
+    security, since a stolen session reaching here only yields a Stripe URL
+    on which the attacker would have to enter their own card. The control now
+    sits on /portal-session, which is asserted below.
+    """
+    plan = await _make_plan(session)
+
+    async def _customer_create(**_kwargs: object) -> _FakeCustomer:
+        return _FakeCustomer("cus_1")
+
+    async def _checkout_create(**_kwargs: object) -> _FakeCheckoutSession:
+        return _FakeCheckoutSession(url="https://checkout.stripe.com/test")
+
+    monkeypatch.setattr(stripe.Customer, "create_async", _customer_create)
+    monkeypatch.setattr(stripe.checkout.Session, "create_async", _checkout_create)
+
+    response = await client.post(
+        "/api/v1/billing/checkout-session",
+        json={"plan_slug": plan.slug, "interval": "monthly"},
+        headers=_stale_headers(owner, org),
+    )
+
+    assert response.status_code == 200
+
+
 async def test_checkout_session_unknown_plan_returns_404(
     client: httpx.AsyncClient,
     owner: User,
@@ -355,6 +403,34 @@ async def test_portal_session_member_without_billing_manage_returns_403(
     response = await client.post("/api/v1/billing/portal-session", headers=_headers(member, org))
 
     assert response.status_code == 403
+
+
+async def test_portal_session_requires_a_recent_sign_in(
+    client: httpx.AsyncClient,
+    owner: User,
+    org: Organization,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The Stripe Customer Portal is the billing surface worth protecting.
+
+    Behind it sit the payment instrument on file, the invoice history, and --
+    where the portal is configured for it -- cancelling outright. Each is
+    damage a hijacked session can do by itself, which is what makes an
+    interruption worth its cost here and not on checkout.
+    """
+
+    async def _unreached(**_kwargs: object) -> object:
+        raise AssertionError("Stripe must not be called when step-up fails")
+
+    monkeypatch.setattr(stripe.Customer, "create_async", _unreached)
+    monkeypatch.setattr(stripe.billing_portal.Session, "create_async", _unreached)
+
+    response = await client.post(
+        "/api/v1/billing/portal-session", headers=_stale_headers(owner, org)
+    )
+
+    assert response.status_code == 403
+    assert response.json()["error"]["code"] == "step_up_auth_required"
 
 
 async def test_portal_session_owner_happy_path(
