@@ -21,6 +21,7 @@ import {
   APP_ROOT,
   BILLING_DISABLED_FIXTURE,
   DIST,
+  TEST_APP_ORIGIN,
   build,
   hrefsOf,
   read,
@@ -280,11 +281,15 @@ describe("locale routing", () => {
         href.startsWith("http"),
       );
 
-      expect(external).toContain(`https://localhost/${locale}/login`);
-      expect(external).toContain(`https://localhost/${locale}/register`);
+      // The origin is TEST_APP_ORIGIN, not the localhost fallback: every
+      // test build sets PUBLIC_APP_URL now, because check-app-links fails a
+      // build whose links point at localhost. What is under test here is the
+      // locale in the path, not the host in front of it.
+      expect(external).toContain(`${TEST_APP_ORIGIN}/${locale}/login`);
+      expect(external).toContain(`${TEST_APP_ORIGIN}/${locale}/register`);
       expect(
         external.some((href) =>
-          /^https:\/\/localhost\/(login|register)/.test(href),
+          new RegExp(`^${TEST_APP_ORIGIN}/(login|register)`).test(href),
         ),
         `${locale}: an app link with no locale in it`,
       ).toBe(false);
