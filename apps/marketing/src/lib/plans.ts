@@ -152,9 +152,18 @@ async function fetchPlans(): Promise<PlanCatalogue> {
     // Guarded rather than unconditional: a product that really does sell a
     // "free" plan row keeps whatever the API said about it.
     const fromApi = data.map(toMarketingPlan);
+    // Zero is zero in any currency and the card renders the word "Free"
+    // rather than a symbol -- but its JSON-LD `Offer` still has to declare
+    // one, and a USD offer beside EUR offers is the same "block disagreeing
+    // with its page" this file's neighbours exist to avoid. Adopt the
+    // catalogue's.
+    const free: MarketingPlan = {
+      ...FREE_PLAN,
+      currency: fromApi[0]?.currency ?? FREE_PLAN.currency,
+    };
     const plans = fromApi.some((plan) => plan.slug === FREE_PLAN.slug)
       ? fromApi
-      : [FREE_PLAN, ...fromApi];
+      : [free, ...fromApi];
 
     return { plans, source: "api" };
   } catch (error) {
