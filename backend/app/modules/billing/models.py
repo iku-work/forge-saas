@@ -82,6 +82,18 @@ class Subscription(UUIDPKMixin, TimestampMixin, SQLModel, table=True):
     billing_interval: str | None = Field(default=None)
     free_override: bool = Field(default=False)
     override_expires_at: datetime | None = Field(default=None, sa_type=_TZ_DATETIME)  # type: ignore[call-overload]
+    # `created` of the newest Stripe *event* whose state is reflected here.
+    #
+    # Stripe does not promise delivery order, and its retries make disorder
+    # likely rather than exotic: an event that failed once is redelivered
+    # minutes later, by which time newer ones have already arrived. Without
+    # this, a redelivered `payment_failed` lands after the `payment_succeeded`
+    # that resolved it and puts a paying customer back into dunning.
+    #
+    # NULL means "no event has been applied yet" -- every row predating this
+    # column, and every row the reconciler wrote (which reads current state
+    # straight from the API and is therefore never stale).
+    last_stripe_event_at: datetime | None = Field(default=None, sa_type=_TZ_DATETIME)  # type: ignore[call-overload]
 
 
 class DunningCampaign(UUIDPKMixin, TimestampMixin, SQLModel, table=True):

@@ -20,6 +20,7 @@ test_billing_service.py.
 """
 
 from collections.abc import AsyncGenerator
+from datetime import UTC, datetime
 from typing import Any
 from uuid import uuid4
 
@@ -35,7 +36,7 @@ from sqlalchemy.ext.asyncio import (
 from sqlmodel import SQLModel
 from testcontainers.postgres import PostgresContainer
 
-from app.core.exceptions import DomainError, NotFoundError
+from app.core.exceptions import ConflictError, DomainError, NotFoundError
 from app.modules.billing.models import Plan, Subscription
 from app.modules.billing.service import BillingService
 from app.modules.tenancy.models import Organization
@@ -284,3 +285,92 @@ async def test_list_active_plans_excludes_inactive(
     ids = {p.id for p in plans}
     assert active.id in ids
     assert inactive.id not in ids
+
+
+# --- the duplicate-subscription guard ---------------------------------------------------
+
+
+async def _give_org_a_subscription(
+    session: AsyncSession, org: Organization, plan: Plan, status: str
+) -> None:
+    session.add(
+        Subscription(
+            org_id=org.id,
+            plan_id=plan.id,
+            stripe_subscription_id=f"sub_{uuid4().hex[:10]}",
+            status=status,
+            current_period_start=datetime(2026, 1, 1, tzinfo=UTC),
+            current_period_end=datetime(2026, 2, 1, tzinfo=UTC),
+            cancel_at_period_end=False,
+            trial_end=None,
+        )
+    )
+    await session.flush()
+
+
+@pytest.mark.parametrize("status", ["active", "trialing", "past_due"])
+async def test_checkout_refused_when_a_live_subscription_exists(
+    service: BillingService,
+    session: AsyncSession,
+    org: Organization,
+    monkeypatch: pytest.MonkeyPatch,
+    status: str,
+) -> None:
+    """Two paid subscriptions on one org happened in production; this is the
+    guard. `past_due` counts as live: the money is owed, the subscription
+    exists, and the answer is a new card in the portal -- never a second
+    subscription."""
+    plan = await _make_plan(session)
+    await _give_org_a_subscription(session, org, plan, status)
+
+    async def _fail_checkout(**_kwargs: object) -> _FakeCheckoutSession:
+        raise AssertionError("checkout must not be opened for a subscribed org")
+
+    monkeypatch.setattr(stripe.checkout.Session, "create_async", _fail_checkout)
+
+    async def _customer_create(**_kwargs: object) -> _FakeCustomer:
+        return _FakeCustomer("cus_1")
+
+    monkeypatch.setattr(stripe.Customer, "create_async", _customer_create)
+
+    async def _portal_create(**_kwargs: object) -> _FakePortalSession:
+        return _FakePortalSession(url="https://billing.stripe.com/portal/existing")
+
+    monkeypatch.setattr(stripe.billing_portal.Session, "create_async", _portal_create)
+
+    with pytest.raises(ConflictError) as excinfo:
+        await service.create_checkout_session(org, plan.slug, "monthly")
+
+    # The portal URL rides along so the client has somewhere to send them --
+    # a bare 409 on the page they came to spend money on is a dead end.
+    assert excinfo.value.details == {"portal_url": "https://billing.stripe.com/portal/existing"}
+
+
+@pytest.mark.parametrize("status", ["canceled", "incomplete"])
+async def test_checkout_allowed_when_the_existing_subscription_is_not_live(
+    service: BillingService,
+    session: AsyncSession,
+    org: Organization,
+    monkeypatch: pytest.MonkeyPatch,
+    status: str,
+) -> None:
+    """Resubscribing after cancellation, and retrying a checkout that never
+    completed, both have to keep working -- refusing either strands the
+    customer."""
+    plan = await _make_plan(session)
+    await _give_org_a_subscription(session, org, plan, status)
+
+    async def _customer_create(**_kwargs: object) -> _FakeCustomer:
+        return _FakeCustomer("cus_1")
+
+    monkeypatch.setattr(stripe.Customer, "create_async", _customer_create)
+
+    async def _checkout_create(**_kwargs: object) -> _FakeCheckoutSession:
+        return _FakeCheckoutSession(url="https://checkout.stripe.com/again")
+
+    monkeypatch.setattr(stripe.checkout.Session, "create_async", _checkout_create)
+
+    assert (
+        await service.create_checkout_session(org, plan.slug, "monthly")
+        == "https://checkout.stripe.com/again"
+    )

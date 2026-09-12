@@ -10,6 +10,7 @@
   "session_invalid": "Tu sesión ya no es válida. Inicia sesión de nuevo.",
   "invalid_credentials": "Correo electrónico o contraseña no válidos.",
   "fallback": "Ocurrió un error.",
+  "subscription_already_active": "Esta organizacion ya tiene una suscripcion activa. Gestionala en el portal de facturacion.",
   "validation_failed": "Error de validación de la solicitud.",
   "internal_error": "Ocurrió un error inesperado.",
   "missing_bearer_token": "Falta el token Bearer.",

@@ -10,6 +10,7 @@
   "session_invalid": "Votre session n'est plus valide. Veuillez vous reconnecter.",
   "invalid_credentials": "E-mail ou mot de passe incorrect.",
   "fallback": "Une erreur s'est produite.",
+  "subscription_already_active": "Cette organisation a deja un abonnement actif. Gerez-le dans le portail de facturation.",
   "validation_failed": "La validation de la requête a échoué.",
   "internal_error": "Une erreur inattendue s'est produite.",
   "missing_bearer_token": "Jeton Bearer manquant.",

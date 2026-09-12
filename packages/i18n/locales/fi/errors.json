@@ -10,6 +10,7 @@
   "session_invalid": "Istuntosi ei ole enää voimassa. Kirjaudu sisään uudelleen.",
   "invalid_credentials": "Virheellinen sähköposti tai salasana.",
   "fallback": "Tapahtui virhe.",
+  "subscription_already_active": "Talla organisaatiolla on jo aktiivinen tilaus. Hallitse sita laskutusportaalissa.",
   "validation_failed": "Pyynnön validointi epäonnistui.",
   "internal_error": "Tapahtui odottamaton virhe.",
   "missing_bearer_token": "Bearer-tunnus puuttuu.",

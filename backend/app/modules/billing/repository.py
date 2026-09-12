@@ -155,6 +155,17 @@ class SubscriptionRepository:
         trial_end: datetime | None,
     ) -> Subscription:
         existing = await self.get_by_stripe_subscription_id(stripe_subscription_id)
+        # `org_id` is unique on this table, so an org that resubscribes -- a
+        # new Stripe subscription id against a row whose old one is dead --
+        # cannot be an INSERT. Without this second lookup that path raised
+        # UniqueViolation on ix_subscription_org_id, the webhook 500'd, and
+        # Stripe retried into the same constraint forever. The caller
+        # (_handle_subscription_upserted) is what decides whether adopting
+        # the new id is legitimate; by the time it reaches here, it is.
+        if existing is None:
+            existing = await self.get_by_org_id(org_id)
+            if existing is not None:
+                existing.stripe_subscription_id = stripe_subscription_id
         if existing is not None:
             existing.org_id = org_id
             existing.plan_id = plan_id

@@ -842,3 +842,281 @@ async def test_subscription_deleted_invalidates_feature_flag_cache(
     )
 
     assert await redis.get(f"feature_flags:{org.id}:seats") is None
+
+
+# --- duplicate subscriptions and other unapplied events -------------------------------
+
+
+async def test_second_live_subscription_for_one_org_is_recorded_not_applied(
+    service: BillingService, session: AsyncSession, subscriptions: SubscriptionRepository
+) -> None:
+    """Two Stripe subscriptions on one org must not crash the webhook.
+
+    `subscription.org_id` is unique and `upsert` looks rows up by *Stripe*
+    id, so before this the second one took the INSERT path and raised
+    UniqueViolation -- a 500 that Stripe retried into the same constraint
+    forever. It is now skipped, and the org keeps the subscription it
+    already had.
+    """
+    await _make_plan(session, price_id="price_pro")
+    org_id = uuid4()
+    for stripe_id in ("sub_original", "sub_duplicate"):
+        await service.handle_event(
+            WebhookEvent(
+                id=f"evt_{stripe_id}",
+                type="customer.subscription.created",
+                payload=_subscription_event(
+                    subscription_id=stripe_id,
+                    status="active",
+                    org_id=str(org_id),
+                    price_id="price_pro",
+                ),
+            )
+        )
+
+    sub = await subscriptions.get_by_org_id(org_id)
+    assert sub is not None
+    assert sub.stripe_subscription_id == "sub_original"
+    assert await subscriptions.get_by_stripe_subscription_id("sub_duplicate") is None
+
+
+async def test_duplicate_subscription_is_audited(
+    service: BillingService, session: AsyncSession
+) -> None:
+    """The skip has to be findable later, or it is just a silent drop."""
+    await _make_plan(session, price_id="price_pro")
+    org_id = uuid4()
+    for stripe_id in ("sub_a", "sub_b"):
+        await service.handle_event(
+            WebhookEvent(
+                id=f"evt_{stripe_id}",
+                type="customer.subscription.created",
+                payload=_subscription_event(
+                    subscription_id=stripe_id,
+                    status="active",
+                    org_id=str(org_id),
+                    price_id="price_pro",
+                ),
+            )
+        )
+
+    rows = (
+        await session.execute(
+            text(
+                "select action, resource_id from audit_event "
+                "where action like 'billing.event_not_applied%' and org_id = :org"
+            ),
+            {"org": org_id},
+        )
+    ).all()
+    assert [(r[0], r[1]) for r in rows] == [
+        ("billing.event_not_applied.duplicate_subscription", "sub_b")
+    ]
+
+
+async def test_resubscribe_after_cancellation_adopts_the_new_subscription(
+    service: BillingService, session: AsyncSession, subscriptions: SubscriptionRepository
+) -> None:
+    """A dead row is not a duplicate -- it is an ordinary resubscribe.
+
+    This is the path that would still have hit the unique constraint if
+    `upsert` only ever looked rows up by Stripe id.
+    """
+    await _make_plan(session, price_id="price_pro")
+    org_id = uuid4()
+    await service.handle_event(
+        WebhookEvent(
+            id="evt_first",
+            type="customer.subscription.created",
+            payload=_subscription_event(
+                subscription_id="sub_old",
+                status="active",
+                org_id=str(org_id),
+                price_id="price_pro",
+            ),
+        )
+    )
+    await service.handle_event(
+        WebhookEvent(
+            id="evt_gone",
+            type="customer.subscription.deleted",
+            payload=_subscription_event(
+                subscription_id="sub_old",
+                status="canceled",
+                org_id=str(org_id),
+                price_id="price_pro",
+            ),
+        )
+    )
+    await service.handle_event(
+        WebhookEvent(
+            id="evt_again",
+            type="customer.subscription.created",
+            payload=_subscription_event(
+                subscription_id="sub_new",
+                status="active",
+                org_id=str(org_id),
+                price_id="price_pro",
+            ),
+        )
+    )
+
+    sub = await subscriptions.get_by_org_id(org_id)
+    assert sub is not None
+    assert sub.stripe_subscription_id == "sub_new"
+    assert sub.status == "active"
+
+
+async def test_unknown_price_is_audited_rather_than_silently_dropped(
+    service: BillingService, session: AsyncSession
+) -> None:
+    """Somebody paid for a price this deployment cannot resolve to a plan.
+
+    Previously a bare logger.warning: the endpoint answered 200, Stripe
+    considered it delivered, and the org silently stayed on free.
+    """
+    await _make_plan(session, price_id="price_pro")
+    org_id = uuid4()
+    await service.handle_event(
+        WebhookEvent(
+            id="evt_unknown_price",
+            type="customer.subscription.created",
+            payload=_subscription_event(
+                subscription_id="sub_x",
+                status="active",
+                org_id=str(org_id),
+                price_id="price_not_in_this_catalogue",
+            ),
+        )
+    )
+
+    actions = [
+        r[0]
+        for r in (
+            await session.execute(
+                text("select action from audit_event where org_id = :org"), {"org": org_id}
+            )
+        ).all()
+    ]
+    assert "billing.event_not_applied.unknown_price" in actions
+
+
+# --- out-of-order delivery ---------------------------------------------------------------
+#
+# Stripe promises delivery, not order, and its own retries make disorder the
+# common case: an event that failed once is redelivered minutes later, behind
+# everything that arrived in the meantime.
+
+
+def _with_created(payload: dict[str, Any], epoch: int) -> dict[str, Any]:
+    """Stamp the Event envelope's own `created`, as Stripe sends it."""
+    return {**payload, "created": epoch}
+
+
+_EARLIER = 1_700_000_000
+_LATER = 1_700_000_600
+
+
+async def test_a_redelivered_payment_failed_does_not_undo_a_later_success(
+    service: BillingService, session: AsyncSession, subscriptions: SubscriptionRepository
+) -> None:
+    """The failure this guard exists for.
+
+    A `payment_failed` that Stripe retries arrives after the
+    `payment_succeeded` that resolved it. Applied in arrival order, it puts a
+    customer who has paid back into dunning and past_due.
+    """
+    await _make_plan(session, price_id="price_pro")
+    org_id = uuid4()
+    await service.handle_event(
+        WebhookEvent(
+            id="evt_created",
+            type="customer.subscription.created",
+            payload=_with_created(
+                _subscription_event(
+                    subscription_id="sub_order",
+                    status="active",
+                    org_id=str(org_id),
+                    price_id="price_pro",
+                ),
+                _EARLIER,
+            ),
+        )
+    )
+    await service.handle_event(
+        WebhookEvent(
+            id="evt_paid",
+            type="invoice.payment_succeeded",
+            payload=_with_created(_invoice_event(subscription_id="sub_order"), _LATER),
+        )
+    )
+    # ... and only now the retry of the older failure lands.
+    await service.handle_event(
+        WebhookEvent(
+            id="evt_failed_retry",
+            type="invoice.payment_failed",
+            payload=_with_created(_invoice_event(subscription_id="sub_order"), _EARLIER),
+        )
+    )
+
+    sub = await subscriptions.get_by_stripe_subscription_id("sub_order")
+    assert sub is not None
+    assert sub.status == "active"
+
+
+async def test_events_in_order_are_all_applied(
+    service: BillingService, session: AsyncSession, subscriptions: SubscriptionRepository
+) -> None:
+    """The guard must not reject ordinary forward progress."""
+    await _make_plan(session, price_id="price_pro")
+    org_id = uuid4()
+    await service.handle_event(
+        WebhookEvent(
+            id="evt_c",
+            type="customer.subscription.created",
+            payload=_with_created(
+                _subscription_event(
+                    subscription_id="sub_fwd",
+                    status="active",
+                    org_id=str(org_id),
+                    price_id="price_pro",
+                ),
+                _EARLIER,
+            ),
+        )
+    )
+    await service.handle_event(
+        WebhookEvent(
+            id="evt_f",
+            type="invoice.payment_failed",
+            payload=_with_created(_invoice_event(subscription_id="sub_fwd"), _LATER),
+        )
+    )
+
+    sub = await subscriptions.get_by_stripe_subscription_id("sub_fwd")
+    assert sub is not None
+    assert sub.status == "past_due"
+
+
+async def test_an_event_with_no_created_is_still_applied(
+    service: BillingService, session: AsyncSession, subscriptions: SubscriptionRepository
+) -> None:
+    """Every fixture in this file predates the guard and carries no
+    `created`; none of them should start being skipped."""
+    await _make_plan(session, price_id="price_pro")
+    await service.handle_event(
+        WebhookEvent(
+            id="evt_nocreated",
+            type="customer.subscription.created",
+            payload=_subscription_event(
+                subscription_id="sub_nocreated",
+                status="active",
+                org_id=str(uuid4()),
+                price_id="price_pro",
+            ),
+        )
+    )
+
+    sub = await subscriptions.get_by_stripe_subscription_id("sub_nocreated")
+    assert sub is not None
+    assert sub.last_stripe_event_at is None
