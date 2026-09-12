@@ -63,10 +63,20 @@ const SheetContent = forwardRef<
         // h-dvh, not h-screen: on a phone `100vh` is the viewport with the
         // browser chrome *hidden*, so a full-height panel is taller than what
         // you can see and its last item sits under the toolbar.
-        "fixed inset-block-0 z-50 flex h-dvh w-72 max-w-[85vw] flex-col gap-0 overflow-y-auto bg-card p-4 shadow-elevated transition ease-in-out data-[state=closed]:duration-200 data-[state=open]:duration-300 data-[state=open]:animate-in data-[state=closed]:animate-out",
+        // `inset-y-0` and `start-0`/`end-0`, NOT `inset-block-0` and
+        // `inset-inline-start-0`: Tailwind v4 *already* compiles the former
+        // to the logical properties (inset-block, inset-inline-start), and
+        // the CSS-property spellings are not utilities at all. Writing them
+        // out produced no rule -- so this panel was `fixed` with no anchor,
+        // landing at its static position at the end of the portal, below the
+        // fold, while the overlay covered the screen. On a phone that read
+        // as "the menu does not open and everything turns blue". Nothing
+        // errors on an unknown Tailwind class, so only the built CSS shows
+        // it; sheet.test.tsx now asserts these class names.
+        "fixed inset-y-0 z-50 flex h-dvh w-72 max-w-[85vw] flex-col gap-0 overflow-y-auto bg-card p-4 shadow-elevated transition ease-in-out data-[state=closed]:duration-200 data-[state=open]:duration-300 data-[state=open]:animate-in data-[state=closed]:animate-out",
         side === "start"
-          ? "inset-inline-start-0 data-[state=closed]:slide-out-to-left data-[state=open]:slide-in-from-left"
-          : "inset-inline-end-0 data-[state=closed]:slide-out-to-right data-[state=open]:slide-in-from-right",
+          ? "start-0 data-[state=closed]:slide-out-to-left data-[state=open]:slide-in-from-left"
+          : "end-0 data-[state=closed]:slide-out-to-right data-[state=open]:slide-in-from-right",
         className,
       )}
       {...props}
