@@ -67,6 +67,25 @@ class OrganizationRepository:
         result = await self.session.execute(stmt)
         return list(result.scalars().all())
 
+    async def list_with_stripe_customer(
+        self, *, limit: int, after_id: UUID | None
+    ) -> list[Organization]:
+        """One page of orgs that exist in Stripe, ordered by id.
+
+        Keyset pagination on the primary key rather than OFFSET: the caller
+        (app.workers.jobs.billing.reconcile_subscriptions) walks every page
+        and makes a Stripe API call per org, so a page can be minutes old by
+        the time the next one is asked for -- an OFFSET would then skip or
+        repeat rows as orgs are created underneath it.
+        """
+        m = cast("Any", Organization)
+        stmt = select(Organization).where(m.stripe_customer_id.is_not(None))
+        if after_id is not None:
+            stmt = stmt.where(m.id > after_id)
+        stmt = stmt.order_by(m.id).limit(limit)
+        result = await self.session.execute(stmt)
+        return list(result.scalars().all())
+
     async def list_by_ids(self, org_ids: Collection[UUID]) -> list[Organization]:
         # T-243: the batch counterpart to get_by_id, for callers holding a
         # page of rows that each name an org (the admin audit feed, the admin

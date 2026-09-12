@@ -93,6 +93,25 @@ function redirectTo(url: string): void {
   window.location.href = url;
 }
 
+/**
+ * The Stripe portal URL a 409 from POST /billing/checkout-session carries in
+ * `error.details`, or null for any other failure.
+ *
+ * Read defensively rather than through a generated type: hey-api only types
+ * the responses FastAPI documents, so non-422 error bodies are `unknown`
+ * here -- the same reason getErrorMessage sniffs the envelope by hand.
+ */
+function portalUrlFromError(error: unknown): string | null {
+  if (typeof error !== "object" || error === null || !("error" in error)) {
+    return null;
+  }
+  const details = (
+    error as { error?: { details?: { portal_url?: unknown } | null } | null }
+  ).error?.details;
+  const url = details?.portal_url;
+  return typeof url === "string" && url.length > 0 ? url : null;
+}
+
 export function BillingSettingsPage() {
   const { t, i18n } = useTranslation();
   const { org, isLoading: orgLoading } = useOrg();
@@ -204,6 +223,18 @@ export function BillingSettingsPage() {
         redirectTo(url);
       }
     } catch (error) {
+      // The org already pays for something, so the server refused to open a
+      // second checkout (two live subscriptions on one org happened in
+      // production) and handed back the portal instead. Following it is the
+      // whole point of sending it: the customer pressed a plan button, and
+      // the portal is where Stripe lets an existing customer change plan.
+      // Showing "you already have a subscription" and stopping would leave
+      // them on the one page where they came to spend money with no way to.
+      const portalUrl = portalUrlFromError(error);
+      if (portalUrl) {
+        redirectTo(portalUrl);
+        return;
+      }
       setActionError(getErrorMessage(error, "billing.error.checkout_failed"));
     }
   };

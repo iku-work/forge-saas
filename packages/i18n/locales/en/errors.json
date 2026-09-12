@@ -10,6 +10,7 @@
   "session_invalid": "Your session is no longer valid. Please log in again.",
   "invalid_credentials": "Invalid email or password.",
   "fallback": "An error occurred.",
+  "subscription_already_active": "This organization already has an active subscription. Manage it in the billing portal.",
   "validation_failed": "Request validation failed.",
   "internal_error": "An unexpected error occurred.",
   "missing_bearer_token": "Missing bearer token.",

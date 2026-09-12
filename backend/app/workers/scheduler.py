@@ -34,7 +34,11 @@ from app.modules.auth.repository import (
 from app.modules.billing.repository import SubscriptionRepository
 from app.modules.gdpr.repository import DataExportJobRepository
 from app.modules.notifications.repository import NotificationRepository
-from app.workers.jobs.billing import expire_trials_to_inactive, notify_expiring_trials
+from app.workers.jobs.billing import (
+    expire_trials_to_inactive,
+    notify_expiring_trials,
+    reconcile_subscriptions,
+)
 from app.workers.jobs.usage import report_usage_to_stripe
 from app.workers.jobs.webhooks import prune_webhook_deliveries, sweep_due_webhook_deliveries
 
@@ -164,6 +168,18 @@ def create_scheduler(redis_client: Redis) -> AsyncIOScheduler:
         report_usage_to_stripe,
         "report_usage_to_stripe",
         CronTrigger(minute="*/15", timezone="UTC"),
+    )
+    # Hourly, not daily: this is the safety net for a webhook that never
+    # arrived, and the window between paying and being upgraded is the thing
+    # it exists to bound. Hourly against Stripe's rate limits is nothing --
+    # one list call per org with a Stripe customer -- and a customer who
+    # pays and waits a day for their plan has effectively not been upgraded.
+    _add_locked_job(
+        scheduler,
+        redis_client,
+        reconcile_subscriptions,
+        "reconcile_subscriptions",
+        CronTrigger(minute=20, timezone="UTC"),
     )
     _add_locked_job(
         scheduler,

@@ -57,7 +57,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
 from app.core.dependencies import invalidate_org_cache
-from app.core.exceptions import DomainError, NotFoundError
+from app.core.exceptions import ConflictError, DomainError, NotFoundError
+from app.core.metrics import FORGE_BILLING_UNAPPLIED_EVENTS_TOTAL
 from app.core.resilience import resilient
 from app.core.urls import frontend_url
 from app.modules.audit.service import AuditService
@@ -131,6 +132,16 @@ def _subscription_period(obj: dict[str, Any]) -> tuple[int, int]:
     )
 
 
+# A subscription in one of these states is one Stripe will still bill for,
+# so starting a *second* checkout on top of it buys the customer a duplicate
+# rather than an upgrade. `past_due` is deliberately included: the money is
+# still owed and the subscription still exists, and the fix for it is the
+# portal (update the card), never a second subscription. `incomplete` is not
+# -- that is a checkout that never completed, and refusing to let someone
+# retry it would strand them.
+_LIVE_SUBSCRIPTION_STATUSES = frozenset({"active", "trialing", "past_due"})
+
+
 def _invoice_subscription_id(obj: dict[str, Any]) -> str | None:
     """The subscription an Invoice belongs to, or None if it is not one."""
     parent = obj.get("parent") or {}
@@ -184,6 +195,11 @@ def _billing_page_url(locale: str | None) -> str:
     return frontend_url("/settings/billing", locale)
 
 
+def _event_created_at(payload: dict[str, Any]) -> datetime | None:
+    """When Stripe generated this event, from the envelope's own `created`."""
+    return _epoch_to_datetime(payload.get("created"))
+
+
 class BillingService:
     def __init__(self, session: AsyncSession, redis: Redis) -> None:
         self._session = session
@@ -198,32 +214,174 @@ class BillingService:
 
     async def handle_event(self, event: WebhookEvent) -> None:
         payload = cast("dict[str, Any]", event.payload)
+        # Stripe promises delivery, not order, and its own retries make
+        # disorder the common case rather than an exotic one: an event that
+        # failed once is redelivered minutes later, behind everything that
+        # arrived in the meantime. Each handler compares this against the
+        # row's last_stripe_event_at before writing.
+        at = _event_created_at(payload)
         match event.type:
             case "customer.subscription.created" | "customer.subscription.updated":
-                await self._handle_subscription_upserted(payload)
+                await self.apply_subscription_snapshot(payload["data"]["object"], event_created=at)
             case "customer.subscription.deleted":
-                await self._handle_subscription_deleted(payload)
+                await self._handle_subscription_deleted(payload, at)
             case "invoice.payment_succeeded":
-                await self._handle_invoice_payment_succeeded(payload)
+                await self._handle_invoice_payment_succeeded(payload, at)
             case "invoice.payment_failed":
-                await self._handle_invoice_payment_failed(payload)
+                await self._handle_invoice_payment_failed(payload, at)
             case _:
                 logger.info("billing.webhook_ignored: type=%s", event.type)
 
-    async def _handle_subscription_upserted(self, payload: dict[str, Any]) -> None:
-        obj = payload["data"]["object"]
+    async def _is_stale(
+        self, subscription: Subscription | None, event_created: datetime | None
+    ) -> bool:
+        """True when this event describes a state older than the row already has.
+
+        `event_created is None` means the caller has no ordering information
+        to offer -- an internal caller, or a fixture predating the column.
+        The reconciler passes `utcnow()` rather than None: its read *is*
+        current state, so every event generated before it is older, and
+        advancing the watermark is what stops a queued redelivery from
+        undoing the repair.
+        """
+        if subscription is None or event_created is None:
+            return False
+        last = subscription.last_stripe_event_at
+        if last is None or event_created >= last:
+            return False
+        await self._record_unapplied(
+            "stale_event",
+            org_id=subscription.org_id,
+            stripe_subscription_id=subscription.stripe_subscription_id,
+            detail=(
+                f"event generated {event_created.isoformat()} is older than the "
+                f"state already applied from {last.isoformat()}"
+            ),
+        )
+        return True
+
+    @staticmethod
+    def _mark_applied(subscription: Subscription, event_created: datetime | None) -> None:
+        if event_created is not None and (
+            subscription.last_stripe_event_at is None
+            or event_created > subscription.last_stripe_event_at
+        ):
+            subscription.last_stripe_event_at = event_created
+
+    async def _record_unapplied(
+        self,
+        reason: str,
+        *,
+        org_id: UUID | None,
+        stripe_subscription_id: str | None,
+        detail: str,
+    ) -> None:
+        """One place for "understood the event, did not apply it".
+
+        Each of these used to be a bare `logger.warning(...); return`. That
+        is the quietest possible way to strand a paying customer on the free
+        tier: the endpoint answers 200, Stripe considers the event
+        delivered, nothing is at ERROR, and the only trace is a log line
+        nobody greps for. A counter makes it alertable and an audit row
+        makes it explicable months later, when the question is "why was this
+        org never upgraded?".
+        """
+        FORGE_BILLING_UNAPPLIED_EVENTS_TOTAL.labels(reason=reason).inc()
+        logger.warning(
+            "billing.event_not_applied: reason=%s subscription=%s org=%s detail=%s",
+            reason,
+            stripe_subscription_id,
+            org_id,
+            detail,
+        )
+        if org_id is not None:
+            await self._audit.log(
+                action=f"billing.event_not_applied.{reason}",
+                resource_type="subscription",
+                resource_id=stripe_subscription_id,
+                org_id=org_id,
+                diff={"reason": reason, "detail": detail},
+                severity="elevated",
+            )
+
+    async def apply_subscription_snapshot(
+        self, obj: dict[str, Any], *, event_created: datetime | None = None
+    ) -> None:
+        """Bring local state in line with one Stripe Subscription object.
+
+        Public because the webhook is not the only way this arrives:
+        app.workers.jobs.billing.reconcile_subscriptions reads the same
+        objects straight from the API and applies them through here. Sharing
+        the function rather than the rules is the point -- a reconciler that
+        re-implemented plan lookup, the Basil period read and the duplicate
+        check would drift from the webhook the first time any of them
+        changed, and drift is exactly what it exists to remove.
+        """
         org_id = obj.get("metadata", {}).get("org_id")
         if org_id is None:
-            logger.warning("billing.webhook_missing_org_id: subscription=%s", obj["id"])
-            return
-
-        price_id = obj["items"]["data"][0]["price"]["id"]
-        plan = await self._plans.get_by_stripe_price_id(price_id)
-        if plan is None:
-            logger.warning("billing.webhook_unknown_price: price_id=%s", price_id)
+            await self._record_unapplied(
+                "missing_org_id",
+                org_id=None,
+                stripe_subscription_id=obj.get("id"),
+                detail="subscription metadata carried no org_id",
+            )
             return
 
         org_uuid = UUID(org_id)
+        price_id = obj["items"]["data"][0]["price"]["id"]
+        plan = await self._plans.get_by_stripe_price_id(price_id)
+        if plan is None:
+            await self._record_unapplied(
+                "unknown_price",
+                org_id=org_uuid,
+                stripe_subscription_id=obj.get("id"),
+                detail=(
+                    f"price {price_id} matches no plan; run `make sync-plans` if this price is new"
+                ),
+            )
+            return
+
+        # A second Stripe subscription on an org that already has a live one.
+        #
+        # `subscription.org_id` is unique, so `upsert` -- which looks the row
+        # up by *Stripe* id -- would take the INSERT path and raise
+        # UniqueViolation. That is not a crash worth having: the endpoint
+        # would 500, Stripe would retry into the same constraint forever, and
+        # the event would never clear. Verified against the real schema.
+        #
+        # So it is recorded and skipped rather than applied. Not applied,
+        # because there is no safe automatic answer: the customer already has
+        # service from the first subscription, and silently switching the org
+        # onto the second one could move them to whichever of the two an
+        # operator is about to cancel and refund. A human has to decide which
+        # survives; `_record_unapplied` is how they find out they need to.
+        #
+        # A *dead* existing row is different -- that is an ordinary
+        # resubscribe, and adopting the new subscription is exactly right.
+        existing = await self._subscriptions.get_by_org_id(org_uuid)
+        if (
+            existing is not None
+            and existing.stripe_subscription_id == obj["id"]
+            and await self._is_stale(existing, event_created)
+        ):
+            return
+        if (
+            existing is not None
+            and existing.stripe_subscription_id != obj["id"]
+            and existing.status in _LIVE_SUBSCRIPTION_STATUSES
+        ):
+            await self._record_unapplied(
+                "duplicate_subscription",
+                org_id=org_uuid,
+                stripe_subscription_id=obj["id"],
+                detail=(
+                    f"org already has live subscription "
+                    f"{existing.stripe_subscription_id} ({existing.status}); "
+                    "cancel and refund one of the two in Stripe"
+                ),
+            )
+            return
+
         period_start, period_end = _subscription_period(obj)
         subscription = await self._subscriptions.upsert(
             org_id=org_uuid,
@@ -235,6 +393,7 @@ class BillingService:
             cancel_at_period_end=obj.get("cancel_at_period_end", False),
             trial_end=_epoch_to_datetime(obj.get("trial_end")),
         )
+        self._mark_applied(subscription, event_created)
         await self._flags.invalidate(org_uuid)
         # T-320. The one billing event worth publishing: a consumer that
         # provisions on plan change needs it, and everything else Stripe
@@ -249,37 +408,60 @@ class BillingService:
             ),
         )
 
-    async def _handle_subscription_deleted(self, payload: dict[str, Any]) -> None:
+    async def _handle_subscription_deleted(
+        self, payload: dict[str, Any], event_created: datetime | None = None
+    ) -> None:
         obj = payload["data"]["object"]
+        if await self._is_stale(
+            await self._subscriptions.get_by_stripe_subscription_id(obj["id"]), event_created
+        ):
+            return
         subscription = await self._subscriptions.set_status_by_stripe_subscription_id(
             obj["id"], "canceled"
         )
         if subscription is not None:
+            self._mark_applied(subscription, event_created)
             await self._dunning.cancel(subscription.id)
             await self._flags.invalidate(subscription.org_id)
 
-    async def _handle_invoice_payment_succeeded(self, payload: dict[str, Any]) -> None:
+    async def _handle_invoice_payment_succeeded(
+        self, payload: dict[str, Any], event_created: datetime | None = None
+    ) -> None:
         obj = payload["data"]["object"]
         subscription_id = _invoice_subscription_id(obj)
         if subscription_id is None:
+            return
+        if await self._is_stale(
+            await self._subscriptions.get_by_stripe_subscription_id(subscription_id),
+            event_created,
+        ):
             return
         subscription = await self._subscriptions.set_status_by_stripe_subscription_id(
             subscription_id, "active"
         )
         if subscription is not None:
+            self._mark_applied(subscription, event_created)
             await self._dunning.complete(subscription.id)
             await self._flags.invalidate(subscription.org_id)
             await self._invoices.invalidate(subscription.org_id)
 
-    async def _handle_invoice_payment_failed(self, payload: dict[str, Any]) -> None:
+    async def _handle_invoice_payment_failed(
+        self, payload: dict[str, Any], event_created: datetime | None = None
+    ) -> None:
         obj = payload["data"]["object"]
         subscription_id = _invoice_subscription_id(obj)
         if subscription_id is None:
+            return
+        if await self._is_stale(
+            await self._subscriptions.get_by_stripe_subscription_id(subscription_id),
+            event_created,
+        ):
             return
         subscription = await self._subscriptions.set_status_by_stripe_subscription_id(
             subscription_id, "past_due"
         )
         if subscription is not None:
+            self._mark_applied(subscription, event_created)
             await self._audit.log(
                 action="billing.payment_failed",
                 resource_type="subscription",
@@ -328,6 +510,27 @@ class BillingService:
         price_id = (
             plan.stripe_price_id_monthly if interval == "monthly" else plan.stripe_price_id_yearly
         )
+        # An org that already pays for something must not be able to buy a
+        # second subscription. Two of these existed on one org in production
+        # on 2026-09-12 -- two charges, one plan -- because this method had
+        # no such check and a customer could simply open checkout twice (or
+        # once more while the first subscription's webhook was still in
+        # flight). Stripe is happy to create both; `subscription.org_id` is
+        # unique, so the second one's webhook could not even be recorded.
+        #
+        # The portal, not a bare refusal: "you already have a subscription"
+        # with no way forward is a dead end on the one page where the
+        # customer came to spend money. The portal is where Stripe expects
+        # an existing customer to change plan or cancel, and the URL rides
+        # along in `details` so the client can send them straight there.
+        existing = await self._subscriptions.get_by_org_id(org.id)
+        if existing is not None and existing.status in _LIVE_SUBSCRIPTION_STATUSES:
+            raise ConflictError(
+                "errors.subscription_already_active",
+                fallback="This organization already has an active subscription.",
+                details={"portal_url": await self.create_portal_session(org, locale)},
+            )
+
         customer_id = await self.get_or_create_stripe_customer(org)
 
         checkout_session = await _create_checkout_session_stripe(

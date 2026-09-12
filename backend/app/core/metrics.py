@@ -80,6 +80,28 @@ FORGE_STRIPE_WEBHOOK_SECONDS = Histogram(
     "forge_stripe_webhook_seconds", "Time spent handling a single Stripe webhook event"
 )
 FORGE_EMAILS_SENT_TOTAL = Counter("forge_emails_sent_total", "Emails successfully sent")
+
+# Billing events that were received and understood but deliberately not
+# applied. Every one of them means a customer's money and a customer's
+# entitlements have diverged, which is the class of bug that stays invisible
+# for months: the webhook returns 200, no error is logged at ERROR, and the
+# only symptom is somebody quietly not getting what they paid for. `reason`
+# is low-cardinality by construction -- see BILLING_UNAPPLIED_REASONS.
+FORGE_BILLING_UNAPPLIED_EVENTS_TOTAL = Counter(
+    "forge_billing_unapplied_events_total",
+    "Stripe events accepted but not applied to local billing state",
+    ["reason"],
+)
+
+# Repairs made by the periodic sweep that re-derives billing state from
+# Stripe. A steady non-zero rate here means webhooks are being lost, which
+# is worth an alert on its own: the sweep hides the symptom, so nothing else
+# would say so.
+FORGE_BILLING_RECONCILED_TOTAL = Counter(
+    "forge_billing_reconciled_total",
+    "Subscriptions whose local state the reconciliation sweep had to change",
+    ["action"],
+)
 FORGE_PUSH_SENT_TOTAL = Counter(
     "forge_push_sent_total", "Push notifications successfully handed off to the Expo push API"
 )

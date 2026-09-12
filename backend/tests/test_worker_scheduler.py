@@ -499,6 +499,10 @@ async def test_create_scheduler_registers_all_jobs_in_utc(redis_client: Redis) -
         # re-enqueues a due delivery whose deferred ARQ job was lost.
         "prune_webhook_deliveries",
         "sweep_due_webhook_deliveries",
+        # The safety net for a webhook that never arrived: re-derives every
+        # org's subscription from Stripe, which is the system of record for
+        # what somebody is actually being charged.
+        "reconcile_subscriptions",
         "refresh_active_sessions_gauge",
     }
     assert "hour='*/6'" in repr(jobs_by_id["cleanup_expired_sessions"].trigger)
@@ -508,6 +512,11 @@ async def test_create_scheduler_registers_all_jobs_in_utc(redis_client: Redis) -
     assert "hour=" not in repr(jobs_by_id["cleanup_expired_tokens"].trigger)
     assert "hour=" not in repr(jobs_by_id["expire_data_export_urls"].trigger)
     assert "minute='*/15'" in repr(jobs_by_id["report_usage_to_stripe"].trigger)
+    # Hourly, on a minute of its own: the window between paying and being
+    # upgraded is what this job bounds, so a daily sweep would leave a
+    # customer effectively un-upgraded for a day.
+    assert "minute='20'" in repr(jobs_by_id["reconcile_subscriptions"].trigger)
+    assert "hour=" not in repr(jobs_by_id["reconcile_subscriptions"].trigger)
     assert "hour='2'" in repr(jobs_by_id["prune_old_notifications"].trigger)
     # An hour after the notification prune, so the two biggest delete sweeps
     # never contend for the same window.

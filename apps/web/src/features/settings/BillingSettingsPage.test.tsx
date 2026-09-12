@@ -314,3 +314,68 @@ describe("BillingSettingsPage", () => {
     ).toBeInTheDocument();
   });
 });
+
+describe("BillingSettingsPage duplicate-subscription guard", () => {
+  beforeEach(() => {
+    hooks.useOrg.mockReturnValue({ org: fixtureOrg, isLoading: false });
+    hooks.usePermission.mockReturnValue(true);
+  });
+
+  it("follows the portal URL when checkout is refused for an existing subscription", async () => {
+    // The server answers 409 with the portal URL in `error.details` rather
+    // than opening a second checkout. Pressing a plan button must land the
+    // customer somewhere useful, not on an error banner.
+    const assigned: string[] = [];
+    const location = window.location;
+    Object.defineProperty(window, "location", {
+      configurable: true,
+      value: {
+        ...location,
+        set href(url: string) {
+          assigned.push(url);
+        },
+        get href() {
+          return "https://app.test/en/settings/billing";
+        },
+      },
+    });
+
+    server.use(
+      http.get(`${API}/api/v1/billing/plans`, () =>
+        HttpResponse.json(envelope([freePlan, proPlan])),
+      ),
+      http.get(`${API}/api/v1/orgs/:orgId/subscription`, () =>
+        HttpResponse.json(envelope(null)),
+      ),
+      http.post(`${API}/api/v1/billing/checkout-session`, () =>
+        HttpResponse.json(
+          {
+            data: null,
+            error: {
+              code: "conflict",
+              message_key: "errors.subscription_already_active",
+              message: "already subscribed",
+              details: { portal_url: "https://billing.stripe.test/portal/abc" },
+            },
+            meta: { request_id: "r1" },
+          },
+          { status: 409 },
+        ),
+      ),
+    );
+
+    renderPage();
+
+    const upgrade = (await screen.findAllByRole("button", { name: "Upgrade" }))[0];
+    await userEvent.click(upgrade);
+
+    await waitFor(() => {
+      expect(assigned).toEqual(["https://billing.stripe.test/portal/abc"]);
+    });
+
+    Object.defineProperty(window, "location", {
+      configurable: true,
+      value: location,
+    });
+  });
+});

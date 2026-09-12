@@ -10,6 +10,7 @@
   "session_invalid": "Ihre Sitzung ist nicht mehr gültig. Bitte melden Sie sich erneut an.",
   "invalid_credentials": "Ungültige E-Mail-Adresse oder falsches Passwort.",
   "fallback": "Ein Fehler ist aufgetreten.",
+  "subscription_already_active": "Diese Organisation hat bereits ein aktives Abonnement. Verwalten Sie es im Abrechnungsportal.",
   "validation_failed": "Die Validierung der Anfrage ist fehlgeschlagen.",
   "internal_error": "Ein unerwarteter Fehler ist aufgetreten.",
   "missing_bearer_token": "Bearer-Token fehlt.",

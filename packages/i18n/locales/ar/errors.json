@@ -10,6 +10,7 @@
   "session_invalid": "جلستك لم تعد صالحة. يرجى تسجيل الدخول مرة أخرى.",
   "invalid_credentials": "البريد الإلكتروني أو كلمة المرور غير صحيحة.",
   "fallback": "حدث خطأ.",
+  "subscription_already_active": "هذه المؤسسة لديها اشتراك نشط بالفعل. أدره من بوابة الفوترة.",
   "validation_failed": "فشل التحقق من صحة الطلب.",
   "internal_error": "حدث خطأ غير متوقع.",
   "missing_bearer_token": "رمز الحامل مفقود.",

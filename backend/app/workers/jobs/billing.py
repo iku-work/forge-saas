@@ -70,6 +70,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core import jobs
 from app.core.config import get_settings
 from app.core.db import async_session_factory
+from app.core.metrics import (
+    FORGE_BILLING_RECONCILED_TOTAL,
+)
+from app.core.resilience import resilient
 from app.core.tracing import trace_job
 from app.core.urls import frontend_url
 from app.models._mixins import utcnow
@@ -82,9 +86,11 @@ from app.modules.billing.repository import (
     PlanRepository,
     SubscriptionRepository,
 )
+from app.modules.billing.service import BillingService
 from app.modules.feature_flags.service import FeatureFlagService
 from app.modules.notifications.service import NotificationService
 from app.modules.tenancy.models import Membership, Organization
+from app.modules.tenancy.repository import OrganizationRepository
 
 if TYPE_CHECKING:
     from redis.asyncio import Redis
@@ -380,3 +386,153 @@ async def expire_trials_to_inactive(
                 await FeatureFlagService(session, redis).invalidate(subscription.org_id)
 
         await session.commit()
+
+
+# --- reconciliation ---------------------------------------------------------------------
+#
+# Webhooks are not a reliable transport, and this deployment learned it the
+# hard way on 2026-09-12: a bug made the endpoint return 500, Stripe's
+# retries ran out, and a customer who had paid sat on the free tier with
+# nothing anywhere saying so. Stripe also disables an endpoint that keeps
+# failing, at which point *every* subsequent event is lost rather than
+# retried -- and a second payment produced no local record at all.
+#
+# So local state is periodically re-derived from Stripe, which is the system
+# of record for what somebody is actually being charged. Anything a missed
+# webhook would have done, this does on the next tick.
+
+_RECONCILE_PAGE_SIZE = 100
+
+# Statuses Stripe will still bill for. Kept in step with
+# app.modules.billing.service._LIVE_SUBSCRIPTION_STATUSES, which is the same
+# question asked at checkout time.
+_LIVE_STATUSES = frozenset({"active", "trialing", "past_due"})
+
+
+@resilient("stripe")
+async def _list_stripe_subscriptions(customer_id: str) -> list[dict[str, Any]]:
+    # status="all" rather than the default (live only): a subscription that
+    # was cancelled while the endpoint was down has to be seen, or the local
+    # row keeps granting a plan nobody pays for.
+    listing = await stripe.Subscription.list_async(customer=customer_id, status="all", limit=100)
+    return [item.to_dict(for_json=True) for item in listing.data]
+
+
+async def reconcile_subscriptions(
+    ctx: dict[str, Any],  # APScheduler calling convention; see app.workers.scheduler
+) -> None:
+    """Re-derive every org's subscription from Stripe and repair the drift."""
+    redis: Redis | None = ctx.get("redis")
+    if redis is None or not get_settings().STRIPE_SECRET_KEY:
+        logger.info("billing.reconcile_skipped: no redis or no Stripe key configured")
+        return
+
+    stripe.api_key = get_settings().STRIPE_SECRET_KEY
+    checked = 0
+    repaired = 0
+    after_id: UUID | None = None
+
+    while True:
+        async with async_session_factory() as session:
+            orgs = await OrganizationRepository(session).list_with_stripe_customer(
+                limit=_RECONCILE_PAGE_SIZE, after_id=after_id
+            )
+            if not orgs:
+                break
+            after_id = orgs[-1].id
+
+            for org in orgs:
+                checked += 1
+                if await _reconcile_one_org(session, redis, org):
+                    repaired += 1
+            await session.commit()
+
+    logger.info("billing.reconcile_done: checked=%d repaired=%d", checked, repaired)
+
+
+async def _reconcile_one_org(session: AsyncSession, redis: "Redis", org: Organization) -> bool:
+    """Returns True when this org's local state had to be changed."""
+    customer_id = cast("str", org.stripe_customer_id)
+    try:
+        remote = await _list_stripe_subscriptions(customer_id)
+    except Exception:
+        # One unreachable customer must not abandon the rest of the sweep --
+        # the next tick will retry this org anyway.
+        logger.exception("billing.reconcile_customer_failed: org=%s", org.id)
+        return False
+
+    live = [s for s in remote if s.get("status") in _LIVE_STATUSES]
+    subscriptions = SubscriptionRepository(session)
+    local = await subscriptions.get_by_org_id(org.id)
+    service = BillingService(session, redis)
+
+    if not live:
+        # Nothing billable at Stripe. A local row that still claims to be
+        # live is granting a plan nobody is paying for.
+        if local is not None and local.status in _LIVE_STATUSES:
+            logger.warning(
+                "billing.reconcile_repair: org=%s local=%s -> canceled (no live Stripe sub)",
+                org.id,
+                local.status,
+            )
+            local.status = "canceled"
+            await FeatureFlagService(session, redis).invalidate(org.id)
+            FORGE_BILLING_RECONCILED_TOTAL.labels(action="canceled").inc()
+            return True
+        return False
+
+    # More than one live subscription is a duplicate charge, not drift, and
+    # picking one automatically could strand the customer on whichever an
+    # operator is about to refund. Record it and leave it to a human --
+    # apply_subscription_snapshot makes the same call for the same reason.
+    if len(live) > 1:
+        FORGE_BILLING_RECONCILED_TOTAL.labels(action="duplicate_detected").inc()
+        logger.error(
+            "billing.reconcile_duplicate: org=%s subscriptions=%s -- cancel and refund one",
+            org.id,
+            [s.get("id") for s in live],
+        )
+        await AuditService(session).log(
+            action="billing.event_not_applied.duplicate_subscription",
+            resource_type="subscription",
+            resource_id=str(live[0].get("id")),
+            org_id=org.id,
+            diff={
+                "reason": "duplicate_subscription",
+                "detail": "reconciliation found "
+                f"{len(live)} live Stripe subscriptions: "
+                f"{[s.get('id') for s in live]}",
+            },
+            severity="elevated",
+        )
+        return True
+
+    remote_sub = live[0]
+    if (
+        local is not None
+        and local.stripe_subscription_id == remote_sub.get("id")
+        and local.status == remote_sub.get("status")
+    ):
+        return False
+
+    logger.warning(
+        "billing.reconcile_repair: org=%s local=%s remote=%s",
+        org.id,
+        None if local is None else f"{local.stripe_subscription_id}/{local.status}",
+        f"{remote_sub.get('id')}/{remote_sub.get('status')}",
+    )
+    # Stripe's own object does not carry org_id unless checkout set it; the
+    # org is known here, so fill it in rather than have the shared path
+    # reject the snapshot as metadata-less.
+    remote_sub.setdefault("metadata", {})
+    remote_sub["metadata"]["org_id"] = str(org.id)
+    # `utcnow()` as the watermark, not None. This read *is* current state, so
+    # every event Stripe generated before now describes something older --
+    # including any that were queued while a disabled endpoint was catching
+    # up. Leaving the watermark where it was would let one of those overwrite
+    # the repair this sweep just made. The staleness check itself cannot
+    # reject this (a watermark in the future is impossible), so passing a
+    # timestamp only advances it.
+    await service.apply_subscription_snapshot(remote_sub, event_created=utcnow())
+    FORGE_BILLING_RECONCILED_TOTAL.labels(action="applied").inc()
+    return True
