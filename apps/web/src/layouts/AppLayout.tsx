@@ -506,7 +506,15 @@ export function AppLayout({ children }: { children: ReactNode }) {
           <SidebarNav modules={modules} />
         </aside>
 
-        <div className="flex flex-1 flex-col">
+        {/* min-w-0 is load-bearing, not tidying. A flex item defaults to
+            `min-width: auto`, which means it refuses to shrink below its
+            content's intrinsic minimum -- so one wide descendant (the
+            members list) pushed this column to 408px inside a 360px phone
+            and every page it hosts scrolled sideways. Measured: setting
+            min-width:0 here took the document's scrollWidth from 408 back
+            to 360. It has to be on this column rather than on the offending
+            page, because the column is what the page is stretched by. */}
+        <div className="flex min-w-0 flex-1 flex-col">
           <header className="flex items-center gap-3 border-b px-4 py-3 sm:px-6">
             <Sheet open={navOpen} onOpenChange={setNavOpen}>
               <SheetTrigger

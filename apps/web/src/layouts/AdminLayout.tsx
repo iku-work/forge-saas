@@ -87,12 +87,16 @@ export function AdminLayout({ children }: { children: ReactNode }) {
 
   return (
     <div className="flex min-h-dvh flex-col bg-slate-950 text-slate-100">
-      <header className="flex items-center justify-between border-b border-slate-800 bg-slate-900 px-6 py-3">
+      {/* Wraps, because this bar holds a wordmark, four nav links and an
+          account block -- 901px of content that used to sit in one
+          unwrappable row, so every admin page scrolled sideways on a phone
+          (measured: 901px document width in a 360px viewport). */}
+      <header className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 border-b border-slate-800 bg-slate-900 px-4 py-3 sm:px-6">
         <div className="flex items-center gap-3">
           <span className="text-sm font-semibold">{t("common.app.name")}</span>
           <Badge variant="destructive">{t("common.admin.badge")}</Badge>
         </div>
-        <nav className="flex items-center gap-1">
+        <nav className="flex flex-wrap items-center gap-1">
           {ADMIN_NAV.map((item) => {
             const Icon = item.icon;
             const isActive =
@@ -114,7 +118,7 @@ export function AdminLayout({ children }: { children: ReactNode }) {
             );
           })}
         </nav>
-        <div className="flex items-center gap-4">
+        <div className="flex min-w-0 items-center gap-4">
           <Link
             to="/$locale"
             params={{ locale }}
