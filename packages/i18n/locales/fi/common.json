@@ -29,7 +29,9 @@
     "billing": "Laskutus",
     "notifications": "Ilmoitukset",
     "reports": "Edistyneet raportit",
-    "logout": "Kirjaudu ulos"
+    "logout": "Kirjaudu ulos",
+    "open_menu": "Avaa valikko",
+    "menu": "Valikko"
   },
   "support": {
     "contact": "Ota yhteyttä tukeen",

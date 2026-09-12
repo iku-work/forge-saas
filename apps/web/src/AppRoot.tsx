@@ -93,7 +93,7 @@ export function AppRoot({ router, queryClient }: AppRootProps) {
           />
         ) : null}
         {isLoading ? (
-          <div className="flex min-h-screen items-center justify-center">
+          <div className="flex min-h-dvh items-center justify-center">
             <span className="text-sm text-muted-foreground">
               {t("common.status.loading")}
             </span>

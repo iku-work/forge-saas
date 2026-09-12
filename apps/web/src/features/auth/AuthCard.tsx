@@ -27,8 +27,16 @@ export function AuthCard({
   }, [title]);
 
   return (
-    <div className="flex min-h-screen items-center justify-center p-4">
-      <Card className="w-full max-w-sm">
+    // `m-auto` on the card rather than `items-center` on the flex parent.
+    // They centre identically until the card is taller than the viewport --
+    // which happens on a landscape phone, or any time the on-screen keyboard
+    // halves the height. At that point `items-center` overflows the box in
+    // *both* directions and the top of the card, including its heading, is
+    // unreachable: scrolling only ever reveals the bottom. Auto margins
+    // collapse to zero instead of going negative, so the card pins to the top
+    // and the whole of it can be scrolled to.
+    <div className="flex min-h-dvh p-4">
+      <Card className="m-auto w-full max-w-sm">
         <CardHeader>
           {/* CardTitle renders a <div>, not a heading -- each auth page needs
               a real <h1> for a11y and for the page's document outline. */}

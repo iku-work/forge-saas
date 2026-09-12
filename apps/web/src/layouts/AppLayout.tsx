@@ -17,6 +17,7 @@ import {
   User as UserIcon,
   Users,
   Webhook,
+  Menu,
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
@@ -48,6 +49,10 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
   Toaster,
+  Sheet,
+  SheetContent,
+  SheetTitle,
+  SheetTrigger,
 } from "@forge/ui";
 
 import { GlobalBanner } from "../components/GlobalBanner";
@@ -376,7 +381,7 @@ function CreateFirstOrgPrompt() {
   const { t } = useTranslation();
   return (
     <div
-      className="flex min-h-screen items-center justify-center p-4"
+      className="flex min-h-dvh items-center justify-center p-4"
       data-testid="create-first-org-prompt"
     >
       <Card className="w-full max-w-sm">
@@ -399,12 +404,61 @@ function CreateFirstOrgPrompt() {
   );
 }
 
+function SidebarNav({
+  modules,
+  onNavigate,
+}: {
+  modules: ActiveModules;
+  onNavigate?: () => void;
+}) {
+  const { t } = useTranslation();
+
+  return (
+    <>
+      <div className="px-2 pb-4 text-lg font-semibold">
+        {t("common.app.name")}
+      </div>
+      {modules.multiOrg ? (
+        <div className="pb-4">
+          <OrgSwitcher />
+        </div>
+      ) : null}
+      {/* onClick rather than a route subscription: tapping a link in the
+          drawer has to close it, and the drawer does not unmount on
+          navigation because the shell that owns it never unmounts. */}
+      <nav className="flex flex-1 flex-col gap-1" onClick={onNavigate}>
+        {PRIMARY_NAV.filter((item) => !item.module || modules[item.module]).map(
+          (item) => (
+            <NavLink key={item.to} item={item} />
+          ),
+        )}
+        <div className="mt-4 px-3 text-caption font-medium uppercase text-muted-foreground">
+          {t("common.nav.settings")}
+        </div>
+        {SETTINGS_NAV.filter(
+          (item) => !item.module || modules[item.module],
+        ).map((item) => (
+          <NavLink key={item.to} item={item} />
+        ))}
+      </nav>
+      <div className="border-t pt-2">
+        <SupportLink />
+        <UserMenu />
+      </div>
+    </>
+  );
+}
+
 export function AppLayout({ children }: { children: ReactNode }) {
   const { t } = useTranslation();
   const { orgs, isLoading } = useOrg();
   const modules = useModules();
   const maintenance = useMaintenance();
   const location = useLocation();
+  // Above the early returns below: this component returns before its main
+  // body for maintenance, loading and no-org, and a hook after one of those
+  // is a different hook order on a later render.
+  const [navOpen, setNavOpen] = useState(false);
 
   // T-263, checked before the loading state: during a maintenance window every
   // request this shell would make answers 503, so rendering it at all produces
@@ -417,7 +471,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
 
   if (isLoading) {
     return (
-      <div className="flex min-h-screen items-center justify-center">
+      <div className="flex min-h-dvh items-center justify-center">
         <span className="text-sm text-muted-foreground">
           {t("common.status.loading")}
         </span>
@@ -434,46 +488,46 @@ export function AppLayout({ children }: { children: ReactNode }) {
   return (
     // T-263: the banner sits *outside* the shell's flex row, above everything,
     // so it pushes the whole app down rather than landing inside one column.
-    <div className="flex min-h-screen flex-col" data-testid="app-shell">
+    <div className="flex min-h-dvh flex-col" data-testid="app-shell">
       <GlobalBanner />
       <div className="flex flex-1">
-        <aside className="flex w-64 shrink-0 flex-col border-e p-4">
-          <div className="px-2 pb-4 text-lg font-semibold">
-            {t("common.app.name")}
-          </div>
-          {modules.multiOrg ? (
-            <div className="pb-4">
-              <OrgSwitcher />
-            </div>
-          ) : null}
-          <nav className="flex flex-1 flex-col gap-1">
-            {PRIMARY_NAV.filter(
-              (item) => !item.module || modules[item.module],
-            ).map((item) => (
-              <NavLink key={item.to} item={item} />
-            ))}
-            <div className="mt-4 px-3 text-xs font-medium uppercase text-muted-foreground">
-              {t("common.nav.settings")}
-            </div>
-            {SETTINGS_NAV.filter(
-              (item) => !item.module || modules[item.module],
-            ).map((item) => (
-              <NavLink key={item.to} item={item} />
-            ))}
-          </nav>
-          <div className="border-t pt-2">
-            <SupportLink />
-            <UserMenu />
-          </div>
+        {/* One nav, two presentations. Below `md` it is a drawer behind the
+            header's menu button; from `md` up it is the column it always
+            was. Rendering the same <SidebarNav> in both is what stops the
+            phone getting a nav that quietly drifts from the desktop one. */}
+        <aside className="hidden w-64 shrink-0 flex-col border-e p-4 md:flex">
+          <SidebarNav modules={modules} />
         </aside>
 
         <div className="flex flex-1 flex-col">
-          <header className="flex items-center justify-between border-b px-6 py-3">
+          <header className="flex items-center gap-3 border-b px-4 py-3 sm:px-6">
+            <Sheet open={navOpen} onOpenChange={setNavOpen}>
+              <SheetTrigger
+                className="-ms-1 rounded-md p-2 text-muted-foreground hover:bg-accent hover:text-accent-foreground md:hidden"
+                aria-label={t("common.nav.open_menu")}
+              >
+                <Menu className="size-5" aria-hidden="true" />
+              </SheetTrigger>
+              <SheetContent side="start" aria-describedby={undefined}>
+                {/* Radix requires a title on every dialog for the accessible
+                    name. The drawer shows its own wordmark, so this one is
+                    visually hidden rather than duplicated on screen. */}
+                <SheetTitle className="sr-only">
+                  {t("common.nav.menu")}
+                </SheetTitle>
+                <SidebarNav
+                  modules={modules}
+                  onNavigate={() => {
+                    setNavOpen(false);
+                  }}
+                />
+              </SheetContent>
+            </Sheet>
             {/* Not a heading -- the breadcrumb duplicates the page's own <h1>
                 (e.g. DashboardPage's "Dashboard"); a second <h1> with the same
                 text would be both invalid document structure and ambiguous
                 for screen-reader/role-based queries. */}
-            <p className="text-sm font-medium text-muted-foreground">
+            <p className="flex-1 truncate text-body-sm font-medium text-muted-foreground">
               {pageTitle}
             </p>
             {modules.notifications ? (

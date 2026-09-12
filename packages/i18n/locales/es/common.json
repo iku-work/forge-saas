@@ -33,7 +33,9 @@
     "logout": "Cerrar sesión",
     "logout_hint": "Cierra la sesión de esta cuenta en este dispositivo",
     "api_keys": "Claves de API",
-    "webhooks": "Webhooks"
+    "webhooks": "Webhooks",
+    "open_menu": "Abrir menú",
+    "menu": "Menú"
   },
   "support": {
     "contact": "Contactar con soporte",

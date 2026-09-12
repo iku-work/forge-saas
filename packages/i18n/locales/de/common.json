@@ -33,7 +33,9 @@
     "logout": "Abmelden",
     "logout_hint": "Meldet dieses Konto auf diesem Gerät ab",
     "api_keys": "API-Schlüssel",
-    "webhooks": "Webhooks"
+    "webhooks": "Webhooks",
+    "open_menu": "Menü öffnen",
+    "menu": "Menü"
   },
   "support": {
     "contact": "Support kontaktieren",

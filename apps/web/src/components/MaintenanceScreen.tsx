@@ -32,11 +32,17 @@ export function MaintenanceScreen({
     <div
       role="alert"
       data-testid="maintenance-screen"
-      className="flex min-h-screen flex-col items-center justify-center gap-4 p-6 text-center"
+      className="flex min-h-dvh flex-col items-center justify-center gap-4 p-6 text-center"
     >
       <Wrench className="size-10 text-muted-foreground" aria-hidden="true" />
       <h1 className="text-xl font-semibold">{t("common.maintenance.title")}</h1>
-      <p className="max-w-prose text-sm text-muted-foreground">
+      {/* Not centred, unlike the icon and heading above it. This text is
+          written by an operator and can run to several lines, and centred
+          copy makes the eye hunt for the start of each one -- the cost rises
+          with the number of lines and falls with the font size, and this is
+          small text with no line limit. The short link-style footers on the
+          auth cards are left centred: one line, no hunting. */}
+      <p className="max-w-prose text-start text-body-sm text-muted-foreground">
         {maintenance.message || t("common.maintenance.default_message")}
       </p>
     </div>
