@@ -1,15 +1,12 @@
 import { zodResolver } from "@hookform/resolvers/zod";
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { z } from "zod";
 
-import {
-  getMyAvatarApiV1AuthMeAvatarGet,
-  updateMeApiV1AuthMePatch,
-} from "@forge/api-client";
+import { updateMeApiV1AuthMePatch } from "@forge/api-client";
 import { useAuth } from "@forge/hooks";
 import {
   Avatar,
@@ -34,6 +31,7 @@ import {
 
 import { getErrorMessage } from "../auth/getErrorMessage";
 import { RoutedLocaleSwitcher } from "../../lib/RoutedLocaleSwitcher";
+import { AVATAR_QUERY_KEY, useAvatarSrc } from "../../lib/useAvatarSrc";
 
 function initialsFor(email: string): string {
   return email.slice(0, 2).toUpperCase();
@@ -67,23 +65,8 @@ export function ProfileSettingsPage() {
     form.reset({ fullName });
   }, [form, fullName]);
 
-  // The avatars bucket is private, so there is no URL on the user object to
-  // render -- what comes back here is a presigned link that expires in five
-  // minutes. Fetched only when the user actually has an uploaded avatar; an
-  // OAuth `picture` is already an absolute URL on user.avatar_url.
-  const avatarQuery = useQuery({
-    queryKey: ["me", "avatar"],
-    enabled: user?.has_uploaded_avatar === true,
-    // Refetched well inside the signature's lifetime: a stale src would
-    // simply stop loading, with nothing on the page to explain why.
-    staleTime: 4 * 60 * 1000,
-    queryFn: async () => {
-      const { data } = await getMyAvatarApiV1AuthMeAvatarGet({
-        throwOnError: true,
-      });
-      return data;
-    },
-  });
+  const avatarSrc = useAvatarSrc();
+  const queryClient = useQueryClient();
 
   const setAvatar = useMutation({
     mutationFn: async (fileId: string) => {
@@ -110,10 +93,6 @@ export function ProfileSettingsPage() {
     },
   });
 
-  // An uploaded avatar wins over an OAuth picture: the upload is a
-  // deliberate choice, the picture is a default someone else supplied.
-  const avatarSrc = avatarQuery.data?.data?.url ?? user?.avatar_url ?? null;
-
   const onAvatarUploaded = async (fileId: string): Promise<void> => {
     try {
       const envelope = await setAvatar.mutateAsync(fileId);
@@ -121,9 +100,12 @@ export function ProfileSettingsPage() {
       if (updated) {
         applyUpdatedUser(updated);
       }
-      // has_uploaded_avatar has just flipped, so the query above is enabled
-      // now; refetch rather than wait for a remount.
-      await avatarQuery.refetch();
+      // has_uploaded_avatar has just flipped, so the query is enabled now.
+      // Invalidate rather than refetch a local handle: the shell's user menu
+      // reads the same key through useAvatarSrc, and invalidating updates
+      // the picture in the corner at the same moment as the one on this
+      // page.
+      await queryClient.invalidateQueries({ queryKey: AVATAR_QUERY_KEY });
       toast.success(t("auth.profile.avatar_saved"));
     } catch (error) {
       toast.error(getErrorMessage(error, "auth.profile.error_avatar"));

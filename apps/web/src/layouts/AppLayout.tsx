@@ -34,6 +34,7 @@ import { Permission } from "@forge/types";
 import {
   Avatar,
   AvatarFallback,
+  AvatarImage,
   Card,
   CardContent,
   CardDescription,
@@ -61,6 +62,7 @@ import { CreateOrgForm } from "../features/settings/CreateOrgForm";
 import { NotificationBell } from "../features/notifications/NotificationBell";
 import { SupportLink } from "../features/support/SupportLink";
 import { stripLocale } from "../lib/locale-url";
+import { useAvatarSrc } from "../lib/useAvatarSrc";
 import { useRouteLocale } from "../lib/useRouteLocale";
 
 // T-233: every in-app destination is locale-prefixed. `to` is the router's
@@ -325,6 +327,10 @@ function UserMenu() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
   const locale = useRouteLocale();
+  // Above the early return, not beside the <Avatar> -- `if (!user) return`
+  // below would otherwise make this a conditional hook (eslint
+  // react-hooks/rules-of-hooks). The hook handles a null user itself.
+  const avatarSrc = useAvatarSrc();
 
   if (!user) {
     return null;
@@ -343,6 +349,7 @@ function UserMenu() {
           className="flex w-full items-center gap-2 rounded-md px-2 py-2 text-start text-sm hover:bg-accent"
         >
           <Avatar className="size-7" data-testid="user-menu-avatar">
+            {avatarSrc ? <AvatarImage src={avatarSrc} alt="" /> : null}
             <AvatarFallback>{initialsFor(user.email)}</AvatarFallback>
           </Avatar>
           <span className="flex-1 truncate">
