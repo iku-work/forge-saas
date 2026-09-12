@@ -6,7 +6,7 @@ function ErrorFallback() {
   const { t } = useTranslation();
 
   return (
-    <div className="flex min-h-screen flex-col items-center justify-center gap-4 text-center">
+    <div className="flex min-h-dvh flex-col items-center justify-center gap-4 text-center">
       <p className="text-sm text-muted-foreground">{t("common.error_boundary.title")}</p>
       <button
         type="button"

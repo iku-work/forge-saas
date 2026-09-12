@@ -18,6 +18,28 @@
  * import it alongside this file -- apps/web already does. It is an animation
  * library, not a token, and pulling it in here would hand every static page
  * a stylesheet it has no use for.
+ *
+ * -- The palette ----------------------------------------------------------
+ *
+ * Replaced shadcn's achromatic defaults (every colour was `oklch(L 0 0)` --
+ * zero chroma) with "navy ink on cool marble": navy text rather than black,
+ * one vivid blue for primary actions, near-white surfaces.
+ *
+ * Written as hex rather than oklch so each value reads straight against the
+ * specification it came from. Two deliberate departures from that source,
+ * both forced by gates this repo already runs:
+ *
+ *   - The blue is #0067ff, not #006bff. The original measures 4.38:1 against
+ *     the page canvas, under WCAG AA's 4.5 floor for normal text -- fine as
+ *     a fill (white on it is 4.62) and a failure the moment anything renders
+ *     `text-primary`. Four steps darker clears both (4.55 and 4.79) and is
+ *     not distinguishable side by side. apps/web/e2e/a11y.spec.ts is the
+ *     gate that would otherwise have caught it.
+ *   - The source's "Mist Gray" #a6bbd1 is *not* --muted-foreground. It
+ *     measures 1.97:1 on white, which is sound only for genuinely disabled
+ *     controls (WCAG exempts those). Muted *text* is Slate Gray, at 5.59.
+ *     The previous token layer carried a comment about darkening this exact
+ *     variable to clear AA, so this is well-trodden ground here.
  */
 
 /* Resolved relative to *this* file, so every consumer scans this package's
@@ -29,51 +51,61 @@
 @custom-variant dark (&:is(.dark *));
 
 :root {
-  --radius: 0.625rem;
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.145 0 0);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.145 0 0);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.145 0 0);
-  --primary: oklch(0.205 0 0);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.97 0 0);
-  --secondary-foreground: oklch(0.205 0 0);
-  --muted: oklch(0.97 0 0);
-  /* T-150: 0.556 measured 4.34:1 against --muted (oklch(0.97 0 0)) under
-     axe-core's color-contrast check, just under WCAG AA's 4.5:1 floor for
-     normal text -- darkened to clear it with margin. */
-  --muted-foreground: oklch(0.48 0 0);
-  --accent: oklch(0.97 0 0);
-  --accent-foreground: oklch(0.205 0 0);
-  --destructive: oklch(0.577 0.245 27.325);
-  --destructive-foreground: oklch(0.985 0 0);
-  --border: oklch(0.922 0 0);
-  --input: oklch(0.922 0 0);
-  --ring: oklch(0.708 0 0);
+  /* Buttons and inputs. The other radii are stated in @theme rather than
+     derived from this one: the scale is 4 / 8 / 16 / 24, not a constant
+     offset from a single base. */
+  --radius: 0.5rem;
+
+  --background: #f8f9fb; /* Cloud -- page canvas */
+  --foreground: #0b3558; /* Ink Navy -- never #000; the black is what breaks the warmth */
+  --card: #ffffff; /* Paper */
+  --card-foreground: #0b3558;
+  --popover: #ffffff;
+  --popover-foreground: #0b3558;
+  --primary: #0067ff; /* Signal Blue, darkened -- see the header */
+  --primary-foreground: #ffffff;
+  --secondary: #f0f3f8; /* Pebble -- input fills, hover washes */
+  --secondary-foreground: #0b3558;
+  --muted: #f0f3f8;
+  --muted-foreground: #476788; /* Slate Gray -- 5.30:1 on Pebble, 5.59 on canvas */
+  --accent: #f0f3f8;
+  --accent-foreground: #004eba; /* Deep Cobalt -- 6.75:1 on Pebble */
+  --destructive: oklch(0.577 0.245 27.325); /* no red in the source; kept as-is */
+  --destructive-foreground: #ffffff;
+  --border: #d4e0ed; /* Hairline */
+  --input: #d4e0ed;
+  --ring: #0067ff;
 }
 
+/*
+ * The source system is light-only. This is derived from the same hues rather
+ * than left grey: dark mode is a shipped feature here (every component
+ * carries a `dark:` variant), and half a redesign is more jarring than none.
+ *
+ * Surfaces get *lighter* with elevation, the opposite of the light theme and
+ * the usual convention in the dark -- a raised card catches more light.
+ * Every pair below was measured; the tightest is 6.25:1.
+ */
 .dark {
-  --background: oklch(0.145 0 0);
-  --foreground: oklch(0.985 0 0);
-  --card: oklch(0.205 0 0);
-  --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.205 0 0);
-  --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.922 0 0);
-  --primary-foreground: oklch(0.205 0 0);
-  --secondary: oklch(0.269 0 0);
-  --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.269 0 0);
-  --muted-foreground: oklch(0.708 0 0);
-  --accent: oklch(0.269 0 0);
-  --accent-foreground: oklch(0.985 0 0);
+  --background: #071a2b; /* deepest navy -- the canvas */
+  --foreground: #e8eef5; /* cool near-white, not #fff */
+  --card: #0e2740; /* raised one step */
+  --card-foreground: #e8eef5;
+  --popover: #0e2740;
+  --popover-foreground: #e8eef5;
+  --primary: #4d9bff; /* the blue lifted for a dark ground: 6.25:1 */
+  --primary-foreground: #071a2b; /* navy on blue, not white */
+  --secondary: #16324f;
+  --secondary-foreground: #e8eef5;
+  --muted: #16324f;
+  --muted-foreground: #9db4cc; /* 7.11:1 on card, 8.25 on canvas */
+  --accent: #16324f;
+  --accent-foreground: #9ec5ff;
   --destructive: oklch(0.704 0.191 22.216);
-  --destructive-foreground: oklch(0.985 0 0);
-  --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.556 0 0);
+  --destructive-foreground: #ffffff;
+  --border: #1e3d5c;
+  --input: #1e3d5c;
+  --ring: #4d9bff;
 }
 
 @theme inline {
@@ -96,10 +128,82 @@
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);
-  --radius-sm: calc(var(--radius) - 4px);
-  --radius-md: calc(var(--radius) - 2px);
-  --radius-lg: var(--radius);
-  --radius-xl: calc(var(--radius) + 4px);
+
+  /* 4 / 8 / 16 / 24, the source's scale, stated rather than derived. Badges
+     use `rounded-full`, which Tailwind already provides. */
+  --radius-sm: 0.25rem;
+  --radius-md: 0.5rem;
+  --radius-lg: 1rem;
+  --radius-xl: 1.5rem;
+
+  /* Inter first, then the platform's own UI face. No @font-face and no font
+     files: apps/marketing's build gate (scripts/check-budget.mjs) is written
+     around this site having no webfonts -- "text paints in the first frame
+     and costs zero bytes" -- and the character of this system comes far more
+     from the scale, the weights and the colour than from one face.
+     Self-hosting Inter later is one @font-face block plus a preload. */
+  --font-sans:
+    Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
+    "Helvetica Neue", Arial, sans-serif;
+
+  /* A minor third from a 16px base. The four display sizes clamp: 80px is
+     more than a fifth of a 375px viewport, so a fixed value is a headline
+     that does not fit on a phone. Each floor is the next step down the same
+     scale, so a narrow screen lands on a real size rather than an arbitrary
+     one.
+
+     Leading rises as the size falls, monotonically, because line height is
+     inversely proportional to font size: a long line of small text needs
+     more space between rows for the eye to find the next one, while a
+     display size set at 1.5 reads as a gappy list rather than a headline.
+
+     This is where the two references disagree, and the principle wins. The
+     specification's own numbers are not monotonic -- it sets 14px at 1.4 and
+     16px at 1.5, so its *smaller* text gets the *tighter* leading. Those are
+     measurements of one shipped site rather than a rule, so the ramp below
+     follows the rule and departs from them at heading-sm, subheading,
+     body-lg, body-sm and caption.
+
+     `button` is deliberately outside the ramp: a button label is one line in
+     a control whose height is set by padding, so its leading is about the
+     hit area, not legibility. */
+  --text-display: clamp(2.5rem, 1.2rem + 6.5vw, 5rem);
+  --text-display--line-height: 1.1;
+  --text-heading-lg: clamp(2.25rem, 1.2rem + 5.25vw, 4.25rem);
+  --text-heading-lg--line-height: 1.15;
+  --text-heading: clamp(2rem, 1.3rem + 3.5vw, 3.125rem);
+  --text-heading--line-height: 1.2;
+  --text-heading-sm: clamp(1.75rem, 1.35rem + 2vw, 2.375rem);
+  --text-heading-sm--line-height: 1.25;
+  --text-subheading: 1.75rem;
+  --text-subheading--line-height: 1.35;
+  --text-body-lg: 1.25rem;
+  --text-body-lg--line-height: 1.45;
+  --text-button: 1.125rem;
+  --text-button--line-height: 1.6;
+  /* The source states 1.0 here -- body copy set solid, which is hard to read
+     and works against WCAG 1.4.12's expectation that 1.5 be supportable. */
+  --text-body: 1rem;
+  --text-body--line-height: 1.5;
+  --text-body-sm: 0.875rem;
+  --text-body-sm--line-height: 1.55;
+  --text-caption: 0.75rem;
+  --text-caption--line-height: 1.6;
+
+  /* Blue-tinted rather than neutral: a grey shadow on this canvas reads as
+     dirt. Three depths, from the source. */
+  --shadow-card:
+    rgba(71, 103, 136, 0.04) 0px 4px 5px 0px,
+    rgba(71, 103, 136, 0.03) 0px 4px 10px 0px,
+    rgba(71, 103, 136, 0.05) 0px 10px 20px 0px;
+  --shadow-elevated:
+    rgba(71, 103, 136, 0.04) 0px 4px 5px 0px,
+    rgba(71, 103, 136, 0.03) 0px 8px 15px 0px,
+    rgba(71, 103, 136, 0.08) 0px 30px 50px 0px;
+  --shadow-button:
+    rgba(71, 103, 136, 0.04) 0px 4px 5px 0px,
+    rgba(71, 103, 136, 0.03) 0px 8px 15px 0px,
+    rgba(71, 103, 136, 0.06) 0px 15px 30px 0px;
 }
 
 @layer base {
@@ -108,5 +212,6 @@
   }
   body {
     @apply bg-background text-foreground;
+    font-family: var(--font-sans);
   }
 }

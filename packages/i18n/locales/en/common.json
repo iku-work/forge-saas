@@ -33,7 +33,9 @@
     "logout": "Log out",
     "logout_hint": "Signs out of this account on this device",
     "api_keys": "API keys",
-    "webhooks": "Webhooks"
+    "webhooks": "Webhooks",
+    "open_menu": "Open menu",
+    "menu": "Menu"
   },
   "support": {
     "contact": "Contact support",

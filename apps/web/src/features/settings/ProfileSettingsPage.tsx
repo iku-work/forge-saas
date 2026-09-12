@@ -202,11 +202,13 @@ export function ProfileSettingsPage() {
                     <FormItem>
                       <FormLabel>{t("auth.profile.name_label")}</FormLabel>
                       <FormControl>
-                        <Input
-                          autoComplete="name"
-                          placeholder={t("auth.profile.no_name")}
-                          {...field}
-                        />
+                        {/* No placeholder. `auth.profile.no_name` is an
+                            em-dash -- it was the *display* fallback for a
+                            profile with no name, and as a placeholder it
+                            renders an empty field that looks like it already
+                            contains a stray character. The label says Name;
+                            an empty field needs no further explanation. */}
+                        <Input autoComplete="name" {...field} />
                       </FormControl>
                       <FormMessage />
                     </FormItem>

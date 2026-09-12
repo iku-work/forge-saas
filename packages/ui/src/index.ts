@@ -15,6 +15,7 @@ export * from "./components/password-input";
 export * from "./components/password-strength-meter";
 export * from "./components/popover";
 export * from "./components/separator";
+export * from "./components/sheet";
 export * from "./components/skeleton";
 export * from "./components/sonner";
 export * from "./components/table";
