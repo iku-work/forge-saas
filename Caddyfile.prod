@@ -44,6 +44,24 @@
 		root * /srv/web
 		try_files {path} /index.html
 		file_server
+
+		# Vite content-hashes everything under /assets, so those URLs can never
+		# change meaning and are safe to keep forever. index.html is the
+		# opposite: one stable URL whose contents name the current bundle, so a
+		# cached copy pins a browser to whatever build it was fetched during.
+		#
+		# It had no Cache-Control at all, which leaves the browser to invent a
+		# heuristic freshness window from Last-Modified -- and a tab opened
+		# before a deploy then keeps serving the previous app, with no error to
+		# suggest why a shipped feature is missing. `no-cache` still allows the
+		# 304 round trip; it only forbids using the copy without asking.
+		#
+		# Same split as apps/marketing/caddy/*/marketing.caddy uses for
+		# /_astro/*, for the same reason.
+		@web_immutable path /assets/*
+		@web_revalidated not path /assets/*
+		header @web_immutable Cache-Control "public, max-age=31536000, immutable"
+		header @web_revalidated Cache-Control "no-cache"
 	}
 
 	# Caddy auto-obtains and renews Let's Encrypt cert — no config needed

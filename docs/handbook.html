@@ -1523,6 +1523,7 @@ git checkout main          # first time only, if the box was pinned to a branch
 git pull --ff-only
 
 # 1. frontend -- only if apps/ or packages/ changed
+rm -rf apps/web/dist apps/marketing/dist      # see the warning below
 docker run --rm -v "$PWD":/repo -w /repo   -e PUBLIC_SITE_URL=https://$APEX   -e PUBLIC_APP_URL=https://$APP   -e VITE_API_URL=https://$APP   node:22-slim sh -c "corepack enable &amp;&amp; pnpm install --frozen-lockfile     &amp;&amp; pnpm build &amp;&amp; chown -R $(id -u):$(id -g) /repo"
 
 # 2. backend -- only if backend/ changed
@@ -1542,6 +1543,27 @@ $C up -d backend worker caddy</code></pre>
         If only <code>docs/</code> or <code>.github/</code> moved, there is nothing to do on the
         box at all.
       </p>
+
+      <div class="warn-box">
+        <span class="warn-label">Delete <code>dist/</code> before rebuilding</span>
+        <p>
+          Vite empties its own output directory, but only of files it is allowed to delete.
+          Builds run in a container against the bind-mounted repo, and one that wrote as a
+          different uid leaves files the next build cannot remove &mdash; so old bundles
+          accumulate rather than being replaced. A box running this stack was found serving
+          four different <code>index-*.js</code> out of one <code>dist/</code>.
+        </p>
+        <p>
+          That matters for what it stops happening. A browser holding a stale
+          <code>index.html</code> asks for a bundle hash that <em>should</em> be gone, gets a
+          404, and reloads. With the old file still sitting there it gets a 200 and quietly
+          runs the previous version of the app &mdash; a shipped feature simply absent, with
+          nothing anywhere saying why. Caddy now sends <code>Cache-Control: no-cache</code>
+          for <code>index.html</code> so the browser always revalidates, and
+          <code>immutable</code> for the content-hashed assets under <code>/assets</code>;
+          removing <code>dist/</code> is the other half of the same fix.
+        </p>
+      </div>
 
       <div class="warn-box">
         <span class="warn-label">Do not reach for <code>--force-recreate</code></span>

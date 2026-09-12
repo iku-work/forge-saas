@@ -136,6 +136,8 @@ def _stripe_event(
     # particular business outcome, so a no-op type keeps setup minimal.
     return {
         "id": event_id,
+        # `object: "event"` matters: construct_event unwraps EventBridge and
+        # EventGrid envelopes, and tells a bare event from one by this field.
         "object": "event",
         "type": event_type,
         "data": {"object": {"id": "obj_1"}},
@@ -187,6 +189,55 @@ async def test_missing_signature_header_returns_400(client: httpx.AsyncClient) -
     )
 
     assert response.status_code == 400
+
+
+async def test_a_decimal_amount_in_the_payload_is_stored(
+    client: httpx.AsyncClient, session: AsyncSession
+) -> None:
+    """The bug that stopped every real delivery in production.
+
+    Stripe sends `*_decimal` fields as JSON *strings* -- "4900" -- and the SDK
+    coerces them to `Decimal` on the way in. The handler stored
+    `stripe_event.to_dict()` into a JSONB column, json.dumps refuses a
+    Decimal, and the INSERT raised before the event was ever recorded. Every
+    delivery answered 500 while *recording* the event, which is the worst
+    place to fail: no row was written, so handle_event never ran, a paid
+    subscription never reached the database, and there was no event row on
+    which to see a failure. Stripe retried into the same wall.
+
+    The shape below is copied from a real `customer.subscription.created` off
+    the live account, and the `object` discriminators are load-bearing.
+    Coercion is not keyed on the field name: the SDK picks a typed class from
+    `object` -- subscription, plan, price -- and only those classes convert
+    their `*_decimal` strings. Drop the discriminators and the same payload
+    deserialises into a plain StripeObject with no Decimal anywhere, which is
+    how a first attempt at this test passed against the very bug it was
+    written for.
+    """
+    event_id = f"evt_{uuid4().hex}"
+    body = _stripe_event(event_id=event_id)
+    body["data"]["object"] = {
+        "id": "sub_1",
+        "object": "subscription",
+        "plan": {"object": "plan", "amount_decimal": "4900"},
+        "items": {
+            "object": "list",
+            "data": [
+                {
+                    "object": "subscription_item",
+                    "price": {"object": "price", "unit_amount_decimal": "4900"},
+                }
+            ],
+        },
+    }
+
+    response = await _post_webhook(client, body)
+
+    assert response.status_code == 200
+    stored = await WebhookEventRepository(session).get_by_id(event_id)
+    assert stored is not None
+    # Rendered back as the string Stripe sent, not dropped and not a float.
+    assert stored.payload["data"]["object"]["plan"]["amount_decimal"] == "4900"
 
 
 # --- idempotency --------------------------------------------------------------------
