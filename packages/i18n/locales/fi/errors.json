@@ -87,5 +87,7 @@
   "api_key_rate_limited": "Tämä API-avain on ylittänyt rajan {limit} pyyntöä minuutissa.",
   "invalid_org_header": "X-Org-ID ei ole kelvollinen tunniste.",
   "card_declined": "Korttisi hylättiin.",
-  "payment_provider_error": "Maksupalveluntarjoaja ei voinut suorittaa tätä pyyntöä. Jos ongelma jatkuu, ota yhteyttä tukeen."
+  "payment_provider_error": "Maksupalveluntarjoaja ei voinut suorittaa tätä pyyntöä. Jos ongelma jatkuu, ota yhteyttä tukeen.",
+  "avatar_file_invalid": "Tätä tiedostoa ei voi käyttää profiilikuvana.",
+  "avatar_not_found": "Profiilikuvaa ei ole ladattu."
 }

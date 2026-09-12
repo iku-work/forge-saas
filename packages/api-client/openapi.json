@@ -190,6 +190,26 @@
         "title": "ApiKeyUpdateRequest",
         "type": "object"
       },
+      "AvatarUrlResponse": {
+        "description": "A short-lived link to the caller's own uploaded avatar.\n\nSeparate from UserPublic because it expires: baking it into the user\nobject would put a decaying value into everything that caches one.",
+        "properties": {
+          "expires_at": {
+            "format": "date-time",
+            "title": "Expires At",
+            "type": "string"
+          },
+          "url": {
+            "title": "Url",
+            "type": "string"
+          }
+        },
+        "required": [
+          "url",
+          "expires_at"
+        ],
+        "title": "AvatarUrlResponse",
+        "type": "object"
+      },
       "CancelEmailChangeRequest": {
         "properties": {
           "token": {
@@ -589,6 +609,38 @@
           "meta"
         ],
         "title": "Envelope[ApiKeyPublic]",
+        "type": "object"
+      },
+      "Envelope_AvatarUrlResponse_": {
+        "properties": {
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AvatarUrlResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "error": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ErrorBody"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "meta": {
+            "$ref": "#/components/schemas/Meta"
+          }
+        },
+        "required": [
+          "meta"
+        ],
+        "title": "Envelope[AvatarUrlResponse]",
         "type": "object"
       },
       "Envelope_CheckoutSessionResponse_": {
@@ -3987,15 +4039,44 @@
         "type": "object"
       },
       "UpdateMeRequest": {
+        "description": "A partial update: every field is optional and only what was *sent* is\nwritten.\n\nBoth fields are nullable, so \"leave it alone\" and \"clear it\" have to be\ntold apart by something other than the value -- the router reads\n`model_fields_set` (via model_dump(exclude_unset=True)) rather than\ntreating None as absent. Sending `{\"full_name\": null}` removes the name;\nomitting the key entirely leaves it.\n\n`locale` was the only field here until 2026-09-12, which is why the\nprofile page had nothing to submit: there was no field for the name it\ndisplayed.",
         "properties": {
+          "avatar_file_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Avatar File Id"
+          },
+          "full_name": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Full Name"
+          },
           "locale": {
-            "title": "Locale",
-            "type": "string"
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Locale"
           }
         },
-        "required": [
-          "locale"
-        ],
         "title": "UpdateMeRequest",
         "type": "object"
       },
@@ -4122,6 +4203,11 @@
               }
             ],
             "title": "Full Name"
+          },
+          "has_uploaded_avatar": {
+            "default": false,
+            "title": "Has Uploaded Avatar",
+            "type": "boolean"
           },
           "id": {
             "format": "uuid",
@@ -5865,6 +5951,33 @@
           }
         ],
         "summary": "Update Me",
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/api/v1/auth/me/avatar": {
+      "get": {
+        "description": "A short-lived presigned URL for the caller's own uploaded avatar.\n\nThe avatars bucket is private like every other, so there is no public URL\nto put in a UserPublic -- and a presigned one does not belong there\neither, because it expires and that object is cached and re-serialised\neverywhere. Hence a separate endpoint the page calls when it renders.\n\n404 when the user has no uploaded avatar: an OAuth `picture` is already on\nUserPublic.avatar_url and needs nothing from here.",
+        "operationId": "get_my_avatar_api_v1_auth_me_avatar_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_AvatarUrlResponse_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Get My Avatar",
         "tags": [
           "auth"
         ]

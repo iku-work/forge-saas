@@ -108,6 +108,25 @@ export type ApiKeyUpdateRequest = {
 };
 
 /**
+ * AvatarUrlResponse
+ *
+ * A short-lived link to the caller's own uploaded avatar.
+ *
+ * Separate from UserPublic because it expires: baking it into the user
+ * object would put a decaying value into everything that caches one.
+ */
+export type AvatarUrlResponse = {
+    /**
+     * Expires At
+     */
+    expires_at: string;
+    /**
+     * Url
+     */
+    url: string;
+};
+
+/**
  * CancelEmailChangeRequest
  */
 export type CancelEmailChangeRequest = {
@@ -338,6 +357,15 @@ export type EnvelopeApiKeyCreated = {
  */
 export type EnvelopeApiKeyPublic = {
     data?: ApiKeyPublic | null;
+    error?: ErrorBody | null;
+    meta: Meta;
+};
+
+/**
+ * Envelope[AvatarUrlResponse]
+ */
+export type EnvelopeAvatarUrlResponse = {
+    data?: AvatarUrlResponse | null;
     error?: ErrorBody | null;
     meta: Meta;
 };
@@ -1945,12 +1973,33 @@ export type UnreadCountResponse = {
 
 /**
  * UpdateMeRequest
+ *
+ * A partial update: every field is optional and only what was *sent* is
+ * written.
+ *
+ * Both fields are nullable, so "leave it alone" and "clear it" have to be
+ * told apart by something other than the value -- the router reads
+ * `model_fields_set` (via model_dump(exclude_unset=True)) rather than
+ * treating None as absent. Sending `{"full_name": null}` removes the name;
+ * omitting the key entirely leaves it.
+ *
+ * `locale` was the only field here until 2026-09-12, which is why the
+ * profile page had nothing to submit: there was no field for the name it
+ * displayed.
  */
 export type UpdateMeRequest = {
     /**
+     * Avatar File Id
+     */
+    avatar_file_id?: string | null;
+    /**
+     * Full Name
+     */
+    full_name?: string | null;
+    /**
      * Locale
      */
-    locale: string;
+    locale?: string | null;
 };
 
 /**
@@ -2016,6 +2065,10 @@ export type UserPublic = {
      * Full Name
      */
     full_name: string | null;
+    /**
+     * Has Uploaded Avatar
+     */
+    has_uploaded_avatar?: boolean;
     /**
      * Id
      */
@@ -3009,6 +3062,22 @@ export type UpdateMeApiV1AuthMePatchResponses = {
 };
 
 export type UpdateMeApiV1AuthMePatchResponse = UpdateMeApiV1AuthMePatchResponses[keyof UpdateMeApiV1AuthMePatchResponses];
+
+export type GetMyAvatarApiV1AuthMeAvatarGetData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/v1/auth/me/avatar';
+};
+
+export type GetMyAvatarApiV1AuthMeAvatarGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: EnvelopeAvatarUrlResponse;
+};
+
+export type GetMyAvatarApiV1AuthMeAvatarGetResponse = GetMyAvatarApiV1AuthMeAvatarGetResponses[keyof GetMyAvatarApiV1AuthMeAvatarGetResponses];
 
 export type ListOauthAccountsApiV1AuthOauthAccountsGetData = {
     body?: never;

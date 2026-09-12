@@ -5,6 +5,7 @@ import type { PublicKeyCredentialCreationOptionsJSON } from "@simplewebauthn/bro
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
 import { useTranslation } from "react-i18next";
+import { QRCodeSVG } from "qrcode.react";
 import { z } from "zod";
 
 import {
@@ -382,10 +383,27 @@ function TwoFactorCard() {
               noValidate
             >
               <p className="text-sm">{t("auth.two_factor.scan_instruction")}</p>
-              <p className="break-all rounded-md bg-muted p-2 font-mono text-xs">
-                {provisioning.provisioningUri}
-              </p>
-              <p className="text-xs text-muted-foreground">
+              {/* The instruction above has always said "scan this", and until
+                  now the only thing to scan was the otpauth:// URI printed as
+                  text -- which no authenticator app can read. The raw URI is
+                  gone with it: the secret below is the manual path the same
+                  sentence offers, and the URI is that secret plus an issuer
+                  and account name, so printing both was noise. */}
+              <div className="flex justify-center rounded-md bg-white p-4">
+                <QRCodeSVG
+                  value={provisioning.provisioningUri}
+                  size={192}
+                  // Without this the QR is an unlabelled <svg> to a screen
+                  // reader. It is not readable by one either way -- the
+                  // secret below is how that user enrols -- but an unnamed
+                  // graphic in the middle of a form is its own problem.
+                  title={t("auth.two_factor.qr_title")}
+                />
+              </div>
+              <p
+                className="break-all text-xs text-muted-foreground"
+                data-testid="totp-secret"
+              >
                 {t("auth.two_factor.secret_label", {
                   secret: provisioning.secret,
                 })}
@@ -619,14 +637,18 @@ function ChangePasswordCard() {
       setSuccess(true);
       form.reset();
     } catch (caught) {
-      setFormError(getErrorMessage(caught, "auth.change_password.error_default"));
+      setFormError(
+        getErrorMessage(caught, "auth.change_password.error_default"),
+      );
     }
   };
 
   return (
     <Card>
       <CardHeader>
-        <CardDescription>{t("auth.change_password.description")}</CardDescription>
+        <CardDescription>
+          {t("auth.change_password.description")}
+        </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
         {formError ? (
@@ -750,7 +772,9 @@ function ChangeEmailCard() {
         ) : null}
         {success ? (
           <Alert>
-            <AlertDescription>{t("auth.change_email.success_message")}</AlertDescription>
+            <AlertDescription>
+              {t("auth.change_email.success_message")}
+            </AlertDescription>
           </Alert>
         ) : null}
 
@@ -767,7 +791,9 @@ function ChangeEmailCard() {
               name="currentPassword"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>{t("auth.change_email.current_password_label")}</FormLabel>
+                  <FormLabel>
+                    {t("auth.change_email.current_password_label")}
+                  </FormLabel>
                   <FormControl>
                     <PasswordInput autoComplete="current-password" {...field} />
                   </FormControl>
@@ -783,7 +809,9 @@ function ChangeEmailCard() {
               name="newEmail"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>{t("auth.change_email.new_email_label")}</FormLabel>
+                  <FormLabel>
+                    {t("auth.change_email.new_email_label")}
+                  </FormLabel>
                   <FormControl>
                     <Input type="email" autoComplete="email" {...field} />
                   </FormControl>
@@ -835,7 +863,9 @@ function LinkedAccountsCard() {
         queryKey: listOauthAccountsApiV1AuthOauthAccountsGetQueryKey(),
       });
     } catch (error) {
-      setUnlinkError(getErrorMessage(error, "auth.linked_accounts.error_unlink"));
+      setUnlinkError(
+        getErrorMessage(error, "auth.linked_accounts.error_unlink"),
+      );
     }
   };
 
@@ -846,7 +876,9 @@ function LinkedAccountsCard() {
   return (
     <Card>
       <CardHeader>
-        <CardDescription>{t("auth.linked_accounts.description")}</CardDescription>
+        <CardDescription>
+          {t("auth.linked_accounts.description")}
+        </CardDescription>
       </CardHeader>
       <CardContent className="space-y-3">
         {unlinkError ? (

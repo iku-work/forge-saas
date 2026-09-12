@@ -10,5 +10,6 @@
   "code_digits_only": "Chiffres uniquement.",
   "code_length": "Saisissez le code à 6 chiffres.",
   "org_name_required": "Le nom de l'organisation est obligatoire.",
-  "role_required": "Choisissez un rôle."
+  "role_required": "Choisissez un rôle.",
+  "name_too_long": "C'est trop long."
 }

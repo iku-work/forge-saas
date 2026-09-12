@@ -666,6 +666,119 @@ async def test_update_me_updates_locale(client: httpx.AsyncClient, verified_user
     assert me_response.json()["data"]["locale"] == "fi"
 
 
+async def test_update_me_sets_the_full_name(client: httpx.AsyncClient, verified_user: User) -> None:
+    """The profile page displayed a name with nothing able to change it: this
+    endpoint took `locale` and nothing else until 2026-09-12."""
+    response = await client.patch(
+        "/api/v1/auth/me",
+        json={"full_name": "Ada Lovelace"},
+        headers=_auth_header(verified_user),
+    )
+
+    assert response.status_code == 200
+    assert response.json()["data"]["full_name"] == "Ada Lovelace"
+
+    me_response = await client.get("/api/v1/auth/me", headers=_auth_header(verified_user))
+    assert me_response.json()["data"]["full_name"] == "Ada Lovelace"
+
+
+async def test_update_me_leaves_out_what_was_not_sent(
+    client: httpx.AsyncClient, verified_user: User
+) -> None:
+    """A locale-only request must not wipe the name.
+
+    Both fields are nullable, so if the router filtered on None instead of
+    "was it sent", every locale change would clear the user's name -- and the
+    locale switcher on the profile page sends exactly that request.
+    """
+    await client.patch(
+        "/api/v1/auth/me",
+        json={"full_name": "Ada Lovelace"},
+        headers=_auth_header(verified_user),
+    )
+
+    response = await client.patch(
+        "/api/v1/auth/me", json={"locale": "fi"}, headers=_auth_header(verified_user)
+    )
+
+    assert response.status_code == 200
+    body = response.json()["data"]
+    assert body["locale"] == "fi"
+    assert body["full_name"] == "Ada Lovelace"
+
+
+async def test_update_me_clears_the_name_when_explicitly_null(
+    client: httpx.AsyncClient, verified_user: User
+) -> None:
+    """The counterpart to the test above: null is a value, not an absence."""
+    await client.patch(
+        "/api/v1/auth/me",
+        json={"full_name": "Ada Lovelace"},
+        headers=_auth_header(verified_user),
+    )
+
+    response = await client.patch(
+        "/api/v1/auth/me", json={"full_name": None}, headers=_auth_header(verified_user)
+    )
+
+    assert response.status_code == 200
+    assert response.json()["data"]["full_name"] is None
+
+
+async def test_update_me_treats_a_whitespace_name_as_cleared(
+    client: httpx.AsyncClient, verified_user: User
+) -> None:
+    """A form's empty input arrives as "" or "   ", and a name made of spaces
+    renders as a blank gap in the app shell rather than as no name."""
+    response = await client.patch(
+        "/api/v1/auth/me", json={"full_name": "   "}, headers=_auth_header(verified_user)
+    )
+
+    assert response.status_code == 200
+    assert response.json()["data"]["full_name"] is None
+
+
+async def test_update_me_rejects_an_overlong_name(
+    client: httpx.AsyncClient, verified_user: User
+) -> None:
+    response = await client.patch(
+        "/api/v1/auth/me", json={"full_name": "a" * 201}, headers=_auth_header(verified_user)
+    )
+
+    assert response.status_code == 422
+
+
+async def test_update_me_with_an_empty_body_is_a_no_op(
+    client: httpx.AsyncClient, verified_user: User
+) -> None:
+    """Not an error: the router returns the caller unchanged without touching
+    the database."""
+    response = await client.patch("/api/v1/auth/me", json={}, headers=_auth_header(verified_user))
+
+    assert response.status_code == 200
+    assert response.json()["data"]["email"] == verified_user.email
+
+
+async def test_update_me_rejects_an_explicitly_null_locale(
+    client: httpx.AsyncClient, verified_user: User
+) -> None:
+    """Nullable in the schema only so the field can be omitted.
+
+    User.locale is NOT NULL and every user has one, so unlike full_name there
+    is no "clear it" to express. Letting a null through wrote NULL into the
+    column and answered 500 -- found by the schemathesis contract test, which
+    sends exactly this.
+    """
+    response = await client.patch(
+        "/api/v1/auth/me", json={"locale": None}, headers=_auth_header(verified_user)
+    )
+
+    assert response.status_code == 422
+
+    me_response = await client.get("/api/v1/auth/me", headers=_auth_header(verified_user))
+    assert me_response.json()["data"]["locale"] is not None
+
+
 async def test_update_me_rejects_unsupported_locale(
     client: httpx.AsyncClient, verified_user: User
 ) -> None:
