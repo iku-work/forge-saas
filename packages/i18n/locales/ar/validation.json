@@ -10,5 +10,6 @@
   "code_digits_only": "أرقام فقط.",
   "code_length": "أدخل الرمز المكوّن من 6 أرقام.",
   "org_name_required": "اسم المؤسسة مطلوب.",
-  "role_required": "اختر دورًا."
+  "role_required": "اختر دورًا.",
+  "name_too_long": "هذا طويل جدًا."
 }

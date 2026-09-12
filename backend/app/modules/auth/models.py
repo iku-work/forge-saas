@@ -28,7 +28,33 @@ class User(RedactedReprMixin, UUIDPKMixin, TimestampMixin, SoftDeleteMixin, SQLM
     email_verified_at: datetime | None = Field(default=None, sa_type=_TZ_DATETIME)  # type: ignore[call-overload]
     hashed_password: str | None = Field(default=None)  # null for OAuth-only users
     full_name: str | None = Field(default=None, sa_column=Column(EncryptedString, nullable=True))
+    # Set by an OAuth provider (AuthService's oauth flow copies `picture`),
+    # so it is an absolute URL on someone else's domain.
     avatar_url: str | None = Field(default=None)
+    # An avatar the user uploaded, as the private object key it lives at --
+    # the bucket is not public-read, so there is no URL to store. Resolved to
+    # a short-lived presigned URL by GET /auth/me/avatar, and preferred over
+    # avatar_url above: an upload is a deliberate choice, an OAuth picture is
+    # a default.
+    #
+    # Deliberately NOT a foreign key to stored_file.id. `file_storage` is an
+    # optional module with nothing depending on it, so that table does not
+    # exist in every configuration and a constraint would fail to create in
+    # the minimum-surface one. The cost is a key that can outlive its file,
+    # which shows up as an avatar that stops loading -- see
+    # AuthService.set_avatar for what is validated at write time instead.
+    avatar_object_key: str | None = Field(default=None)
+
+    @property
+    def has_uploaded_avatar(self) -> bool:
+        """What UserPublic exposes instead of the key or a URL.
+
+        A plain property rather than a column: it is derived, and the key
+        itself must not leave the server -- a client holding one could ask for
+        it to be presigned.
+        """
+        return self.avatar_object_key is not None
+
     is_active: bool = Field(default=True)
     is_superadmin: bool = Field(default=False)
     totp_enabled: bool = Field(default=False)

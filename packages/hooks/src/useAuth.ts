@@ -131,6 +131,17 @@ export interface UseAuthResult {
   endImpersonation: () => Promise<void>;
   loadImpersonatedSession: (accessToken: string, user: UserPublic) => void;
   completeTwoFactorLogin: (accessToken: string, user: UserPublic) => void;
+  /**
+   * Replace the cached user after a write that returned a fresh one.
+   *
+   * PATCH /me answers with the updated UserPublic, and the name it carries is
+   * rendered in the app shell as well as on the form that changed it -- so
+   * without this the shell keeps showing the old one until the next full
+   * bootstrap. Takes the server's response rather than the form's values on
+   * purpose: the server normalises (a whitespace-only name comes back null),
+   * and the store should hold what was actually stored.
+   */
+  applyUpdatedUser: (user: UserPublic) => void;
 }
 
 export function useAuth(): UseAuthResult {
@@ -227,6 +238,10 @@ export function useAuth(): UseAuthResult {
     [],
   );
 
+  const applyUpdatedUser = useCallback((user: UserPublic): void => {
+    setState({ user });
+  }, []);
+
   return {
     user: snapshot.user,
     isLoading: snapshot.isLoading,
@@ -237,5 +252,6 @@ export function useAuth(): UseAuthResult {
     endImpersonation,
     loadImpersonatedSession,
     completeTwoFactorLogin,
+    applyUpdatedUser,
   };
 }

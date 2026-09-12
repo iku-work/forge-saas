@@ -114,5 +114,7 @@
   "sso_unsafe_url": "Diese URL kann nicht abgerufen werden: {reason}",
   "sso_delete_while_enforced": "Deaktivieren Sie die Erzwingung, bevor Sie diese Verbindung löschen.",
   "card_declined": "Ihre Karte wurde abgelehnt.",
-  "payment_provider_error": "Der Zahlungsanbieter konnte diese Anfrage nicht abschließen. Wenn das Problem weiterhin besteht, wenden Sie sich an den Support."
+  "payment_provider_error": "Der Zahlungsanbieter konnte diese Anfrage nicht abschließen. Wenn das Problem weiterhin besteht, wenden Sie sich an den Support.",
+  "avatar_file_invalid": "Diese Datei kann nicht als Profilbild verwendet werden.",
+  "avatar_not_found": "Kein hochgeladenes Profilbild."
 }

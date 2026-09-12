@@ -12,6 +12,7 @@ import hmac
 import json
 import logging
 import secrets
+from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import timedelta
 from typing import Any
@@ -38,10 +39,13 @@ from app.core.exceptions import (
     NotFoundError,
     PermissionDeniedError,
     RateLimitError,
+    UnprocessableEntityError,
 )
+from app.core.module_loader import is_enabled
 from app.core.urls import frontend_url
 from app.models._mixins import utcnow
 from app.modules.audit.service import AuditService
+from app.modules.auth.device_label import describe_device
 from app.modules.auth.models import OAuthAccount, TOTPSecret, User, WebAuthnCredential
 from app.modules.auth.models import Session as SessionModel
 from app.modules.auth.repository import (
@@ -344,7 +348,7 @@ class AuthService:
         await self._sessions.create(
             user_id=user.id,
             token_hash=refresh_hash,
-            device_label=None,
+            device_label=describe_device(user_agent),
             ip_address=ip,
             user_agent=user_agent,
             expires_at=now + timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS),
@@ -400,7 +404,12 @@ class AuthService:
         await self._sessions.create(
             user_id=session.user_id,
             token_hash=refresh_hash,
-            device_label=session.device_label,
+            # The chain keeps the identity it was created with -- a rotation
+            # is the same device, and re-deriving on every refresh would let
+            # a label drift on a browser upgrade. `or` only to heal the
+            # sessions that predate device_label being populated at all;
+            # without it they stay "Unknown device" for their whole life.
+            device_label=session.device_label or describe_device(user_agent),
             ip_address=ip,
             user_agent=user_agent,
             # Absolute cap stays anchored to the chain's original auth_time
@@ -856,8 +865,56 @@ class AuthService:
     async def list_sessions(self, user_id: UUID) -> list[SessionModel]:
         return await self._sessions.list_active_for_user(user_id)
 
-    async def update_locale(self, user_id: UUID, locale: str) -> User:
-        return await self._users.update(user_id, locale=locale)
+    async def resolve_avatar_change(self, user_id: UUID, file_id: UUID | None) -> str | None:
+        """Translate a client-supplied file id into the key to store.
+
+        None means "clear the avatar" and needs no lookup. Anything else is
+        checked against the caller: the file has to exist, be ready, live in
+        the avatars bucket, and have been uploaded by *them*. Skipping that
+        would let anyone set their avatar to any file id in the system and
+        then have GET /auth/me/avatar presign it -- the bucket is private, so
+        this endpoint is the only thing standing in front of it.
+
+        Raises UnprocessableEntityError rather than saying which check failed:
+        the distinctions would confirm the existence of other people's files.
+        """
+        if file_id is None:
+            return None
+
+        # file_storage is optional and nothing requires it, so `stored_file`
+        # does not exist in every configuration -- querying it there would be
+        # a 500 rather than a refusal. There is also no way to have uploaded
+        # anything, so any id the client offers is invalid by definition.
+        if not is_enabled("file_storage"):
+            raise UnprocessableEntityError(
+                "errors.avatar_file_invalid",
+                fallback="That file cannot be used as an avatar.",
+            )
+
+        # Lazy, like app.core.resilience's import of the scanner: file_storage
+        # is optional, and auth must still import when it is off.
+        from app.modules.storage.avatars import (  # noqa: PLC0415
+            resolve_own_avatar_key,
+        )
+
+        key = await resolve_own_avatar_key(self._db, user_id=user_id, file_id=file_id)
+        if key is None:
+            raise UnprocessableEntityError(
+                "errors.avatar_file_invalid",
+                fallback="That file cannot be used as an avatar.",
+            )
+        return key
+
+    async def update_profile(self, user_id: UUID, changes: Mapping[str, Any]) -> User:
+        """Apply exactly the fields PATCH /me was sent, and no others.
+
+        `changes` comes from model_dump(exclude_unset=True), so an omitted key
+        is absent here rather than present-and-None -- which is what lets
+        `{"full_name": null}` clear a name while `{"locale": "de"}` leaves it
+        alone. Writes go through UserRepository so full_name passes through
+        EncryptedString on the way to the column.
+        """
+        return await self._users.update(user_id, **dict(changes))
 
     async def update_notification_preferences(
         self, user_id: UUID, preferences: dict[str, dict[str, bool]]

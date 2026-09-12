@@ -5,10 +5,10 @@ accept or return a model directly (§0.4's mass-assignment rule).
 """
 
 from datetime import datetime
-from typing import Any
+from typing import Any, Self
 from uuid import UUID
 
-from pydantic import ConfigDict, EmailStr, Field, field_validator
+from pydantic import ConfigDict, EmailStr, Field, field_validator, model_validator
 
 from app.core.schemas import AppBaseModel
 
@@ -1063,7 +1063,14 @@ class UserPublic(AppBaseModel):
     id: UUID
     email: str
     full_name: str | None
+    # An OAuth provider's picture, if there is one -- an absolute URL on
+    # someone else's domain, safe to hand out.
     avatar_url: str | None
+    # Whether the user has uploaded an avatar. Not the key and not a URL: the
+    # object is private, so what a client can actually render comes from GET
+    # /auth/me/avatar, and a presigned URL has no business being cached inside
+    # a user object that gets stored, logged and re-serialised.
+    has_uploaded_avatar: bool = False
     locale: str
     email_verified_at: datetime | None
     totp_enabled: bool
@@ -1081,12 +1088,67 @@ class UserPublic(AppBaseModel):
     notification_preferences: dict[str, dict[str, bool]] = Field(default_factory=dict)
 
 
+# Long enough for any real name (the longest legally recorded ones run to
+# ~200 characters) and short enough that the column, the app shell and the
+# admin directory are not a place to paste an essay.
+_FULL_NAME_MAX_LENGTH = 200
+
+
 class UpdateMeRequest(AppBaseModel):
-    locale: str
+    """A partial update: every field is optional and only what was *sent* is
+    written.
+
+    Both fields are nullable, so "leave it alone" and "clear it" have to be
+    told apart by something other than the value -- the router reads
+    `model_fields_set` (via model_dump(exclude_unset=True)) rather than
+    treating None as absent. Sending `{"full_name": null}` removes the name;
+    omitting the key entirely leaves it.
+
+    `locale` was the only field here until 2026-09-12, which is why the
+    profile page had nothing to submit: there was no field for the name it
+    displayed.
+    """
+
+    # Nullable in the annotation only so the field can be *omitted*. An
+    # explicit null is rejected below: User.locale is NOT NULL, so unlike
+    # full_name there is no "clear it" to express, and letting one through
+    # wrote NULL into the column and 500'd. Caught by the schemathesis
+    # contract test, which sends exactly that.
+    locale: str | None = None
+    # Capped because it is rendered in the app shell, in emails and in the
+    # admin directory. EncryptedString on the model side (see User.full_name)
+    # so it is encrypted at rest and redacted from audit diffs.
+    full_name: str | None = Field(default=None, max_length=_FULL_NAME_MAX_LENGTH)
+    # The id of a file the caller uploaded to the "avatars" bucket. Null
+    # clears the avatar. The server resolves this to a storage key itself and
+    # checks the file is the caller's -- a client-supplied key would be a way
+    # to have any object in the bucket presigned for you.
+    avatar_file_id: UUID | None = Field(default=None)
+
+    @model_validator(mode="after")
+    def _reject_an_explicitly_null_locale(self) -> Self:
+        """Omitting `locale` leaves it; sending `null` is not a way to unset
+        it, because there is nothing to unset it to -- the column is NOT NULL
+        and every user has one."""
+        if "locale" in self.model_fields_set and self.locale is None:
+            msg = "locale must not be null -- omit the field to leave it unchanged"
+            raise ValueError(msg)
+        return self
+
+    @field_validator("full_name")
+    @classmethod
+    def _tidy_full_name(cls, full_name: str | None) -> str | None:
+        """Whitespace-only is a cleared name, not a name made of spaces."""
+        if full_name is None:
+            return None
+        stripped = full_name.strip()
+        return stripped or None
 
     @field_validator("locale")
     @classmethod
-    def _check_supported_locale(cls, locale: str) -> str:
+    def _check_supported_locale(cls, locale: str | None) -> str | None:
+        if locale is None:
+            return None
         # Lazy import: get_supported_locales() reads product.config.LOCALES at
         # call time so a test's monkeypatch.setattr(product_config, ...) is
         # picked up here, same reasoning as module_loader.py/i18n.py.
@@ -1189,6 +1251,17 @@ class OAuthProfile(AppBaseModel):
     email_verified: bool
     full_name: str | None = None
     avatar_url: str | None = None
+
+
+class AvatarUrlResponse(AppBaseModel):
+    """A short-lived link to the caller's own uploaded avatar.
+
+    Separate from UserPublic because it expires: baking it into the user
+    object would put a decaying value into everything that caches one.
+    """
+
+    url: str
+    expires_at: datetime
 
 
 class Enable2FAResponse(AppBaseModel):

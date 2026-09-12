@@ -114,5 +114,7 @@
   "sso_unsafe_url": "No se puede acceder a esa URL: {reason}",
   "sso_delete_while_enforced": "Desactiva la obligatoriedad antes de eliminar esta conexión.",
   "card_declined": "Tu tarjeta fue rechazada.",
-  "payment_provider_error": "El proveedor de pagos no pudo completar esta solicitud. Si el problema persiste, contacta con soporte."
+  "payment_provider_error": "El proveedor de pagos no pudo completar esta solicitud. Si el problema persiste, contacta con soporte.",
+  "avatar_file_invalid": "Ese archivo no se puede usar como foto de perfil.",
+  "avatar_not_found": "No hay ninguna foto de perfil subida."
 }

@@ -10,6 +10,7 @@ finally -- it never commits, so the caller (here, the router) owns the
 transaction boundary.
 """
 
+from datetime import timedelta
 from typing import Annotated
 from uuid import UUID, uuid4
 
@@ -26,10 +27,12 @@ from app.core.dependencies import (
     require_recent_auth,
 )
 from app.core.envelope import Envelope, Meta
-from app.core.exceptions import AuthenticationError
+from app.core.exceptions import AuthenticationError, NotFoundError
 from app.middleware.rate_limit import api_limit, auth_limit, sensitive_limit
+from app.models._mixins import utcnow
 from app.modules.auth.models import User
 from app.modules.auth.schemas import (
+    AvatarUrlResponse,
     CancelEmailChangeRequest,
     ChangePasswordRequest,
     ConfirmEmailChangeRequest,
@@ -315,11 +318,66 @@ async def update_me(
     session: Annotated[AsyncSession, Depends(get_session)],
     redis: Annotated[Redis, Depends(get_redis)],
 ) -> Envelope[UserPublic]:
-    updated = await AuthService(session).update_locale(user.id, body.locale)
+    # exclude_unset, not exclude_none: both fields are nullable, so an omitted
+    # key and an explicit null mean different things -- leave it alone versus
+    # clear it. Only what the client actually sent is written.
+    changes = body.model_dump(exclude_unset=True)
+    if "avatar_file_id" in changes:
+        # The client names a file it uploaded; the column stores the object
+        # key. Resolving here rather than trusting a key from the client is
+        # what stops an arbitrary object being presigned later -- see
+        # AuthService.resolve_avatar_change.
+        service = AuthService(session)
+        changes["avatar_object_key"] = await service.resolve_avatar_change(
+            user.id, changes.pop("avatar_file_id")
+        )
+
+    if not changes:
+        return Envelope(
+            data=UserPublic.model_validate(user), meta=Meta(request_id=_request_id(request))
+        )
+
+    updated = await AuthService(session).update_profile(user.id, changes)
     await session.commit()
     await invalidate_user_cache(redis, user.id)
     return Envelope(
         data=UserPublic.model_validate(updated), meta=Meta(request_id=_request_id(request))
+    )
+
+
+@router.get("/me/avatar")
+@api_limit
+async def get_my_avatar(
+    request: Request,
+    user: Annotated[User, Depends(get_current_user)],
+) -> Envelope[AvatarUrlResponse]:
+    """A short-lived presigned URL for the caller's own uploaded avatar.
+
+    The avatars bucket is private like every other, so there is no public URL
+    to put in a UserPublic -- and a presigned one does not belong there
+    either, because it expires and that object is cached and re-serialised
+    everywhere. Hence a separate endpoint the page calls when it renders.
+
+    404 when the user has no uploaded avatar: an OAuth `picture` is already on
+    UserPublic.avatar_url and needs nothing from here.
+    """
+    if user.avatar_object_key is None:
+        raise NotFoundError("errors.avatar_not_found", fallback="No uploaded avatar.")
+
+    # Lazy for the same reason as AuthService.resolve_avatar_change: this
+    # module has to import with file_storage off.
+    from app.modules.storage.avatars import (  # noqa: PLC0415
+        AVATAR_URL_EXPIRES_IN_SECONDS,
+        presign_avatar,
+    )
+
+    url = await presign_avatar(user.avatar_object_key)
+    return Envelope(
+        data=AvatarUrlResponse(
+            url=url,
+            expires_at=utcnow() + timedelta(seconds=AVATAR_URL_EXPIRES_IN_SECONDS),
+        ),
+        meta=Meta(request_id=_request_id(request)),
     )
 
 
