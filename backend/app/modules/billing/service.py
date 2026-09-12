@@ -80,6 +80,68 @@ def _epoch_to_datetime(value: int | None) -> datetime | None:
     return datetime.fromtimestamp(value, tz=UTC) if value is not None else None
 
 
+# --- reading Stripe objects across the Basil rename ---------------------------------
+#
+# Stripe's `2025-03-31.basil` API version moved two fields this integration
+# depends on, and moved them *silently*: the old keys are simply absent, so
+# code that reads them either raises KeyError or -- worse -- takes a `.get()`
+# default and does nothing. Both happened here in production on 2026-09-12,
+# against an account on 2025-08-27.basil:
+#
+#   subscription.current_period_{start,end}
+#       -> subscription.items.data[].current_period_{start,end}
+#          A subscription's items can now bill on different cadences, so the
+#          period is a property of the item, not the subscription.
+#
+#   invoice.subscription
+#       -> invoice.parent.subscription_details.subscription
+#          `parent` is a discriminated union; `type` is "subscription_details"
+#          for a subscription invoice and something else (e.g.
+#          "quote_details") otherwise, with the non-matching members null.
+#
+# Both readers below prefer the new location and fall back to the old one.
+# The fallback is not dead weight: this repo pins no `stripe.api_version`, so
+# the shape is whatever the *account* is set to, and an account created
+# before Basil still sends the old one. Reading both means the integration
+# does not break in either direction when that setting changes.
+
+
+def _subscription_period(obj: dict[str, Any]) -> tuple[int, int]:
+    """The current billing period of `obj`, a Stripe Subscription, as epochs.
+
+    Read from the same item the plan is resolved from (the first), so the
+    period and the plan always describe the same thing. A multi-item
+    subscription with divergent cadences is out of scope here -- checkout
+    creates exactly one item -- and picking item 0 for both is at least
+    coherent, where mixing item 0's price with, say, the latest end date
+    across items would not be.
+    """
+    items = obj.get("items", {}).get("data") or [{}]
+    first = items[0]
+    for key in ("current_period_start", "current_period_end"):
+        if key not in first and key not in obj:
+            # Not a warn-and-return: the columns are NOT NULL and this is a
+            # subscription somebody has paid for. Raising leaves the event
+            # unprocessed with the reason recorded, and Stripe retries.
+            msg = f"subscription {obj.get('id')!r} has no {key} on its item or itself"
+            raise KeyError(msg)
+    return (
+        first.get("current_period_start", obj.get("current_period_start")),
+        first.get("current_period_end", obj.get("current_period_end")),
+    )
+
+
+def _invoice_subscription_id(obj: dict[str, Any]) -> str | None:
+    """The subscription an Invoice belongs to, or None if it is not one."""
+    parent = obj.get("parent") or {}
+    details = parent.get("subscription_details") or {}
+    subscription = details.get("subscription") or obj.get("subscription")
+    # Expanded, the field is the object rather than its id.
+    if isinstance(subscription, dict):
+        return cast("str | None", subscription.get("id"))
+    return cast("str | None", subscription)
+
+
 @resilient("stripe")
 async def _create_checkout_session_stripe(
     *, customer_id: str, price_id: str, org_id: str, return_to: str
@@ -162,13 +224,14 @@ class BillingService:
             return
 
         org_uuid = UUID(org_id)
+        period_start, period_end = _subscription_period(obj)
         subscription = await self._subscriptions.upsert(
             org_id=org_uuid,
             plan_id=plan.id,
             stripe_subscription_id=obj["id"],
             status=obj["status"],
-            current_period_start=cast("datetime", _epoch_to_datetime(obj["current_period_start"])),
-            current_period_end=cast("datetime", _epoch_to_datetime(obj["current_period_end"])),
+            current_period_start=cast("datetime", _epoch_to_datetime(period_start)),
+            current_period_end=cast("datetime", _epoch_to_datetime(period_end)),
             cancel_at_period_end=obj.get("cancel_at_period_end", False),
             trial_end=_epoch_to_datetime(obj.get("trial_end")),
         )
@@ -197,7 +260,7 @@ class BillingService:
 
     async def _handle_invoice_payment_succeeded(self, payload: dict[str, Any]) -> None:
         obj = payload["data"]["object"]
-        subscription_id = obj.get("subscription")
+        subscription_id = _invoice_subscription_id(obj)
         if subscription_id is None:
             return
         subscription = await self._subscriptions.set_status_by_stripe_subscription_id(
@@ -210,7 +273,7 @@ class BillingService:
 
     async def _handle_invoice_payment_failed(self, payload: dict[str, Any]) -> None:
         obj = payload["data"]["object"]
-        subscription_id = obj.get("subscription")
+        subscription_id = _invoice_subscription_id(obj)
         if subscription_id is None:
             return
         subscription = await self._subscriptions.set_status_by_stripe_subscription_id(

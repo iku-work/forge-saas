@@ -12,6 +12,7 @@ since the dispatch logic only ever looks at a handful of keys.
 """
 
 from collections.abc import AsyncGenerator
+from datetime import UTC, datetime
 from typing import Any
 from uuid import uuid4
 
@@ -119,6 +120,19 @@ async def _make_plan(session: AsyncSession, *, price_id: str = "price_1") -> Pla
     return plan
 
 
+# The payload shapes below are Basil's (Stripe API >= 2025-03-31.basil), taken
+# from real events this integration received on 2026-09-12 under
+# 2025-08-27.basil. They used to be the pre-Basil shapes, which is precisely
+# why this suite stayed green while production could not process a payment:
+# `current_period_start` had moved onto the item and `invoice.subscription`
+# under `parent`, and a fixture that still carried the old keys asserted
+# against an API that no longer exists. The `_legacy` variants below keep the
+# old shape covered, since the reader accepts both.
+
+_PERIOD_START = 1_700_000_000
+_PERIOD_END = 1_702_592_000
+
+
 def _subscription_event(
     *, subscription_id: str, status: str, org_id: str | None, price_id: str
 ) -> dict[str, Any]:
@@ -128,9 +142,35 @@ def _subscription_event(
                 "id": subscription_id,
                 "status": status,
                 "metadata": {} if org_id is None else {"org_id": org_id},
+                "items": {
+                    "data": [
+                        {
+                            "price": {"id": price_id},
+                            "current_period_start": _PERIOD_START,
+                            "current_period_end": _PERIOD_END,
+                        }
+                    ]
+                },
+                "cancel_at_period_end": False,
+                "trial_end": None,
+            }
+        }
+    }
+
+
+def _subscription_event_legacy(
+    *, subscription_id: str, status: str, org_id: str | None, price_id: str
+) -> dict[str, Any]:
+    """Pre-Basil: the period sat on the subscription, not on its items."""
+    return {
+        "data": {
+            "object": {
+                "id": subscription_id,
+                "status": status,
+                "metadata": {} if org_id is None else {"org_id": org_id},
                 "items": {"data": [{"price": {"id": price_id}}]},
-                "current_period_start": 1_700_000_000,
-                "current_period_end": 1_702_592_000,
+                "current_period_start": _PERIOD_START,
+                "current_period_end": _PERIOD_END,
                 "cancel_at_period_end": False,
                 "trial_end": None,
             }
@@ -139,6 +179,22 @@ def _subscription_event(
 
 
 def _invoice_event(*, subscription_id: str | None, invoice_id: str = "in_1") -> dict[str, Any]:
+    parent = (
+        None
+        if subscription_id is None
+        else {
+            "type": "subscription_details",
+            "quote_details": None,
+            "subscription_details": {"subscription": subscription_id, "metadata": {}},
+        }
+    )
+    return {"data": {"object": {"id": invoice_id, "parent": parent}}}
+
+
+def _invoice_event_legacy(
+    *, subscription_id: str | None, invoice_id: str = "in_1"
+) -> dict[str, Any]:
+    """Pre-Basil: the subscription id sat at the top level of the invoice."""
     return {"data": {"object": {"id": invoice_id, "subscription": subscription_id}}}
 
 
@@ -168,6 +224,61 @@ async def test_subscription_created_upserts_subscription(
     assert sub.org_id == org_id
     assert sub.plan_id == plan.id
     assert sub.status == "active"
+    # The period comes off the *item* under Basil. Asserting it is what
+    # makes this test fail against the pre-Basil reader rather than merely
+    # exercising it.
+    assert sub.current_period_start == datetime.fromtimestamp(_PERIOD_START, tz=UTC)
+    assert sub.current_period_end == datetime.fromtimestamp(_PERIOD_END, tz=UTC)
+
+
+async def test_subscription_created_reads_period_from_pre_basil_payload(
+    service: BillingService, session: AsyncSession, subscriptions: SubscriptionRepository
+) -> None:
+    """An account still on a pre-Basil API version sends the period up top."""
+    await _make_plan(session, price_id="price_pro")
+    await service.handle_event(
+        WebhookEvent(
+            id="evt_legacy_sub",
+            type="customer.subscription.created",
+            payload=_subscription_event_legacy(
+                subscription_id="sub_legacy",
+                status="active",
+                org_id=str(uuid4()),
+                price_id="price_pro",
+            ),
+        )
+    )
+
+    sub = await subscriptions.get_by_stripe_subscription_id("sub_legacy")
+    assert sub is not None
+    assert sub.current_period_start == datetime.fromtimestamp(_PERIOD_START, tz=UTC)
+    assert sub.current_period_end == datetime.fromtimestamp(_PERIOD_END, tz=UTC)
+
+
+async def test_subscription_created_without_any_period_raises(
+    service: BillingService, session: AsyncSession
+) -> None:
+    """Neither shape present: fail loudly so Stripe retries.
+
+    The tempting alternative -- log a warning and return -- would mark the
+    event processed and leave a paying customer on the free tier with no
+    error anywhere, which is the exact failure this module's docstring warns
+    about.
+    """
+    await _make_plan(session, price_id="price_pro")
+    payload = _subscription_event(
+        subscription_id="sub_no_period",
+        status="active",
+        org_id=str(uuid4()),
+        price_id="price_pro",
+    )
+    del payload["data"]["object"]["items"]["data"][0]["current_period_start"]
+    del payload["data"]["object"]["items"]["data"][0]["current_period_end"]
+
+    with pytest.raises(KeyError, match="current_period_start"):
+        await service.handle_event(
+            WebhookEvent(id="evt_no_period", type="customer.subscription.created", payload=payload)
+        )
 
 
 async def test_subscription_updated_changes_existing_row_not_create_new(
@@ -330,6 +441,36 @@ async def test_invoice_payment_succeeded_without_subscription_field_is_noop(
             payload=_invoice_event(subscription_id=None),
         )
     )
+
+
+async def test_invoice_payment_succeeded_reads_pre_basil_subscription_field(
+    service: BillingService, session: AsyncSession, subscriptions: SubscriptionRepository
+) -> None:
+    await _make_plan(session, price_id="price_pro")
+    await service.handle_event(
+        WebhookEvent(
+            id="evt_create_legacy_inv",
+            type="customer.subscription.created",
+            payload=_subscription_event(
+                subscription_id="sub_legacy_inv",
+                status="past_due",
+                org_id=str(uuid4()),
+                price_id="price_pro",
+            ),
+        )
+    )
+
+    await service.handle_event(
+        WebhookEvent(
+            id="evt_invoice_legacy",
+            type="invoice.payment_succeeded",
+            payload=_invoice_event_legacy(subscription_id="sub_legacy_inv"),
+        )
+    )
+
+    sub = await subscriptions.get_by_stripe_subscription_id("sub_legacy_inv")
+    assert sub is not None
+    assert sub.status == "active"
 
 
 async def test_invoice_payment_failed_sets_status_past_due_and_emits_audit_event(
