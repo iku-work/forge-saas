@@ -74,7 +74,12 @@ async def create_checkout_session(  # noqa: PLR0913 — T-120 adds redis on top 
 ) -> Envelope[CheckoutSessionResponse]:
     org, _ = org_and_membership
     url = await BillingService(session, redis).create_checkout_session(
-        org, body.plan_slug, body.interval
+        org,
+        body.plan_slug,
+        body.interval,
+        # So Stripe returns the customer to the locale they were browsing in,
+        # rather than the product default. Set by the i18n middleware.
+        locale=getattr(request.state, "locale", None),
     )
     await session.commit()
     return Envelope(
@@ -102,7 +107,9 @@ async def create_portal_session(
     redis: Annotated[Redis, Depends(get_redis)],
 ) -> Envelope[PortalSessionResponse]:
     org, _ = org_and_membership
-    url = await BillingService(session, redis).create_portal_session(org)
+    url = await BillingService(session, redis).create_portal_session(
+        org, locale=getattr(request.state, "locale", None)
+    )
     await session.commit()
     return Envelope(data=PortalSessionResponse(url=url), meta=Meta(request_id=_request_id(request)))
 

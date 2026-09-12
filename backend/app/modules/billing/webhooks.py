@@ -73,7 +73,25 @@ async def stripe_webhook(
             existing = await repo.create(
                 event_id=stripe_event["id"],
                 event_type=stripe_event["type"],
-                payload=stripe_event.to_dict(),
+                # for_json=True, not a bare to_dict(). The SDK coerces every
+                # `*_decimal` field -- unit_amount_decimal, amount_decimal,
+                # quantity_decimal -- into a `Decimal`, and json.dumps refuses
+                # those, so the INSERT into this JSONB column raised "Object of
+                # type Decimal is not JSON serializable". Every delivery
+                # answered 500 while *recording* the event, which is the worst
+                # place for it to fail: no row was written, so handle_event
+                # never ran, a paid subscription never reached the database,
+                # and there was no event row on which to see a failure. Stripe
+                # retried into the same wall until it gave up.
+                #
+                # for_json=True is the SDK's own answer (see StripeObject.
+                # to_dict) and renders those back as the strings Stripe sent
+                # them as. Storing the raw signed body instead would also
+                # avoid the Decimal, but construct_event above unwraps
+                # EventBridge and EventGrid envelopes -- with one of those in
+                # front, raw_body is the envelope and handle_event's
+                # payload["data"]["object"] would not be there.
+                payload=stripe_event.to_dict(for_json=True),
             )
             await session.commit()
 

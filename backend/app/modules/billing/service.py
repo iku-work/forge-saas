@@ -59,6 +59,7 @@ from app.core.config import get_settings
 from app.core.dependencies import invalidate_org_cache
 from app.core.exceptions import DomainError, NotFoundError
 from app.core.resilience import resilient
+from app.core.urls import frontend_url
 from app.modules.audit.service import AuditService
 from app.modules.billing.dunning import DunningService
 from app.modules.billing.invoices import InvoiceService
@@ -81,14 +82,14 @@ def _epoch_to_datetime(value: int | None) -> datetime | None:
 
 @resilient("stripe")
 async def _create_checkout_session_stripe(
-    *, customer_id: str, price_id: str, org_id: str, domain: str
+    *, customer_id: str, price_id: str, org_id: str, return_to: str
 ) -> stripe.checkout.Session:
     return await stripe.checkout.Session.create_async(
         customer=customer_id,
         mode="subscription",
         line_items=[{"price": price_id, "quantity": 1}],
-        success_url=f"https://{domain}/billing?checkout=success",
-        cancel_url=f"https://{domain}/billing?checkout=canceled",
+        success_url=f"{return_to}?checkout=success",
+        cancel_url=f"{return_to}?checkout=canceled",
         metadata={"org_id": org_id},
         # The webhook handler (_handle_subscription_upserted) reads org_id
         # off the *Subscription* object's metadata, not the Checkout
@@ -100,12 +101,25 @@ async def _create_checkout_session_stripe(
 
 @resilient("stripe")
 async def _create_portal_session_stripe(
-    *, customer_id: str, domain: str
+    *, customer_id: str, return_to: str
 ) -> stripe.billing_portal.Session:
     return await stripe.billing_portal.Session.create_async(
         customer=customer_id,
-        return_url=f"https://{domain}/billing",
+        return_url=return_to,
     )
+
+
+def _billing_page_url(locale: str | None) -> str:
+    """Where Stripe sends the customer back to.
+
+    Built with frontend_url, not by hand. The hand-built version was
+    `https://{DOMAIN}/billing`, which was wrong three times over once T-233
+    put a locale segment on every route: the path is /settings/billing, it
+    needs a locale in front of it, and DOMAIN is the bare host where
+    FRONTEND_URL is the origin the app is actually served on. A customer who
+    had just paid landed on the SPA's not-found page.
+    """
+    return frontend_url("/settings/billing", locale)
 
 
 class BillingService:
@@ -234,7 +248,11 @@ class BillingService:
         return customer.id
 
     async def create_checkout_session(
-        self, org: Organization, plan_slug: str, interval: Literal["monthly", "yearly"]
+        self,
+        org: Organization,
+        plan_slug: str,
+        interval: Literal["monthly", "yearly"],
+        locale: str | None = None,
     ) -> str:
         plan = await self._plans.get_by_slug(plan_slug)
         if plan is None:
@@ -248,10 +266,12 @@ class BillingService:
             plan.stripe_price_id_monthly if interval == "monthly" else plan.stripe_price_id_yearly
         )
         customer_id = await self.get_or_create_stripe_customer(org)
-        domain = get_settings().DOMAIN
 
         checkout_session = await _create_checkout_session_stripe(
-            customer_id=customer_id, price_id=price_id, org_id=str(org.id), domain=domain
+            customer_id=customer_id,
+            price_id=price_id,
+            org_id=str(org.id),
+            return_to=_billing_page_url(locale),
         )
         if checkout_session.url is None:
             raise DomainError(
@@ -259,11 +279,12 @@ class BillingService:
             )
         return checkout_session.url
 
-    async def create_portal_session(self, org: Organization) -> str:
+    async def create_portal_session(self, org: Organization, locale: str | None = None) -> str:
         customer_id = await self.get_or_create_stripe_customer(org)
-        domain = get_settings().DOMAIN
 
-        portal_session = await _create_portal_session_stripe(customer_id=customer_id, domain=domain)
+        portal_session = await _create_portal_session_stripe(
+            customer_id=customer_id, return_to=_billing_page_url(locale)
+        )
         return portal_session.url
 
     async def get_subscription(self, org_id: UUID) -> Subscription | None:
