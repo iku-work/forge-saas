@@ -327,10 +327,14 @@ describe("BillingSettingsPage duplicate-subscription guard", () => {
     // customer somewhere useful, not on an error banner.
     const assigned: string[] = [];
     const location = window.location;
+    // A hand-built stub rather than `{...location}`: Location is a class
+    // instance, so spreading it drops the prototype (and eslint's
+    // no-misused-spread rightly objects). The page only ever writes `href`.
     Object.defineProperty(window, "location", {
       configurable: true,
       value: {
-        ...location,
+        assign: (url: string) => assigned.push(url),
+        replace: (url: string) => assigned.push(url),
         set href(url: string) {
           assigned.push(url);
         },
@@ -344,7 +348,7 @@ describe("BillingSettingsPage duplicate-subscription guard", () => {
       http.get(`${API}/api/v1/billing/plans`, () =>
         HttpResponse.json(envelope([freePlan, proPlan])),
       ),
-      http.get(`${API}/api/v1/orgs/:orgId/subscription`, () =>
+      http.get(`${API}/api/v1/billing/subscription`, () =>
         HttpResponse.json(envelope(null)),
       ),
       http.post(`${API}/api/v1/billing/checkout-session`, () =>
@@ -366,7 +370,16 @@ describe("BillingSettingsPage duplicate-subscription guard", () => {
 
     renderPage();
 
-    const upgrade = (await screen.findAllByRole("button", { name: "Upgrade" }))[0];
+    // findAllBy + [0] is `HTMLElement | undefined` under
+    // noUncheckedIndexedAccess; assert on the list first so a page that
+    // renders no Upgrade button fails here rather than on a cryptic click.
+    const [upgrade] = await screen.findAllByRole("button", {
+      name: "Upgrade",
+    });
+    // Narrowed rather than asserted: noUncheckedIndexedAccess makes this
+    // `HTMLElement | undefined`, and a page that renders no Upgrade button
+    // should fail here with a sentence rather than on a cryptic click.
+    if (!upgrade) throw new Error("no Upgrade button rendered");
     await userEvent.click(upgrade);
 
     await waitFor(() => {
@@ -377,5 +390,77 @@ describe("BillingSettingsPage duplicate-subscription guard", () => {
       configurable: true,
       value: location,
     });
+  });
+});
+
+describe("BillingSettingsPage after a subscription is cancelled", () => {
+  beforeEach(() => {
+    hooks.useOrg.mockReturnValue({ org: fixtureOrg, isLoading: false });
+    hooks.usePermission.mockReturnValue(true);
+  });
+
+  it("shows Free and re-enables the plan button once the subscription is canceled", async () => {
+    // A cancelled row keeps pointing at the plan it used to grant. Deriving
+    // the badge from plan_id alone claimed "Pro" beside a status line
+    // reading "canceled", and disabled Pro's button as "Current plan" --
+    // stranding a customer who wanted to resubscribe on the one page built
+    // for exactly that.
+    server.use(
+      http.get(`${API}/api/v1/billing/plans`, () =>
+        HttpResponse.json(envelope([freePlan, proPlan])),
+      ),
+      http.get(`${API}/api/v1/billing/subscription`, () =>
+        HttpResponse.json(
+          envelope({
+            id: "77777777-7777-7777-7777-777777777777",
+            plan_id: proPlan.id,
+            status: "canceled",
+            current_period_start: "2026-09-12T08:13:07Z",
+            current_period_end: "2026-10-12T08:13:07Z",
+            cancel_at_period_end: false,
+            trial_end: null,
+          } satisfies SubscriptionPublic),
+        ),
+      ),
+    );
+
+    renderPage();
+
+    expect(await screen.findByTestId("billing-current-plan")).toHaveTextContent(
+      "Free",
+    );
+    expect(screen.getByTestId("billing-upgrade-pro")).toBeEnabled();
+    expect(screen.getByTestId("billing-upgrade-pro")).toHaveTextContent(
+      "Upgrade",
+    );
+  });
+
+  it("still shows the plan while a payment is being chased", async () => {
+    // past_due is live: the plan is still theirs during the grace period
+    // (_is_entitled), so the page must not tell them they are on Free.
+    server.use(
+      http.get(`${API}/api/v1/billing/plans`, () =>
+        HttpResponse.json(envelope([freePlan, proPlan])),
+      ),
+      http.get(`${API}/api/v1/billing/subscription`, () =>
+        HttpResponse.json(
+          envelope({
+            id: "88888888-8888-8888-8888-888888888888",
+            plan_id: proPlan.id,
+            status: "past_due",
+            current_period_start: "2026-09-12T08:13:07Z",
+            current_period_end: "2026-10-12T08:13:07Z",
+            cancel_at_period_end: false,
+            trial_end: null,
+          } satisfies SubscriptionPublic),
+        ),
+      ),
+    );
+
+    renderPage();
+
+    expect(await screen.findByTestId("billing-current-plan")).toHaveTextContent(
+      "Pro",
+    );
   });
 });
