@@ -1120,3 +1120,80 @@ async def test_an_event_with_no_created_is_still_applied(
     sub = await subscriptions.get_by_stripe_subscription_id("sub_nocreated")
     assert sub is not None
     assert sub.last_stripe_event_at is None
+
+
+# --- Basil moved the cancellation flag too -----------------------------------------------
+
+
+async def test_a_subscription_cancelling_at_period_end_is_recorded_as_such(
+    service: BillingService, session: AsyncSession, subscriptions: SubscriptionRepository
+) -> None:
+    """Under Basil the old flag stays False and `cancel_at` carries the truth.
+
+    Taken from two real production subscriptions on 2026-09-13, both
+    scheduled to stop on 2026-10-12: `cancel_at_period_end` was False on
+    each. Reading only that flag told a customer who had just cancelled that
+    their subscription would renew.
+    """
+    await _make_plan(session, price_id="price_pro")
+    payload = _subscription_event(
+        subscription_id="sub_ending",
+        status="active",
+        org_id=str(uuid4()),
+        price_id="price_pro",
+    )
+    payload["data"]["object"]["cancel_at_period_end"] = False
+    payload["data"]["object"]["cancel_at"] = _PERIOD_END
+
+    await service.handle_event(
+        WebhookEvent(id="evt_cancel_at", type="customer.subscription.updated", payload=payload)
+    )
+
+    sub = await subscriptions.get_by_stripe_subscription_id("sub_ending")
+    assert sub is not None
+    assert sub.cancel_at_period_end is True
+
+
+async def test_the_pre_basil_cancellation_flag_still_counts(
+    service: BillingService, session: AsyncSession, subscriptions: SubscriptionRepository
+) -> None:
+    await _make_plan(session, price_id="price_pro")
+    payload = _subscription_event(
+        subscription_id="sub_legacy_cancel",
+        status="active",
+        org_id=str(uuid4()),
+        price_id="price_pro",
+    )
+    payload["data"]["object"]["cancel_at_period_end"] = True
+
+    await service.handle_event(
+        WebhookEvent(id="evt_legacy_cancel", type="customer.subscription.updated", payload=payload)
+    )
+
+    sub = await subscriptions.get_by_stripe_subscription_id("sub_legacy_cancel")
+    assert sub is not None
+    assert sub.cancel_at_period_end is True
+
+
+async def test_a_renewing_subscription_is_not_marked_as_cancelling(
+    service: BillingService, session: AsyncSession, subscriptions: SubscriptionRepository
+) -> None:
+    """The guard against the obvious over-correction: `cancel_at` absent and
+    the flag false has to stay false, or every subscription reads as ending."""
+    await _make_plan(session, price_id="price_pro")
+    await service.handle_event(
+        WebhookEvent(
+            id="evt_renewing",
+            type="customer.subscription.updated",
+            payload=_subscription_event(
+                subscription_id="sub_renewing",
+                status="active",
+                org_id=str(uuid4()),
+                price_id="price_pro",
+            ),
+        )
+    )
+
+    sub = await subscriptions.get_by_stripe_subscription_id("sub_renewing")
+    assert sub is not None
+    assert sub.cancel_at_period_end is False
