@@ -94,6 +94,21 @@ class Subscription(UUIDPKMixin, TimestampMixin, SQLModel, table=True):
     # column, and every row the reconciler wrote (which reads current state
     # straight from the API and is therefore never stale).
     last_stripe_event_at: datetime | None = Field(default=None, sa_type=_TZ_DATETIME)  # type: ignore[call-overload]
+    # The same watermark for the *invoice* stream, kept separate on purpose.
+    #
+    # One shared watermark was wrong, and wrong in the direction that hurts:
+    # `customer.subscription.*` and `invoice.payment_*` describe different
+    # objects, so their `created` timestamps are not comparable. Creating a
+    # subscription whose first charge fails emits both within one second,
+    # and Stripe stamped the invoice failure a second *earlier* than the
+    # subscription record while delivering it second -- so the shared
+    # watermark rejected a perfectly valid payment failure as stale and
+    # dunning never started. Observed in production on 2026-09-13.
+    #
+    # Ordering is meaningful *within* each stream (a redelivered
+    # payment_failed must not undo a later payment_succeeded) and meaningless
+    # across them, which is exactly what two columns express.
+    last_invoice_event_at: datetime | None = Field(default=None, sa_type=_TZ_DATETIME)  # type: ignore[call-overload]
 
 
 class DunningCampaign(UUIDPKMixin, TimestampMixin, SQLModel, table=True):
