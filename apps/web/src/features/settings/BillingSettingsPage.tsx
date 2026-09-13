@@ -101,6 +101,13 @@ function redirectTo(url: string): void {
  * the responses FastAPI documents, so non-422 error bodies are `unknown`
  * here -- the same reason getErrorMessage sniffs the envelope by hand.
  */
+/**
+ * Subscription statuses Stripe still bills for -- the client-side twin of
+ * `_LIVE_SUBSCRIPTION_STATUSES` in app/modules/billing/service.py. Anything
+ * else (canceled, incomplete, incomplete_expired, unpaid) grants nothing.
+ */
+const LIVE_SUBSCRIPTION_STATUSES = new Set(["active", "trialing", "past_due"]);
+
 function portalUrlFromError(error: unknown): string | null {
   if (typeof error !== "object" || error === null || !("error" in error)) {
     return null;
@@ -207,8 +214,22 @@ export function BillingSettingsPage() {
   const usage = usageQuery.data?.data ?? [];
   const invoices =
     invoicesQuery.data?.pages.flatMap((page) => page.data ?? []) ?? [];
-  const currentPlan = subscription
-    ? (plans.find((plan) => plan.id === subscription.plan_id) ?? null)
+  // Only a subscription Stripe still bills for names the current plan. A
+  // cancelled row keeps pointing at the plan it used to grant, and deriving
+  // the badge from `plan_id` alone made the page claim "Pro" next to a
+  // status line reading "canceled" -- and, worse, disabled that plan's
+  // button as "Current plan", so a customer whose subscription had ended
+  // could not resubscribe from the one page built for it.
+  //
+  // `past_due` counts as live here on purpose, matching the server's
+  // _LIVE_SUBSCRIPTION_STATUSES and _is_entitled's grace period: the plan is
+  // still theirs while the payment is being chased.
+  const activeSubscription =
+    subscription && LIVE_SUBSCRIPTION_STATUSES.has(subscription.status)
+      ? subscription
+      : null;
+  const currentPlan = activeSubscription
+    ? (plans.find((plan) => plan.id === activeSubscription.plan_id) ?? null)
     : null;
 
   const handleUpgrade = async (planSlug: string): Promise<void> => {
