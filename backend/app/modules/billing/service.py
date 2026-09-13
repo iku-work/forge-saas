@@ -195,6 +195,14 @@ def _billing_page_url(locale: str | None) -> str:
     return frontend_url("/settings/billing", locale)
 
 
+# Which watermark column an event's ordering is judged against. Subscription
+# lifecycle events and invoice payment events are two independent streams;
+# see Subscription.last_invoice_event_at for what conflating them cost.
+_EventStream = Literal["last_stripe_event_at", "last_invoice_event_at"]
+_SUBSCRIPTION_STREAM: _EventStream = "last_stripe_event_at"
+_INVOICE_STREAM: _EventStream = "last_invoice_event_at"
+
+
 def _will_not_renew(obj: dict[str, Any]) -> bool:
     """Whether this Stripe Subscription is scheduled to stop.
 
@@ -254,12 +262,22 @@ class BillingService:
                 logger.info("billing.webhook_ignored: type=%s", event.type)
 
     async def _is_stale(
-        self, subscription: Subscription | None, event_created: datetime | None
+        self,
+        subscription: Subscription | None,
+        event_created: datetime | None,
+        stream: _EventStream,
     ) -> bool:
-        """True when this event describes a state older than the row already has.
+        """True when this event is older than what that stream already applied.
+
+        Compared only against its own stream. A subscription event and an
+        invoice event describe different objects, so their `created`
+        timestamps say nothing about each other -- comparing across the two
+        rejected a valid payment failure that Stripe happened to stamp one
+        second before the subscription record it arrived with, and dunning
+        silently never started.
 
         `event_created is None` means the caller has no ordering information
-        to offer -- an internal caller, or a fixture predating the column.
+        to offer -- an internal caller, or a fixture predating the columns.
         The reconciler passes `utcnow()` rather than None: its read *is*
         current state, so every event generated before it is older, and
         advancing the watermark is what stops a queued redelivery from
@@ -267,7 +285,7 @@ class BillingService:
         """
         if subscription is None or event_created is None:
             return False
-        last = subscription.last_stripe_event_at
+        last = cast("datetime | None", getattr(subscription, stream))
         if last is None or event_created >= last:
             return False
         await self._record_unapplied(
@@ -275,19 +293,21 @@ class BillingService:
             org_id=subscription.org_id,
             stripe_subscription_id=subscription.stripe_subscription_id,
             detail=(
-                f"event generated {event_created.isoformat()} is older than the "
-                f"state already applied from {last.isoformat()}"
+                f"{stream}: event generated {event_created.isoformat()} is older "
+                f"than the state already applied from {last.isoformat()}"
             ),
         )
         return True
 
     @staticmethod
-    def _mark_applied(subscription: Subscription, event_created: datetime | None) -> None:
-        if event_created is not None and (
-            subscription.last_stripe_event_at is None
-            or event_created > subscription.last_stripe_event_at
-        ):
-            subscription.last_stripe_event_at = event_created
+    def _mark_applied(
+        subscription: Subscription, event_created: datetime | None, stream: _EventStream
+    ) -> None:
+        if event_created is None:
+            return
+        last = cast("datetime | None", getattr(subscription, stream))
+        if last is None or event_created > last:
+            setattr(subscription, stream, event_created)
 
     async def _record_unapplied(
         self,
@@ -383,7 +403,7 @@ class BillingService:
         if (
             existing is not None
             and existing.stripe_subscription_id == obj["id"]
-            and await self._is_stale(existing, event_created)
+            and await self._is_stale(existing, event_created, _SUBSCRIPTION_STREAM)
         ):
             return
         if (
@@ -414,7 +434,7 @@ class BillingService:
             cancel_at_period_end=_will_not_renew(obj),
             trial_end=_epoch_to_datetime(obj.get("trial_end")),
         )
-        self._mark_applied(subscription, event_created)
+        self._mark_applied(subscription, event_created, _SUBSCRIPTION_STREAM)
         await self._flags.invalidate(org_uuid)
         # T-320. The one billing event worth publishing: a consumer that
         # provisions on plan change needs it, and everything else Stripe
@@ -434,14 +454,16 @@ class BillingService:
     ) -> None:
         obj = payload["data"]["object"]
         if await self._is_stale(
-            await self._subscriptions.get_by_stripe_subscription_id(obj["id"]), event_created
+            await self._subscriptions.get_by_stripe_subscription_id(obj["id"]),
+            event_created,
+            _SUBSCRIPTION_STREAM,
         ):
             return
         subscription = await self._subscriptions.set_status_by_stripe_subscription_id(
             obj["id"], "canceled"
         )
         if subscription is not None:
-            self._mark_applied(subscription, event_created)
+            self._mark_applied(subscription, event_created, _SUBSCRIPTION_STREAM)
             await self._dunning.cancel(subscription.id)
             await self._flags.invalidate(subscription.org_id)
 
@@ -455,13 +477,14 @@ class BillingService:
         if await self._is_stale(
             await self._subscriptions.get_by_stripe_subscription_id(subscription_id),
             event_created,
+            _INVOICE_STREAM,
         ):
             return
         subscription = await self._subscriptions.set_status_by_stripe_subscription_id(
             subscription_id, "active"
         )
         if subscription is not None:
-            self._mark_applied(subscription, event_created)
+            self._mark_applied(subscription, event_created, _INVOICE_STREAM)
             await self._dunning.complete(subscription.id)
             await self._flags.invalidate(subscription.org_id)
             await self._invoices.invalidate(subscription.org_id)
@@ -476,13 +499,14 @@ class BillingService:
         if await self._is_stale(
             await self._subscriptions.get_by_stripe_subscription_id(subscription_id),
             event_created,
+            _INVOICE_STREAM,
         ):
             return
         subscription = await self._subscriptions.set_status_by_stripe_subscription_id(
             subscription_id, "past_due"
         )
         if subscription is not None:
-            self._mark_applied(subscription, event_created)
+            self._mark_applied(subscription, event_created, _INVOICE_STREAM)
             await self._audit.log(
                 action="billing.payment_failed",
                 resource_type="subscription",

@@ -1197,3 +1197,94 @@ async def test_a_renewing_subscription_is_not_marked_as_cancelling(
     sub = await subscriptions.get_by_stripe_subscription_id("sub_renewing")
     assert sub is not None
     assert sub.cancel_at_period_end is False
+
+
+async def test_an_invoice_failure_stamped_before_its_subscription_still_applies(
+    service: BillingService,
+    session: AsyncSession,
+    subscriptions: SubscriptionRepository,
+    dunning_campaigns: DunningCampaignRepository,
+) -> None:
+    """The production regression: two streams, one watermark.
+
+    Creating a subscription whose first charge fails emits both events
+    inside one second, and on 2026-09-13 Stripe stamped the invoice failure
+    at 1789333759 and the subscription record at 1789333760 -- delivering
+    the subscription first. A single shared watermark then rejected the
+    payment failure as stale, so the subscription sat at `incomplete` and no
+    dunning campaign was ever started. Silently: 200 to Stripe, nothing at
+    ERROR.
+
+    The two `created` values describe different objects and say nothing
+    about each other, which is why each stream now has its own watermark.
+    """
+    await _make_plan(session, price_id="price_pro")
+    org_id = uuid4()
+    await service.handle_event(
+        WebhookEvent(
+            id="evt_sub_created",
+            type="customer.subscription.created",
+            payload=_with_created(
+                _subscription_event(
+                    subscription_id="sub_two_streams",
+                    status="incomplete",
+                    org_id=str(org_id),
+                    price_id="price_pro",
+                ),
+                1_789_333_760,
+            ),
+        )
+    )
+    await service.handle_event(
+        WebhookEvent(
+            id="evt_inv_failed",
+            type="invoice.payment_failed",
+            payload=_with_created(_invoice_event(subscription_id="sub_two_streams"), 1_789_333_759),
+        )
+    )
+
+    sub = await subscriptions.get_by_stripe_subscription_id("sub_two_streams")
+    assert sub is not None
+    assert sub.status == "past_due"
+    assert await dunning_campaigns.get_active_by_subscription_id(sub.id) is not None
+
+
+async def test_a_redelivered_invoice_failure_is_still_rejected(
+    service: BillingService, session: AsyncSession, subscriptions: SubscriptionRepository
+) -> None:
+    """Splitting the watermark must not lose the protection it was added for:
+    within the invoice stream, ordering still holds."""
+    await _make_plan(session, price_id="price_pro")
+    await service.handle_event(
+        WebhookEvent(
+            id="evt_s",
+            type="customer.subscription.created",
+            payload=_with_created(
+                _subscription_event(
+                    subscription_id="sub_same_stream",
+                    status="active",
+                    org_id=str(uuid4()),
+                    price_id="price_pro",
+                ),
+                _EARLIER,
+            ),
+        )
+    )
+    await service.handle_event(
+        WebhookEvent(
+            id="evt_ok",
+            type="invoice.payment_succeeded",
+            payload=_with_created(_invoice_event(subscription_id="sub_same_stream"), _LATER),
+        )
+    )
+    await service.handle_event(
+        WebhookEvent(
+            id="evt_retry",
+            type="invoice.payment_failed",
+            payload=_with_created(_invoice_event(subscription_id="sub_same_stream"), _EARLIER),
+        )
+    )
+
+    sub = await subscriptions.get_by_stripe_subscription_id("sub_same_stream")
+    assert sub is not None
+    assert sub.status == "active"
