@@ -195,6 +195,27 @@ def _billing_page_url(locale: str | None) -> str:
     return frontend_url("/settings/billing", locale)
 
 
+def _will_not_renew(obj: dict[str, Any]) -> bool:
+    """Whether this Stripe Subscription is scheduled to stop.
+
+    The third field Basil moved, and the one with a customer-visible lie in
+    it. Cancelling at period end used to set `cancel_at_period_end: true`;
+    under `2025-08-27.basil` that flag stays **False** and the truth lands in
+    `cancel_at`, the timestamp the subscription terminates at. Observed on
+    two real production subscriptions on 2026-09-13:
+
+        status               = active
+        cancel_at_period_end = False        <- reading only this says "renews"
+        cancel_at            = 2026-10-12   <- it does not
+        cancellation_details = {'reason': 'cancellation_requested'}
+
+    Reading the old flag alone told a customer who had just cancelled that
+    their subscription would renew. Either field means "will not renew", so
+    both are read -- which also keeps a pre-Basil account correct.
+    """
+    return bool(obj.get("cancel_at_period_end")) or obj.get("cancel_at") is not None
+
+
 def _event_created_at(payload: dict[str, Any]) -> datetime | None:
     """When Stripe generated this event, from the envelope's own `created`."""
     return _epoch_to_datetime(payload.get("created"))
@@ -390,7 +411,7 @@ class BillingService:
             status=obj["status"],
             current_period_start=cast("datetime", _epoch_to_datetime(period_start)),
             current_period_end=cast("datetime", _epoch_to_datetime(period_end)),
-            cancel_at_period_end=obj.get("cancel_at_period_end", False),
+            cancel_at_period_end=_will_not_renew(obj),
             trial_end=_epoch_to_datetime(obj.get("trial_end")),
         )
         self._mark_applied(subscription, event_created)
