@@ -374,3 +374,39 @@ async def test_checkout_allowed_when_the_existing_subscription_is_not_live(
         await service.create_checkout_session(org, plan.slug, "monthly")
         == "https://checkout.stripe.com/again"
     )
+
+
+async def test_the_refusal_survives_stripe_being_unavailable(
+    service: BillingService,
+    session: AsyncSession,
+    org: Organization,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A refusal is a fact about local state; it must not need a network call.
+
+    The 409's `details` used to be built by awaiting create_portal_session
+    inline, so with Stripe unreachable the guard raised instead of returning
+    -- and an org with a live subscription got a 500 rather than "you already
+    have one". Found by an e2e run against a stack whose Stripe key is a
+    dummy, where that is the *normal* case rather than an outage.
+    """
+    plan = await _make_plan(session)
+    await _give_org_a_subscription(session, org, plan, "active")
+
+    async def _customer_create(**_kwargs: object) -> _FakeCustomer:
+        return _FakeCustomer("cus_1")
+
+    monkeypatch.setattr(stripe.Customer, "create_async", _customer_create)
+
+    async def _portal_is_down(**_kwargs: object) -> _FakePortalSession:
+        raise stripe.APIConnectionError("stripe is unreachable")
+
+    monkeypatch.setattr(stripe.billing_portal.Session, "create_async", _portal_is_down)
+
+    with pytest.raises(ConflictError) as excinfo:
+        await service.create_checkout_session(org, plan.slug, "monthly")
+
+    # Still a 409, still the right message key -- only the convenience link
+    # is missing.
+    assert excinfo.value.message_key == "errors.subscription_already_active"
+    assert excinfo.value.details is None

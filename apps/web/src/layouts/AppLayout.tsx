@@ -263,6 +263,7 @@ function OrgSwitcher() {
         <DropdownMenuTrigger asChild>
           <button
             type="button"
+            data-testid="org-switcher-trigger"
             className="flex w-full items-center justify-between gap-2 rounded-md border px-3 py-2 text-sm font-medium"
             disabled={isLoading}
           >
@@ -296,6 +297,7 @@ function OrgSwitcher() {
           ))}
           <DropdownMenuSeparator />
           <DropdownMenuItem
+            data-testid="org-switcher-create"
             onSelect={() => {
               setCreateOpen(true);
             }}
