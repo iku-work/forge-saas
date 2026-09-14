@@ -1,0 +1,76 @@
+name: Deploy preflight
+description: >-
+  Everything that must happen before any platform switches traffic: pull the
+  scanned image, materialise the production env, refuse an unsafe one, and
+  migrate the database from that same image.
+
+# Extracted so the three deploy workflows cannot drift from each other. The
+# migration step in particular is the one that must never differ: it runs the
+# image that is about to serve traffic, so what migrated the schema is
+# byte-for-byte what will read it.
+
+inputs:
+  image:
+    description: Fully qualified image ref, including tag.
+    required: true
+  prod-env-file:
+    description: >-
+      The complete production .env, passed from the calling workflow's
+      secrets. Composite actions cannot read `secrets` themselves.
+    required: true
+  registry-username:
+    description: GHCR username.
+    required: true
+  registry-password:
+    description: GHCR token.
+    required: true
+
+outputs:
+  env-file:
+    description: Path to the materialised env file, for later steps.
+    value: ${{ steps.write-env.outputs.path }}
+
+runs:
+  using: composite
+  steps:
+    - name: Log in to GHCR
+      uses: docker/login-action@v3
+      with:
+        registry: ghcr.io
+        username: ${{ inputs.registry-username }}
+        password: ${{ inputs.registry-password }}
+
+    - name: Write production .env
+      id: write-env
+      shell: bash
+      # Settings() validates every required field at import, not just
+      # DATABASE_URL, so the whole file has to be present before the
+      # migration below can even start.
+      run: |
+        printf '%s' "${{ inputs.prod-env-file }}" > prod.env
+        echo "path=prod.env" >> "$GITHUB_OUTPUT"
+        if [ ! -s prod.env ]; then
+          echo "PROD_ENV_FILE is empty -- refusing to deploy." >&2
+          exit 1
+        fi
+
+    # T-225/ASVS V12.4.2: app.core.config.Settings already refuses to boot
+    # with VIRUS_SCANNER=noop outside dev, but that failure would only
+    # surface as a crash-looping service *after* the deploy. Catching it here
+    # fails fast, before migrations run, against the exact env file the
+    # deploy is about to ship.
+    - name: Guard against VIRUS_SCANNER=noop in production
+      shell: bash
+      run: |
+        if grep -qE '^VIRUS_SCANNER=noop$' prod.env; then
+          echo "PROD_ENV_FILE sets VIRUS_SCANNER=noop -- uploaded files would never be scanned. Refusing to deploy." >&2
+          exit 1
+        fi
+
+    # Never reinstalled from source: the image that migrates is the image
+    # that deploys. `python -m app.core.migrations`, never `alembic upgrade
+    # head` -- this schema has branched module heads and `head` (singular)
+    # could never have succeeded against it.
+    - name: Run migrations against the production database
+      shell: bash
+      run: docker run --rm --env-file prod.env "${{ inputs.image }}" python -m app.core.migrations

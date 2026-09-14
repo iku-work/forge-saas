@@ -1,0 +1,166 @@
+name: Deploy — AWS (ECS Fargate)
+
+# The image built and scanned by ci.yml, re-tagged into ECR and rolled onto
+# an existing ECS service.
+#
+# What this workflow does NOT do, and must not be mistaken for: create the
+# infrastructure. There is no Terraform or CDK in this repo, so the cluster,
+# services, task definitions, load balancer, RDS instance, ElastiCache and S3
+# bucket all have to exist already. This is the deploy half only. If you are
+# starting from nothing on AWS, stand that up first -- and prefer RDS and
+# ElastiCache over running Postgres and Redis as tasks, which the compose
+# file does only because a single VPS has no managed alternative.
+#
+# Authentication is OIDC rather than an access key pair. GitHub mints a
+# short-lived token per run and AWS trusts the repository, so there is no
+# long-lived secret to leak or rotate. It is a little more setup once (an IAM
+# role with a trust policy naming this repo) and strictly less risk forever.
+# AWS_ROLE_ARN is therefore a *variable*, not a secret -- it is not one.
+#
+# Configuration:
+#   vars.AWS_ROLE_ARN         IAM role for this repo to assume
+#   vars.AWS_REGION           e.g. eu-north-1
+#   vars.ECR_REPOSITORY       e.g. forge-saas
+#   vars.ECS_CLUSTER          cluster name
+#   vars.ECS_BACKEND_SERVICE  service running the API
+#   vars.ECS_WORKER_SERVICE   service running the arq worker
+#   secrets.PROD_ENV_FILE     the complete backend/.env, for migrations
+#   secrets.PROD_DOMAIN       for the smoke test
+#
+# The frontend is not deployed here. On AWS the sensible home for the bundle
+# is S3 + CloudFront, not a container -- so that is its own step to add when
+# the infrastructure exists, rather than a Caddy image pretending to be a CDN.
+
+on:
+  workflow_call:
+    inputs:
+      image-tag:
+        description: Tag of the already-built, already-scanned GHCR image.
+        required: true
+        type: string
+  workflow_dispatch:
+    inputs:
+      image-tag:
+        description: Commit SHA to deploy (must already be built and pushed).
+        required: true
+        type: string
+
+concurrency:
+  group: deploy-aws
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: production
+
+    permissions:
+      contents: read
+      packages: read
+      # Required for OIDC: without it the role assumption below fails with a
+      # credentials error that reads like a policy problem.
+      id-token: write
+
+    env:
+      GHCR_IMAGE: ghcr.io/${{ github.repository }}:${{ inputs.image-tag }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Preflight — env, guards, migrations
+        uses: ./.github/actions/deploy-preflight
+        with:
+          image: ${{ env.GHCR_IMAGE }}
+          prod-env-file: ${{ secrets.PROD_ENV_FILE }}
+          registry-username: ${{ github.actor }}
+          registry-password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Assume the deploy role
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      - name: Log in to ECR
+        id: ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      # Re-tagged, never rebuilt. Rebuilding for a second registry would ship
+      # bytes that nothing scanned, and the two images would drift the first
+      # time a base layer moved.
+      - name: Copy the scanned image into ECR
+        id: push
+        run: |
+          ECR_IMAGE="${{ steps.ecr.outputs.registry }}/${{ vars.ECR_REPOSITORY }}:${{ inputs.image-tag }}"
+          docker pull "$GHCR_IMAGE"
+          docker tag "$GHCR_IMAGE" "$ECR_IMAGE"
+          docker push "$ECR_IMAGE"
+          echo "image=$ECR_IMAGE" >> "$GITHUB_OUTPUT"
+
+      - name: Record the running task definition (rollback target)
+        id: previous
+        run: |
+          ARN=$(aws ecs describe-services \
+            --cluster "${{ vars.ECS_CLUSTER }}" \
+            --services "${{ vars.ECS_BACKEND_SERVICE }}" \
+            --query 'services[0].taskDefinition' --output text)
+          echo "task_definition=$ARN" >> "$GITHUB_OUTPUT"
+          echo "currently running: $ARN"
+
+      - name: Render the backend task definition
+        id: backend-task
+        uses: aws-actions/amazon-ecs-render-task-definition@v1
+        with:
+          task-definition-family: ${{ vars.ECS_BACKEND_SERVICE }}
+          container-name: backend
+          image: ${{ steps.push.outputs.image }}
+
+      # wait-for-service-stability is what makes this a gate rather than a
+      # fire-and-forget: ECS keeps the old tasks serving until the new ones
+      # pass their health checks, and this blocks until that resolves either
+      # way.
+      - name: Deploy the backend service
+        id: deploy-backend
+        uses: aws-actions/amazon-ecs-deploy-task-definition@v2
+        with:
+          task-definition: ${{ steps.backend-task.outputs.task-definition }}
+          service: ${{ vars.ECS_BACKEND_SERVICE }}
+          cluster: ${{ vars.ECS_CLUSTER }}
+          wait-for-service-stability: true
+
+      - name: Render the worker task definition
+        id: worker-task
+        uses: aws-actions/amazon-ecs-render-task-definition@v1
+        with:
+          task-definition-family: ${{ vars.ECS_WORKER_SERVICE }}
+          container-name: worker
+          image: ${{ steps.push.outputs.image }}
+
+      - name: Deploy the worker service
+        uses: aws-actions/amazon-ecs-deploy-task-definition@v2
+        with:
+          task-definition: ${{ steps.worker-task.outputs.task-definition }}
+          service: ${{ vars.ECS_WORKER_SERVICE }}
+          cluster: ${{ vars.ECS_CLUSTER }}
+          wait-for-service-stability: true
+
+      - name: Smoke test
+        id: smoke_test
+        run: curl -sf "https://${{ secrets.PROD_DOMAIN }}/health/ready"
+
+      # Only the tasks move backwards; the database does not. A migration
+      # that has applied stays applied, which is why they have to work
+      # against the previous release too.
+      - name: Roll back to the previous task definition
+        if: failure() && steps.deploy-backend.outcome == 'success'
+        run: |
+          aws ecs update-service \
+            --cluster "${{ vars.ECS_CLUSTER }}" \
+            --service "${{ vars.ECS_BACKEND_SERVICE }}" \
+            --task-definition "${{ steps.previous.outputs.task_definition }}" \
+            --force-new-deployment
+          aws ecs wait services-stable \
+            --cluster "${{ vars.ECS_CLUSTER }}" \
+            --services "${{ vars.ECS_BACKEND_SERVICE }}"
+          echo "rolled back to ${{ steps.previous.outputs.task_definition }}" >&2

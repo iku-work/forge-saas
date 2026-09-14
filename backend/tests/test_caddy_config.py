@@ -104,10 +104,30 @@ def test_dev_compose_mounts_marketing_next_to_the_spa() -> None:
     assert "- ./apps/web/dist:/srv/web:ro" in content
 
 
-def test_prod_compose_mounts_the_production_marketing_block() -> None:
-    content = _compose("docker-compose.prod.yml")
-    assert "- ./apps/marketing/dist:/srv/marketing:ro" in content
-    assert "- ./apps/marketing/caddy/prod:/etc/caddy/conf.d:ro" in content
+def test_the_marketing_block_reaches_caddy_by_both_supported_routes() -> None:
+    """Marketing's site block and its dist have to arrive somehow, and since
+    2026-09-14 there are two ways.
+
+    The mounts moved out of docker-compose.prod.yml because compose merges
+    `volumes` by appending: an overlay cannot remove a base mount, so a
+    leftover bind of ./apps/marketing/dist would shadow the copy baked into
+    the edge image. Both routes are asserted here rather than only the one
+    this deployment happens to use -- the other is exactly the sort of thing
+    that rots unnoticed.
+    """
+    host_build = _compose("docker-compose.host-build.yml")
+    assert "- ./apps/marketing/dist:/srv/marketing:ro" in host_build
+    assert "- ./apps/marketing/caddy/prod:/etc/caddy/conf.d:ro" in host_build
+
+    # The registry route bakes the same two paths into the image instead.
+    dockerfile = (REPO_ROOT / "Dockerfile.caddy").read_text(encoding="utf-8")
+    assert "/repo/apps/marketing/dist /srv/marketing" in dockerfile
+    assert "/repo/apps/marketing/caddy/prod /etc/caddy/conf.d" in dockerfile
+
+    # And the base file must carry neither, or it would shadow them.
+    base = _compose("docker-compose.prod.yml")
+    assert "/srv/marketing" not in base
+    assert "/etc/caddy/conf.d" not in base
 
 
 def test_marketing_domain_is_declared_and_never_blank() -> None:

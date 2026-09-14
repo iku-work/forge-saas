@@ -106,7 +106,7 @@ services:
       # never actually build.
       context: .
       dockerfile: backend/Dockerfile
-    image: forge-saas-backend
+    image: ${BACKEND_IMAGE:-forge-saas-backend}
     restart: unless-stopped
     env_file:
       - ./backend/.env
@@ -129,7 +129,7 @@ services:
     build:
       context: .
       dockerfile: backend/Dockerfile
-    image: forge-saas-backend
+    image: ${BACKEND_IMAGE:-forge-saas-backend}
     restart: unless-stopped
     env_file:
       - ./backend/.env
@@ -228,24 +228,28 @@ services:
       - forge-net
 
   caddy:
-    image: caddy:2-alpine
+    # The edge image, and the *only* thing that decides what the browser
+    # gets. Two ways to supply it, and you must pick one -- the base file
+    # alone gives an edge with no site in it:
+    #
+    #   docker-compose.registry.yml    a prebuilt image with the bundle baked
+    #                                  in (CI builds and pushes it). Nothing
+    #                                  is built on the host.
+    #   docker-compose.host-build.yml  the old arrangement: plain caddy:alpine
+    #                                  plus bind mounts of a `pnpm build` run
+    #                                  on the host.
+    #
+    # The mounts had to leave this file rather than be overridden, because
+    # compose merges `volumes` by appending: an overlay cannot remove a base
+    # mount, and a leftover bind of ./apps/web/dist would shadow the bundle
+    # inside the image with whatever happened to be on disk. Measured with
+    # `docker compose config`, not assumed.
+    image: ${CADDY_IMAGE:-caddy:2-alpine}
     restart: unless-stopped
     env_file:
       - ./backend/.env
     volumes:
-      - ./Caddyfile.prod:/etc/caddy/Caddyfile
       - caddy_data:/data
-      # apps/web's built output, produced on the host by `pnpm build` before
-      # this stack comes up -- the same requirement apps/marketing/dist below
-      # already has. Nothing served the SPA in production before this.
-      - ./apps/web/dist:/srv/web:ro
-      # T-307: apps/marketing's built output and the site block that serves
-      # it, both produced on the host by `pnpm build` before this stack comes
-      # up. Read-only, and both absent when `modules.marketing` is false --
-      # the Caddyfile imports the directory as a glob, so an empty one leaves
-      # the app's own block above untouched.
-      - ./apps/marketing/dist:/srv/marketing:ro
-      - ./apps/marketing/caddy/prod:/etc/caddy/conf.d:ro
     ports:
       - "80:80"
       - "443:443"

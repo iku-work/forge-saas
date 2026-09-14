@@ -1,0 +1,30 @@
+# The pre-2026-09-14 arrangement: Caddy serves a bundle built on the host.
+#
+# Kept working so an operator who has not moved to registry images is not
+# stranded, and so `make dev`-style local prod checks still have a path. It
+# is the legacy option, and it carries the two failure modes that motivated
+# the change:
+#
+#   - the host builds, so Docker build cache grows there. On a 38 GB disk it
+#     reached 30 GB and took Postgres down mid-write on 2026-09-13.
+#   - `rm -rf apps/web/dist` before a rebuild leaves this running container
+#     holding a deleted directory, and every page 404s until it is recreated.
+#
+# Prefer docker-compose.registry.yml. Usage:
+#
+#   docker compose -f docker-compose.prod.yml \
+#                  -f docker-compose.tls.yml \
+#                  -f docker-compose.host-build.yml up -d
+services:
+  caddy:
+    volumes:
+      - ./Caddyfile.prod:/etc/caddy/Caddyfile
+      # apps/web's built output, produced on the host by `pnpm build` before
+      # this stack comes up.
+      - ./apps/web/dist:/srv/web:ro
+      # T-307: apps/marketing's built output and the site block that serves
+      # it. Both absent when `modules.marketing` is false -- the Caddyfile
+      # imports the directory as a glob, so an empty one leaves the app's own
+      # block untouched.
+      - ./apps/marketing/dist:/srv/marketing:ro
+      - ./apps/marketing/caddy/prod:/etc/caddy/conf.d:ro
