@@ -42,6 +42,38 @@ class Settings(BaseSettings):
     # Auth
     JWT_PRIVATE_KEY: str
     JWT_PUBLIC_KEY: str
+    # The public half of the keypair being rotated *away* from. Access tokens
+    # are verified against the current key first and this one second, so a
+    # keypair rotation stops signing everyone out mid-request. Signing always
+    # uses JWT_PRIVATE_KEY; there is deliberately no old *private* key,
+    # because nothing should still be minting tokens with a retired one.
+    #
+    # Clear it once ACCESS_TOKEN_EXPIRE_MINUTES has elapsed -- after that no
+    # token signed by the old key can still be valid.
+    JWT_PUBLIC_KEY_OLD: str = ""
+
+    # Signing secret for the tokens that travel in URLs and emails: email
+    # verification, password reset, magic links, email-change confirm/cancel,
+    # the OAuth `state` parameter and the 2FA challenge token.
+    #
+    # Blank means "use JWT_PRIVATE_KEY", which is what these tokens were
+    # always signed with -- app.modules.auth.utils._url_token_serializer
+    # borrowed it for want of a dedicated field. That coupling is why
+    # rotating the JWT keypair silently invalidated every link a user had
+    # been emailed, which is a far larger blast radius than the 15-minute
+    # access tokens the name suggests.
+    #
+    # Setting it separates the two, so each can be rotated without touching
+    # the other. See docs/runbooks/credential-rotation.md for the migration,
+    # which is not automatic on purpose: switching to a dedicated secret
+    # would otherwise invalidate every link in flight at the moment of
+    # deploy.
+    URL_TOKEN_SECRET: str = ""
+    # The previous URL_TOKEN_SECRET. itsdangerous verifies against every key
+    # it is given and signs with the last, so both stay valid during a
+    # rotation. Keep it for at least the longest token TTL -- 24 hours, the
+    # email-verification link -- then clear it.
+    URL_TOKEN_SECRET_OLD: str = ""
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 15
     # T-218/ASVS V3.3.2: REFRESH_TOKEN_EXPIRE_DAYS is now the *absolute* cap on
     # a session chain's lifetime, anchored to the original login
@@ -322,6 +354,23 @@ class Settings(BaseSettings):
     # Vault/HSM-held storage of this value is intentionally out of scope —
     # see docs/adr/0001-security-baseline.md's V2.4.5 row.
     PASSWORD_PEPPER: str = ""
+    # The pepper being rotated *away* from. Set it for as long as it takes
+    # logins to drain, then clear it.
+    #
+    # Named for its sibling ENCRYPTION_KEY_OLD, and it works the same way:
+    # verification falls back to it, and every successful login re-hashes
+    # that user's password with the current pepper (see
+    # app.modules.auth.utils.check_password). The difference is that nothing
+    # sweeps the table in the background -- a password cannot be re-hashed
+    # without the plaintext, which only the user has, so rows migrate as
+    # people sign in and never all at once. Accounts that never log in again
+    # keep their old hash, which is why this is cleared on a judgement call
+    # about login volume rather than on a completion signal.
+    #
+    # Blank is the normal state, and blank means the fallback is skipped
+    # entirely: while it is set, a *wrong* password costs two Argon2
+    # verifications instead of one.
+    PASSWORD_PEPPER_OLD: str = ""
 
     @field_validator("MIGRATIONS_DATABASE_URL", "READ_REPLICA_URL", mode="before")
     @classmethod

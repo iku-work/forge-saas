@@ -3,12 +3,15 @@ from uuid import UUID, uuid4
 
 import pytest
 from argon2.exceptions import InvalidHashError
+from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives.asymmetric import rsa
 from jose import jwt
 
 from app.core.config import get_settings
 from app.core.exceptions import AuthenticationError
 from app.modules.auth.utils import (
     AccessTokenPayload,
+    check_password,
     create_access_token,
     generate_refresh_token,
     hash_password,
@@ -41,6 +44,26 @@ def test_verify_password_raises_on_corrupt_hash_format() -> None:
         verify_password("anything", "not-an-argon2-hash")
 
 
+def _generate_rsa_keypair() -> tuple[str, str]:
+    """A throwaway keypair for rotation tests. 2048-bit: these are generated
+    per test and the suite runs on every push, so key size is wall time."""
+    key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    private = key.private_bytes(
+        encoding=serialization.Encoding.PEM,
+        format=serialization.PrivateFormat.PKCS8,
+        encryption_algorithm=serialization.NoEncryption(),
+    ).decode()
+    public = (
+        key.public_key()
+        .public_bytes(
+            encoding=serialization.Encoding.PEM,
+            format=serialization.PublicFormat.SubjectPublicKeyInfo,
+        )
+        .decode()
+    )
+    return private, public
+
+
 @pytest.mark.owasp("A02")
 def test_verify_password_fails_when_pepper_changes(monkeypatch: pytest.MonkeyPatch) -> None:
     # T-225/ASVS V2.4.5: proves PASSWORD_PEPPER is actually mixed into the
@@ -48,6 +71,10 @@ def test_verify_password_fails_when_pepper_changes(monkeypatch: pytest.MonkeyPat
     # one pepper must not verify under a different one.
     settings = get_settings()
     monkeypatch.setattr(settings, "PASSWORD_PEPPER", "pepper-a")
+    # Explicit: with PASSWORD_PEPPER_OLD set this would (correctly) verify --
+    # that is the rotation path, covered below. This asserts the pepper is
+    # load-bearing, so the fallback has to be off for it to mean anything.
+    monkeypatch.setattr(settings, "PASSWORD_PEPPER_OLD", "")
     hashed = hash_password("correct horse battery staple")
 
     monkeypatch.setattr(settings, "PASSWORD_PEPPER", "pepper-b")
@@ -227,3 +254,147 @@ def test_tampered_url_token_raises_authentication_error() -> None:
 
     with pytest.raises(AuthenticationError):
         verify_url_token(tampered, max_age=3600)
+
+
+# ---------------------------------------------------------------------------
+# Pepper rotation (PASSWORD_PEPPER_OLD).
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.owasp("A02")
+def test_a_password_hashed_under_the_previous_pepper_still_verifies(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The whole point of the fallback.
+
+    Without it PASSWORD_PEPPER could not be rotated at all: changing it made
+    every stored password fail to verify, indistinguishably from a wrong
+    password, and the only remedy was forcing a reset on every user.
+    """
+    settings = get_settings()
+    monkeypatch.setattr(settings, "PASSWORD_PEPPER", "pepper-a")
+    monkeypatch.setattr(settings, "PASSWORD_PEPPER_OLD", "")
+    hashed = hash_password("correct horse battery staple")
+
+    monkeypatch.setattr(settings, "PASSWORD_PEPPER", "pepper-b")
+    monkeypatch.setattr(settings, "PASSWORD_PEPPER_OLD", "pepper-a")
+
+    result = check_password("correct horse battery staple", hashed)
+    assert result.ok is True
+    # ...and the caller is told to rewrite it, which is what ends the
+    # rotation rather than leaving the fallback load-bearing forever.
+    assert result.needs_rehash is True
+
+
+@pytest.mark.owasp("A02")
+def test_the_wrong_password_is_still_wrong_under_both_peppers(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # The obvious way to break this: a fallback that turns into "accept
+    # anything" because the second attempt's failure is swallowed.
+    settings = get_settings()
+    monkeypatch.setattr(settings, "PASSWORD_PEPPER", "pepper-a")
+    monkeypatch.setattr(settings, "PASSWORD_PEPPER_OLD", "")
+    hashed = hash_password("correct horse battery staple")
+
+    monkeypatch.setattr(settings, "PASSWORD_PEPPER", "pepper-b")
+    monkeypatch.setattr(settings, "PASSWORD_PEPPER_OLD", "pepper-a")
+
+    assert check_password("not the password", hashed).ok is False
+
+
+def test_a_current_pepper_hash_needs_no_rehash(monkeypatch: pytest.MonkeyPatch) -> None:
+    settings = get_settings()
+    monkeypatch.setattr(settings, "PASSWORD_PEPPER", "pepper-a")
+    monkeypatch.setattr(settings, "PASSWORD_PEPPER_OLD", "pepper-z")
+    hashed = hash_password("correct horse battery staple")
+
+    result = check_password("correct horse battery staple", hashed)
+    assert result.ok is True
+    assert result.needs_rehash is False
+
+
+# ---------------------------------------------------------------------------
+# Token-signing rotation: JWT_PUBLIC_KEY_OLD and URL_TOKEN_SECRET(_OLD).
+# ---------------------------------------------------------------------------
+
+
+def test_url_tokens_still_use_the_jwt_key_when_no_dedicated_secret_is_set(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The default has to stay exactly what it was.
+
+    Every deployment predating URL_TOKEN_SECRET has links in flight signed
+    with JWT_PRIVATE_KEY; adopting a dedicated secret silently would
+    invalidate all of them at the moment of deploy.
+    """
+    settings = get_settings()
+    monkeypatch.setattr(settings, "URL_TOKEN_SECRET", "")
+    monkeypatch.setattr(settings, "URL_TOKEN_SECRET_OLD", "")
+
+    token = sign_url_token({"purpose": "test"}, 60)
+    assert verify_url_token(token, 60) == {"purpose": "test"}
+
+
+def test_a_url_token_survives_rotating_its_secret(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The point of the change: an emailed link outlives the rotation.
+
+    Email verification links last 24 hours, so a rotation without overlap
+    breaks every one issued in the previous day -- password resets included.
+    """
+    settings = get_settings()
+    monkeypatch.setattr(settings, "URL_TOKEN_SECRET", "secret-one")
+    monkeypatch.setattr(settings, "URL_TOKEN_SECRET_OLD", "")
+    issued_before = sign_url_token({"purpose": "reset"}, 3600)
+
+    monkeypatch.setattr(settings, "URL_TOKEN_SECRET", "secret-two")
+    monkeypatch.setattr(settings, "URL_TOKEN_SECRET_OLD", "secret-one")
+
+    assert verify_url_token(issued_before, 3600) == {"purpose": "reset"}
+    # And new links are signed with the new secret, so clearing the old one
+    # later does not strand them.
+    issued_after = sign_url_token({"purpose": "reset"}, 3600)
+    monkeypatch.setattr(settings, "URL_TOKEN_SECRET_OLD", "")
+    assert verify_url_token(issued_after, 3600) == {"purpose": "reset"}
+
+
+@pytest.mark.owasp("A02")
+def test_a_url_token_signed_with_an_unrelated_secret_is_rejected(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # The over-correction guard: accepting a list of keys must not become
+    # accepting anything.
+    settings = get_settings()
+    monkeypatch.setattr(settings, "URL_TOKEN_SECRET", "attacker-secret")
+    monkeypatch.setattr(settings, "URL_TOKEN_SECRET_OLD", "")
+    forged = sign_url_token({"purpose": "reset"}, 3600)
+
+    monkeypatch.setattr(settings, "URL_TOKEN_SECRET", "real-secret")
+    monkeypatch.setattr(settings, "URL_TOKEN_SECRET_OLD", "previous-real-secret")
+
+    with pytest.raises(AuthenticationError):
+        verify_url_token(forged, 3600)
+
+
+def test_an_access_token_survives_rotating_the_keypair(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Verify-side overlap, so a keypair rotation does not reject every
+    token minted in the preceding 15 minutes at once."""
+    settings = get_settings()
+    old_public = settings.JWT_PUBLIC_KEY
+    token = create_access_token(uuid4(), None, [])
+
+    # Rotate to a different keypair, keeping the old public half for
+    # verification only.
+    new_private, new_public = _generate_rsa_keypair()
+    monkeypatch.setattr(settings, "JWT_PRIVATE_KEY", new_private)
+    monkeypatch.setattr(settings, "JWT_PUBLIC_KEY", new_public)
+    monkeypatch.setattr(settings, "JWT_PUBLIC_KEY_OLD", old_public)
+
+    assert verify_access_token(token).user_id is not None
+
+    # ...and once the old public key is dropped, it stops being accepted.
+    monkeypatch.setattr(settings, "JWT_PUBLIC_KEY_OLD", "")
+    with pytest.raises(AuthenticationError):
+        verify_access_token(token)

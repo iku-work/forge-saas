@@ -19,6 +19,7 @@ from sqlalchemy.ext.asyncio import (
 from sqlmodel import SQLModel
 from testcontainers.postgres import PostgresContainer
 
+from app.core.config import get_settings
 from app.core.exceptions import AuthenticationError
 from app.modules.audit.models import AuditEvent
 from app.modules.auth.models import Session as SessionModel
@@ -26,7 +27,7 @@ from app.modules.auth.models import User, WebAuthnCredential
 from app.modules.auth.repository import SessionRepository, UserRepository
 from app.modules.auth.schemas import LoginRequest
 from app.modules.auth.service import AuthService
-from app.modules.auth.utils import hash_password
+from app.modules.auth.utils import hash_password, verify_password
 from tests._module_tables import with_module_hot_path_tables
 
 # Wrapped rather than listed: an enabled optional module reaches for tables
@@ -337,3 +338,65 @@ async def test_login_oauth_only_account_rejected(
         await service.login(
             LoginRequest(email="oauth@example.com", password=_VALID_PASSWORD), _IP, _USER_AGENT
         )
+
+
+# --- pepper rotation -----------------------------------------------------------
+
+
+async def test_login_rehashes_a_password_stored_under_the_previous_pepper(
+    service: AuthService,
+    user_repo: UserRepository,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Rotation has to *finish*, not just not break.
+
+    The fallback in check_password keeps everyone able to log in while
+    PASSWORD_PEPPER_OLD is set. This is what lets it be unset again: the one
+    moment the plaintext exists is a successful login, so that is when the
+    row moves forward. Nothing can sweep the table in the background --
+    re-hashing needs the password, which only the user has.
+    """
+    settings = get_settings()
+    monkeypatch.setattr(settings, "PASSWORD_PEPPER", "pepper-old")
+    monkeypatch.setattr(settings, "PASSWORD_PEPPER_OLD", "")
+    user = await user_repo.create(
+        email="rotating@example.com",
+        hashed_password=hash_password(_VALID_PASSWORD),
+        email_verified_at=datetime.now(UTC),
+    )
+    stored_before = user.hashed_password
+
+    # The rotation itself.
+    monkeypatch.setattr(settings, "PASSWORD_PEPPER", "pepper-new")
+    monkeypatch.setattr(settings, "PASSWORD_PEPPER_OLD", "pepper-old")
+
+    await service.login(
+        LoginRequest(email="rotating@example.com", password=_VALID_PASSWORD), _IP, _USER_AGENT
+    )
+
+    refreshed = await user_repo.get_by_id(user.id)
+    assert refreshed is not None
+    assert refreshed.hashed_password != stored_before, "the stored hash should be rewritten"
+
+    # The real assertion: it now verifies with the fallback switched off,
+    # which is the state the operator is trying to reach.
+    monkeypatch.setattr(settings, "PASSWORD_PEPPER_OLD", "")
+    assert verify_password(_VALID_PASSWORD, refreshed.hashed_password or "") is True
+
+
+async def test_login_leaves_an_up_to_date_hash_alone(
+    service: AuthService,
+    verified_user: User,
+    user_repo: UserRepository,
+) -> None:
+    # The over-correction guard: rewriting on every login would burn an
+    # Argon2 hash per request for no reason, and churn the row.
+    before = verified_user.hashed_password
+
+    await service.login(
+        LoginRequest(email="alice@example.com", password=_VALID_PASSWORD), _IP, _USER_AGENT
+    )
+
+    refreshed = await user_repo.get_by_id(verified_user.id)
+    assert refreshed is not None
+    assert refreshed.hashed_password == before

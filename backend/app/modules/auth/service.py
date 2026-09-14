@@ -61,6 +61,8 @@ from app.modules.auth.repository import (
 )
 from app.modules.auth.schemas import LoginRequest, OAuthProfile, RegisterRequest
 from app.modules.auth.utils import (
+    PasswordCheck,
+    check_password,
     create_access_token,
     generate_refresh_token,
     hash_password,
@@ -112,6 +114,16 @@ async def _hash_password_off_loop(plain: str) -> str:
 
 async def _verify_password_off_loop(plain: str, hashed: str) -> bool:
     return await asyncio.to_thread(verify_password, plain, hashed)
+
+
+async def _check_password_off_loop(plain: str, hashed: str) -> PasswordCheck:
+    """As above, plus whether the stored hash should be rewritten.
+
+    Only the login path uses this. Everywhere else that verifies a password
+    is checking something with no row worth updating -- a backup code, or a
+    re-authentication before a sensitive action.
+    """
+    return await asyncio.to_thread(check_password, plain, hashed)
 
 
 # §T-024: the token /login hands back instead of real credentials when
@@ -246,9 +258,10 @@ class AuthService:
                 fallback="Please verify your email address before logging in.",
             )
 
-        if not await _verify_password_off_loop(
+        password_check = await _check_password_off_loop(
             req.password, user.hashed_password or _DUMMY_PASSWORD_HASH
-        ):
+        )
+        if not password_check.ok:
             await self._users.increment_failed_login(user.id)
             if user.failed_login_count >= _MAX_FAILED_LOGIN_ATTEMPTS:
                 await self._users.set_lockout(user.id, utcnow() + _LOCKOUT_DURATION)
@@ -282,6 +295,17 @@ class AuthService:
             )
 
         await self._users.reset_failed_login(user.id)
+
+        # The one moment the plaintext is available, which is the only moment
+        # a password can be re-hashed. True when this password verified under
+        # PASSWORD_PEPPER_OLD, or when argon2's cost parameters have been
+        # raised since it was stored -- both migrate the same way, one login
+        # at a time. Deliberately after the credential is known good and
+        # before any of the branches below can return.
+        if password_check.needs_rehash and user.hashed_password is not None:
+            await self._users.update(
+                user.id, hashed_password=await _hash_password_off_loop(req.password)
+            )
 
         # T-331: an organization that enforces SSO does not accept passwords
         # from its members. Checked *after* the password, deliberately -- an
