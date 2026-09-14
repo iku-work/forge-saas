@@ -1,3 +1,48 @@
+# Global options. Must be the first block in the file and unnamed.
+{
+	servers {
+		# Which peer addresses may speak for a client via X-Forwarded-For.
+		#
+		# Since Caddy 2.7 an *untrusted* peer's X-Forwarded-For is discarded
+		# and replaced with the address Caddy observed. With nothing trusted
+		# here and Cloudflare in front, that meant the client IP Cloudflare
+		# put in the header was thrown away before the backend ever saw it:
+		# every session in "Devices currently signed in" and every audit
+		# event recorded a Cloudflare edge address (observed on production
+		# 2026-09-14 as 104.23.221.198). The backend's own
+		# TRUSTED_PROXY_IPS was correct and could do nothing about it,
+		# because the information was already gone.
+		#
+		# The worst of the three consequences is not the audit trail: it is
+		# that app.middleware.rate_limit keys unauthenticated limits on this
+		# address, so every caller on the internet shared one bucket and any
+		# one of them could lock out the rest.
+		#
+		# Space-separated, unlike the backend's comma-separated
+		# TRUSTED_PROXY_IPS -- Caddy takes these as separate arguments. Keep
+		# the two in step; they answer the same question for the two halves
+		# of the same hop.
+		#
+		# Default: the private ranges, which is right for a stack whose only
+		# ingress is docker-compose and wrong the moment a CDN is in front.
+		# Set CADDY_TRUSTED_PROXIES to your CDN's published ranges then --
+		# and read the warning in docs/runbooks/ about origin exposure
+		# first, because trusting a CDN's addresses without restricting the
+		# origin to them lets anyone who can originate from that CDN forge
+		# this header.
+		#
+		# Measured, not assumed: set-but-empty does *not* fall back to the
+		# default -- it expands to `trusted_proxies static` with no
+		# arguments, which validates fine and trusts nothing. So an empty
+		# value silently reverts to the broken behaviour rather than failing
+		# loudly. A *malformed* value is the louder failure, and it takes
+		# down the whole edge rather than one site, so validate before
+		# reloading:
+		#   docker compose -f docker-compose.prod.yml exec caddy 		#     caddy validate --config /etc/caddy/Caddyfile
+		trusted_proxies static {$CADDY_TRUSTED_PROXIES:10.0.0.0/8 172.16.0.0/12 192.168.0.0/16}
+	}
+}
+
 {$DOMAIN} {
 	# Inside a `handle`, not a bare `respond /metrics 404`. Caddy sorts
 	# `handle` ahead of `respond` in its default directive order, so with any
