@@ -80,6 +80,7 @@ from app.models._mixins import utcnow
 from app.modules.audit.service import AuditService
 from app.modules.auth.models import User
 from app.modules.auth.permissions import MemberRole
+from app.modules.billing.dunning import DunningService
 from app.modules.billing.models import DunningCampaign, Plan, Subscription
 from app.modules.billing.repository import (
     DunningCampaignRepository,
@@ -476,6 +477,11 @@ async def _reconcile_one_org(session: AsyncSession, redis: "Redis", org: Organiz
                 local.status,
             )
             local.status = "canceled"
+            # Same reason as the webhook path: a subscription nobody is
+            # billed for must not keep being chased for payment. This branch
+            # exists precisely because the cancellation webhook went missing,
+            # so it cannot rely on that webhook having stopped dunning.
+            await DunningService(session).cancel(local.id)
             await FeatureFlagService(session, redis).invalidate(org.id)
             FORGE_BILLING_RECONCILED_TOTAL.labels(action="canceled").inc()
             return True

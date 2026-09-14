@@ -39,5 +39,8 @@
     "feature_unavailable": "ميزة '{feature}' غير متاحة في خطتك.",
     "plan_limit_reached": "لقد وصلت إلى الحد الأقصى لخطتك لـ '{feature}'.",
     "plan_not_found": "تعذّر العثور على الخطة '{plan_slug}'."
+  },
+  "checkout": {
+    "canceled": "تم إلغاء عملية الدفع. لم يتم خصم أي مبلغ منك."
   }
 }

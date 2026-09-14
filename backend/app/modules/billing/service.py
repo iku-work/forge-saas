@@ -435,6 +435,15 @@ class BillingService:
             trial_end=_epoch_to_datetime(obj.get("trial_end")),
         )
         self._mark_applied(subscription, event_created, _SUBSCRIPTION_STREAM)
+        # A subscription that has stopped must stop being chased. Only
+        # `customer.subscription.deleted` cancelled dunning before, and
+        # Stripe does not always send it: an unpaid subscription ends via
+        # `customer.subscription.updated` into `incomplete_expired`, which
+        # left an active campaign with its day-1/3/7 emails still queued.
+        # Observed on 2026-09-13 -- a cancelled test subscription was still
+        # scheduled to send three "your payment failed" emails.
+        if subscription.status not in _LIVE_SUBSCRIPTION_STATUSES:
+            await self._dunning.cancel(subscription.id)
         await self._flags.invalidate(org_uuid)
         # T-320. The one billing event worth publishing: a consumer that
         # provisions on plan change needs it, and everything else Stripe

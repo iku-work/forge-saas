@@ -39,5 +39,8 @@
     "feature_unavailable": "Die Funktion „{feature}“ ist in Ihrem Tarif nicht verfügbar.",
     "plan_limit_reached": "Sie haben das Limit Ihres Tarifs für „{feature}“ erreicht.",
     "plan_not_found": "Der Tarif „{plan_slug}“ wurde nicht gefunden."
+  },
+  "checkout": {
+    "canceled": "Der Bezahlvorgang wurde abgebrochen. Es wurde nichts berechnet."
   }
 }

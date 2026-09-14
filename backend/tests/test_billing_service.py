@@ -1288,3 +1288,117 @@ async def test_a_redelivered_invoice_failure_is_still_rejected(
     sub = await subscriptions.get_by_stripe_subscription_id("sub_same_stream")
     assert sub is not None
     assert sub.status == "active"
+
+
+async def test_a_subscription_that_expires_without_a_delete_event_stops_dunning(
+    service: BillingService,
+    session: AsyncSession,
+    subscriptions: SubscriptionRepository,
+    dunning_campaigns: DunningCampaignRepository,
+) -> None:
+    """Stripe does not always send `customer.subscription.deleted`.
+
+    An unpaid subscription ends via `customer.subscription.updated` into
+    `incomplete_expired`. Only the delete handler cancelled dunning, so on
+    2026-09-13 a subscription that no longer existed still had three "your
+    payment failed" emails queued against it.
+    """
+    await _make_plan(session, price_id="price_pro")
+    org_id = uuid4()
+    await service.handle_event(
+        WebhookEvent(
+            id="evt_born",
+            type="customer.subscription.created",
+            payload=_with_created(
+                _subscription_event(
+                    subscription_id="sub_expires",
+                    status="incomplete",
+                    org_id=str(org_id),
+                    price_id="price_pro",
+                ),
+                _EARLIER,
+            ),
+        )
+    )
+    await service.handle_event(
+        WebhookEvent(
+            id="evt_unpaid",
+            type="invoice.payment_failed",
+            payload=_with_created(_invoice_event(subscription_id="sub_expires"), _EARLIER),
+        )
+    )
+    sub = await subscriptions.get_by_stripe_subscription_id("sub_expires")
+    assert sub is not None
+    assert await dunning_campaigns.get_active_by_subscription_id(sub.id) is not None
+
+    # Stripe gives up on it -- an update, not a delete.
+    await service.handle_event(
+        WebhookEvent(
+            id="evt_expired",
+            type="customer.subscription.updated",
+            payload=_with_created(
+                _subscription_event(
+                    subscription_id="sub_expires",
+                    status="incomplete_expired",
+                    org_id=str(org_id),
+                    price_id="price_pro",
+                ),
+                _LATER,
+            ),
+        )
+    )
+
+    assert await dunning_campaigns.get_active_by_subscription_id(sub.id) is None
+
+
+async def test_dunning_survives_an_ordinary_status_change(
+    service: BillingService,
+    session: AsyncSession,
+    subscriptions: SubscriptionRepository,
+    dunning_campaigns: DunningCampaignRepository,
+) -> None:
+    """The over-correction guard: `past_due` is still live, and a campaign
+    must not be cancelled by the very update that reports the failure."""
+    await _make_plan(session, price_id="price_pro")
+    org_id = uuid4()
+    await service.handle_event(
+        WebhookEvent(
+            id="evt_live",
+            type="customer.subscription.created",
+            payload=_with_created(
+                _subscription_event(
+                    subscription_id="sub_chased",
+                    status="active",
+                    org_id=str(org_id),
+                    price_id="price_pro",
+                ),
+                _EARLIER,
+            ),
+        )
+    )
+    await service.handle_event(
+        WebhookEvent(
+            id="evt_bad",
+            type="invoice.payment_failed",
+            payload=_with_created(_invoice_event(subscription_id="sub_chased"), _EARLIER),
+        )
+    )
+    await service.handle_event(
+        WebhookEvent(
+            id="evt_pastdue",
+            type="customer.subscription.updated",
+            payload=_with_created(
+                _subscription_event(
+                    subscription_id="sub_chased",
+                    status="past_due",
+                    org_id=str(org_id),
+                    price_id="price_pro",
+                ),
+                _LATER,
+            ),
+        )
+    )
+
+    sub = await subscriptions.get_by_stripe_subscription_id("sub_chased")
+    assert sub is not None
+    assert await dunning_campaigns.get_active_by_subscription_id(sub.id) is not None

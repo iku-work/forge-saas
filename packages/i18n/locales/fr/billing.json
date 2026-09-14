@@ -39,5 +39,8 @@
     "feature_unavailable": "La fonctionnalité « {feature} » n'est pas disponible sur votre offre.",
     "plan_limit_reached": "Vous avez atteint la limite de votre offre pour « {feature} ».",
     "plan_not_found": "L'offre « {plan_slug} » est introuvable."
+  },
+  "checkout": {
+    "canceled": "Le paiement a ete annule. Aucun montant ne vous a ete facture."
   }
 }

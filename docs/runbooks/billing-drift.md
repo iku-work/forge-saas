@@ -196,6 +196,121 @@ Stop and escalate when:
   webhooks or API incident. Reconciliation will catch up on its own once the
   incident clears; do not start cancelling subscriptions during one.
 
+## Appendix: debugging one payment
+
+Every command here was used to diagnose a real incident between 2026-09-12
+and 2026-09-13. They run against production and are read-only unless marked
+otherwise. `psql` is invoked through the container so the credentials come
+from its own environment -- never type them.
+
+### What did we receive, and did it apply?
+
+```bash
+docker compose -f docker-compose.prod.yml exec -T postgres   sh -c 'psql -U $POSTGRES_USER -d $POSTGRES_DB -x -c "
+    select id, type, received_at, processed_at, attempt_count,
+           left(coalesce(error, chr(45)), 200) as err
+    from webhook_event order by received_at desc limit 10"'
+```
+
+**Expected:** every row has a `processed_at`. Read `error` even on rows that
+do have one -- it is not cleared when a later retry succeeds, so an `error`
+plus a `processed_at` means "recovered on its own".
+
+### What did Stripe actually send?
+
+The table above only lists what *arrived*. Stripe's own event log is the
+only way to tell "we never got it" from "it was never sent":
+
+```bash
+docker compose -f docker-compose.prod.yml exec -T backend python -c "
+import asyncio, stripe, datetime
+from app.core.config import get_settings
+stripe.api_key = get_settings().STRIPE_SECRET_KEY
+async def main():
+    for e in (await stripe.Event.list_async(limit=20)).data:
+        print(datetime.datetime.fromtimestamp(e.created, tz=datetime.UTC).isoformat(), e.type)
+asyncio.run(main())
+"
+```
+
+This is what showed that a checkout failing on its first charge emits
+`payment_intent.payment_failed` and `charge.failed` but **no**
+`invoice.payment_failed` -- there is no subscription yet, so there is no
+invoice to fail. Dunning cannot be reached that way; see the appendix below.
+
+### What does Stripe think this customer has?
+
+```bash
+docker compose -f docker-compose.prod.yml exec -T backend python -c "
+import asyncio, stripe, datetime
+from app.core.config import get_settings
+stripe.api_key = get_settings().STRIPE_SECRET_KEY
+def ts(v): return None if v is None else datetime.datetime.fromtimestamp(v, tz=datetime.UTC).isoformat()
+async def main():
+    subs = await stripe.Subscription.list_async(customer='<cus_...>', status='all', limit=20)
+    for s in subs.data:
+        d = s.to_dict(for_json=True)
+        print(s.id, d['status'],
+              'cancel_at_period_end=', d.get('cancel_at_period_end'),
+              'cancel_at=', ts(d.get('cancel_at')),
+              'item_period_end=', ts(d['items']['data'][0].get('current_period_end')))
+asyncio.run(main())
+"
+```
+
+Note which fields are printed: under Basil the period lives on the *item*
+and the cancellation on `cancel_at`, not on `cancel_at_period_end`. Reading
+the old field alone reports a cancelled subscription as renewing.
+
+The customer id comes from `select name, stripe_customer_id from
+organization where stripe_customer_id is not null`.
+
+### Why was an event received but not applied?
+
+```bash
+docker compose -f docker-compose.prod.yml exec -T postgres   sh -c 'psql -U $POSTGRES_USER -d $POSTGRES_DB -x -c "
+    select action, resource_id, ts, diff from audit_event
+    where action like (chr(98)||chr(105)||chr(108)||chr(108)||chr(105)||chr(110)||chr(103)||chr(46)||chr(37))
+    order by ts desc limit 5"'
+```
+
+Every deliberate non-application writes one of these, and the `diff` says
+why in a sentence. This is what turned "dunning silently did not start" into
+a one-query answer: the row named both timestamps behind a `stale_event`
+rejection. (The `chr(...)` spelling of the `billing.%` pattern only avoids
+quote-nesting through `ssh` + `sh -c`; type it normally at a real prompt.)
+
+### What is the payload we stored?
+
+The stored payload is the only copy once Stripe's retention lapses, and it
+is what reproduces a bug in a test:
+
+```bash
+docker compose -f docker-compose.prod.yml exec -T postgres   sh -c 'psql -U $POSTGRES_USER -d $POSTGRES_DB -t -A -c "
+    select jsonb_pretty(payload) from webhook_event where id = '"'"'<evt_...>'"'"'"'
+```
+
+To see just the shape rather than the whole object, list the keys:
+`select jsonb_object_keys(payload->'data'->'object') ...`. That is how all
+three Basil field moves were found -- the field was simply not in the list.
+
+### Where is the subscription and its dunning campaign?
+
+```bash
+docker compose -f docker-compose.prod.yml exec -T postgres   sh -c 'psql -U $POSTGRES_USER -d $POSTGRES_DB -x -c "
+    select s.stripe_subscription_id, s.status, s.cancel_at_period_end,
+           s.last_stripe_event_at, s.last_invoice_event_at,
+           d.id as campaign, d.status as campaign_status, d.scheduled_job_ids
+    from subscription s
+    left join dunning_campaign d on d.subscription_id = s.id"'
+```
+
+The two watermarks are deliberately separate -- subscription events and
+invoice events are independent streams, and comparing one against the other
+rejected a valid payment failure as stale. An `active` campaign against a
+subscription in a non-live status means queued emails that should have been
+revoked.
+
 ## Appendix: proving the failed-payment path
 
 The `invoice.payment_failed` handler was broken from the day this account
