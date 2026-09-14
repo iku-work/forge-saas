@@ -54,7 +54,7 @@ export function AdminUsersPage() {
 
   return (
     <div className="max-w-5xl space-y-6 p-6">
-      <h1 className="text-xl font-semibold">{t("common.admin.users.title")}</h1>
+      <h1 className="text-xl font-semibold" data-testid="page-title">{t("common.admin.users.title")}</h1>
 
       <div className="flex gap-3">
         <Input
@@ -88,7 +88,7 @@ export function AdminUsersPage() {
               <Skeleton className="h-8 w-full" />
             </div>
           ) : usersQuery.isError ? (
-            <Alert variant="destructive">
+            <Alert variant="destructive" data-testid="admin-users-error">
               <AlertDescription>
                 {getErrorMessage(usersQuery.error, "common.admin.users.error_load")}
               </AlertDescription>

@@ -283,7 +283,7 @@ export function BillingSettingsPage({
   if (orgLoading || !org) {
     return (
       <div className="max-w-2xl space-y-6 p-6">
-        <h1 className="text-xl font-semibold">{t("billing.title")}</h1>
+        <h1 className="text-xl font-semibold" data-testid="page-title">{t("billing.title")}</h1>
         <Skeleton className="h-32 w-full" />
       </div>
     );
@@ -292,7 +292,7 @@ export function BillingSettingsPage({
   if (!canRead) {
     return (
       <div className="max-w-2xl space-y-6 p-6">
-        <h1 className="text-xl font-semibold">{t("billing.title")}</h1>
+        <h1 className="text-xl font-semibold" data-testid="page-title">{t("billing.title")}</h1>
         <Alert>
           <AlertDescription>
             {t("billing.error.permission_denied")}
@@ -304,7 +304,7 @@ export function BillingSettingsPage({
 
   return (
     <div className="max-w-2xl space-y-6 p-6">
-      <h1 className="text-xl font-semibold">{t("billing.title")}</h1>
+      <h1 className="text-xl font-semibold" data-testid="page-title">{t("billing.title")}</h1>
 
       {actionError ? (
         <Alert variant="destructive">
@@ -337,7 +337,10 @@ export function BillingSettingsPage({
                 {currentPlan?.name ?? t("billing.current_plan.free_label")}
               </Badge>
               {subscription ? (
-                <span className="text-sm text-muted-foreground">
+                <span
+                  className="text-sm text-muted-foreground"
+                  data-testid="billing-subscription-status"
+                >
                   {t("billing.current_plan.status", {
                     status: subscription.status,
                   })}

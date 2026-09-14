@@ -931,13 +931,21 @@ export function SecuritySettingsPage() {
   const modules = useModules();
   return (
     <div className="max-w-xl space-y-6 p-6">
-      <h1 className="text-xl font-semibold">{t("common.nav.security")}</h1>
+      <h1 className="text-xl font-semibold" data-testid="page-title">{t("common.nav.security")}</h1>
       <ChangePasswordCard />
       <ChangeEmailCard />
       <SessionsCard />
-      {modules.totp2fa ? <TwoFactorCard /> : null}
+      {modules.totp2fa ? (
+        <div data-testid="security-2fa-section">
+          <TwoFactorCard />
+        </div>
+      ) : null}
       {modules.totp2fa ? <SecurityKeysCard /> : null}
-      {modules.oauth ? <LinkedAccountsCard /> : null}
+      {modules.oauth ? (
+        <div data-testid="linked-accounts-card">
+          <LinkedAccountsCard />
+        </div>
+      ) : null}
     </div>
   );
 }

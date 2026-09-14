@@ -79,14 +79,12 @@ test.describe("every enabled module is reachable", () => {
 
     await test.step("file_storage: the Files page", async () => {
       await page.getByTestId("nav-files").click();
-      await expect(page.getByRole("heading", { name: /files/i })).toBeVisible();
+      await expect(page.getByTestId("page-title")).toContainText("Files");
     });
 
     await test.step("notifications: preferences and the bell", async () => {
       await page.goto("/en/settings/notifications");
-      await expect(
-        page.getByRole("heading", { name: /notification/i }),
-      ).toBeVisible();
+      await expect(page.getByTestId("page-title")).toContainText("Notification");
       // The bell is the module's only always-on surface, and it lives in the
       // shell rather than on a page -- worth opening, since a broken feed
       // renders a bell that does nothing.
@@ -104,11 +102,12 @@ test.describe("every enabled module is reachable", () => {
 
     await test.step("totp_2fa and oauth: both on the Security page", async () => {
       await page.goto("/en/settings/security");
-      await expect(page.getByRole("heading", { name: /security/i })).toBeVisible();
-      // totp_2fa off would remove the control entirely, not just disable it.
-      await expect(page.getByRole("button", { name: /2fa/i })).toBeVisible();
+      await expect(page.getByTestId("page-title")).toContainText("Security");
+      // totp_2fa off removes the card entirely, rather than disabling it --
+      // which is why its presence is the assertion.
+      await expect(page.getByTestId("security-2fa-section")).toBeVisible();
       // oauth surfaces as the linkable providers.
-      await expect(page.getByText(/google/i).first()).toBeVisible();
+      await expect(page.getByTestId("linked-accounts-card")).toBeVisible();
     });
 
     await test.step("billing: the plans surface", async () => {
@@ -122,7 +121,9 @@ test.describe("every enabled module is reachable", () => {
       // rather than render. Asserting the refusal is what proves the gate
       // exists; asserting the page would prove the opposite.
       await page.goto("/en/admin/users");
-      await expect(page.getByText(/two-factor/i)).toBeVisible();
+      await expect(page.getByTestId("admin-users-error")).toContainText(
+        "two-factor",
+      );
     });
 
     expect(failures, "no module's page should make a failing API call").toEqual([]);

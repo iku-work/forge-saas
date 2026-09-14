@@ -136,7 +136,7 @@ export function AdminProductSettingsPage() {
   return (
     <div className="max-w-3xl space-y-6 p-6">
       <div className="space-y-1">
-        <h1 className="text-xl font-semibold">
+        <h1 className="text-xl font-semibold" data-testid="page-title">
           {t("common.admin.product_settings.title")}
         </h1>
         <p className="text-sm text-muted-foreground">

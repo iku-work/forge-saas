@@ -520,6 +520,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
           <header className="flex items-center gap-3 border-b px-4 py-3 sm:px-6">
             <Sheet open={navOpen} onOpenChange={setNavOpen}>
               <SheetTrigger
+                data-testid="nav-drawer-trigger"
                 className="-ms-1 rounded-md p-2 text-muted-foreground hover:bg-accent hover:text-accent-foreground md:hidden"
                 aria-label={t("common.nav.open_menu")}
               >
