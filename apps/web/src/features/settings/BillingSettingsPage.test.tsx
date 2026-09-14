@@ -464,3 +464,43 @@ describe("BillingSettingsPage after a subscription is cancelled", () => {
     );
   });
 });
+
+describe("BillingSettingsPage returning from Stripe Checkout", () => {
+  beforeEach(() => {
+    hooks.useOrg.mockReturnValue({ org: fixtureOrg, isLoading: false });
+    hooks.usePermission.mockReturnValue(true);
+    server.use(
+      http.get(`${API}/api/v1/billing/plans`, () =>
+        HttpResponse.json(envelope([freePlan, proPlan])),
+      ),
+      http.get(`${API}/api/v1/billing/subscription`, () =>
+        HttpResponse.json(envelope(null)),
+      ),
+    );
+  });
+
+  it("says nothing was charged when checkout was abandoned", async () => {
+    render(
+      <QueryClientProvider
+        client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}
+      >
+        <BillingSettingsPage checkout="canceled" />
+      </QueryClientProvider>,
+    );
+
+    expect(
+      await screen.findByTestId("billing-checkout-canceled"),
+    ).toHaveTextContent("You have not been charged.");
+  });
+
+  it("shows nothing when the page is opened normally", async () => {
+    renderPage();
+
+    // Waiting on the page proper first, so this is not a vacuous pass
+    // against a page that had not rendered yet.
+    expect(await screen.findByTestId("billing-current-plan")).toBeInTheDocument();
+    expect(
+      screen.queryByTestId("billing-checkout-canceled"),
+    ).not.toBeInTheDocument();
+  });
+});

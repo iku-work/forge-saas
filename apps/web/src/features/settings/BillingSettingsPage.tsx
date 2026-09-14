@@ -119,7 +119,14 @@ function portalUrlFromError(error: unknown): string | null {
   return typeof url === "string" && url.length > 0 ? url : null;
 }
 
-export function BillingSettingsPage() {
+export function BillingSettingsPage({
+  // Aliased: `checkout` is already the name of the mutation that *starts*
+  // one, a few lines down.
+  checkout: checkoutReturn,
+}: {
+  /** Stripe Checkout's return marker; see the route's search schema. */
+  checkout?: "success" | "canceled" | undefined;
+} = {}) {
   const { t, i18n } = useTranslation();
   const { org, isLoading: orgLoading } = useOrg();
   const canManage = usePermission(Permission.BILLING_MANAGE);
@@ -302,6 +309,18 @@ export function BillingSettingsPage() {
       {actionError ? (
         <Alert variant="destructive">
           <AlertDescription>{actionError}</AlertDescription>
+        </Alert>
+      ) : null}
+
+      {/* Coming back from an abandoned Checkout was silent, which reads as
+          "nothing happened -- did it work?". Not `destructive`: cancelling
+          is a choice the customer made, not a failure, and the point of the
+          message is to say plainly that no money moved. Stripe keeps them
+          on its own page for a *declined* card, so that case never lands
+          here. */}
+      {checkoutReturn === "canceled" ? (
+        <Alert data-testid="billing-checkout-canceled">
+          <AlertDescription>{t("billing.checkout.canceled")}</AlertDescription>
         </Alert>
       ) : null}
 

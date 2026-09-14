@@ -34,7 +34,7 @@ from testcontainers.postgres import PostgresContainer
 
 from app.models._mixins import utcnow
 from app.modules.audit.models import AuditEvent
-from app.modules.billing.models import Plan, Subscription
+from app.modules.billing.models import DunningCampaign, Plan, Subscription
 from app.modules.billing.repository import SubscriptionRepository
 from app.modules.tenancy.models import Organization, OrgFeatureFlag
 from app.workers.jobs import billing as billing_job_module
@@ -44,6 +44,9 @@ _TABLES = [
     Organization.__table__,
     Plan.__table__,
     Subscription.__table__,
+    # The sweep cancels any active campaign when it retires a subscription,
+    # so this table is on its hot path even though no test here starts one.
+    DunningCampaign.__table__,
     AuditEvent.__table__,
     OrgFeatureFlag.__table__,
 ]
