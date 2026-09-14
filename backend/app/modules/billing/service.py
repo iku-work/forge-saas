@@ -582,7 +582,7 @@ class BillingService:
             raise ConflictError(
                 "errors.subscription_already_active",
                 fallback="This organization already has an active subscription.",
-                details={"portal_url": await self.create_portal_session(org, locale)},
+                details=await self._portal_details(org, locale),
             )
 
         customer_id = await self.get_or_create_stripe_customer(org)
@@ -598,6 +598,28 @@ class BillingService:
                 "errors.checkout_url_missing", fallback="Stripe did not return a checkout URL"
             )
         return checkout_session.url
+
+    async def _portal_details(self, org: Organization, locale: str | None) -> dict[str, Any] | None:
+        """The portal URL to send a refused checkout to, if Stripe will give one.
+
+        Best effort on purpose. This used to `await create_portal_session()`
+        inline, which made the *refusal* depend on Stripe answering: with
+        Stripe unreachable the guard raised instead of returning its 409, and
+        an org with a live subscription got a 500 rather than "you already
+        have one". The refusal is a fact about local state and should not
+        need a network call to be delivered.
+
+        Losing the URL costs the customer a convenience -- the client falls
+        back to showing the message instead of following the link.
+        """
+        try:
+            return {"portal_url": await self.create_portal_session(org, locale)}
+        except Exception:  # noqa: BLE001 -- deliberately broad, see the docstring
+            # Anything at all: a Stripe outage, an open circuit breaker, a
+            # key rotated out from under us. None of it should turn a
+            # refusal that local state has already decided into a 500.
+            logger.warning("billing.portal_url_unavailable_for_conflict", exc_info=True)
+            return None
 
     async def create_portal_session(self, org: Organization, locale: str | None = None) -> str:
         customer_id = await self.get_or_create_stripe_customer(org)
