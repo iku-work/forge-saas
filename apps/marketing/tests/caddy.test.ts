@@ -317,19 +317,36 @@ describe("the wiring around the block", () => {
     }
   });
 
-  it("is mounted, with dist/, by the compose file for its deployment", () => {
+  it("reaches dev's Caddy as a bind mount", () => {
     expect(repoFile("docker-compose.yml")).toContain(
       `- ./apps/marketing/dist:${SITE_ROOT}:ro`,
     );
     expect(repoFile("docker-compose.yml")).toContain(
       "- ./apps/marketing/caddy/dev:/etc/caddy/conf.d:ro",
     );
-    expect(repoFile("docker-compose.prod.yml")).toContain(
+  });
+
+  it("reaches production's Caddy by whichever of the two routes is in use", () => {
+    // Since 2026-09-14 there are two, and the mounts had to *move* out of
+    // docker-compose.prod.yml rather than be overridden: compose merges
+    // `volumes` by appending, so an overlay cannot remove a base mount and a
+    // leftover bind of ./apps/marketing/dist would shadow the copy baked
+    // into the edge image. Both routes are asserted, not just the one this
+    // deployment happens to use -- the other is exactly what rots unnoticed.
+    expect(repoFile("docker-compose.host-build.yml")).toContain(
       `- ./apps/marketing/dist:${SITE_ROOT}:ro`,
     );
-    expect(repoFile("docker-compose.prod.yml")).toContain(
+    expect(repoFile("docker-compose.host-build.yml")).toContain(
       "- ./apps/marketing/caddy/prod:/etc/caddy/conf.d:ro",
     );
+
+    const dockerfile = repoFile("Dockerfile.caddy");
+    expect(dockerfile).toContain(`/repo/apps/marketing/dist ${SITE_ROOT}`);
+    expect(dockerfile).toContain("/repo/apps/marketing/caddy/prod /etc/caddy/conf.d");
+
+    // And the base file must carry neither, or it shadows both.
+    expect(repoFile("docker-compose.prod.yml")).not.toContain(SITE_ROOT);
+    expect(repoFile("docker-compose.prod.yml")).not.toContain("/etc/caddy/conf.d");
   });
 
   it("is declared as a build output, so a cache hit cannot leave a stale one", () => {

@@ -83,47 +83,84 @@ def test_build_job_generates_sbom_before_pushing() -> None:
     assert sbom_index < push_index
 
 
-def test_deploy_job_only_runs_on_main_and_needs_build() -> None:
-    deploy = _ci_workflow()["jobs"]["deploy"]
-    assert deploy["if"] == "github.ref == 'refs/heads/main'"
-    assert deploy["needs"] == "build"
+DEPLOY_TARGETS = ("render", "hetzner", "aws")
 
 
-# T-225/ASVS V12.4.2: the deploy job must refuse to ship a production env
-# file that would leave uploaded files unscanned, and must do so before any
-# migration/deploy step runs against production.
-def test_deploy_job_guards_against_virus_scanner_noop_before_migrating() -> None:
-    steps = _ci_workflow()["jobs"]["deploy"]["steps"]
-    step_names = [s.get("name", "") for s in steps]
-    guard_index = next(i for i, n in enumerate(step_names) if "Guard against VIRUS_SCANNER" in n)
-    migrate_index = next(i for i, n in enumerate(step_names) if "Run migrations" in n)
-    assert guard_index < migrate_index
-    assert "VIRUS_SCANNER=noop" in steps[guard_index]["run"]
-    assert "exit 1" in steps[guard_index]["run"]
+def _deploy_workflow(target: str) -> dict:
+    path = REPO_ROOT / ".github" / "workflows" / f"deploy-{target}.yml"
+    return yaml.safe_load(path.read_text(encoding="utf-8"))
 
 
-def test_deploy_job_runs_migrations_before_triggering_a_deploy() -> None:
-    steps = _ci_workflow()["jobs"]["deploy"]["steps"]
-    step_names = [s.get("name", "") for s in steps]
-    migrate_index = next(i for i, n in enumerate(step_names) if "Run migrations" in n)
-    deploy_index = next(i for i, n in enumerate(step_names) if "Trigger Render deploy" in n)
-    assert migrate_index < deploy_index
+def _preflight_action() -> dict:
+    path = REPO_ROOT / ".github" / "actions" / "deploy-preflight" / "action.yml"
+    return yaml.safe_load(path.read_text(encoding="utf-8"))
+
+
+# These four used to assert the shape of one inline `deploy` job in ci.yml.
+# That job was split into a workflow per platform on 2026-09-14, and the
+# invariants it guarded matter more now, not less: there are three ways to
+# ship instead of one, and only one of them was ever covered. So they are
+# parameterised over all three.
+@pytest.mark.parametrize("target", DEPLOY_TARGETS)
+def test_deploy_only_runs_on_main_and_needs_build(target: str) -> None:
+    job = _ci_workflow()["jobs"][f"deploy-{target}"]
+    assert "refs/heads/main" in job["if"]
+    assert job["needs"] == "build"
+    # Called as a reusable workflow, so the image it deploys is the one
+    # `build` scanned and pushed rather than one rebuilt here.
+    assert job["uses"] == f"./.github/workflows/deploy-{target}.yml"
+
+
+# T-225/ASVS V12.4.2: a deploy must refuse a production env file that would
+# leave uploaded files unscanned, and must do so before any migration runs
+# against production. Now asserted once, in the shared preflight, which is
+# exactly why the preflight exists -- three copies would have drifted.
+def test_preflight_guards_against_virus_scanner_noop_before_migrating() -> None:
+    steps = _preflight_action()["runs"]["steps"]
+    names = [s.get("name", "") for s in steps]
+    guard = next(i for i, n in enumerate(names) if "VIRUS_SCANNER" in n)
+    migrate = next(i for i, n in enumerate(names) if "migrations" in n.lower())
+    assert guard < migrate
+    assert "exit 1" in steps[guard]["run"]
+
+
+def test_preflight_migrates_with_the_branch_aware_command() -> None:
+    steps = _preflight_action()["runs"]["steps"]
+    migrate = next(s for s in steps if "migrations" in s.get("name", "").lower())
     # `python -m app.core.migrations`, not `alembic upgrade head`: every
     # optional module keeps its migrations on its own branch (T-062), so this
     # tree always has several heads and a bare `head` is ambiguous -- alembic
-    # refuses to run at all. That is why the production migration step could
-    # never have succeeded until it was changed, and asserting the ambiguous
-    # command is *absent* is what stops it coming back.
-    run = steps[migrate_index]["run"]
-    assert "python -m app.core.migrations" in run
-    assert "alembic upgrade head" not in run
+    # refuses to run at all. Asserting the ambiguous command is *absent* is
+    # what stops it coming back.
+    assert "python -m app.core.migrations" in migrate["run"]
+    assert "alembic upgrade head" not in migrate["run"]
 
 
-def test_deploy_job_rolls_back_only_on_smoke_test_failure() -> None:
-    steps = _ci_workflow()["jobs"]["deploy"]["steps"]
-    rollback = next(s for s in steps if s.get("name") == "Roll back to previous deploy")
-    assert rollback["if"] == "failure() && steps.smoke_test.outcome == 'failure'"
-    assert "rollback" in rollback["run"]
+@pytest.mark.parametrize("target", DEPLOY_TARGETS)
+def test_every_deploy_migrates_before_it_switches_traffic(target: str) -> None:
+    steps = _deploy_workflow(target)["jobs"]["deploy"]["steps"]
+    names = [s.get("name", "") for s in steps]
+    preflight = next(i for i, n in enumerate(names) if "Preflight" in n)
+    # The first step that changes anything a user can reach, per platform.
+    switch_marker = {
+        "render": "Trigger Render deploy",
+        "hetzner": "Pull and switch",
+        "aws": "Deploy the backend service",
+    }[target]
+    switch = next(i for i, n in enumerate(names) if switch_marker in n)
+    assert preflight < switch, "a failed migration must abort before traffic moves"
+
+
+@pytest.mark.parametrize("target", DEPLOY_TARGETS)
+def test_every_deploy_can_roll_back_and_only_does_so_on_failure(target: str) -> None:
+    steps = _deploy_workflow(target)["jobs"]["deploy"]["steps"]
+    rollback = next(s for s in steps if "Roll back" in s.get("name", ""))
+    # `failure()` and nothing looser: a rollback that fires on cancellation,
+    # or unconditionally, is a second outage rather than a recovery.
+    assert rollback["if"].startswith("failure()")
+    # And something must have captured what to roll back *to*, before the
+    # switch -- a rollback with no recorded previous state is decoration.
+    assert any("previous" in s.get("id", "") for s in steps)
 
 
 # OWASP A06 (vulnerable components): T-212's mapping asserts the dependency

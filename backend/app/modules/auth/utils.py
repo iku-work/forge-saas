@@ -10,7 +10,7 @@ import secrets
 from collections.abc import Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
-from typing import Any
+from typing import TYPE_CHECKING, Any
 from uuid import UUID, uuid4
 
 from argon2 import PasswordHasher
@@ -21,32 +21,89 @@ from jose import JWTError, jwt
 from app.core.config import get_settings
 from app.core.exceptions import AuthenticationError
 
+if TYPE_CHECKING:
+    from app.core.config import Settings
+
 _JWT_ALGORITHM = "RS256"
 
 _password_hasher = PasswordHasher()
 
 
-def _peppered(plain: str) -> str:
-    # T-225/ASVS V2.4.5: an HMAC-SHA256 pre-hash keyed by settings.PASSWORD_PEPPER,
-    # applied identically before both hash() and verify() so the pepper is
-    # transparent to argon2-cffi itself. Blank pepper (dev only — enforced
-    # non-blank outside dev by Settings._enforce_startup_invariants) reduces
-    # to hashing the plaintext directly, i.e. today's behavior.
-    pepper = get_settings().PASSWORD_PEPPER
+def _peppered(plain: str, pepper: str) -> str:
+    # T-225/ASVS V2.4.5: an HMAC-SHA256 pre-hash keyed by the pepper, applied
+    # identically before both hash() and verify() so it is transparent to
+    # argon2-cffi itself. Blank pepper (dev only — enforced non-blank outside
+    # dev by Settings._enforce_startup_invariants) reduces to hashing the
+    # plaintext directly.
     return hashlib.sha256(f"{pepper}:{plain}".encode()).hexdigest()
 
 
 def hash_password(plain: str) -> str:
-    return _password_hasher.hash(_peppered(plain))
+    """Always hashes with the *current* pepper. Rotation moves rows forward
+    one successful login at a time; see check_password."""
+    return _password_hasher.hash(_peppered(plain, get_settings().PASSWORD_PEPPER))
+
+
+@dataclass(frozen=True)
+class PasswordCheck:
+    """Whether the password matched, and whether its stored hash is stale."""
+
+    ok: bool
+    needs_rehash: bool
+
+
+def check_password(plain: str, hashed: str) -> PasswordCheck:
+    """Verify against the current pepper, then the previous one.
+
+    Before this, PASSWORD_PEPPER could not be rotated at all: it is HMAC'd
+    into every password before Argon2, with no second pepper and no version
+    marker on the stored hash, so changing it made every password fail to
+    verify -- indistinguishably from a wrong password. The only remedy was a
+    forced reset for every user. `docs/runbooks/credential-rotation.md` said
+    so in as many words.
+
+    The fallback is what makes rotation possible, and `needs_rehash` is what
+    makes it *finish*: the caller re-hashes with the current pepper on the
+    next successful login, so the population migrates itself and
+    PASSWORD_PEPPER_OLD can be dropped once logins have drained.
+
+    Two costs, both deliberate:
+
+    - While PASSWORD_PEPPER_OLD is set, a *wrong* password costs two Argon2
+      verifications rather than one, and Argon2 is memory-hard on purpose.
+      That is why the fallback is skipped entirely when the setting is blank
+      -- which is its normal state -- rather than being always-on.
+    - A password verified under the old pepper is still correct, so this
+      returns ok=True. Refusing it would be the "rotation breaks every
+      login" behaviour this exists to remove.
+
+    `needs_rehash` also covers argon2's own parameter changes, so raising the
+    cost parameters migrates hashes by the same mechanism.
+    """
+    settings = get_settings()
+    try:
+        _password_hasher.verify(hashed, _peppered(plain, settings.PASSWORD_PEPPER))
+    except VerifyMismatchError:
+        previous = settings.PASSWORD_PEPPER_OLD
+        if not previous:
+            return PasswordCheck(ok=False, needs_rehash=False)
+        try:
+            _password_hasher.verify(hashed, _peppered(plain, previous))
+        except VerifyMismatchError:
+            return PasswordCheck(ok=False, needs_rehash=False)
+        return PasswordCheck(ok=True, needs_rehash=True)
+    # Any other exception (e.g. InvalidHashError for a corrupt/foreign hash
+    # format) propagates — that is a data-integrity bug, not a wrong password.
+    return PasswordCheck(ok=True, needs_rehash=_password_hasher.check_needs_rehash(hashed))
 
 
 def verify_password(plain: str, hashed: str) -> bool:
-    try:
-        return _password_hasher.verify(hashed, _peppered(plain))
-    except VerifyMismatchError:
-        return False
-    # Any other exception (e.g. InvalidHashError for a corrupt/foreign hash
-    # format) propagates — that is a data-integrity bug, not a wrong password.
+    """The boolean-only view, for callers with nothing to re-hash.
+
+    2FA backup codes go through here: they are single-use and deleted on
+    redemption, so there is no row worth rewriting.
+    """
+    return check_password(plain, hashed).ok
 
 
 # T-223: argon2's memory-hard params (T-225) make a single hash/verify call
@@ -140,13 +197,34 @@ def bearer_token(authorization: str | None) -> str | None:
     return authorization[len(_BEARER_PREFIX) :]
 
 
+def _decode_with_rotation(token: str, settings: "Settings") -> dict[str, Any]:
+    """Decode against the current public key, then the one being retired.
+
+    Signing only ever uses the current private key: this is verify-side
+    overlap, so a keypair rotation does not reject every access token minted
+    in the preceding 15 minutes all at once. Without it, rotation produced a
+    burst in which every client discovered its token was invalid
+    simultaneously and refreshed together.
+
+    `algorithms` stays pinned on both attempts -- without it a token forged
+    with `alg: none`, or `alg: HS256` using the public key as an HMAC
+    secret, would be accepted.
+    """
+    try:
+        return jwt.decode(token, settings.JWT_PUBLIC_KEY, algorithms=[_JWT_ALGORITHM])
+    except JWTError:
+        if not settings.JWT_PUBLIC_KEY_OLD:
+            raise
+        return jwt.decode(token, settings.JWT_PUBLIC_KEY_OLD, algorithms=[_JWT_ALGORITHM])
+
+
 def verify_access_token(token: str) -> AccessTokenPayload:
     settings = get_settings()
     try:
         # `algorithms` is restricted to RS256 explicitly — without this,
         # a token forged with `alg: none` or `alg: HS256` (using the public
         # key as an HMAC secret) would otherwise be accepted.
-        claims = jwt.decode(token, settings.JWT_PUBLIC_KEY, algorithms=[_JWT_ALGORITHM])
+        claims = _decode_with_rotation(token, settings)
         org = claims.get("org")
         impersonator_id = claims.get("impersonator_id")
         auth_time = claims.get("auth_time")
@@ -178,13 +256,38 @@ def hash_token(plain: str) -> str:
     return hashlib.sha256(plain.encode("utf-8")).hexdigest()
 
 
-def _url_token_serializer() -> URLSafeTimedSerializer:
-    # itsdangerous needs an opaque signing secret; Settings has no dedicated
-    # field for one (§"Configuration module"), so JWT_PRIVATE_KEY is reused.
-    # The "auth.url-token" salt namespaces the derived key so a leaked
-    # signature here can't be replayed as a JWT signature, or vice versa.
+def _url_token_keys() -> list[str]:
+    """Every secret a URL token may be signed with, oldest first.
+
+    itsdangerous signs with the **last** key in the list and verifies against
+    all of them, which is the rotation primitive this needs. Measured against
+    itsdangerous 2.2 rather than assumed.
+
+    Blank URL_TOKEN_SECRET means the historical behaviour: these tokens are
+    signed with JWT_PRIVATE_KEY, which `_url_token_serializer` borrowed for
+    want of a dedicated field. That coupling is the reason rotating the JWT
+    keypair invalidated every emailed link -- password resets, email
+    verification, magic links, the OAuth `state` -- rather than just the
+    15-minute access tokens.
+
+    The migration is not automatic on purpose. Adopting a dedicated secret
+    silently would invalidate every link in flight at the moment of deploy;
+    instead the operator sets URL_TOKEN_SECRET to the new value and
+    URL_TOKEN_SECRET_OLD to the JWT private key for one token lifetime. See
+    docs/runbooks/credential-rotation.md.
+    """
     settings = get_settings()
-    return URLSafeTimedSerializer(settings.JWT_PRIVATE_KEY, salt="auth.url-token")
+    if not settings.URL_TOKEN_SECRET:
+        return [settings.JWT_PRIVATE_KEY]
+    previous = settings.URL_TOKEN_SECRET_OLD
+    return ([previous] if previous else []) + [settings.URL_TOKEN_SECRET]
+
+
+def _url_token_serializer() -> URLSafeTimedSerializer:
+    # The "auth.url-token" salt namespaces the derived key so a leaked
+    # signature here can't be replayed as a JWT signature, or vice versa --
+    # which matters most while the two still share a secret.
+    return URLSafeTimedSerializer(_url_token_keys(), salt="auth.url-token")
 
 
 def sign_url_token(payload: dict[str, Any], ttl: int) -> str:  # noqa: ARG001 -- ttl is enforced by verify_url_token's max_age (itsdangerous checks age at load time, not sign time); kept on this signature so call sites pair the two values explicitly

@@ -68,8 +68,9 @@ breaks if you skip the ordering.
 | `STRIPE_WEBHOOK_SECRET` | overlap at Stripe | signature verification, see step 4 |
 | `DATABASE_URL` password | ordered, see step 5 | pgbouncer's SCRAM userlist |
 | `REDIS_URL` password | ordered | every process holding a pool |
-| `JWT_PRIVATE_KEY` / `JWT_PUBLIC_KEY` | **breaking**, see step 6 | access tokens **and every emailed link** |
-| `PASSWORD_PEPPER` | **cannot be rotated**, see step 7 | every stored password |
+| `JWT_PRIVATE_KEY` / `JWT_PUBLIC_KEY` | overlap via `JWT_PUBLIC_KEY_OLD`, see step 6 | access tokens; **also emailed links until `URL_TOKEN_SECRET` is set** |
+| `URL_TOKEN_SECRET` | overlap via `URL_TOKEN_SECRET_OLD`, see step 6b | every emailed and redirect-carried link |
+| `PASSWORD_PEPPER` | supported since 2026-09-14, see step 7 | every stored password |
 | `ENCRYPTION_KEY` | supported — `encryption-key-rotation.md` | encrypted columns |
 | `SSH_KEY` (deploy) | swap | the box's `authorized_keys` |
 
@@ -152,56 +153,95 @@ have the previous password to hand.
 
 ### 6. Rotate the JWT keypair
 
-This is more breaking than it looks, and the reason is not obvious from the
-name. `JWT_PRIVATE_KEY` signs:
+Access tokens are verified against the current public key first and
+`JWT_PUBLIC_KEY_OLD` second, so a rotation does not reject every token
+minted in the preceding 15 minutes at once.
 
-- every access token (15 minutes, so self-healing), **and**
-- every emailed and redirect-carried link, because
-  `app.modules.auth.utils._url_token_serializer` reuses it as the
-  `itsdangerous` secret — email verification, password reset, magic links,
-  email-change confirm/cancel, the OAuth `state` parameter, and the 2FA
-  challenge token
+1. Generate a new RSA keypair.
+2. In `PROD_ENV_FILE`: move the current `JWT_PUBLIC_KEY` to
+   `JWT_PUBLIC_KEY_OLD`, and set the new private/public pair.
+3. Redeploy.
+4. After `ACCESS_TOKEN_EXPIRE_MINUTES` (15 by default), clear
+   `JWT_PUBLIC_KEY_OLD` and redeploy again.
 
-So rotating it invalidates **every outstanding link a user has been emailed**,
-not just their session. Someone mid password-reset gets an invalid-token
-page.
+**Expected:** no change visible to users. No sign-out, and no burst of
+simultaneous refreshes.
 
-There is no `JWT_PUBLIC_KEY_OLD` and no `kid` header, so no overlap is
-possible today. Until there is:
+There is deliberately no old *private* key: signing always uses the current
+one, because nothing should still be minting tokens with a retired key.
 
-1. Announce it, or do it when link volume is lowest.
-2. Rotate and redeploy.
-3. Expect a burst of `/auth/refresh` as every access token is rejected at
-   once. Sessions survive — refresh tokens are stored as plain SHA-256 in
-   the `session` table and do not involve this key.
+**Before doing this, check whether `URL_TOKEN_SECRET` is set.** If it is
+blank, `JWT_PRIVATE_KEY` is *also* the signing secret for every emailed link
+-- password reset, email verification, magic links, email-change
+confirm/cancel, the OAuth `state` parameter, the 2FA challenge token -- and
+rotating it invalidates all of them, up to 24 hours' worth. Do step 6b first
+and this becomes an ordinary keypair rotation.
 
-**Expected:** a spike in refresh calls, then normal traffic. Users are not
-signed out; users holding an emailed link are.
+### 6b. Give URL tokens their own secret
 
-### 7. `PASSWORD_PEPPER` — read before touching
+A one-time migration, worth doing before the first JWT rotation. It exists
+because these two were coupled by accident: `_url_token_serializer` borrowed
+`JWT_PRIVATE_KEY` for want of a dedicated field.
 
-**It cannot be rotated.** `hash_password` computes
-`argon2(sha256(pepper + ":" + plaintext))`, and `verify_password` recomputes
-the same thing. There is no second pepper to fall back to and no version
-marker on the stored hash, so changing this value makes **every stored
-password fail to verify** — with no way to tell a wrong password from a
-wrong pepper.
+1. Generate a secret:
+   `python -c "import secrets; print(secrets.token_urlsafe(32))"`
+2. In `PROD_ENV_FILE`, set `URL_TOKEN_SECRET` to it and
+   `URL_TOKEN_SECRET_OLD` to the **current `JWT_PRIVATE_KEY`**, verbatim.
+   Both at once -- that is what keeps links already in flight working.
+3. Redeploy.
+4. Wait 24 hours: the longest URL-token TTL is the email-verification link.
+5. Clear `URL_TOKEN_SECRET_OLD` and redeploy.
 
-If the pepper leaks, the options are:
+**Expected:** a password-reset link emailed before step 3 still works after
+it. itsdangerous verifies against every key it is given and signs with the
+last, so both are live during the overlap.
 
-- **Leave it.** The pepper is defence in depth *on top of* Argon2's own
-  per-hash salt. A leaked pepper alone does not make hashes crackable; it
-  removes one layer, and the remaining one is the one doing the work.
-- **Force a reset for everyone.** Change the pepper, then treat every
-  password as unusable: expire all sessions and require password reset by
-  email. Only justified if the password hashes leaked too.
+Thereafter `URL_TOKEN_SECRET` rotates the same way: new value in
+`URL_TOKEN_SECRET`, previous in `URL_TOKEN_SECRET_OLD`, wait 24 hours,
+clear.
 
-Do not change it "to be safe". The failure mode is total and immediate.
+### 7. Rotate the password pepper
 
-The proper fix is a versioned pepper — store which pepper hashed each row and
-rehash on next successful login. That is not built; it is the top item in
-this repo's rotation backlog and the reason this section exists rather than a
-procedure.
+Supported since 2026-09-14, and worth reading before starting, because it is
+the one rotation with no completion signal.
+
+`PASSWORD_PEPPER` is HMAC'd into every password before Argon2, so a hash
+cannot be rewritten without the plaintext -- and only the user has that.
+There is therefore no background sweep, as there is for `ENCRYPTION_KEY`.
+Rows migrate one successful login at a time.
+
+1. Generate the new pepper:
+   `python -c "import secrets; print(secrets.token_urlsafe(32))"`
+2. In `PROD_ENV_FILE`, move the current value to `PASSWORD_PEPPER_OLD` and
+   put the new one in `PASSWORD_PEPPER`. **Both set, at once.**
+3. Redeploy.
+
+**Expected:** logins keep working, unchanged, for everyone. Verification
+falls back to the old pepper, and each success re-hashes that user's
+password with the new one (`app.modules.auth.utils.check_password` ->
+`AuthService.login`).
+
+4. Leave both set while logins drain. How long is a judgement call about
+   your login volume, not a status you can query: an account that never
+   signs in again keeps its old hash forever.
+5. Clear `PASSWORD_PEPPER_OLD` and redeploy.
+
+**Expected:** logins still work for everyone who has signed in since step 3.
+Anyone who has not is now locked out and must use password reset — which is
+the trade being made, and the reason step 4 is not "wait an hour".
+
+Two things to know while both are set:
+
+- A **wrong** password costs two Argon2 verifications instead of one, and
+  Argon2 is memory-hard on purpose. The login rate limit (5/minute per IP)
+  bounds it, but do not leave the old pepper set indefinitely "just in case".
+- The same mechanism migrates hashes when Argon2's own cost parameters are
+  raised, via `check_needs_rehash` — so that is a free ride on this path.
+
+**If the pepper leaked**, rotating is now a real option rather than a forced
+reset for everyone. Note it is still defence in depth *on top of* Argon2's
+per-hash salt: a leaked pepper alone does not make hashes crackable. Rotate,
+but do not panic-force resets unless the hashes leaked too.
 
 ### 8. Rotate the deploy SSH key
 
@@ -252,9 +292,10 @@ the deploy goes green.
 
 Two exceptions where even the deploy is not reversible:
 
-- **`PASSWORD_PEPPER`**, as above. Restoring the old value restores the
-  passwords, so keep it until you are certain — but any password *set* while
-  the new pepper was live is then broken instead.
+- **`PASSWORD_PEPPER`**, once `PASSWORD_PEPPER_OLD` has been cleared. Until
+  then rollback is free — put the old value back as the current one. After
+  it, any password re-hashed under the new pepper needs the new pepper, so
+  going back strands exactly the users who have logged in most recently.
 - **`ENCRYPTION_KEY` once its rotation job has run.** Rows re-encrypted with
   the new key need it. See that runbook.
 
