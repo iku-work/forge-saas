@@ -1,9 +1,16 @@
 # Deploying to Render
 
-The `deploy` job in `.github/workflows/ci.yml` targets [Render](https://render.com)
-and is dormant until the secrets below are configured on the repo
-(Settings → Secrets and variables → Actions). Until then, pushes to `main`
-build and push the image but the `deploy` job fails on its first step.
+`.github/workflows/deploy-render.yml` targets [Render](https://render.com). It
+is dormant until the secrets below are configured on the repo
+(Settings → Secrets and variables → Actions); until then, pushes to `main`
+build and push the image but the deploy fails on its first step.
+
+Since 2026-09-14 it is one of three sibling workflows -- Render, Hetzner and
+AWS -- selected by the `DEPLOY_TARGET` repository variable and sharing one
+built, scanned image and one preflight (env, guards, migrations). See
+`docs/runbooks/deploy-pipeline.md` for the shared half; this file covers only
+what is specific to Render. An unset `DEPLOY_TARGET` still means Render, so
+nothing here changed for an existing deployment.
 
 ## Trigger
 

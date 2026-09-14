@@ -1293,6 +1293,36 @@ jobs:
       - name: Push image
         run: docker push "$IMAGE:$GITHUB_SHA"
 
+      # The edge, with the SPA and marketing bundles inside it. Only the
+      # compose-on-a-VPS deploy uses this (Render serves the frontend itself;
+      # on AWS the bundle belongs in S3+CloudFront) -- but it is built on
+      # every main build so the tag always exists for a rollback to reach
+      # back to.
+      #
+      # It compiles the frontend again rather than reusing the turbo build
+      # above, so the image is reproducible from the Dockerfile alone. The
+      # GitHub Actions layer cache is what keeps that from costing a full
+      # rebuild each time; only a lockfile or source change invalidates it.
+      - name: Set up Buildx for the edge image
+        if: github.ref == 'refs/heads/main'
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and push the edge image
+        if: github.ref == 'refs/heads/main'
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: Dockerfile.caddy
+          push: true
+          tags: ${{ env.IMAGE }}-caddy:${{ github.sha }}
+          build-args: |
+            PUBLIC_SITE_URL=${{ vars.PUBLIC_SITE_URL }}
+            PUBLIC_APP_URL=${{ vars.PUBLIC_APP_URL }}
+            PUBLIC_API_URL=${{ vars.PUBLIC_API_URL }}
+            VITE_API_URL=${{ vars.PUBLIC_API_URL }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
   # T-210: passive DAST pass against a real running instance of the app --
   # boots the same dev stack `make dev` does (minus the worker, which this
   # passive HTTP scan never exercises) and scans it through Caddy, not the
@@ -1607,108 +1637,37 @@ jobs:
   # RENDER_WORKER_SERVICE_ID / PROD_ENV_FILE / PROD_DATABASE_URL / PROD_DOMAIN
   # secrets are configured on the repo (see docs/runbooks/deploy-render.md).
   # Until then this job simply fails fast on the first curl, on push to main.
-  deploy:
-    if: github.ref == 'refs/heads/main'
+  # The deploy itself lives in one workflow per platform, so a product can
+  # pick its target without editing this file and so each can be run by hand
+  # (workflow_dispatch) to redeploy or roll forward without pushing a commit.
+  #
+  # DEPLOY_TARGET is a repository *variable*, not a secret. Unset means
+  # render, which is what this job did inline before it was split -- existing
+  # deployments keep their behaviour. Set it to `none` to stop deploying from
+  # CI entirely, which is the right setting while a box is still being
+  # deployed by hand.
+  deploy-render:
+    if: >-
+      github.ref == 'refs/heads/main'
+      && (vars.DEPLOY_TARGET == 'render' || vars.DEPLOY_TARGET == '')
     needs: build
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-    environment: production
+    uses: ./.github/workflows/deploy-render.yml
+    secrets: inherit
+    with:
+      image-tag: ${{ github.sha }}
 
-    permissions:
-      contents: read
-      packages: read
+  deploy-hetzner:
+    if: github.ref == 'refs/heads/main' && vars.DEPLOY_TARGET == 'hetzner'
+    needs: build
+    uses: ./.github/workflows/deploy-hetzner.yml
+    secrets: inherit
+    with:
+      image-tag: ${{ github.sha }}
 
-    env:
-      IMAGE: ghcr.io/${{ github.repository }}:${{ github.sha }}
-
-    steps:
-      - name: Log in to GHCR
-        uses: docker/login-action@v3
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Write production .env (Settings() needs every required field, not just DATABASE_URL)
-        run: printf '%s' "${{ secrets.PROD_ENV_FILE }}" > prod.env
-
-      # T-225/ASVS V12.4.2: app.core.config.Settings itself already refuses
-      # to boot with VIRUS_SCANNER=noop outside dev, but that failure would
-      # only surface as a crash-looping Render service *after* the deploy
-      # below -- catching it here fails fast, before migrations even run,
-      # against the exact env file the deploy is about to ship.
-      - name: Guard against VIRUS_SCANNER=noop in production
-        run: |
-          if grep -qE '^VIRUS_SCANNER=noop$' prod.env; then
-            echo "PROD_ENV_FILE sets VIRUS_SCANNER=noop -- uploaded files would never be scanned. Refusing to deploy." >&2
-            exit 1
-          fi
-
-      # Same image that was scanned + pushed in `build` -- never reinstalled
-      # from source, so what ran migrations is byte-for-byte what gets deployed.
-      # Same multi-head reason as the test job's migrate step above -- and it
-      # matters more here: `alembic upgrade head` could never have succeeded
-      # against this schema, so the production migration step was broken from
-      # the day the first module branch landed. Nothing caught it because this
-      # workflow had never run.
-      - name: Run migrations against production DB (fail = abort, no deploy)
-        run: docker run --rm --env-file prod.env "$IMAGE" python -m app.core.migrations
-
-      - name: Capture currently-live deploy (rollback target if the new one fails)
-        id: previous
-        run: |
-          DEPLOY_ID=$(curl -sf -H "Authorization: Bearer ${{ secrets.RENDER_API_KEY }}" \
-            "https://api.render.com/v1/services/${{ secrets.RENDER_BACKEND_SERVICE_ID }}/deploys?status=live&limit=1" \
-            | jq -r '.[0] | (.deploy // .) | .id')
-          echo "deploy_id=$DEPLOY_ID" >> "$GITHUB_OUTPUT"
-
-      - name: Trigger Render deploy — backend
-        id: deploy_backend
-        run: |
-          DEPLOY_ID=$(curl -sf -X POST \
-            "https://api.render.com/v1/services/${{ secrets.RENDER_BACKEND_SERVICE_ID }}/deploys" \
-            -H "Authorization: Bearer ${{ secrets.RENDER_API_KEY }}" \
-            -H "Content-Type: application/json" \
-            -d "{\"imageUrl\": \"$IMAGE\"}" | jq -r '.id')
-          echo "deploy_id=$DEPLOY_ID" >> "$GITHUB_OUTPUT"
-
-      - name: Trigger Render deploy — worker
-        run: |
-          curl -sf -X POST \
-            "https://api.render.com/v1/services/${{ secrets.RENDER_WORKER_SERVICE_ID }}/deploys" \
-            -H "Authorization: Bearer ${{ secrets.RENDER_API_KEY }}" \
-            -H "Content-Type: application/json" \
-            -d "{\"imageUrl\": \"$IMAGE\"}"
-
-      # Render keeps the previous deploy serving traffic until the new one
-      # reports "live" -- this makes that health gate visible in CI rather
-      # than trusting it silently.
-      - name: Wait for backend health gate
-        run: |
-          for i in $(seq 1 60); do
-            STATUS=$(curl -sf -H "Authorization: Bearer ${{ secrets.RENDER_API_KEY }}" \
-              "https://api.render.com/v1/services/${{ secrets.RENDER_BACKEND_SERVICE_ID }}/deploys/${{ steps.deploy_backend.outputs.deploy_id }}" \
-              | jq -r '.status')
-            echo "deploy status: $STATUS"
-            [ "$STATUS" = "live" ] && exit 0
-            case "$STATUS" in *failed*|canceled) exit 1 ;; esac
-            sleep 5
-          done
-          echo "timed out waiting for deploy to go live" >&2
-          exit 1
-
-      - name: Smoke test
-        id: smoke_test
-        run: curl -sf "https://${{ secrets.PROD_DOMAIN }}/health/ready"
-
-      - name: Roll back to previous deploy
-        if: failure() && steps.smoke_test.outcome == 'failure'
-        run: |
-          curl -sf -X POST "https://api.render.com/v1/services/${{ secrets.RENDER_BACKEND_SERVICE_ID }}/rollback" \
-            -H "Authorization: Bearer ${{ secrets.RENDER_API_KEY }}" \
-            -H "Content-Type: application/json" \
-            -d "{\"deployId\": \"${{ steps.previous.outputs.deploy_id }}\"}"
-
-      # E2E (Playwright) against staging lands in T-220 (Phase 3) -- no
-      # Playwright project exists in this repo yet, so this step is
-      # intentionally not wired up until then.
+  deploy-aws:
+    if: github.ref == 'refs/heads/main' && vars.DEPLOY_TARGET == 'aws'
+    needs: build
+    uses: ./.github/workflows/deploy-aws.yml
+    secrets: inherit
+    with:
+      image-tag: ${{ github.sha }}

@@ -1,0 +1,26 @@
+# Deploy from prebuilt, already-scanned images instead of building on the
+# host. This is what .github/workflows/deploy-hetzner.yml uses.
+#
+# Nothing is compiled on the box: no Node, no pnpm, no Docker build cache to
+# fill the disk with, and no directory mutated underneath a running Caddy.
+# A release is a container, so a rollback is `BACKEND_IMAGE=<older sha>` and
+# `up -d` again.
+#
+# Both variables are required -- there is deliberately no default. A typo
+# that silently fell back to a local image name would deploy whatever last
+# happened to be built on the host, which is the situation this replaces.
+#
+#   BACKEND_IMAGE=ghcr.io/<owner>/<repo>:<sha> \
+#   CADDY_IMAGE=ghcr.io/<owner>/<repo>-caddy:<sha> \
+#   docker compose -f docker-compose.prod.yml \
+#                  -f docker-compose.tls.yml \
+#                  -f docker-compose.registry.yml up -d
+services:
+  backend:
+    image: ${BACKEND_IMAGE:?set BACKEND_IMAGE to a fully qualified image ref}
+    build: !reset null
+  worker:
+    image: ${BACKEND_IMAGE:?set BACKEND_IMAGE to a fully qualified image ref}
+    build: !reset null
+  caddy:
+    image: ${CADDY_IMAGE:?set CADDY_IMAGE to a fully qualified image ref}

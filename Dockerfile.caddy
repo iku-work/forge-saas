@@ -1,0 +1,56 @@
+# The edge, with the frontend baked in.
+#
+# The Hetzner box used to build the bundle itself and Caddy served it from a
+# bind mount. Two production incidents came from that arrangement on
+# 2026-09-13/14:
+#
+#   - Building on the box accumulated 30 GB of Docker build cache on a 38 GB
+#     disk. It filled, Postgres began PANICking mid-write ("could not write
+#     to file ... No space left on device"), and the site went down.
+#   - `rm -rf apps/web/dist` before a rebuild left Caddy holding a deleted
+#     directory, so every page 404'd until the container was recreated.
+#
+# Neither is possible once the bundle is inside an image: the box builds
+# nothing, needs no Node, and a new release is a new container rather than a
+# directory mutated underneath a running server. Rollback becomes "run the
+# previous tag".
+
+# --- build the frontend -----------------------------------------------------
+FROM node:22-slim AS web
+WORKDIR /repo
+
+# The bundle bakes its API origin in at build time (VITE_API_URL), so these
+# are build args rather than runtime env -- a container cannot change them
+# afterwards, which is why the deploy workflow passes the real hosts here.
+ARG PUBLIC_SITE_URL
+ARG PUBLIC_APP_URL
+ARG PUBLIC_API_URL
+ARG VITE_API_URL
+ENV PUBLIC_SITE_URL=$PUBLIC_SITE_URL \
+    PUBLIC_APP_URL=$PUBLIC_APP_URL \
+    PUBLIC_API_URL=$PUBLIC_API_URL \
+    VITE_API_URL=$VITE_API_URL
+
+COPY . .
+RUN corepack enable \
+    && pnpm install --frozen-lockfile \
+    && pnpm build
+
+# --- the image that actually runs -------------------------------------------
+FROM caddy:2-alpine
+
+# Same paths the bind mounts used, so Caddyfile.prod needs no changes.
+COPY --from=web /repo/apps/web/dist /srv/web
+# apps/marketing's build script exits 0 without producing a dist when the
+# marketing module is off, so this has to tolerate an absent directory --
+# hence copying the parent and letting the glob import in Caddyfile.prod find
+# nothing, exactly as it does with an empty bind mount.
+COPY --from=web /repo/apps/marketing/dist /srv/marketing
+COPY --from=web /repo/apps/marketing/caddy/prod /etc/caddy/conf.d
+COPY Caddyfile.prod /etc/caddy/Caddyfile
+
+# Fail the build rather than ship an edge that cannot start. A malformed
+# Caddyfile takes down every site on the box, not one, so this is the last
+# cheap place to catch it.
+RUN DOMAIN=build-check.invalid STORAGE_DOMAIN=storage.build-check.invalid \
+    caddy validate --config /etc/caddy/Caddyfile

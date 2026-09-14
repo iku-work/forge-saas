@@ -1,0 +1,159 @@
+name: Deploy — Hetzner (docker compose over SSH)
+
+# A single VPS running docker-compose.prod.yml. The box pulls prebuilt images
+# and runs them; it builds nothing.
+#
+# That last point is the whole design. When the box built its own images,
+# Docker build cache reached 30 GB of a 38 GB disk, Postgres began PANICking
+# mid-write and the site went down (2026-09-13). Clearing `apps/web/dist`
+# before a rebuild left Caddy holding a deleted directory and every page
+# 404'd (2026-09-14). Both are structurally impossible here: no build on the
+# host, and the bundle lives inside the Caddy image, so a release is a
+# container rather than a directory edited underneath a running server.
+#
+# Secrets this needs:
+#   PROD_ENV_FILE      the complete backend/.env, same secret Render uses
+#   SSH_HOST           box hostname or IP
+#   SSH_USER           the login (must be in the `docker` group)
+#   SSH_KEY            private key, PEM
+#   SSH_KNOWN_HOSTS    output of `ssh-keyscan <host>` -- pinned rather than
+#                      trusted on first use, or the deploy would accept a
+#                      man-in-the-middle on its first run
+#   PROD_DOMAIN        for the post-deploy smoke test
+
+on:
+  workflow_call:
+    inputs:
+      image-tag:
+        description: Tag of the already-built, already-scanned GHCR images.
+        required: true
+        type: string
+  workflow_dispatch:
+    inputs:
+      image-tag:
+        description: Commit SHA to deploy (must already be built and pushed).
+        required: true
+        type: string
+
+concurrency:
+  # One at a time: two overlapping deploys race on the same migration, and
+  # `up -d` on the same compose project would fight over containers.
+  group: deploy-hetzner
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    environment: production
+
+    permissions:
+      contents: read
+      packages: read
+
+    env:
+      BACKEND_IMAGE: ghcr.io/${{ github.repository }}:${{ inputs.image-tag }}
+      CADDY_IMAGE: ghcr.io/${{ github.repository }}-caddy:${{ inputs.image-tag }}
+      COMPOSE: >-
+        -f docker-compose.prod.yml
+        -f docker-compose.tls.yml
+        -f docker-compose.registry.yml
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # Runs the migration from the backend image, here on the runner,
+      # against the production database -- before anything on the box
+      # changes. A failed migration must abort the deploy rather than leave
+      # new code against an old schema.
+      - name: Preflight — env, guards, migrations
+        uses: ./.github/actions/deploy-preflight
+        with:
+          image: ${{ env.BACKEND_IMAGE }}
+          prod-env-file: ${{ secrets.PROD_ENV_FILE }}
+          registry-username: ${{ github.actor }}
+          registry-password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Configure SSH
+        run: |
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "${{ secrets.SSH_KEY }}" > ~/.ssh/id_deploy
+          chmod 600 ~/.ssh/id_deploy
+          printf '%s\n' "${{ secrets.SSH_KNOWN_HOSTS }}" > ~/.ssh/known_hosts
+          chmod 644 ~/.ssh/known_hosts
+
+      # The *tag*, not the full ref: backend and caddy live in two GHCR
+      # repositories that share one tag, so a rollback needs the tag in order
+      # to rebuild both refs. And compose is asked which container is the
+      # backend rather than guessing `forge-backend-1`, which depends on
+      # whatever directory the project happens to sit in.
+      - name: Record the currently-deployed tag (rollback target)
+        id: previous
+        run: |
+          PREVIOUS=$(ssh -i ~/.ssh/id_deploy "${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}" \
+            'cd ~/forge && docker inspect --format "{{.Config.Image}}" \
+               "$(docker compose -f docker-compose.prod.yml -f docker-compose.tls.yml -f docker-compose.registry.yml ps -q backend)" 2>/dev/null || true')
+          echo "full ref currently running: ${PREVIOUS:-<nothing>}"
+          echo "tag=${PREVIOUS##*:}" >> "$GITHUB_OUTPUT"
+
+      # The env file goes over the wire rather than being edited in place.
+      # Hand-editing it on the box is how CADDY_TRUSTED_PROXIES came to be
+      # missing for a week; the file is now derived from one secret and
+      # nothing else.
+      - name: Ship the production env
+        run: |
+          scp -i ~/.ssh/id_deploy prod.env \
+            "${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}:~/forge/backend/.env.next"
+
+      - name: Pull and switch
+        id: switch
+        run: |
+          ssh -i ~/.ssh/id_deploy "${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}" bash -euo pipefail <<EOF
+            cd ~/forge
+            git fetch --quiet origin
+            git checkout --quiet ${{ inputs.image-tag }}
+            mv backend/.env.next backend/.env
+
+            echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+
+            export BACKEND_IMAGE='${{ env.BACKEND_IMAGE }}'
+            export CADDY_IMAGE='${{ env.CADDY_IMAGE }}'
+            docker compose ${{ env.COMPOSE }} pull --quiet backend worker caddy
+
+            # --no-deps, deliberately. Without it, compose stops caddy and
+            # then waits for its dependency chain -- and the backend refuses
+            # to start while caddy is down, because caddy carries the network
+            # alias for STORAGE_DOMAIN and the storage guard (correctly)
+            # refuses to reach object storage over the public internet. That
+            # deadlock took production down on 2026-09-14.
+            docker compose ${{ env.COMPOSE }} up -d --no-deps backend worker caddy
+
+            docker logout ghcr.io
+          EOF
+
+      - name: Smoke test
+        id: smoke_test
+        run: |
+          for _ in $(seq 1 30); do
+            if curl -sf "https://${{ secrets.PROD_DOMAIN }}/health/ready" >/dev/null; then
+              echo "healthy"
+              exit 0
+            fi
+            sleep 4
+          done
+          echo "service did not become healthy" >&2
+          exit 1
+
+      # Only the images move backwards. The database does not: a migration
+      # that has already applied stays applied, which is why they must be
+      # written to work against the previous release too.
+      - name: Roll back to the previous image
+        if: failure() && steps.switch.outcome == 'success' && steps.previous.outputs.tag != ''
+        run: |
+          ssh -i ~/.ssh/id_deploy "${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}" bash -euo pipefail <<EOF
+            cd ~/forge
+            export BACKEND_IMAGE='ghcr.io/${{ github.repository }}:${{ steps.previous.outputs.tag }}'
+            export CADDY_IMAGE='ghcr.io/${{ github.repository }}-caddy:${{ steps.previous.outputs.tag }}'
+            docker compose ${{ env.COMPOSE }} up -d --no-deps backend worker caddy
+          EOF
+          echo "rolled back to ${{ steps.previous.outputs.tag }}" >&2

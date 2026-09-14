@@ -1,0 +1,110 @@
+name: Deploy — Render
+
+# Extracted verbatim from ci.yml's old inline `deploy` job so that the three
+# platforms are siblings rather than one being privileged. Behaviour is
+# unchanged; only its location is.
+#
+# Two triggers on purpose:
+#   workflow_call     ci.yml invokes it after `build`, when DEPLOY_TARGET
+#                     selects render.
+#   workflow_dispatch a human can redeploy or roll forward to any SHA
+#                     without pushing a commit -- which is what you want at
+#                     3am, and what the inline job made impossible.
+
+on:
+  workflow_call:
+    inputs:
+      image-tag:
+        description: Tag of the already-built, already-scanned GHCR image.
+        required: true
+        type: string
+  workflow_dispatch:
+    inputs:
+      image-tag:
+        description: Commit SHA to deploy (must already be built and pushed).
+        required: true
+        type: string
+
+concurrency:
+  # One deploy at a time. Two overlapping ones race on the same migration.
+  group: deploy-render
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: production
+
+    permissions:
+      contents: read
+      packages: read
+
+    env:
+      IMAGE: ghcr.io/${{ github.repository }}:${{ inputs.image-tag }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Preflight — env, guards, migrations
+        uses: ./.github/actions/deploy-preflight
+        with:
+          image: ${{ env.IMAGE }}
+          prod-env-file: ${{ secrets.PROD_ENV_FILE }}
+          registry-username: ${{ github.actor }}
+          registry-password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Capture currently-live deploy (rollback target if the new one fails)
+        id: previous
+        run: |
+          DEPLOY_ID=$(curl -sf -H "Authorization: Bearer ${{ secrets.RENDER_API_KEY }}" \
+            "https://api.render.com/v1/services/${{ secrets.RENDER_BACKEND_SERVICE_ID }}/deploys?status=live&limit=1" \
+            | jq -r '.[0] | (.deploy // .) | .id')
+          echo "deploy_id=$DEPLOY_ID" >> "$GITHUB_OUTPUT"
+
+      - name: Trigger Render deploy — backend
+        id: deploy_backend
+        run: |
+          DEPLOY_ID=$(curl -sf -X POST \
+            "https://api.render.com/v1/services/${{ secrets.RENDER_BACKEND_SERVICE_ID }}/deploys" \
+            -H "Authorization: Bearer ${{ secrets.RENDER_API_KEY }}" \
+            -H "Content-Type: application/json" \
+            -d "{\"imageUrl\": \"$IMAGE\"}" | jq -r '.id')
+          echo "deploy_id=$DEPLOY_ID" >> "$GITHUB_OUTPUT"
+
+      - name: Trigger Render deploy — worker
+        run: |
+          curl -sf -X POST \
+            "https://api.render.com/v1/services/${{ secrets.RENDER_WORKER_SERVICE_ID }}/deploys" \
+            -H "Authorization: Bearer ${{ secrets.RENDER_API_KEY }}" \
+            -H "Content-Type: application/json" \
+            -d "{\"imageUrl\": \"$IMAGE\"}"
+
+      # Render keeps the previous deploy serving traffic until the new one
+      # reports "live" -- this makes that health gate visible in CI rather
+      # than trusting it silently.
+      - name: Wait for backend health gate
+        run: |
+          for _ in $(seq 1 60); do
+            STATUS=$(curl -sf -H "Authorization: Bearer ${{ secrets.RENDER_API_KEY }}" \
+              "https://api.render.com/v1/services/${{ secrets.RENDER_BACKEND_SERVICE_ID }}/deploys/${{ steps.deploy_backend.outputs.deploy_id }}" \
+              | jq -r '.status')
+            echo "deploy status: $STATUS"
+            [ "$STATUS" = "live" ] && exit 0
+            case "$STATUS" in *failed*|canceled) exit 1 ;; esac
+            sleep 5
+          done
+          echo "timed out waiting for deploy to go live" >&2
+          exit 1
+
+      - name: Smoke test
+        id: smoke_test
+        run: curl -sf "https://${{ secrets.PROD_DOMAIN }}/health/ready"
+
+      - name: Roll back to previous deploy
+        if: failure() && steps.smoke_test.outcome == 'failure'
+        run: |
+          curl -sf -X POST "https://api.render.com/v1/services/${{ secrets.RENDER_BACKEND_SERVICE_ID }}/rollback" \
+            -H "Authorization: Bearer ${{ secrets.RENDER_API_KEY }}" \
+            -H "Content-Type: application/json" \
+            -d "{\"deployId\": \"${{ steps.previous.outputs.deploy_id }}\"}"
