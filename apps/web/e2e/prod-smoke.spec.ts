@@ -94,7 +94,7 @@ test.describe("deployed environment smoke", () => {
           await expect(page.getByTestId("app-shell")).toBeVisible();
           // A heading proves the route rendered its page rather than an
           // empty shell or an error boundary.
-          await expect(page.locator("h1").first()).toBeVisible();
+          await expect(page.getByTestId("page-title")).toBeVisible();
           const overflow = await page.evaluate(
             () =>
               document.documentElement.scrollWidth -

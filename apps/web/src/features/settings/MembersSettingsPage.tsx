@@ -311,7 +311,7 @@ export function MembersSettingsPage({
   if (orgLoading || !org) {
     return (
       <div className="max-w-3xl space-y-6 p-6">
-        <h1 className="text-xl font-semibold">{t("tenancy.members.title")}</h1>
+        <h1 className="text-xl font-semibold" data-testid="page-title">{t("tenancy.members.title")}</h1>
         <Skeleton className="h-32 w-full" />
       </div>
     );
@@ -320,7 +320,7 @@ export function MembersSettingsPage({
   return (
     <div className="max-w-3xl space-y-6 p-6">
       <div className="flex items-center justify-between">
-        <h1 className="text-xl font-semibold">{t("tenancy.members.title")}</h1>
+        <h1 className="text-xl font-semibold" data-testid="page-title">{t("tenancy.members.title")}</h1>
         {canManage ? (
           <Button
             type="button"

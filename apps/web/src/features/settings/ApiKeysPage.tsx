@@ -383,7 +383,7 @@ export function ApiKeysPage() {
   if (orgLoading || !org) {
     return (
       <div className="max-w-4xl space-y-6 p-6">
-        <h1 className="text-xl font-semibold">{t("tenancy.api_keys.title")}</h1>
+        <h1 className="text-xl font-semibold" data-testid="page-title">{t("tenancy.api_keys.title")}</h1>
         <Skeleton className="h-32 w-full" />
       </div>
     );
@@ -392,7 +392,7 @@ export function ApiKeysPage() {
   if (!canManage) {
     return (
       <div className="max-w-4xl space-y-6 p-6" data-testid="api-keys-page">
-        <h1 className="text-xl font-semibold">{t("tenancy.api_keys.title")}</h1>
+        <h1 className="text-xl font-semibold" data-testid="page-title">{t("tenancy.api_keys.title")}</h1>
         <Alert>
           <AlertDescription data-testid="api-keys-permission-denied">
             {t("common.error.permission_denied")}
@@ -407,7 +407,7 @@ export function ApiKeysPage() {
   return (
     <div className="max-w-4xl space-y-6 p-6" data-testid="api-keys-page">
       <div className="flex items-center justify-between">
-        <h1 className="text-xl font-semibold">{t("tenancy.api_keys.title")}</h1>
+        <h1 className="text-xl font-semibold" data-testid="page-title">{t("tenancy.api_keys.title")}</h1>
         <Button
           type="button"
           disabled={keys.length >= MAX_KEYS_PER_ORG}

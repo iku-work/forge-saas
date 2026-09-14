@@ -407,7 +407,7 @@ export function AdminOrgDetailPage({ orgId }: { orgId: string }) {
       ) : detail ? (
         <>
           <div>
-            <h1 className="text-xl font-semibold">{detail.name}</h1>
+            <h1 className="text-xl font-semibold" data-testid="page-title">{detail.name}</h1>
             <p className="text-sm text-muted-foreground">{detail.slug}</p>
           </div>
           <div className="flex gap-6 text-sm text-muted-foreground">

@@ -130,7 +130,7 @@ export function ProfileSettingsPage() {
 
   return (
     <div className="max-w-xl space-y-6 p-6">
-      <h1 className="text-xl font-semibold">{t("common.nav.profile")}</h1>
+      <h1 className="text-xl font-semibold" data-testid="page-title">{t("common.nav.profile")}</h1>
 
       {isLoading || !user ? (
         <div className="space-y-4">

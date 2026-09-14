@@ -151,9 +151,9 @@ test.describe("no horizontal overflow at phone widths", () => {
     await page.getByTestId("login-submit").click();
     await expect(page.getByTestId("app-shell")).toBeVisible();
 
-    await page.getByRole("button", { name: /menu/i }).first().click();
+    await page.getByTestId("nav-drawer-trigger").click();
 
-    const drawer = page.getByRole("dialog");
+    const drawer = page.getByTestId("sheet-content");
     await expect(drawer).toBeVisible();
     const box = await drawer.boundingBox();
     expect(box).not.toBeNull();
@@ -163,8 +163,6 @@ test.describe("no horizontal overflow at phone widths", () => {
     expect(box!.width).toBeGreaterThan(200);
     expect(box!.height).toBeGreaterThan(400);
     // And the nav inside it is actually reachable.
-    await expect(
-      drawer.getByRole("link", { name: /dashboard/i }).first(),
-    ).toBeVisible();
+    await expect(drawer.getByTestId("nav-dashboard")).toBeVisible();
   });
 });

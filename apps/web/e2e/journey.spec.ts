@@ -175,7 +175,9 @@ test.describe("the billing lifecycle", () => {
         subscriptionId,
       });
       await page.goto("/en/settings/billing");
-      await expect(page.getByText(/past_due/)).toBeVisible();
+      await expect(page.getByTestId("billing-subscription-status")).toContainText(
+        "past_due",
+      );
       // Still Pro: past_due is inside the grace period, and telling a
       // customer they are on Free while you chase their card is its own lie.
       expect(await planBadge(page)).toContain("Pro");
@@ -196,7 +198,9 @@ test.describe("the billing lifecycle", () => {
         createdAt: recovered - 600,
       });
       await page.goto("/en/settings/billing");
-      await expect(page.getByText(/active/)).toBeVisible();
+      await expect(page.getByTestId("billing-subscription-status")).toContainText(
+        "active",
+      );
     });
 
     // Act 5. A cancelled row kept pointing at the plan it used to grant, so

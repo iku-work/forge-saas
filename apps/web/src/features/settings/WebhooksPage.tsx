@@ -649,7 +649,7 @@ export function WebhooksPage() {
   if (orgLoading || !org) {
     return (
       <div className="max-w-4xl space-y-6 p-6">
-        <h1 className="text-xl font-semibold">{t("tenancy.webhooks.title")}</h1>
+        <h1 className="text-xl font-semibold" data-testid="page-title">{t("tenancy.webhooks.title")}</h1>
         <Skeleton className="h-32 w-full" />
       </div>
     );
@@ -658,7 +658,7 @@ export function WebhooksPage() {
   if (!canManage) {
     return (
       <div className="max-w-4xl space-y-6 p-6" data-testid="webhooks-page">
-        <h1 className="text-xl font-semibold">{t("tenancy.webhooks.title")}</h1>
+        <h1 className="text-xl font-semibold" data-testid="page-title">{t("tenancy.webhooks.title")}</h1>
         <Alert>
           <AlertDescription data-testid="webhooks-permission-denied">
             {t("common.error.permission_denied")}
@@ -674,7 +674,7 @@ export function WebhooksPage() {
   return (
     <div className="max-w-4xl space-y-6 p-6" data-testid="webhooks-page">
       <div className="flex items-center justify-between">
-        <h1 className="text-xl font-semibold">{t("tenancy.webhooks.title")}</h1>
+        <h1 className="text-xl font-semibold" data-testid="page-title">{t("tenancy.webhooks.title")}</h1>
         <Button
           type="button"
           disabled={endpoints.length >= MAX_ENDPOINTS_PER_ORG}

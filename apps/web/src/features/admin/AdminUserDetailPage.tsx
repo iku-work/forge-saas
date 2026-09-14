@@ -64,7 +64,7 @@ export function AdminUserDetailPage({ userId }: { userId: string }) {
           <div className="flex items-center justify-between">
             <div>
               <div className="flex items-center gap-2">
-                <h1 className="text-xl font-semibold">{detail.email}</h1>
+                <h1 className="text-xl font-semibold" data-testid="page-title">{detail.email}</h1>
                 {detail.is_superadmin ? (
                   <Badge variant="destructive">
                     {t("common.admin.user_detail.superadmin_badge")}

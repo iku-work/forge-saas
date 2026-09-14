@@ -39,7 +39,7 @@ export function AdminDashboardPage() {
 
   return (
     <div className="max-w-5xl space-y-6 p-6">
-      <h1 className="text-xl font-semibold">{t("common.admin.dashboard.title")}</h1>
+      <h1 className="text-xl font-semibold" data-testid="page-title">{t("common.admin.dashboard.title")}</h1>
 
       {dashboardQuery.isLoading ? (
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">

@@ -87,7 +87,7 @@ export function OrgSettingsPage() {
   if (isLoading || !org) {
     return (
       <div className="max-w-xl space-y-6 p-6">
-        <h1 className="text-xl font-semibold">
+        <h1 className="text-xl font-semibold" data-testid="page-title">
           {t("tenancy.org_settings.title")}
         </h1>
         <Skeleton className="h-32 w-full" />
@@ -97,7 +97,7 @@ export function OrgSettingsPage() {
 
   return (
     <div className="max-w-xl space-y-6 p-6">
-      <h1 className="text-xl font-semibold">
+      <h1 className="text-xl font-semibold" data-testid="page-title">
         {t("tenancy.org_settings.title")}
       </h1>
       <Card>

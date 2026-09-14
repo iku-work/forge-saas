@@ -59,6 +59,10 @@ const SheetContent = forwardRef<
     <SheetOverlay />
     <DialogPrimitive.Content
       ref={ref}
+      // A stable hook for e2e: apps/web/e2e is data-testid-only (CI greps for
+      // any other selector and fails), and this panel has no other one. A
+      // caller can still override it via props.
+      data-testid="sheet-content"
       className={cn(
         // h-dvh, not h-screen: on a phone `100vh` is the viewport with the
         // browser chrome *hidden*, so a full-height panel is taller than what
