@@ -8,7 +8,8 @@
     "submit": "Submit",
     "load_more": "Load more",
     "remove": "Remove",
-    "upload": "Upload"
+    "upload": "Upload",
+    "undo": "Undo"
   },
   "status": {
     "loading": "Loading…",

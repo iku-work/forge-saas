@@ -34,7 +34,9 @@
   "action": {
     "download": "Herunterladen",
     "delete": "Löschen",
-    "delete_confirm": "Diese Datei löschen?"
+    "delete_confirm": "Diese Datei löschen?",
+    "delete_confirm_title": "Diese Datei löschen?",
+    "delete_confirm_body": "{filename} wird für alle in deiner Organisation entfernt. Das kann nicht rückgängig gemacht werden."
   },
   "picker": {
     "upload_button": "Hochladen",

@@ -9,3 +9,37 @@
  *
  * App-only styling belongs below this line, not in the shared layer. */
 @import "@forge/ui/styles/tokens.css";
+
+/* -- View transitions (F-006) ---------------------------------------------
+ *
+ * The router asks for a transition on every route change
+ * (`defaultViewTransition` in src/router.tsx); this is what it looks like.
+ * The browser's default root animation is already a cross-fade, so only the
+ * duration is set -- 180ms is long enough to read as a transition and short
+ * enough that it never delays a click.
+ *
+ * The reduced-motion block is NOT redundant with the global `*` rule in
+ * @forge/ui's tokens.css. `::view-transition-*` are pseudo-elements in their
+ * own top-layer tree, not descendants of any element, so a universal selector
+ * never matches them and they would keep animating for a user who asked for
+ * no motion.
+ *
+ * `animation: none` (rather than a near-zero duration, which is what the
+ * global rule uses for Radix's sake) is correct here: removing the animation
+ * from a view-transition pseudo-element is the specified way to opt out, and
+ * the transition then completes immediately instead of waiting for an
+ * animationend that also has to fire. There is no Presence primitive on the
+ * other side of this one.
+ */
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation-duration: 180ms;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  ::view-transition-group(*),
+  ::view-transition-old(*),
+  ::view-transition-new(*) {
+    animation: none !important;
+  }
+}

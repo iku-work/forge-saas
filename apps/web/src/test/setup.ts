@@ -17,6 +17,14 @@ window.scrollTo = () => undefined;
 // DOM lib types it as always present, so a nullish guard reads as dead code.
 Element.prototype.scrollIntoView = () => undefined;
 
+// Nor the Pointer Capture APIs, which sonner's <Toaster> binds to implement
+// swipe-to-dismiss. These throw from a *listener*, so they surface as an
+// unhandled error that fails the run even when every assertion passed --
+// vitest exits 1 on an unhandled error regardless of the test results.
+Element.prototype.setPointerCapture = () => undefined;
+Element.prototype.releasePointerCapture = () => undefined;
+Element.prototype.hasPointerCapture = () => false;
+
 // jsdom doesn't implement ResizeObserver either, and Radix reaches for it
 // through @radix-ui/react-use-size the moment a Checkbox mounts inside a
 // Dialog (T-313's create-key form, T-322's event picker) -- an unhandled

@@ -1,3 +1,4 @@
+import { useState } from "react";
 import {
   useInfiniteQuery,
   useMutation,
@@ -20,6 +21,7 @@ import {
   AvatarFallback,
   Badge,
   Button,
+  ConfirmDialog,
   FileUploader,
   Skeleton,
   Table,
@@ -55,6 +57,13 @@ export function FilesPage() {
   const { t } = useTranslation();
   const { org, isLoading: orgLoading } = useOrg();
   const queryClient = useQueryClient();
+  // The file awaiting confirmation, or null. Holds the whole file rather than
+  // its id so the dialog can name it -- "Delete report-q3.pdf?" is a question
+  // the user can actually answer, which "Delete this file?" (what the old
+  // window.confirm asked) is not.
+  const [pendingDelete, setPendingDelete] = useState<StoredFilePublic | null>(
+    null,
+  );
 
   const filesQuery = useInfiniteQuery({
     queryKey: listFilesApiV1FilesGetInfiniteQueryKey(),
@@ -97,7 +106,9 @@ export function FilesPage() {
 
   return (
     <div className="space-y-6 p-6">
-      <h1 className="text-xl font-semibold" data-testid="page-title">{t("files.page.title")}</h1>
+      <h1 className="text-xl font-semibold" data-testid="page-title">
+        {t("files.page.title")}
+      </h1>
 
       <FileUploader
         onUploaded={() => {
@@ -170,11 +181,7 @@ export function FilesPage() {
                         size="sm"
                         disabled={deleteMutation.isPending}
                         onClick={() => {
-                          if (
-                            window.confirm(t("files.action.delete_confirm"))
-                          ) {
-                            void deleteMutation.mutateAsync(file.id);
-                          }
+                          setPendingDelete(file);
                         }}
                       >
                         {t("files.action.delete")}
@@ -198,6 +205,33 @@ export function FilesPage() {
           ) : null}
         </>
       )}
+
+      <ConfirmDialog
+        open={pendingDelete !== null}
+        onOpenChange={(open) => {
+          if (!open) {
+            setPendingDelete(null);
+          }
+        }}
+        title={t("files.action.delete_confirm_title")}
+        description={t("files.action.delete_confirm_body", {
+          filename: pendingDelete?.filename ?? "",
+        })}
+        confirmLabel={t("files.action.delete")}
+        destructive
+        isPending={deleteMutation.isPending}
+        onConfirm={() => {
+          const file = pendingDelete;
+          if (!file) {
+            return;
+          }
+          // Closed before the request, not after: the dialog has done its job
+          // once the answer is given, and leaving it up during the round trip
+          // makes a fast delete look like a stuck one.
+          setPendingDelete(null);
+          deleteMutation.mutate(file.id);
+        }}
+      />
     </div>
   );
 }

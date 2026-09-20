@@ -34,7 +34,9 @@
   "action": {
     "download": "Descargar",
     "delete": "Eliminar",
-    "delete_confirm": "¿Eliminar este archivo?"
+    "delete_confirm": "¿Eliminar este archivo?",
+    "delete_confirm_title": "¿Eliminar este archivo?",
+    "delete_confirm_body": "{filename} se eliminará para todos los miembros de tu organización. Esta acción no se puede deshacer."
   },
   "picker": {
     "upload_button": "Subir",

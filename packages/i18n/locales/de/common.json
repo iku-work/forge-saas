@@ -8,7 +8,8 @@
     "submit": "Absenden",
     "load_more": "Mehr laden",
     "remove": "Entfernen",
-    "upload": "Hochladen"
+    "upload": "Hochladen",
+    "undo": "Rückgängig"
   },
   "status": {
     "loading": "Wird geladen…",

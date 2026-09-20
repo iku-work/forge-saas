@@ -8,7 +8,8 @@
     "submit": "Envoyer",
     "load_more": "Charger plus",
     "remove": "Supprimer",
-    "upload": "Importer"
+    "upload": "Importer",
+    "undo": "Annuler"
   },
   "status": {
     "loading": "Chargement…",

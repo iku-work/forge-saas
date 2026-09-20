@@ -34,7 +34,9 @@
   "action": {
     "download": "تنزيل",
     "delete": "حذف",
-    "delete_confirm": "هل تريد حذف هذا الملف؟"
+    "delete_confirm": "هل تريد حذف هذا الملف؟",
+    "delete_confirm_title": "حذف هذا الملف؟",
+    "delete_confirm_body": "سيُحذف {filename} لدى جميع أعضاء مؤسستك. لا يمكن التراجع عن ذلك."
   },
   "picker": {
     "upload_button": "رفع",

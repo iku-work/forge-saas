@@ -34,7 +34,9 @@
   "action": {
     "download": "Lataa",
     "delete": "Poista",
-    "delete_confirm": "Poistaanko tämä tiedosto?"
+    "delete_confirm": "Poistaanko tämä tiedosto?",
+    "delete_confirm_title": "Poistetaanko tämä tiedosto?",
+    "delete_confirm_body": "{filename} poistetaan kaikilta organisaatiosi jäseniltä. Tätä ei voi kumota."
   },
   "picker": {
     "upload_button": "Lataa",

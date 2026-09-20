@@ -34,7 +34,9 @@
   "action": {
     "download": "Download",
     "delete": "Delete",
-    "delete_confirm": "Delete this file?"
+    "delete_confirm": "Delete this file?",
+    "delete_confirm_title": "Delete this file?",
+    "delete_confirm_body": "{filename} will be removed for everyone in your organization. This can't be undone."
   },
   "picker": {
     "upload_button": "Upload",

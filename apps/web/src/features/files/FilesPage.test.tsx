@@ -1,6 +1,7 @@
 import { http, HttpResponse } from "msw";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { getApiBaseUrl } from "@forge/api-client";
@@ -115,6 +116,75 @@ describe("FilesPage", () => {
     renderPage();
 
     expect(await screen.findByText(file.filename)).toBeInTheDocument();
+  });
+
+  it("asks before deleting, naming the file (F-009)", async () => {
+    // Replaces a window.confirm() that said only "Delete this file?" -- and
+    // that jsdom stubs as always-false, so the old path could not be
+    // exercised at all.
+    const file = makeStoredFile(1);
+    server.use(
+      http.get(`${API}/api/v1/files`, () =>
+        HttpResponse.json(envelope([file])),
+      ),
+    );
+
+    renderPage();
+    await userEvent.click(
+      await screen.findByRole("button", { name: "Delete" }),
+    );
+
+    const dialog = await screen.findByTestId("confirm-dialog");
+    expect(dialog).toHaveTextContent(file.filename);
+  });
+
+  it("does not delete when the confirmation is cancelled", async () => {
+    let deleteCalled = false;
+    const file = makeStoredFile(1);
+    server.use(
+      http.get(`${API}/api/v1/files`, () =>
+        HttpResponse.json(envelope([file])),
+      ),
+      http.delete(`${API}/api/v1/files/:id`, () => {
+        deleteCalled = true;
+        return new HttpResponse(null, { status: 204 });
+      }),
+    );
+
+    renderPage();
+    await userEvent.click(
+      await screen.findByRole("button", { name: "Delete" }),
+    );
+    await userEvent.click(await screen.findByTestId("confirm-dialog-cancel"));
+
+    await waitFor(() => {
+      expect(screen.queryByTestId("confirm-dialog")).not.toBeInTheDocument();
+    });
+    expect(deleteCalled).toBe(false);
+  });
+
+  it("deletes once confirmed", async () => {
+    const deleted: string[] = [];
+    const file = makeStoredFile(1);
+    server.use(
+      http.get(`${API}/api/v1/files`, () =>
+        HttpResponse.json(envelope([file])),
+      ),
+      http.delete(`${API}/api/v1/files/:id`, ({ params }) => {
+        deleted.push(String(params.id));
+        return new HttpResponse(null, { status: 204 });
+      }),
+    );
+
+    renderPage();
+    await userEvent.click(
+      await screen.findByRole("button", { name: "Delete" }),
+    );
+    await userEvent.click(await screen.findByTestId("confirm-dialog-confirm"));
+
+    await waitFor(() => {
+      expect(deleted).toEqual([file.id]);
+    });
   });
 
   it("shows an error alert when the files request fails", async () => {

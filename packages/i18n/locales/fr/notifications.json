@@ -19,7 +19,9 @@
     "view_hint": "Ouvre la page associée à cette notification",
     "loading": "Chargement des notifications…",
     "error": "Impossible de charger les notifications.",
-    "empty": "Vous êtes à jour."
+    "empty": "Vous êtes à jour.",
+    "marked_read": "Marquée comme lue",
+    "error_mark_read": "Impossible de mettre à jour cette notification. Réessayez."
   },
   "banner": {
     "dismiss_hint": "Ferme cette notification"

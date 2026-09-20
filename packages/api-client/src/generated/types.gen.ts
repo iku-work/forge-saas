@@ -4468,6 +4468,42 @@ export type MarkNotificationReadApiV1NotificationsNotificationIdReadPatchRespons
 
 export type MarkNotificationReadApiV1NotificationsNotificationIdReadPatchResponse = MarkNotificationReadApiV1NotificationsNotificationIdReadPatchResponses[keyof MarkNotificationReadApiV1NotificationsNotificationIdReadPatchResponses];
 
+export type MarkNotificationUnreadApiV1NotificationsNotificationIdUnreadPatchData = {
+    body?: never;
+    headers?: {
+        /**
+         * X-Org-Id
+         */
+        'X-Org-ID'?: string | null;
+    };
+    path: {
+        /**
+         * Notification Id
+         */
+        notification_id: string;
+    };
+    query?: never;
+    url: '/api/v1/notifications/{notification_id}/unread';
+};
+
+export type MarkNotificationUnreadApiV1NotificationsNotificationIdUnreadPatchErrors = {
+    /**
+     * Validation Error
+     */
+    422: EnvelopeNoneType;
+};
+
+export type MarkNotificationUnreadApiV1NotificationsNotificationIdUnreadPatchError = MarkNotificationUnreadApiV1NotificationsNotificationIdUnreadPatchErrors[keyof MarkNotificationUnreadApiV1NotificationsNotificationIdUnreadPatchErrors];
+
+export type MarkNotificationUnreadApiV1NotificationsNotificationIdUnreadPatchResponses = {
+    /**
+     * Successful Response
+     */
+    200: EnvelopeNotificationPublic;
+};
+
+export type MarkNotificationUnreadApiV1NotificationsNotificationIdUnreadPatchResponse = MarkNotificationUnreadApiV1NotificationsNotificationIdUnreadPatchResponses[keyof MarkNotificationUnreadApiV1NotificationsNotificationIdUnreadPatchResponses];
+
 export type ListMyOrgsApiV1OrgsGetData = {
     body?: never;
     path?: never;

@@ -8,7 +8,8 @@
     "submit": "Enviar",
     "load_more": "Cargar más",
     "remove": "Eliminar",
-    "upload": "Subir"
+    "upload": "Subir",
+    "undo": "Deshacer"
   },
   "status": {
     "loading": "Cargando…",

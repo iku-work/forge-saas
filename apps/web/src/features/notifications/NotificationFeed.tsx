@@ -128,7 +128,10 @@ export function NotificationFeed({
         onLoadMore={onLoadMore}
         itemTestId="notification-row"
         renderItem={(notification) => (
-          <NotificationRow notification={notification} onMarkRead={onMarkRead} />
+          <NotificationRow
+            notification={notification}
+            onMarkRead={onMarkRead}
+          />
         )}
       />
       {isLoadingMore ? (
