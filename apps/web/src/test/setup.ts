@@ -8,6 +8,15 @@ import { server } from "./server";
 // jsdom doesn't implement scrollTo; the router calls it on every navigation.
 window.scrollTo = () => undefined;
 
+// Nor scrollIntoView, which cmdk calls to keep the highlighted command-palette
+// row visible as the list re-filters (F-005). Unstubbed it throws
+// "scrollIntoView is not a function" *during render*, so the palette never
+// mounts at all and every assertion against it fails as "unable to find
+// role=dialog" -- a considerably less obvious symptom than the missing API.
+// Assigned unconditionally for the same reason as ResizeObserver below: the
+// DOM lib types it as always present, so a nullish guard reads as dead code.
+Element.prototype.scrollIntoView = () => undefined;
+
 // jsdom doesn't implement ResizeObserver either, and Radix reaches for it
 // through @radix-ui/react-use-size the moment a Checkbox mounts inside a
 // Dialog (T-313's create-key form, T-322's event picker) -- an unhandled

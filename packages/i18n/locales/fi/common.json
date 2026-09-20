@@ -142,5 +142,31 @@
     "dark": "Tumma",
     "system": "Järjestelmä",
     "hint": "Järjestelmä seuraa laitteesi vaalean tai tumman asetusta."
+  },
+  "palette": {
+    "label": "Komentopaletti",
+    "trigger": "Haku",
+    "placeholder": "Hae sivuja ja toimintoja...",
+    "empty": "Ei osumia. Kokeile toista sanaa.",
+    "recent": "Viimeisimmät",
+    "navigation": "Siirry",
+    "actions": "Toiminnot",
+    "toggle_theme": "Vaihda teemaa",
+    "hint": "avaa missä tahansa"
+  },
+  "shortcuts": {
+    "title": "Pikanäppäimet",
+    "description": "Paina ? millä tahansa sivulla nähdäksesi tämän listan.",
+    "category": {
+      "navigation": "Navigointi",
+      "actions": "Toiminnot",
+      "view": "Näkymä"
+    },
+    "command_palette": "Avaa komentopaletti",
+    "help": "Näytä pikanäppäimet",
+    "close": "Sulje valintaikkuna tai valikko",
+    "goto_dashboard": "Siirry koontinäyttöön",
+    "goto_files": "Siirry tiedostoihin",
+    "goto_settings": "Siirry asetuksiin"
   }
 }

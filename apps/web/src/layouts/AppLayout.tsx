@@ -1,36 +1,19 @@
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { Link, useLocation, useNavigate } from "@tanstack/react-router";
 import {
-  BarChart3,
   Bell,
-  Building2,
   Check,
+  Search,
   ChevronsUpDown,
-  CreditCard,
-  FolderOpen,
-  KeyRound,
-  LayoutDashboard,
   LogOut,
   Plus,
-  Shield,
   ShieldAlert,
-  User as UserIcon,
-  Users,
-  Webhook,
   Menu,
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
-import {
-  useAuth,
-  useFeatureFlag,
-  useMaintenance,
-  useModules,
-  useOrg,
-  usePermission,
-} from "@forge/hooks";
+import { useAuth, useMaintenance, useModules, useOrg } from "@forge/hooks";
 import type { ActiveModules } from "@forge/hooks";
-import { Permission } from "@forge/types";
 import {
   Avatar,
   AvatarFallback,
@@ -57,130 +40,20 @@ import {
 } from "@forge/ui";
 
 import { GlobalBanner } from "../components/GlobalBanner";
+import { CommandPalette } from "../features/command-palette/CommandPalette";
+import { recordRecentPath } from "../features/command-palette/recent";
+import { isAppleDevice, renderKey } from "../features/shortcuts/registry";
+import { ShortcutsDialog } from "../features/shortcuts/ShortcutsDialog";
+import { useGlobalShortcuts } from "../features/shortcuts/useGlobalShortcuts";
 import { MAIN_CONTENT_ID, SkipLink } from "../components/SkipLink";
 import { MaintenanceScreen } from "../components/MaintenanceScreen";
 import { CreateOrgForm } from "../features/settings/CreateOrgForm";
 import { NotificationBell } from "../features/notifications/NotificationBell";
 import { SupportLink } from "../features/support/SupportLink";
 import { stripLocale } from "../lib/locale-url";
+import { useVisibleNavItems, type NavItem } from "../lib/navigation";
 import { useAvatarSrc } from "../lib/useAvatarSrc";
 import { useRouteLocale } from "../lib/useRouteLocale";
-
-// T-233: every in-app destination is locale-prefixed. `to` is the router's
-// path (with the `$locale` param it now needs); `path` is the same
-// destination without it, and is what the breadcrumb, the active-state
-// check, and the `data-testid` slugs are keyed on -- none of those should
-// change shape just because the URL grew a locale segment.
-type NavTo =
-  | "/$locale"
-  | "/$locale/files"
-  | "/$locale/reports"
-  | "/$locale/settings/profile"
-  | "/$locale/settings/security"
-  | "/$locale/settings/org"
-  | "/$locale/settings/members"
-  | "/$locale/settings/billing"
-  | "/$locale/settings/notifications"
-  | "/$locale/settings/api-keys"
-  | "/$locale/settings/webhooks";
-
-interface NavItem {
-  to: NavTo;
-  path: string;
-  labelKey: string;
-  icon: typeof LayoutDashboard;
-  permission?: Permission;
-  module?: keyof ActiveModules;
-  // Org-plan-driven gate (T-121), orthogonal to `module` (product-config-driven)
-  // -- both a disabled module and a plan without this flag hide the item.
-  flag?: string;
-}
-
-const PRIMARY_NAV: NavItem[] = [
-  {
-    to: "/$locale",
-    path: "/",
-    labelKey: "common.nav.dashboard",
-    icon: LayoutDashboard,
-  },
-  {
-    to: "/$locale/files",
-    path: "/files",
-    labelKey: "common.nav.files",
-    icon: FolderOpen,
-    module: "fileStorage",
-  },
-  {
-    to: "/$locale/reports",
-    path: "/reports",
-    labelKey: "common.nav.reports",
-    icon: BarChart3,
-    module: "featureFlags",
-    flag: "advanced_reports",
-  },
-];
-
-const SETTINGS_NAV: NavItem[] = [
-  {
-    to: "/$locale/settings/profile",
-    path: "/settings/profile",
-    labelKey: "common.nav.profile",
-    icon: UserIcon,
-  },
-  {
-    to: "/$locale/settings/security",
-    path: "/settings/security",
-    labelKey: "common.nav.security",
-    icon: Shield,
-  },
-  {
-    to: "/$locale/settings/org",
-    path: "/settings/org",
-    labelKey: "common.nav.organization",
-    icon: Building2,
-  },
-  {
-    to: "/$locale/settings/members",
-    path: "/settings/members",
-    labelKey: "common.nav.members",
-    icon: Users,
-  },
-  {
-    to: "/$locale/settings/billing",
-    path: "/settings/billing",
-    labelKey: "common.nav.billing",
-    icon: CreditCard,
-    permission: Permission.BILLING_READ,
-    module: "billing",
-  },
-  {
-    to: "/$locale/settings/notifications",
-    path: "/settings/notifications",
-    labelKey: "common.nav.notifications",
-    icon: Bell,
-    module: "notifications",
-  },
-  // T-313/T-322: both are org-manage surfaces (a key that can mint a key and
-  // an endpoint that can be pointed anywhere are each an escalation), so the
-  // permission gate is SETTINGS_MANAGE on top of the module toggle -- the
-  // same pair their routers use.
-  {
-    to: "/$locale/settings/api-keys",
-    path: "/settings/api-keys",
-    labelKey: "common.nav.api_keys",
-    icon: KeyRound,
-    permission: Permission.SETTINGS_MANAGE,
-    module: "publicApi",
-  },
-  {
-    to: "/$locale/settings/webhooks",
-    path: "/settings/webhooks",
-    labelKey: "common.nav.webhooks",
-    icon: Webhook,
-    permission: Permission.SETTINGS_MANAGE,
-    module: "outboundWebhooks",
-  },
-];
 
 // Route paths that sit one level under "Settings" in the header breadcrumb
 // -- "/" gets its nav label directly with no prefix (see pageTitleFor).
@@ -219,22 +92,9 @@ function navTestSlug(path: string): string {
 function NavLink({ item }: { item: NavItem }) {
   const { t } = useTranslation();
   const locale = useRouteLocale();
-  // usePermission must run unconditionally (hooks can't be called
-  // conditionally) -- MEMBERS_READ is just a harmless placeholder for items
-  // with no `permission`, since the result below is only consulted when one
-  // was actually declared.
-  const hasPermission = usePermission(
-    item.permission ?? Permission.MEMBERS_READ,
-  );
-  // Same unconditional-call-with-a-placeholder reasoning as usePermission
-  // above -- item.flag is only consulted below when one was actually declared.
-  const hasFlag = useFeatureFlag(item.flag ?? "");
-  if (item.permission && !hasPermission) {
-    return null;
-  }
-  if (item.flag && !hasFlag) {
-    return null;
-  }
+  // No permission/flag check here any more: useVisibleNavItems() (lib/
+  // navigation.ts) applies all three gates to the whole list before it gets
+  // here, so the palette and the sidebar cannot disagree about what exists.
   const Icon = item.icon;
   return (
     <Link
@@ -422,6 +282,7 @@ function SidebarNav({
   onNavigate?: () => void;
 }) {
   const { t } = useTranslation();
+  const nav = useVisibleNavItems();
 
   return (
     <>
@@ -437,17 +298,13 @@ function SidebarNav({
           drawer has to close it, and the drawer does not unmount on
           navigation because the shell that owns it never unmounts. */}
       <nav className="flex flex-1 flex-col gap-1" onClick={onNavigate}>
-        {PRIMARY_NAV.filter((item) => !item.module || modules[item.module]).map(
-          (item) => (
-            <NavLink key={item.to} item={item} />
-          ),
-        )}
+        {nav.primary.map((item) => (
+          <NavLink key={item.to} item={item} />
+        ))}
         <div className="mt-4 px-3 text-caption font-medium uppercase text-muted-foreground">
           {t("common.nav.settings")}
         </div>
-        {SETTINGS_NAV.filter(
-          (item) => !item.module || modules[item.module],
-        ).map((item) => (
+        {nav.settings.map((item) => (
           <NavLink key={item.to} item={item} />
         ))}
       </nav>
@@ -469,6 +326,41 @@ export function AppLayout({ children }: { children: ReactNode }) {
   // body for maintenance, loading and no-org, and a hook after one of those
   // is a different hook order on a later render.
   const [navOpen, setNavOpen] = useState(false);
+  const [paletteOpen, setPaletteOpen] = useState(false);
+  const [shortcutsOpen, setShortcutsOpen] = useState(false);
+  const nav = useVisibleNavItems();
+  const navigate = useNavigate();
+  const locale = useRouteLocale();
+  const activePath = stripLocale(location.pathname);
+
+  // F-005. Recorded from the shell rather than from each page: this is the
+  // one place that sees every in-app navigation, and a page-level call would
+  // have to be remembered for every page added afterwards. Only paths that
+  // are actually nav destinations are stored -- the palette resolves them
+  // back to nav items, so anything else would be dead weight.
+  useEffect(() => {
+    if (nav.all.some((item) => item.path === activePath)) {
+      recordRecentPath(activePath);
+    }
+  }, [activePath, nav]);
+
+  useGlobalShortcuts({
+    onCommandPalette: () => {
+      setPaletteOpen((wasOpen) => !wasOpen);
+    },
+    onShowShortcuts: () => {
+      setShortcutsOpen(true);
+    },
+    onNavigate: (path) => {
+      // Resolved against the visible nav, so `g f` does nothing at all when
+      // file storage is off rather than navigating to a route that will
+      // bounce the user back.
+      const target = nav.all.find((item) => item.path === path);
+      if (target) {
+        void navigate({ to: target.to, params: { locale } });
+      }
+    },
+  });
 
   // T-263, checked before the loading state: during a maintenance window every
   // request this shell would make answers 503, so rendering it at all produces
@@ -493,7 +385,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
     return <CreateFirstOrgPrompt />;
   }
 
-  const pageTitle = pageTitleFor(stripLocale(location.pathname), t);
+  const pageTitle = pageTitleFor(activePath, t);
 
   return (
     // T-263: the banner sits *outside* the shell's flex row, above everything,
@@ -552,6 +444,33 @@ export function AppLayout({ children }: { children: ReactNode }) {
             <p className="flex-1 truncate text-body-sm font-medium text-muted-foreground">
               {pageTitle}
             </p>
+            {/* F-005 discoverability: a palette nobody knows about is a
+                palette nobody uses, so the hotkey is shown rather than
+                described. Also a real button -- ⌘K is unreachable on a
+                touch device, and this is the only way in there. */}
+            <button
+              type="button"
+              onClick={() => {
+                setPaletteOpen(true);
+              }}
+              data-testid="palette-trigger"
+              aria-keyshortcuts="Meta+K Control+K"
+              className="flex min-h-11 items-center gap-2 rounded-md border px-2 text-caption text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground sm:px-3"
+            >
+              <Search className="size-4 shrink-0" aria-hidden="true" />
+              <span className="hidden sm:inline">
+                {t("common.palette.trigger")}
+              </span>
+              {/* aria-hidden: the shortcut is already announced through
+                  aria-keyshortcuts above, and "⌘ K" read out as content is
+                  noise. */}
+              <kbd
+                aria-hidden="true"
+                className="hidden rounded border bg-muted px-1.5 py-0.5 sm:inline"
+              >
+                {`${renderKey("mod", isAppleDevice())}K`}
+              </kbd>
+            </button>
             {modules.notifications ? (
               <NotificationBell />
             ) : (
@@ -578,6 +497,14 @@ export function AppLayout({ children }: { children: ReactNode }) {
           </main>
         </div>
       </div>
+      <CommandPalette
+        open={paletteOpen}
+        onOpenChange={setPaletteOpen}
+        onShowShortcuts={() => {
+          setShortcutsOpen(true);
+        }}
+      />
+      <ShortcutsDialog open={shortcutsOpen} onOpenChange={setShortcutsOpen} />
       <Toaster />
     </div>
   );

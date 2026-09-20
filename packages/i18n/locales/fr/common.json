@@ -327,5 +327,31 @@
     "dark": "Sombre",
     "system": "Système",
     "hint": "Système suit le réglage clair ou sombre de votre appareil."
+  },
+  "palette": {
+    "label": "Palette de commandes",
+    "trigger": "Rechercher",
+    "placeholder": "Rechercher des pages et des actions...",
+    "empty": "Aucun résultat. Essayez un autre mot.",
+    "recent": "Récents",
+    "navigation": "Aller à",
+    "actions": "Actions",
+    "toggle_theme": "Changer de thème",
+    "hint": "pour ouvrir partout"
+  },
+  "shortcuts": {
+    "title": "Raccourcis clavier",
+    "description": "Appuyez sur ? sur n'importe quelle page pour voir cette liste.",
+    "category": {
+      "navigation": "Navigation",
+      "actions": "Actions",
+      "view": "Affichage"
+    },
+    "command_palette": "Ouvrir la palette de commandes",
+    "help": "Afficher les raccourcis clavier",
+    "close": "Fermer une boîte de dialogue ou un menu",
+    "goto_dashboard": "Aller au tableau de bord",
+    "goto_files": "Aller aux fichiers",
+    "goto_settings": "Aller aux paramètres"
   }
 }

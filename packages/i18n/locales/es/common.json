@@ -327,5 +327,31 @@
     "dark": "Oscuro",
     "system": "Sistema",
     "hint": "Sistema sigue la configuración clara u oscura de tu dispositivo."
+  },
+  "palette": {
+    "label": "Paleta de comandos",
+    "trigger": "Buscar",
+    "placeholder": "Busca páginas y acciones...",
+    "empty": "Sin resultados. Prueba con otra palabra.",
+    "recent": "Recientes",
+    "navigation": "Ir a",
+    "actions": "Acciones",
+    "toggle_theme": "Cambiar tema",
+    "hint": "para abrir en cualquier lugar"
+  },
+  "shortcuts": {
+    "title": "Atajos de teclado",
+    "description": "Pulsa ? en cualquier página para ver esta lista.",
+    "category": {
+      "navigation": "Navegación",
+      "actions": "Acciones",
+      "view": "Vista"
+    },
+    "command_palette": "Abrir la paleta de comandos",
+    "help": "Mostrar los atajos de teclado",
+    "close": "Cerrar un diálogo o menú",
+    "goto_dashboard": "Ir al panel",
+    "goto_files": "Ir a los archivos",
+    "goto_settings": "Ir a los ajustes"
   }
 }

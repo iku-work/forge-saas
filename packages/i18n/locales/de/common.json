@@ -327,5 +327,31 @@
     "dark": "Dunkel",
     "system": "System",
     "hint": "System folgt der Hell-/Dunkel-Einstellung deines Geräts."
+  },
+  "palette": {
+    "label": "Befehlspalette",
+    "trigger": "Suchen",
+    "placeholder": "Seiten und Aktionen durchsuchen...",
+    "empty": "Keine Treffer. Versuche ein anderes Wort.",
+    "recent": "Zuletzt verwendet",
+    "navigation": "Gehe zu",
+    "actions": "Aktionen",
+    "toggle_theme": "Design wechseln",
+    "hint": "zum Öffnen überall"
+  },
+  "shortcuts": {
+    "title": "Tastaturkürzel",
+    "description": "Drücke ? auf jeder Seite, um diese Liste zu sehen.",
+    "category": {
+      "navigation": "Navigation",
+      "actions": "Aktionen",
+      "view": "Ansicht"
+    },
+    "command_palette": "Befehlspalette öffnen",
+    "help": "Tastaturkürzel anzeigen",
+    "close": "Dialog oder Menü schließen",
+    "goto_dashboard": "Zum Dashboard",
+    "goto_files": "Zu den Dateien",
+    "goto_settings": "Zu den Einstellungen"
   }
 }

@@ -270,8 +270,9 @@ describe("THEME_BOOT_SNIPPET", () => {
       stubMatchMedia(matchesDark);
       document.documentElement.classList.remove("dark");
 
-      // eslint-disable-next-line @typescript-eslint/no-implied-eval, no-new-func -- running the real snippet is the assertion
-      new Function(THEME_BOOT_SNIPPET)();
+      // eslint-disable-next-line @typescript-eslint/no-implied-eval -- running the real snippet *is* the assertion
+      const runBootSnippet = new Function(THEME_BOOT_SNIPPET) as () => void;
+      runBootSnippet();
 
       expect(document.documentElement.classList.contains("dark")).toBe(
         expected,
