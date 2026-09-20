@@ -4,6 +4,7 @@ import {
   useMutation,
   useQueryClient,
 } from "@tanstack/react-query";
+import { FolderOpen } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
 import {
@@ -22,6 +23,7 @@ import {
   Badge,
   Button,
   ConfirmDialog,
+  EmptyState,
   FileUploader,
   Skeleton,
   Table,
@@ -131,7 +133,14 @@ export function FilesPage() {
           </AlertDescription>
         </Alert>
       ) : files.length === 0 ? (
-        <p className="text-sm text-muted-foreground">{t("files.page.empty")}</p>
+        // No `action` here, deliberately: the uploader is already rendered
+        // directly above this block, so a button would either duplicate it or
+        // scroll the user to it. The description points at it instead.
+        <EmptyState
+          icon={FolderOpen}
+          title={t("files.page.empty_title")}
+          description={t("files.page.empty_body")}
+        />
       ) : (
         <>
           <Table>

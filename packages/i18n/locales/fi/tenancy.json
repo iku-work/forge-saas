@@ -1,1 +1,10 @@
-{}
+{
+  "api_keys": {
+    "empty_title": "Ei vielä API-avaimia",
+    "empty_body": "API-avaimilla skriptit ja integraatiot voivat kutsua APIa organisaatiosi nimissä vain niillä oikeuksilla, jotka myönnät. Luo avain aloittaaksesi — avain näytetään vain kerran."
+  },
+  "webhooks": {
+    "empty_title": "Ei vielä päätepisteitä",
+    "empty_body": "Webhookit lähettävät tapahtumat hallitsemaasi osoitteeseen heti niiden tapahtuessa, joten niitä ei tarvitse kysellä. Lisää päätepiste ja valitse, mitkä tapahtumat se vastaanottaa."
+  }
+}

@@ -2,7 +2,9 @@
   "page": {
     "title": "Fichiers",
     "empty": "Aucun fichier pour le moment. Importez-en un pour commencer.",
-    "error_load": "Impossible de charger les fichiers."
+    "error_load": "Impossible de charger les fichiers.",
+    "empty_title": "Aucun fichier pour le moment",
+    "empty_body": "Les fichiers que vous importez ici sont privés à votre organisation et analysés contre les virus avant tout téléchargement. Utilisez l'outil d'import ci-dessus pour ajouter le premier."
   },
   "uploader": {
     "drop_here": "Déposez vos fichiers ici",

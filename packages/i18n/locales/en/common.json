@@ -62,7 +62,12 @@
     "select_hint": "Sets this as your app language"
   },
   "dashboard": {
-    "empty": "Nothing here yet."
+    "empty": "Nothing here yet.",
+    "empty_title": "Welcome — your workspace is ready",
+    "empty_body": "There's nothing here yet because you've just started. Pick one of the steps below, or use the search button in the header (or press Ctrl/Cmd + K) to jump anywhere in the app.",
+    "empty_action_files": "Upload your first file",
+    "empty_action_invite": "Invite a teammate",
+    "empty_action_profile": "Finish your profile"
   },
   "not_found": {
     "title": "Page not found",

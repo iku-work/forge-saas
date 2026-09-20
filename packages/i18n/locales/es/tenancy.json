@@ -132,7 +132,9 @@
     "error_load": "No se pudieron cargar las claves de API.",
     "error_create": "No se pudo crear la clave.",
     "error_revoke": "No se pudo revocar la clave.",
-    "error_no_scopes": "Elige al menos un permiso."
+    "error_no_scopes": "Elige al menos un permiso.",
+    "empty_title": "Aún no hay claves de API",
+    "empty_body": "Las claves de API permiten que scripts e integraciones llamen a la API en nombre de tu organización, solo con los permisos que concedas. Crea una para empezar; la clave se muestra una sola vez."
   },
   "webhooks": {
     "title": "Webhooks",
@@ -209,6 +211,8 @@
     "error_rotate": "No se pudo rotar el secreto.",
     "error_delete": "No se pudo eliminar el endpoint.",
     "error_replay": "No se pudo reenviar la entrega.",
-    "error_no_events": "Elige al menos un evento."
+    "error_no_events": "Elige al menos un evento.",
+    "empty_title": "Aún no hay endpoints",
+    "empty_body": "Los webhooks envían los eventos a una URL que controlas en cuanto ocurren, así no tienes que consultarlos. Añade un endpoint y elige qué eventos debe recibir."
   }
 }

@@ -9,6 +9,7 @@ export * from "./components/command";
 export * from "./components/confirm-dialog";
 export * from "./components/dialog";
 export * from "./components/dropdown-menu";
+export * from "./components/empty-state";
 export * from "./components/form";
 export * from "./components/input";
 export * from "./components/label";

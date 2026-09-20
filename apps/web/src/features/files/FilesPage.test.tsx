@@ -93,16 +93,18 @@ describe("FilesPage", () => {
     ).toBeInTheDocument();
   });
 
-  it("shows empty state when no files exist", async () => {
+  it("shows an empty state that explains the feature, not just its absence", async () => {
+    // F-010: the assertion is on the *explanation*, not only the heading --
+    // "No files yet" alone is what this replaced.
     server.use(
       http.get(`${API}/api/v1/files`, () => HttpResponse.json(envelope([]))),
     );
 
     renderPage();
 
-    expect(
-      await screen.findByText("No files yet. Upload one to get started."),
-    ).toBeInTheDocument();
+    const empty = await screen.findByTestId("empty-state");
+    expect(empty).toHaveTextContent("No files yet");
+    expect(empty).toHaveTextContent(/scanned for viruses/i);
   });
 
   it("renders the file list with filename and size", async () => {

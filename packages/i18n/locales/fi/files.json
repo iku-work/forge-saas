@@ -2,7 +2,9 @@
   "page": {
     "title": "Tiedostot",
     "empty": "Ei tiedostoja vielä. Lataa yksi aloittaaksesi.",
-    "error_load": "Tiedostojen lataaminen epäonnistui."
+    "error_load": "Tiedostojen lataaminen epäonnistui.",
+    "empty_title": "Ei vielä tiedostoja",
+    "empty_body": "Tänne lataamasi tiedostot näkyvät vain organisaatiollesi, ja ne tarkistetaan virusten varalta ennen lataamista. Lisää ensimmäinen tiedosto yllä olevalla latauskentällä."
   },
   "uploader": {
     "drop_here": "Pudota tiedostot tähän",

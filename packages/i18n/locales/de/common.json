@@ -62,7 +62,12 @@
     "select_hint": "Legt dies als Ihre App-Sprache fest"
   },
   "dashboard": {
-    "empty": "Hier gibt es noch nichts."
+    "empty": "Hier gibt es noch nichts.",
+    "empty_title": "Willkommen — dein Arbeitsbereich ist bereit",
+    "empty_body": "Hier ist noch nichts, weil du gerade erst angefangen hast. Wähle einen der Schritte unten oder nutze die Suche in der Kopfzeile (oder drücke Strg/Cmd + K), um überallhin zu springen.",
+    "empty_action_files": "Erste Datei hochladen",
+    "empty_action_invite": "Teammitglied einladen",
+    "empty_action_profile": "Profil vervollständigen"
   },
   "not_found": {
     "title": "Seite nicht gefunden",

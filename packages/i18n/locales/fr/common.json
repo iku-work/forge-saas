@@ -62,7 +62,12 @@
     "select_hint": "Définit cette langue comme langue de l'application"
   },
   "dashboard": {
-    "empty": "Rien à afficher pour le moment."
+    "empty": "Rien à afficher pour le moment.",
+    "empty_title": "Bienvenue — votre espace est prêt",
+    "empty_body": "Il n'y a encore rien ici parce que vous venez de commencer. Choisissez une des étapes ci-dessous, ou utilisez la recherche dans l'en-tête (ou appuyez sur Ctrl/Cmd + K) pour aller n'importe où.",
+    "empty_action_files": "Importer votre premier fichier",
+    "empty_action_invite": "Inviter un collègue",
+    "empty_action_profile": "Compléter votre profil"
   },
   "not_found": {
     "title": "Page introuvable",
