@@ -4,7 +4,7 @@ import type {
   ElementRef,
   HTMLAttributes,
 } from "react";
-import { Command as CommandPrimitive } from "cmdk";
+import { Command as CommandPrimitive, useCommandState } from "cmdk";
 import { Search } from "lucide-react";
 
 import { cn } from "@forge/utils";
@@ -120,17 +120,47 @@ const CommandList = forwardRef<
 ));
 CommandList.displayName = CommandPrimitive.List.displayName;
 
-const CommandEmpty = forwardRef<
-  ElementRef<typeof CommandPrimitive.Empty>,
-  ComponentPropsWithoutRef<typeof CommandPrimitive.Empty>
->((props, ref) => (
-  <CommandPrimitive.Empty
-    ref={ref}
-    className="py-6 text-center text-body-sm text-muted-foreground"
-    {...props}
-  />
-));
-CommandEmpty.displayName = CommandPrimitive.Empty.displayName;
+/**
+ * The "nothing matched" row.
+ *
+ * Not `CommandPrimitive.Empty`, which renders `role="presentation"`. A
+ * `listbox` may only own `option` and `group`, so when a search filters
+ * everything away the palette's list is left with no valid children and axe
+ * fails it on aria-required-children -- "Required ARIA children role not
+ * present". That is a real violation of the shipped palette, not only of the
+ * story that caught it.
+ *
+ * An `option` that is `aria-disabled` is the conventional fix, and an honest
+ * description: this *is* a row in the list, it just cannot be chosen. The
+ * alternatives were worse -- dropping the listbox role entirely leaves the
+ * input's `aria-controls` pointing at nothing, and cmdk spreads incoming
+ * props *before* its own `role`, so neither primitive can be corrected from
+ * the outside.
+ */
+const CommandEmpty = forwardRef<HTMLDivElement, HTMLAttributes<HTMLDivElement>>(
+  ({ className, children, ...props }, ref) => {
+    const isEmpty = useCommandState((state) => state.filtered.count === 0);
+    if (!isEmpty) {
+      return null;
+    }
+    return (
+      <div
+        ref={ref}
+        role="option"
+        aria-disabled="true"
+        aria-selected="false"
+        className={cn(
+          "py-6 text-center text-body-sm text-muted-foreground",
+          className,
+        )}
+        {...props}
+      >
+        {children}
+      </div>
+    );
+  },
+);
+CommandEmpty.displayName = "CommandEmpty";
 
 const CommandGroup = forwardRef<
   ElementRef<typeof CommandPrimitive.Group>,
@@ -150,6 +180,13 @@ const CommandSeparator = forwardRef<
 >(({ className, ...props }, ref) => (
   <CommandPrimitive.Separator
     ref={ref}
+    // aria-hidden because cmdk gives this role="separator", and a listbox may
+    // only contain `option` and `group` children -- axe fails the whole list
+    // on aria-required-children otherwise (caught by the Storybook a11y
+    // gate). Hiding it is the correct fix rather than a silencing one: the
+    // rule it draws is decorative, and the information it stands for is
+    // already carried by the group headings on either side.
+    aria-hidden="true"
     className={cn("-mx-1 h-px bg-border", className)}
     {...props}
   />
