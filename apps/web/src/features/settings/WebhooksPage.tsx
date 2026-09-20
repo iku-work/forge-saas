@@ -7,6 +7,7 @@ import {
   useQueryClient,
 } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
+import { Webhook } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { z } from "zod";
 
@@ -43,6 +44,7 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
+  EmptyState,
   Form,
   FormControl,
   FormField,
@@ -200,7 +202,9 @@ function EndpointForm({
               <FormLabel>{t("tenancy.webhooks.field_description")}</FormLabel>
               <FormControl>
                 <Input
-                  placeholder={t("tenancy.webhooks.field_description_placeholder")}
+                  placeholder={t(
+                    "tenancy.webhooks.field_description_placeholder",
+                  )}
                   data-testid="webhook-description-input"
                   {...field}
                 />
@@ -301,7 +305,10 @@ function TypedConfirmDialog({
         </DialogHeader>
         <div className="space-y-4">
           <p className="text-sm text-muted-foreground">{description}</p>
-          <label className="block space-y-1 text-sm" htmlFor={`${testIdPrefix}-input`}>
+          <label
+            className="block space-y-1 text-sm"
+            htmlFor={`${testIdPrefix}-input`}
+          >
             <span>{t("tenancy.webhooks.delete_confirm_label", { word })}</span>
             <Input
               id={`${testIdPrefix}-input`}
@@ -347,10 +354,12 @@ function DeliveryLog({ endpoint }: { endpoint: WebhookEndpointPublic }) {
   // on, so an explicit `undefined` is not the same as an absent property.
   const queryFilter = status ? { status } : {};
   const queryKey =
-    listDeliveriesApiV1WebhooksEndpointsEndpointIdDeliveriesGetInfiniteQueryKey({
-      path: { endpoint_id: endpoint.id },
-      query: queryFilter,
-    });
+    listDeliveriesApiV1WebhooksEndpointsEndpointIdDeliveriesGetInfiniteQueryKey(
+      {
+        path: { endpoint_id: endpoint.id },
+        query: queryFilter,
+      },
+    );
 
   const deliveriesQuery = useInfiniteQuery({
     queryKey,
@@ -399,7 +408,10 @@ function DeliveryLog({ endpoint }: { endpoint: WebhookEndpointPublic }) {
   return (
     <div className="space-y-3">
       <div className="flex items-center gap-2">
-        <label className="text-sm text-muted-foreground" htmlFor="delivery-status-filter">
+        <label
+          className="text-sm text-muted-foreground"
+          htmlFor="delivery-status-filter"
+        >
           {t("tenancy.webhooks.delivery_filter")}
         </label>
         <select
@@ -436,7 +448,10 @@ function DeliveryLog({ endpoint }: { endpoint: WebhookEndpointPublic }) {
       {deliveriesQuery.isPending ? (
         <Skeleton className="h-24 w-full" />
       ) : deliveries.length === 0 ? (
-        <p className="text-sm text-muted-foreground" data-testid="deliveries-empty">
+        <p
+          className="text-sm text-muted-foreground"
+          data-testid="deliveries-empty"
+        >
           {t("tenancy.webhooks.empty_deliveries")}
         </p>
       ) : (
@@ -459,7 +474,11 @@ function DeliveryLog({ endpoint }: { endpoint: WebhookEndpointPublic }) {
           renderItem={(delivery) => (
             <div className="flex items-center justify-between gap-3 border-b px-2 py-2 text-sm">
               <span className="font-mono text-xs">{delivery.event_type}</span>
-              <Badge variant={delivery.status === "delivered" ? "default" : "secondary"}>
+              <Badge
+                variant={
+                  delivery.status === "delivered" ? "default" : "secondary"
+                }
+              >
                 {t(deliveryStatusLabelKey(delivery.status))}
               </Badge>
               <span className="text-xs text-muted-foreground">
@@ -610,7 +629,10 @@ export function WebhooksPage() {
     });
   };
 
-  const handleToggle = async (endpointId: string, enabled: boolean): Promise<void> => {
+  const handleToggle = async (
+    endpointId: string,
+    enabled: boolean,
+  ): Promise<void> => {
     setActionError(null);
     try {
       await toggleEnabled.mutateAsync({ endpointId, enabled });
@@ -649,7 +671,9 @@ export function WebhooksPage() {
   if (orgLoading || !org) {
     return (
       <div className="max-w-4xl space-y-6 p-6">
-        <h1 className="text-xl font-semibold" data-testid="page-title">{t("tenancy.webhooks.title")}</h1>
+        <h1 className="text-xl font-semibold" data-testid="page-title">
+          {t("tenancy.webhooks.title")}
+        </h1>
         <Skeleton className="h-32 w-full" />
       </div>
     );
@@ -658,7 +682,9 @@ export function WebhooksPage() {
   if (!canManage) {
     return (
       <div className="max-w-4xl space-y-6 p-6" data-testid="webhooks-page">
-        <h1 className="text-xl font-semibold" data-testid="page-title">{t("tenancy.webhooks.title")}</h1>
+        <h1 className="text-xl font-semibold" data-testid="page-title">
+          {t("tenancy.webhooks.title")}
+        </h1>
         <Alert>
           <AlertDescription data-testid="webhooks-permission-denied">
             {t("common.error.permission_denied")}
@@ -674,7 +700,9 @@ export function WebhooksPage() {
   return (
     <div className="max-w-4xl space-y-6 p-6" data-testid="webhooks-page">
       <div className="flex items-center justify-between">
-        <h1 className="text-xl font-semibold" data-testid="page-title">{t("tenancy.webhooks.title")}</h1>
+        <h1 className="text-xl font-semibold" data-testid="page-title">
+          {t("tenancy.webhooks.title")}
+        </h1>
         <Button
           type="button"
           disabled={endpoints.length >= MAX_ENDPOINTS_PER_ORG}
@@ -699,16 +727,21 @@ export function WebhooksPage() {
           ) : null}
           {endpointsQuery.isError ? (
             <Alert variant="destructive">
-              <AlertDescription>{t("tenancy.webhooks.error_load")}</AlertDescription>
+              <AlertDescription>
+                {t("tenancy.webhooks.error_load")}
+              </AlertDescription>
             </Alert>
           ) : null}
 
           {endpointsQuery.isPending ? (
             <Skeleton className="h-24 w-full" />
           ) : endpoints.length === 0 ? (
-            <p className="text-sm text-muted-foreground" data-testid="webhooks-empty">
-              {t("tenancy.webhooks.empty")}
-            </p>
+            <EmptyState
+              icon={Webhook}
+              data-testid="webhooks-empty"
+              title={t("tenancy.webhooks.empty_title")}
+              description={t("tenancy.webhooks.empty_body")}
+            />
           ) : (
             <ul className="space-y-4">
               {endpoints.map((endpoint) => (
@@ -718,7 +751,9 @@ export function WebhooksPage() {
                   data-testid={`webhook-row-${endpoint.id}`}
                 >
                   <div className="flex flex-wrap items-center justify-between gap-2">
-                    <span className="break-all font-mono text-sm">{endpoint.url}</span>
+                    <span className="break-all font-mono text-sm">
+                      {endpoint.url}
+                    </span>
                     <Badge variant={endpoint.enabled ? "default" : "secondary"}>
                       {endpoint.enabled
                         ? t("tenancy.webhooks.status_enabled")
@@ -752,7 +787,9 @@ export function WebhooksPage() {
                       variant="outline"
                       size="sm"
                       onClick={() => {
-                        setOpenLog(openLog === endpoint.id ? null : endpoint.id);
+                        setOpenLog(
+                          openLog === endpoint.id ? null : endpoint.id,
+                        );
                       }}
                       data-testid={`webhook-deliveries-${endpoint.id}`}
                     >
@@ -794,7 +831,9 @@ export function WebhooksPage() {
                       {t("tenancy.webhooks.delete")}
                     </Button>
                   </div>
-                  {openLog === endpoint.id ? <DeliveryLog endpoint={endpoint} /> : null}
+                  {openLog === endpoint.id ? (
+                    <DeliveryLog endpoint={endpoint} />
+                  ) : null}
                 </li>
               ))}
             </ul>
@@ -913,7 +952,9 @@ export function WebhooksPage() {
       {deleting ? (
         <TypedConfirmDialog
           title={t("tenancy.webhooks.delete_title")}
-          description={t("tenancy.webhooks.delete_description", { url: deleting.url })}
+          description={t("tenancy.webhooks.delete_description", {
+            url: deleting.url,
+          })}
           word={t("tenancy.webhooks.delete_confirm_word")}
           submitLabel={t("tenancy.webhooks.delete_submit")}
           testIdPrefix="webhook-delete-confirm"

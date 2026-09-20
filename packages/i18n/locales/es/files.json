@@ -2,7 +2,9 @@
   "page": {
     "title": "Archivos",
     "empty": "Aún no hay archivos. Sube uno para comenzar.",
-    "error_load": "No se pudieron cargar los archivos."
+    "error_load": "No se pudieron cargar los archivos.",
+    "empty_title": "Aún no hay archivos",
+    "empty_body": "Los archivos que subas aquí son privados para tu organización y se analizan en busca de virus antes de que alguien pueda descargarlos. Usa el cargador de arriba para añadir el primero."
   },
   "uploader": {
     "drop_here": "Suelta los archivos aquí",
@@ -34,7 +36,9 @@
   "action": {
     "download": "Descargar",
     "delete": "Eliminar",
-    "delete_confirm": "¿Eliminar este archivo?"
+    "delete_confirm": "¿Eliminar este archivo?",
+    "delete_confirm_title": "¿Eliminar este archivo?",
+    "delete_confirm_body": "{filename} se eliminará para todos los miembros de tu organización. Esta acción no se puede deshacer."
   },
   "picker": {
     "upload_button": "Subir",

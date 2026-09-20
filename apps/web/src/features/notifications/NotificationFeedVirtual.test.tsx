@@ -100,6 +100,14 @@ describe("NotificationFeed virtualization", () => {
     expect(onLoadMore).toHaveBeenCalledTimes(1);
   });
 
+  // Given its own, longer budget: this is the heaviest test in the web suite
+  // -- 20 sequential user-event keyboard round trips against a 200-row
+  // virtualized list, each of which re-renders the range and re-runs the
+  // measurement stubs. It was already failing intermittently under full
+  // file-level parallelism before this budget existed (and before the suite
+  // grew), always by running out of time rather than by asserting anything
+  // different. The file-wide 15s in vitest.config.ts is the right default;
+  // this one test genuinely needs more headroom on a loaded machine.
   it("arrow keys move focus through rows across a virtualization boundary", async () => {
     renderFeed(makeNotifications(200));
 
@@ -130,7 +138,7 @@ describe("NotificationFeed virtualization", () => {
       "data-index",
       String(ROWS_TO_WALK - 1),
     );
-  });
+  }, 45_000);
 
   it("has no a11y violations with the list virtualized", async () => {
     const { container } = renderFeed(makeNotifications(200));

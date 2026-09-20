@@ -7,11 +7,12 @@
 // a11y-allowlist.ts; moderate-and-below are recorded as annotations
 // instead of failing the run.
 //
-// One thing this task's own spec calls for that this file deliberately
-// doesn't do yet:
-//   - Both color schemes: the product has no dark mode today (Storybook's
-//     `.dark` class toggle is a Storybook-only preview affordance, not a
-//     user-facing toggle anywhere in apps/web) -- nothing to scan twice.
+// Both colour schemes are now scanned. That note used to read "the product
+// has no dark mode today"; F-004 gave it one (Settings -> Profile ->
+// Appearance, persisted to User.theme), so the dark theme gets its own pass
+// at the bottom of this file -- contrast is the axe rule most likely to
+// regress in a second palette, and the whole point of the dark token set is
+// that it was derived to clear AA rather than dimmed by eye.
 //
 // The `ar` (RTL) locale is covered below (T-231) -- dashboard + a settings
 // page, not the full page list above, mirroring visual.spec.ts's own ar
@@ -35,7 +36,10 @@ const ownerEmail = `a11y-owner+${runId}@example.com`;
 const teammateEmail = `a11y-teammate+${runId}@example.com`;
 const password = `A11y-Journey-${runId}!Aa1`;
 
-test("key pages have no serious/critical WCAG A/AA violations", async ({ page, browser }, testInfo) => {
+test("key pages have no serious/critical WCAG A/AA violations", async ({
+  page,
+  browser,
+}, testInfo) => {
   await test.step("login", async () => {
     await page.goto("/login");
     await expect(page.getByTestId("login-email-input")).toBeVisible();
@@ -86,7 +90,9 @@ test("key pages have no serious/critical WCAG A/AA violations", async ({ page, b
     // color-contrast violation on its text. Waiting for the animation to
     // finish scans the panel in the same fully-opaque state a real user
     // would perceive it in.
-    await panel.evaluate((el) => Promise.all(el.getAnimations().map((a) => a.finished)));
+    await panel.evaluate((el) =>
+      Promise.all(el.getAnimations().map((a) => a.finished)),
+    );
     await checkA11y(page, testInfo, "notification-center-open");
     await page.keyboard.press("Escape");
   });
@@ -112,11 +118,15 @@ test("key pages have no serious/critical WCAG A/AA violations", async ({ page, b
       /https:\/\/localhost\/[a-z]{2}\/accept-invitation\/[\w.-]+/,
     );
 
-    const teammateContext = await browser.newContext({ ignoreHTTPSErrors: true });
+    const teammateContext = await browser.newContext({
+      ignoreHTTPSErrors: true,
+    });
     const teammatePage = await teammateContext.newPage();
     try {
       await teammatePage.goto("/register");
-      await teammatePage.getByTestId("register-email-input").fill(teammateEmail);
+      await teammatePage
+        .getByTestId("register-email-input")
+        .fill(teammateEmail);
       await teammatePage.getByTestId("register-password-input").fill(password);
       await teammatePage.getByTestId("register-submit").click();
       await expect(teammatePage.getByTestId("register-success")).toBeVisible();
@@ -126,13 +136,17 @@ test("key pages have no serious/critical WCAG A/AA violations", async ({ page, b
         /https:\/\/localhost\/[a-z]{2}\/verify-email\?token=[\w-]+/,
       );
       await teammatePage.goto(teammateVerifyLink);
-      await expect(teammatePage.getByTestId("verify-email-success")).toBeVisible();
+      await expect(
+        teammatePage.getByTestId("verify-email-success"),
+      ).toBeVisible();
       await teammatePage.getByTestId("verify-email-continue-to-login").click();
 
       await teammatePage.getByTestId("login-email-input").fill(teammateEmail);
       await teammatePage.getByTestId("login-password-input").fill(password);
       await teammatePage.getByTestId("login-submit").click();
-      await expect(teammatePage.getByTestId("create-first-org-prompt")).toBeVisible();
+      await expect(
+        teammatePage.getByTestId("create-first-org-prompt"),
+      ).toBeVisible();
 
       await teammatePage.goto(inviteLink);
       await teammatePage.getByTestId("accept-invitation-button").click();
@@ -208,7 +222,9 @@ test("ar (rtl) locale has no serious/critical WCAG A/AA violations", async ({
   await page.getByTestId("login-submit").click();
   await expect(page.getByTestId("create-first-org-prompt")).toBeVisible();
 
-  await page.getByTestId("create-org-name-input").fill(`A11y RTL Co ${rtlRunId}`);
+  await page
+    .getByTestId("create-org-name-input")
+    .fill(`A11y RTL Co ${rtlRunId}`);
   await page.getByTestId("create-org-submit").click();
   await expect(page.getByTestId("app-shell")).toBeVisible();
 
@@ -224,5 +240,76 @@ test("ar (rtl) locale has no serious/critical WCAG A/AA violations", async ({
     await expect(page.getByTestId("app-shell")).toBeVisible();
     expect(await page.evaluate(() => document.documentElement.dir)).toBe("rtl");
     await checkA11y(page, testInfo, "settings-profile-ar");
+  });
+});
+
+// F-004: the same key pages again, in the dark theme.
+//
+// The theme is applied by seeding localStorage before the app boots rather
+// than by driving the settings UI: the boot script in index.html reads that
+// key synchronously on first paint, so this reproduces exactly what a
+// returning user with a saved preference gets -- and it does not depend on
+// the profile page still laying its control out the same way.
+test("dark theme has no serious/critical WCAG A/AA violations", async ({
+  page,
+}, testInfo) => {
+  const darkRunId = `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`;
+  const email = `a11y-dark+${darkRunId}@example.com`;
+  const darkPassword = `A11y-Dark-${darkRunId}!Aa1`;
+
+  await page.addInitScript(() => {
+    window.localStorage.setItem("forge.theme", "dark");
+  });
+
+  await page.goto("/register");
+  await page.getByTestId("register-email-input").fill(email);
+  await page.getByTestId("register-password-input").fill(darkPassword);
+  await page.getByTestId("register-submit").click();
+  await expect(page.getByTestId("register-success")).toBeVisible();
+
+  const verifyLink = await waitForLink(
+    email,
+    /https:\/\/localhost\/[a-z]{2}\/verify-email\?token=[\w-]+/,
+  );
+  await page.goto(verifyLink);
+  await expect(page.getByTestId("verify-email-success")).toBeVisible();
+  await page.getByTestId("verify-email-continue-to-login").click();
+
+  await test.step("login (dark)", async () => {
+    await expect(page.getByTestId("login-email-input")).toBeVisible();
+    expect(
+      await page.evaluate(() =>
+        document.documentElement.classList.contains("dark"),
+      ),
+    ).toBe(true);
+    await checkA11y(page, testInfo, "login-dark");
+  });
+
+  await page.getByTestId("login-email-input").fill(email);
+  await page.getByTestId("login-password-input").fill(darkPassword);
+  await page.getByTestId("login-submit").click();
+  await expect(page.getByTestId("create-first-org-prompt")).toBeVisible();
+
+  await page
+    .getByTestId("create-org-name-input")
+    .fill(`A11y Dark Co ${darkRunId}`);
+  await page.getByTestId("create-org-submit").click();
+  await expect(page.getByTestId("app-shell")).toBeVisible();
+
+  await test.step("dashboard (dark)", async () => {
+    await checkA11y(page, testInfo, "dashboard-dark");
+  });
+
+  await test.step("command palette (dark)", async () => {
+    await page.getByTestId("palette-trigger").click();
+    await expect(page.getByTestId("palette-nav-/")).toBeVisible();
+    await checkA11y(page, testInfo, "command-palette-dark");
+    await page.keyboard.press("Escape");
+  });
+
+  await test.step("settings (dark)", async () => {
+    await page.goto("/en/settings/profile");
+    await expect(page.getByTestId("theme-toggle")).toBeVisible();
+    await checkA11y(page, testInfo, "settings-profile-dark");
   });
 });

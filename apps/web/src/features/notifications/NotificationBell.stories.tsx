@@ -26,7 +26,9 @@ export const Empty: Story = {
   parameters: {
     msw: {
       handlers: [
-        http.get(`${API}/api/v1/notifications`, () => HttpResponse.json(envelope([]))),
+        http.get(`${API}/api/v1/notifications`, () =>
+          HttpResponse.json(envelope([])),
+        ),
         http.get(`${API}/api/v1/notifications/unread-count`, () =>
           HttpResponse.json(envelope({ count: 0 })),
         ),

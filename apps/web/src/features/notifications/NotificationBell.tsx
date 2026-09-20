@@ -31,6 +31,7 @@ export function NotificationBell() {
     isLoadingMore,
     loadMore,
     markRead,
+    markUnread,
     markAllRead,
   } = useNotifications({
     subscribe: subscribeToNotificationStream,
@@ -67,7 +68,9 @@ export function NotificationBell() {
               data-testid="notification-badge"
               className="absolute -inset-e-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full px-1 text-[10px] leading-none"
             >
-              {unreadCount > MAX_BADGE_COUNT ? `${String(MAX_BADGE_COUNT)}+` : unreadCount}
+              {unreadCount > MAX_BADGE_COUNT
+                ? `${String(MAX_BADGE_COUNT)}+`
+                : unreadCount}
             </Badge>
           ) : null}
         </button>
@@ -79,13 +82,18 @@ export function NotificationBell() {
         data-testid="notification-panel"
       >
         <div className="flex items-center justify-between px-4 py-2">
-          <p className="text-sm font-semibold">{t("notifications.feed.heading")}</p>
+          <p className="text-sm font-semibold">
+            {t("notifications.feed.heading")}
+          </p>
           {unreadCount > 0 ? (
             <Button
               type="button"
               variant="ghost"
               size="sm"
-              className="h-auto px-2 py-0.5 text-xs"
+              // F-014: h-auto + 12px text + 2px padding measured 23.2px tall, just
+              // under WCAG 2.2 2.5.8. min-h-6 is the 24px floor exactly; a full
+              // 44px target would stretch every row of a deliberately dense feed.
+              className="h-auto min-h-6 px-2 py-0.5 text-xs"
               onClick={() => {
                 void markAllRead();
               }}
@@ -103,7 +111,36 @@ export function NotificationBell() {
           isLoadingMore={isLoadingMore}
           onLoadMore={loadMore}
           onMarkRead={(id) => {
-            void markRead(id);
+            // F-009: act now, offer the way back -- rather than asking first.
+            // Marking read is reversible and low-stakes, so a confirmation
+            // would interrupt the common case to protect against the rare
+            // one. The toast is the protection, and it does not block.
+            //
+            // The `.catch` is not decoration: markRead() rejects when the
+            // request fails, and a bare `void` on it left an unhandled
+            // promise rejection behind -- invisible to the user, and enough
+            // to fail a test run on its own. The mutation's onError has
+            // already put the row back by the time this runs; all that is
+            // left is to say so (F-011: every error has a next step).
+            markRead(id)
+              .then(() => {
+                toast(t("notifications.feed.marked_read"), {
+                  action: {
+                    label: t("common.button.undo"),
+                    onClick: () => {
+                      markUnread(id).catch(() => {
+                        toast.error(t("notifications.feed.error_mark_read"));
+                      });
+                    },
+                  },
+                  // Long enough to notice and reach, short enough not to
+                  // stack up when someone clears several rows in a row.
+                  duration: 5000,
+                });
+              })
+              .catch(() => {
+                toast.error(t("notifications.feed.error_mark_read"));
+              });
           }}
         />
       </PopoverContent>

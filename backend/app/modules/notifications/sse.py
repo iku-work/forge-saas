@@ -291,6 +291,36 @@ async def mark_notification_read(  # noqa: PLR0913 -- the usual router param set
     )
 
 
+@router.patch(
+    "/notifications/{notification_id}/unread",
+    dependencies=[Depends(reject_during_impersonation("notification_read_state"))],
+)
+@api_limit
+async def mark_notification_unread(  # noqa: PLR0913 -- the usual router param set plus the reader's locale (T-234)
+    request: Request,
+    notification_id: UUID,
+    org_and_membership: Annotated[tuple[Organization, Membership], Depends(get_current_org)],
+    session: Annotated[AsyncSession, Depends(get_session)],
+    redis: Annotated[Redis, Depends(get_redis)],
+    locale: Annotated[str, Depends(get_locale)],
+) -> Envelope[NotificationPublic]:
+    """The inverse of the endpoint above, so "Mark as read" can offer an Undo
+    that restores the state and not just the row's appearance (F-009).
+
+    Carries the same impersonation guard as mark-read: read state is the
+    user's own, and a superadmin acting as them must not quietly change what
+    they have and have not seen -- in either direction.
+    """
+    org, membership = org_and_membership
+    repo = NotificationRepository(session, org.id, redis)
+    notification = await repo.mark_unread(notification_id, membership.user_id)
+    await session.commit()
+    return Envelope(
+        data=_public(notification, locale),
+        meta=Meta(request_id=_request_id(request)),
+    )
+
+
 @router.post(
     "/notifications/read-all",
     dependencies=[Depends(reject_during_impersonation("notification_read_state"))],

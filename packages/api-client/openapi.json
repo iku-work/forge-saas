@@ -4075,6 +4075,17 @@
               }
             ],
             "title": "Locale"
+          },
+          "theme": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Theme"
           }
         },
         "title": "UpdateMeRequest",
@@ -4232,6 +4243,11 @@
             },
             "title": "Notification Preferences",
             "type": "object"
+          },
+          "theme": {
+            "default": "system",
+            "title": "Theme",
+            "type": "string"
           },
           "totp_enabled": {
             "title": "Totp Enabled",
@@ -8383,6 +8399,72 @@
           }
         ],
         "summary": "Mark Notification Read",
+        "tags": [
+          "notifications"
+        ]
+      }
+    },
+    "/api/v1/notifications/{notification_id}/unread": {
+      "patch": {
+        "description": "The inverse of the endpoint above, so \"Mark as read\" can offer an Undo\nthat restores the state and not just the row's appearance (F-009).\n\nCarries the same impersonation guard as mark-read: read state is the\nuser's own, and a superadmin acting as them must not quietly change what\nthey have and have not seen -- in either direction.",
+        "operationId": "mark_notification_unread_api_v1_notifications__notification_id__unread_patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "notification_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Notification Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Org-ID",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Org-Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_NotificationPublic_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_NoneType_"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Mark Notification Unread",
         "tags": [
           "notifications"
         ]

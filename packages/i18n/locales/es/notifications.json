@@ -19,7 +19,9 @@
     "view_hint": "Abre la página vinculada a esta notificación",
     "loading": "Cargando notificaciones…",
     "error": "No se pudieron cargar las notificaciones.",
-    "empty": "Estás al día."
+    "empty": "Estás al día.",
+    "marked_read": "Marcada como leída",
+    "error_mark_read": "No se pudo actualizar esa notificación. Inténtalo de nuevo."
   },
   "banner": {
     "dismiss_hint": "Descarta esta notificación"

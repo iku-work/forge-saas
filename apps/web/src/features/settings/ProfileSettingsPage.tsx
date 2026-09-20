@@ -30,6 +30,7 @@ import {
 } from "@forge/ui";
 
 import { getErrorMessage } from "../auth/getErrorMessage";
+import { ThemeToggle } from "../../components/ThemeToggle";
 import { RoutedLocaleSwitcher } from "../../lib/RoutedLocaleSwitcher";
 import { AVATAR_QUERY_KEY, useAvatarSrc } from "../../lib/useAvatarSrc";
 
@@ -228,6 +229,21 @@ export function ProfileSettingsPage() {
               <div>
                 <RoutedLocaleSwitcher />
               </div>
+            </div>
+
+            {/* No <Label> here: ThemeToggle is a radiogroup that carries its
+                own aria-label, and a <Label> with no `htmlFor` pointing at a
+                single control is a label for nothing. The visible heading is
+                a <p> so it reads as the group's caption without claiming a
+                form-control relationship it does not have. */}
+            <div className="space-y-1">
+              <p className="text-body-sm font-medium">
+                {t("common.theme.label")}
+              </p>
+              <ThemeToggle />
+              <p className="text-caption text-muted-foreground">
+                {t("common.theme.hint")}
+              </p>
             </div>
           </CardContent>
         </Card>

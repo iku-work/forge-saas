@@ -14,6 +14,7 @@ import {
   listNotificationsApiV1NotificationsGetQueryKey,
   markAllNotificationsReadApiV1NotificationsReadAllPost,
   markNotificationReadApiV1NotificationsNotificationIdReadPatch,
+  markNotificationUnreadApiV1NotificationsNotificationIdUnreadPatch,
 } from "@forge/api-client";
 import type {
   EnvelopeListNotificationPublic,
@@ -53,11 +54,17 @@ export interface UseNotificationsResult {
   isLoadingMore: boolean;
   loadMore: () => void;
   markRead: (id: string) => Promise<void>;
+  /** F-009: the inverse of markRead, so an "Undo" restores the state rather
+   *  than only the row's appearance. */
+  markUnread: (id: string) => Promise<void>;
   markAllRead: () => Promise<void>;
   isConnected: boolean;
 }
 
-type NotificationsPageData = InfiniteData<EnvelopeListNotificationPublic, string | null>;
+type NotificationsPageData = InfiniteData<
+  EnvelopeListNotificationPublic,
+  string | null
+>;
 
 const DEFAULT_PAGE_SIZE = 50;
 
@@ -90,7 +97,10 @@ function prependNotification(
   }
   return {
     ...data,
-    pages: [{ ...firstPage, data: [notification, ...(firstPage.data ?? [])] }, ...restPages],
+    pages: [
+      { ...firstPage, data: [notification, ...(firstPage.data ?? [])] },
+      ...restPages,
+    ],
   };
 }
 
@@ -129,6 +139,10 @@ export function useNotifications(
     },
   });
 
+  // F-008: optimistic. Marking read is the textbook case -- it is
+  // single-item, it essentially always succeeds, and the round trip is the
+  // only thing between the click and the row changing. `onMutate` (not
+  // `onSuccess`, which is what this was) is what makes it instant.
   const markReadMutation = useMutation({
     mutationFn: async (notificationId: string) => {
       await markNotificationReadApiV1NotificationsNotificationIdReadPatch({
@@ -136,7 +150,16 @@ export function useNotifications(
         throwOnError: true,
       });
     },
-    onSuccess: (_response, notificationId) => {
+    onMutate: async (notificationId: string) => {
+      // Cancel first: an in-flight list refetch that started before this
+      // click would land *after* the optimistic write and overwrite it with
+      // the pre-click server state, which reads as the row flicking back.
+      await queryClient.cancelQueries({
+        queryKey: listNotificationsApiV1NotificationsGetQueryKey(),
+      });
+      const previous = queryClient.getQueryData<NotificationsPageData>(
+        listNotificationsApiV1NotificationsGetQueryKey(),
+      );
       queryClient.setQueryData<NotificationsPageData>(
         listNotificationsApiV1NotificationsGetQueryKey(),
         (old) =>
@@ -146,6 +169,62 @@ export function useNotifications(
               : notification,
           ),
       );
+      return { previous };
+    },
+    onError: (_error, _notificationId, context) => {
+      // Restore the whole page structure rather than un-setting one field:
+      // the snapshot is the only thing that is certainly consistent with
+      // what the user was looking at.
+      if (context?.previous) {
+        queryClient.setQueryData(
+          listNotificationsApiV1NotificationsGetQueryKey(),
+          context.previous,
+        );
+      }
+    },
+    onSettled: () => {
+      void queryClient.invalidateQueries({
+        queryKey: getUnreadCountApiV1NotificationsUnreadCountGetQueryKey(),
+      });
+    },
+  });
+
+  // F-009: the undo half. Optimistic for the same reasons, and with the same
+  // rollback -- an undo that visibly lags is an undo the user presses twice.
+  const markUnreadMutation = useMutation({
+    mutationFn: async (notificationId: string) => {
+      await markNotificationUnreadApiV1NotificationsNotificationIdUnreadPatch({
+        path: { notification_id: notificationId },
+        throwOnError: true,
+      });
+    },
+    onMutate: async (notificationId: string) => {
+      await queryClient.cancelQueries({
+        queryKey: listNotificationsApiV1NotificationsGetQueryKey(),
+      });
+      const previous = queryClient.getQueryData<NotificationsPageData>(
+        listNotificationsApiV1NotificationsGetQueryKey(),
+      );
+      queryClient.setQueryData<NotificationsPageData>(
+        listNotificationsApiV1NotificationsGetQueryKey(),
+        (old) =>
+          mapNotifications(old, (notification) =>
+            notification.id === notificationId
+              ? { ...notification, read_at: null }
+              : notification,
+          ),
+      );
+      return { previous };
+    },
+    onError: (_error, _notificationId, context) => {
+      if (context?.previous) {
+        queryClient.setQueryData(
+          listNotificationsApiV1NotificationsGetQueryKey(),
+          context.previous,
+        );
+      }
+    },
+    onSettled: () => {
       void queryClient.invalidateQueries({
         queryKey: getUnreadCountApiV1NotificationsUnreadCountGetQueryKey(),
       });
@@ -164,7 +243,9 @@ export function useNotifications(
         listNotificationsApiV1NotificationsGetQueryKey(),
         (old) =>
           mapNotifications(old, (notification) =>
-            notification.read_at ? notification : { ...notification, read_at: now },
+            notification.read_at
+              ? notification
+              : { ...notification, read_at: now },
           ),
       );
       void queryClient.invalidateQueries({
@@ -205,7 +286,8 @@ export function useNotifications(
               queryKey: listNotificationsApiV1NotificationsGetQueryKey(),
             });
             void queryClient.invalidateQueries({
-              queryKey: getUnreadCountApiV1NotificationsUnreadCountGetQueryKey(),
+              queryKey:
+                getUnreadCountApiV1NotificationsUnreadCountGetQueryKey(),
             });
           }
           hasConnectedOnceRef.current = true;
@@ -229,6 +311,13 @@ export function useNotifications(
     [markReadMutation],
   );
 
+  const markUnread = useCallback(
+    async (id: string) => {
+      await markUnreadMutation.mutateAsync(id);
+    },
+    [markUnreadMutation],
+  );
+
   const markAllRead = useCallback(async () => {
     await markAllReadMutation.mutateAsync();
   }, [markAllReadMutation]);
@@ -242,6 +331,7 @@ export function useNotifications(
     isLoadingMore: listQuery.isFetchingNextPage,
     loadMore,
     markRead,
+    markUnread,
     markAllRead,
     isConnected,
   };

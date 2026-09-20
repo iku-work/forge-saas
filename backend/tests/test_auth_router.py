@@ -789,6 +789,83 @@ async def test_update_me_rejects_unsupported_locale(
     assert response.status_code == 422
 
 
+async def test_update_me_defaults_theme_to_system(
+    client: httpx.AsyncClient, verified_user: User
+) -> None:
+    """F-004: a user who has never chosen follows prefers-color-scheme.
+
+    Asserted on the read path rather than the model, because the web app's
+    ThemeProvider reads it from exactly here -- an absent field would send it
+    to its own fallback and the two could drift.
+    """
+    response = await client.get("/api/v1/auth/me", headers=_auth_header(verified_user))
+
+    assert response.status_code == 200
+    assert response.json()["data"]["theme"] == "system"
+
+
+async def test_update_me_updates_theme(client: httpx.AsyncClient, verified_user: User) -> None:
+    response = await client.patch(
+        "/api/v1/auth/me", json={"theme": "dark"}, headers=_auth_header(verified_user)
+    )
+
+    assert response.status_code == 200
+    assert response.json()["data"]["theme"] == "dark"
+
+    me_response = await client.get("/api/v1/auth/me", headers=_auth_header(verified_user))
+    assert me_response.json()["data"]["theme"] == "dark"
+
+
+async def test_update_me_theme_does_not_disturb_the_other_fields(
+    client: httpx.AsyncClient, verified_user: User
+) -> None:
+    """The theme toggle sends `{"theme": ...}` alone, from a page that is not
+    the profile form -- so it must not clear the name the profile form set."""
+    await client.patch(
+        "/api/v1/auth/me",
+        json={"full_name": "Ada Lovelace", "locale": "fi"},
+        headers=_auth_header(verified_user),
+    )
+
+    response = await client.patch(
+        "/api/v1/auth/me", json={"theme": "light"}, headers=_auth_header(verified_user)
+    )
+
+    assert response.status_code == 200
+    body = response.json()["data"]
+    assert body["theme"] == "light"
+    assert body["full_name"] == "Ada Lovelace"
+    assert body["locale"] == "fi"
+
+
+async def test_update_me_rejects_an_explicitly_null_theme(
+    client: httpx.AsyncClient, verified_user: User
+) -> None:
+    """Same reasoning as the null-locale case above: User.theme is NOT NULL,
+    "no preference" is spelled "system", and schemathesis sends this."""
+    response = await client.patch(
+        "/api/v1/auth/me", json={"theme": None}, headers=_auth_header(verified_user)
+    )
+
+    assert response.status_code == 422
+
+    me_response = await client.get("/api/v1/auth/me", headers=_auth_header(verified_user))
+    assert me_response.json()["data"]["theme"] is not None
+
+
+async def test_update_me_rejects_an_unsupported_theme(
+    client: httpx.AsyncClient, verified_user: User
+) -> None:
+    """The column is a plain string, so this validator is the only thing
+    standing between the API and a `.dark`-class value the web app cannot
+    resolve."""
+    response = await client.patch(
+        "/api/v1/auth/me", json={"theme": "solarized"}, headers=_auth_header(verified_user)
+    )
+
+    assert response.status_code == 422
+
+
 # --- /sessions -------------------------------------------------------------------
 
 

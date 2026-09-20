@@ -11,6 +11,8 @@ import { AppErrorBoundary } from "./layouts/AppErrorBoundary";
 import { ImpersonationBanner } from "./layouts/ImpersonationBanner";
 import { localeOf, withLocale } from "./lib/locale-url";
 import { setSentryUser } from "./lib/sentry";
+import { startThemeSync } from "./lib/theme";
+import { useServerThemeSync } from "./lib/useTheme";
 import { useConsentSync } from "./lib/useConsentSync";
 import type { AppRouter } from "./router";
 
@@ -70,6 +72,20 @@ export function AppRoot({ router, queryClient }: AppRootProps) {
   // Does nothing at all in the template's default configuration, which
   // configures no analytics and therefore writes no cookie.
   useConsentSync();
+
+  // F-004. Two halves of one thing, and the order matters.
+  //
+  // startThemeSync() adopts whatever is in localStorage (the same value the
+  // boot script in index.html already painted with) and begins listening for
+  // the OS preference changing and for another tab switching theme. It runs
+  // in an effect with an empty dep array, i.e. once per mount.
+  //
+  // useServerThemeSync() then applies the *account's* saved theme once
+  // /auth/me has resolved, which is what makes the choice follow the user to
+  // a new device. It is a no-op when the two already agree, so the ordinary
+  // case never repaints.
+  useEffect(() => startThemeSync(), []);
+  useServerThemeSync();
 
   return (
     <AppErrorBoundary>

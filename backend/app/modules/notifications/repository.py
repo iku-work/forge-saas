@@ -124,6 +124,22 @@ class NotificationRepository:
         await self._invalidate_unread_count(user_id)
         return notification
 
+    async def mark_unread(self, notification_id: UUID, user_id: UUID) -> Notification:
+        """The inverse of mark_read, so the web app's "Undo" can restore the
+        state rather than only the appearance (F-009).
+
+        Same ownership check and same not-found shape as mark_read -- an undo
+        is an ordinary write by the same caller a moment later, and gets no
+        special authority for being one.
+        """
+        notification = await self.get_or_raise(notification_id)
+        if notification.user_id != user_id:
+            raise NotFoundError("errors.notification_not_found", fallback="Notification not found")
+        notification.read_at = None
+        await self.session.flush()
+        await self._invalidate_unread_count(user_id)
+        return notification
+
     async def mark_all_read(self, user_id: UUID) -> int:
         m = cast("Any", Notification)
         stmt = (

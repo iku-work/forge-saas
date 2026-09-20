@@ -8,7 +8,8 @@
     "submit": "Submit",
     "load_more": "Load more",
     "remove": "Remove",
-    "upload": "Upload"
+    "upload": "Upload",
+    "undo": "Undo"
   },
   "status": {
     "loading": "Loading…",
@@ -35,7 +36,8 @@
     "api_keys": "API keys",
     "webhooks": "Webhooks",
     "open_menu": "Open menu",
-    "menu": "Menu"
+    "menu": "Menu",
+    "skip_to_content": "Skip to content"
   },
   "support": {
     "contact": "Contact support",
@@ -60,7 +62,12 @@
     "select_hint": "Sets this as your app language"
   },
   "dashboard": {
-    "empty": "Nothing here yet."
+    "empty": "Nothing here yet.",
+    "empty_title": "Welcome — your workspace is ready",
+    "empty_body": "There's nothing here yet because you've just started. Pick one of the steps below, or use the search button in the header (or press Ctrl/Cmd + K) to jump anywhere in the app.",
+    "empty_action_files": "Upload your first file",
+    "empty_action_invite": "Invite a teammate",
+    "empty_action_profile": "Finish your profile"
   },
   "not_found": {
     "title": "Page not found",
@@ -319,5 +326,38 @@
   "maintenance": {
     "title": "We'll be right back",
     "default_message": "The service is temporarily down for maintenance. This page updates itself when we're done — there's no need to reload."
+  },
+  "theme": {
+    "label": "Appearance",
+    "light": "Light",
+    "dark": "Dark",
+    "system": "System",
+    "hint": "System follows your device's light or dark setting."
+  },
+  "palette": {
+    "label": "Command palette",
+    "trigger": "Search",
+    "placeholder": "Search pages and actions...",
+    "empty": "No matches. Try a different word.",
+    "recent": "Recent",
+    "navigation": "Go to",
+    "actions": "Actions",
+    "toggle_theme": "Toggle theme",
+    "hint": "to open anywhere"
+  },
+  "shortcuts": {
+    "title": "Keyboard shortcuts",
+    "description": "Press ? on any page to see this list.",
+    "category": {
+      "navigation": "Navigation",
+      "actions": "Actions",
+      "view": "View"
+    },
+    "command_palette": "Open the command palette",
+    "help": "Show keyboard shortcuts",
+    "close": "Close a dialog or menu",
+    "goto_dashboard": "Go to dashboard",
+    "goto_files": "Go to files",
+    "goto_settings": "Go to settings"
   }
 }

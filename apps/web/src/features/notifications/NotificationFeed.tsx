@@ -43,7 +43,10 @@ function NotificationRow({
             type="button"
             variant="ghost"
             size="sm"
-            className="h-auto px-2 py-0.5 text-xs"
+            // F-014: h-auto + 12px text + 2px padding measured 23.2px tall, just
+            // under WCAG 2.2 2.5.8. min-h-6 is the 24px floor exactly; a full
+            // 44px target would stretch every row of a deliberately dense feed.
+            className="h-auto min-h-6 px-2 py-0.5 text-xs"
             onClick={() => {
               onMarkRead(notification.id);
             }}
@@ -128,7 +131,10 @@ export function NotificationFeed({
         onLoadMore={onLoadMore}
         itemTestId="notification-row"
         renderItem={(notification) => (
-          <NotificationRow notification={notification} onMarkRead={onMarkRead} />
+          <NotificationRow
+            notification={notification}
+            onMarkRead={onMarkRead}
+          />
         )}
       />
       {isLoadingMore ? (

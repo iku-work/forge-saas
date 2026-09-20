@@ -8,7 +8,8 @@
     "submit": "Absenden",
     "load_more": "Mehr laden",
     "remove": "Entfernen",
-    "upload": "Hochladen"
+    "upload": "Hochladen",
+    "undo": "Rückgängig"
   },
   "status": {
     "loading": "Wird geladen…",
@@ -35,7 +36,8 @@
     "api_keys": "API-Schlüssel",
     "webhooks": "Webhooks",
     "open_menu": "Menü öffnen",
-    "menu": "Menü"
+    "menu": "Menü",
+    "skip_to_content": "Zum Inhalt springen"
   },
   "support": {
     "contact": "Support kontaktieren",
@@ -60,7 +62,12 @@
     "select_hint": "Legt dies als Ihre App-Sprache fest"
   },
   "dashboard": {
-    "empty": "Hier gibt es noch nichts."
+    "empty": "Hier gibt es noch nichts.",
+    "empty_title": "Willkommen — dein Arbeitsbereich ist bereit",
+    "empty_body": "Hier ist noch nichts, weil du gerade erst angefangen hast. Wähle einen der Schritte unten oder nutze die Suche in der Kopfzeile (oder drücke Strg/Cmd + K), um überallhin zu springen.",
+    "empty_action_files": "Erste Datei hochladen",
+    "empty_action_invite": "Teammitglied einladen",
+    "empty_action_profile": "Profil vervollständigen"
   },
   "not_found": {
     "title": "Seite nicht gefunden",
@@ -319,5 +326,38 @@
   "maintenance": {
     "title": "Wir sind gleich zurück",
     "default_message": "Der Dienst ist vorübergehend wegen Wartungsarbeiten nicht verfügbar. Diese Seite aktualisiert sich von selbst, sobald wir fertig sind — ein Neuladen ist nicht nötig."
+  },
+  "theme": {
+    "label": "Darstellung",
+    "light": "Hell",
+    "dark": "Dunkel",
+    "system": "System",
+    "hint": "System folgt der Hell-/Dunkel-Einstellung deines Geräts."
+  },
+  "palette": {
+    "label": "Befehlspalette",
+    "trigger": "Suchen",
+    "placeholder": "Seiten und Aktionen durchsuchen...",
+    "empty": "Keine Treffer. Versuche ein anderes Wort.",
+    "recent": "Zuletzt verwendet",
+    "navigation": "Gehe zu",
+    "actions": "Aktionen",
+    "toggle_theme": "Design wechseln",
+    "hint": "zum Öffnen überall"
+  },
+  "shortcuts": {
+    "title": "Tastaturkürzel",
+    "description": "Drücke ? auf jeder Seite, um diese Liste zu sehen.",
+    "category": {
+      "navigation": "Navigation",
+      "actions": "Aktionen",
+      "view": "Ansicht"
+    },
+    "command_palette": "Befehlspalette öffnen",
+    "help": "Tastaturkürzel anzeigen",
+    "close": "Dialog oder Menü schließen",
+    "goto_dashboard": "Zum Dashboard",
+    "goto_files": "Zu den Dateien",
+    "goto_settings": "Zu den Einstellungen"
   }
 }

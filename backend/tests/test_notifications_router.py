@@ -354,6 +354,75 @@ async def test_mark_notification_read_invalidates_unread_count_cache(
     assert after.json()["data"]["count"] == 0
 
 
+# --- PATCH /notifications/{id}/unread (F-009's undo) -----------------------------------
+
+
+async def test_mark_notification_unread_restores_the_state(
+    client: httpx.AsyncClient, session: AsyncSession, owner: User, org: Organization
+) -> None:
+    """The undo path: read, then unread, leaves the row exactly as it was.
+
+    Asserted on read_at rather than only on the unread count, because
+    "restores state, not just appearance" is the F-009 requirement -- a count
+    that happens to line up would also pass a weaker test.
+    """
+    notification = await _make_notification(session, org, owner)
+    await client.patch(
+        f"/api/v1/notifications/{notification.id}/read", headers=_headers(owner, org)
+    )
+
+    response = await client.patch(
+        f"/api/v1/notifications/{notification.id}/unread", headers=_headers(owner, org)
+    )
+
+    assert response.status_code == 200
+    assert response.json()["data"]["read_at"] is None
+
+
+async def test_mark_notification_unread_cross_user_same_org_returns_404(
+    client: httpx.AsyncClient, session: AsyncSession, owner: User, org: Organization
+) -> None:
+    """An undo gets no more authority than the action it reverses."""
+    member = await _add_member(session, org)
+    notification = await _make_notification(session, org, owner)
+
+    response = await client.patch(
+        f"/api/v1/notifications/{notification.id}/unread", headers=_headers(member, org)
+    )
+
+    assert response.status_code == 404
+
+
+async def test_mark_notification_unread_unknown_id_returns_404(
+    client: httpx.AsyncClient, owner: User, org: Organization
+) -> None:
+    response = await client.patch(
+        f"/api/v1/notifications/{uuid4()}/unread", headers=_headers(owner, org)
+    )
+
+    assert response.status_code == 404
+
+
+async def test_mark_notification_unread_invalidates_unread_count_cache(
+    client: httpx.AsyncClient, session: AsyncSession, owner: User, org: Organization
+) -> None:
+    """The bell's badge has to come back too -- the count is Redis-cached, and
+    a stale zero after an undo is the visible symptom."""
+    notification = await _make_notification(session, org, owner)
+    await client.patch(
+        f"/api/v1/notifications/{notification.id}/read", headers=_headers(owner, org)
+    )
+    read = await client.get("/api/v1/notifications/unread-count", headers=_headers(owner, org))
+    assert read.json()["data"]["count"] == 0
+
+    await client.patch(
+        f"/api/v1/notifications/{notification.id}/unread", headers=_headers(owner, org)
+    )
+
+    after = await client.get("/api/v1/notifications/unread-count", headers=_headers(owner, org))
+    assert after.json()["data"]["count"] == 1
+
+
 # --- POST /notifications/read-all ------------------------------------------------------
 
 

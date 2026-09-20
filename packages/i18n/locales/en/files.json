@@ -2,7 +2,9 @@
   "page": {
     "title": "Files",
     "empty": "No files yet. Upload one to get started.",
-    "error_load": "Could not load files."
+    "error_load": "Could not load files.",
+    "empty_title": "No files yet",
+    "empty_body": "Files you upload here are private to your organization and scanned for viruses before anyone can download them. Use the uploader above to add your first one."
   },
   "uploader": {
     "drop_here": "Drop files here",
@@ -34,7 +36,9 @@
   "action": {
     "download": "Download",
     "delete": "Delete",
-    "delete_confirm": "Delete this file?"
+    "delete_confirm": "Delete this file?",
+    "delete_confirm_title": "Delete this file?",
+    "delete_confirm_body": "{filename} will be removed for everyone in your organization. This can't be undone."
   },
   "picker": {
     "upload_button": "Upload",

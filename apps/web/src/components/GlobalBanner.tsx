@@ -64,7 +64,7 @@ export function GlobalBanner() {
             setDismissedMessage(banner.message);
           }}
           aria-label={t("common.banner.dismiss")}
-          className="shrink-0 rounded p-1 hover:bg-black/10"
+          className="shrink-0 rounded p-1.5 hover:bg-black/10"
         >
           <X className="size-4" aria-hidden="true" />
         </button>

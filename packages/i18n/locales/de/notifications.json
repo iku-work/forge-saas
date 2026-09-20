@@ -19,7 +19,9 @@
     "view_hint": "Öffnet die verknüpfte Seite dieser Benachrichtigung",
     "loading": "Benachrichtigungen werden geladen…",
     "error": "Benachrichtigungen konnten nicht geladen werden.",
-    "empty": "Sie haben alles gesehen."
+    "empty": "Sie haben alles gesehen.",
+    "marked_read": "Als gelesen markiert",
+    "error_mark_read": "Diese Benachrichtigung konnte nicht aktualisiert werden. Versuche es erneut."
   },
   "banner": {
     "dismiss_hint": "Blendet diese Benachrichtigung aus"

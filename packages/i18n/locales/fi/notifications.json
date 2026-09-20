@@ -29,5 +29,9 @@
     "type_file_infected": "Lataamasi tiedosto merkitään saastuneeksi",
     "channel_required": "pakollinen",
     "required_note": "Ilmoitamme laskutusongelmista aina sähköpostitse, eikä sitä voi poistaa käytöstä — muuten menettäisit käyttöoikeuden ilman varoitusta."
+  },
+  "feed": {
+    "marked_read": "Merkitty luetuksi",
+    "error_mark_read": "Ilmoituksen päivitys epäonnistui. Yritä uudelleen."
   }
 }

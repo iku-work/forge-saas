@@ -2,6 +2,7 @@ import { useState } from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
+import { KeyRound } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { z } from "zod";
 
@@ -28,6 +29,7 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
+  EmptyState,
   Form,
   FormControl,
   FormField,
@@ -105,7 +107,8 @@ type KeyStatus = "active" | "revoked" | "expired";
 
 function statusOf(key: ApiKeyPublic): KeyStatus {
   if (key.revoked_at) return "revoked";
-  if (key.expires_at && new Date(key.expires_at) <= new Date()) return "expired";
+  if (key.expires_at && new Date(key.expires_at) <= new Date())
+    return "expired";
   return "active";
 }
 
@@ -115,11 +118,7 @@ const STATUS_LABEL_KEYS: Record<KeyStatus, string> = {
   expired: "tenancy.api_keys.status_expired",
 };
 
-function CreateKeyForm({
-  onCreated,
-}: {
-  onCreated: (key: string) => void;
-}) {
+function CreateKeyForm({ onCreated }: { onCreated: (key: string) => void }) {
   const { t } = useTranslation();
   const [formError, setFormError] = useState<string | null>(null);
 
@@ -242,7 +241,11 @@ function CreateKeyForm({
             <FormItem>
               <FormLabel>{t("tenancy.api_keys.field_expires")}</FormLabel>
               <FormControl>
-                <Input type="date" data-testid="api-key-expires-input" {...field} />
+                <Input
+                  type="date"
+                  data-testid="api-key-expires-input"
+                  {...field}
+                />
               </FormControl>
               <p className="text-xs text-muted-foreground">
                 {t("tenancy.api_keys.field_expires_hint")}
@@ -295,7 +298,10 @@ function RevokeDialog({
           <p className="text-sm text-muted-foreground">
             {t("tenancy.api_keys.revoke_description")}
           </p>
-          <label className="block space-y-1 text-sm" htmlFor="api-key-revoke-confirm">
+          <label
+            className="block space-y-1 text-sm"
+            htmlFor="api-key-revoke-confirm"
+          >
             <span>{t("tenancy.api_keys.revoke_confirm_label", { word })}</span>
             <Input
               id="api-key-revoke-confirm"
@@ -383,7 +389,9 @@ export function ApiKeysPage() {
   if (orgLoading || !org) {
     return (
       <div className="max-w-4xl space-y-6 p-6">
-        <h1 className="text-xl font-semibold" data-testid="page-title">{t("tenancy.api_keys.title")}</h1>
+        <h1 className="text-xl font-semibold" data-testid="page-title">
+          {t("tenancy.api_keys.title")}
+        </h1>
         <Skeleton className="h-32 w-full" />
       </div>
     );
@@ -392,7 +400,9 @@ export function ApiKeysPage() {
   if (!canManage) {
     return (
       <div className="max-w-4xl space-y-6 p-6" data-testid="api-keys-page">
-        <h1 className="text-xl font-semibold" data-testid="page-title">{t("tenancy.api_keys.title")}</h1>
+        <h1 className="text-xl font-semibold" data-testid="page-title">
+          {t("tenancy.api_keys.title")}
+        </h1>
         <Alert>
           <AlertDescription data-testid="api-keys-permission-denied">
             {t("common.error.permission_denied")}
@@ -407,7 +417,9 @@ export function ApiKeysPage() {
   return (
     <div className="max-w-4xl space-y-6 p-6" data-testid="api-keys-page">
       <div className="flex items-center justify-between">
-        <h1 className="text-xl font-semibold" data-testid="page-title">{t("tenancy.api_keys.title")}</h1>
+        <h1 className="text-xl font-semibold" data-testid="page-title">
+          {t("tenancy.api_keys.title")}
+        </h1>
         <Button
           type="button"
           disabled={keys.length >= MAX_KEYS_PER_ORG}
@@ -432,16 +444,21 @@ export function ApiKeysPage() {
           ) : null}
           {keysQuery.isError ? (
             <Alert variant="destructive">
-              <AlertDescription>{t("tenancy.api_keys.error_load")}</AlertDescription>
+              <AlertDescription>
+                {t("tenancy.api_keys.error_load")}
+              </AlertDescription>
             </Alert>
           ) : null}
 
           {keysQuery.isPending ? (
             <Skeleton className="h-24 w-full" />
           ) : keys.length === 0 ? (
-            <p className="text-sm text-muted-foreground" data-testid="api-keys-empty">
-              {t("tenancy.api_keys.empty")}
-            </p>
+            <EmptyState
+              icon={KeyRound}
+              data-testid="api-keys-empty"
+              title={t("tenancy.api_keys.empty_title")}
+              description={t("tenancy.api_keys.empty_body")}
+            />
           ) : (
             <Table>
               <TableHeader>
@@ -459,9 +476,14 @@ export function ApiKeysPage() {
                 {keys.map((key) => {
                   const status = statusOf(key);
                   return (
-                    <TableRow key={key.id} data-testid={`api-key-row-${key.id}`}>
+                    <TableRow
+                      key={key.id}
+                      data-testid={`api-key-row-${key.id}`}
+                    >
                       <TableCell>{key.name}</TableCell>
-                      <TableCell className="font-mono text-xs">{key.prefix}</TableCell>
+                      <TableCell className="font-mono text-xs">
+                        {key.prefix}
+                      </TableCell>
                       <TableCell className="space-x-1">
                         {key.scopes.map((scope) => (
                           <Badge key={scope} variant="secondary">
@@ -480,7 +502,11 @@ export function ApiKeysPage() {
                           : t("tenancy.api_keys.never")}
                       </TableCell>
                       <TableCell>
-                        <Badge variant={status === "active" ? "default" : "secondary"}>
+                        <Badge
+                          variant={
+                            status === "active" ? "default" : "secondary"
+                          }
+                        >
                           {t(STATUS_LABEL_KEYS[status])}
                         </Badge>
                       </TableCell>

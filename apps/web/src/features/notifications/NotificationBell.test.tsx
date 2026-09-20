@@ -47,7 +47,9 @@ function renderBell() {
   );
 }
 
-function mockStream(): { push: (notification: NotificationPublic) => Promise<void> } {
+function mockStream(): {
+  push: (notification: NotificationPublic) => Promise<void>;
+} {
   let handlers: NotificationStreamHandlers | null = null;
   sse.subscribeToNotificationStream.mockImplementation(
     (h: NotificationStreamHandlers) => {
@@ -111,7 +113,9 @@ describe("NotificationBell", () => {
     );
     await screen.findByText("Existing notification");
 
-    await stream.push(makeNotification(11, { title: "Brand new notification" }));
+    await stream.push(
+      makeNotification(11, { title: "Brand new notification" }),
+    );
 
     await waitFor(() => {
       const titles = screen.getAllByText(
@@ -174,7 +178,9 @@ describe("NotificationBell", () => {
       await screen.findByRole("button", { name: "Notifications, 2 unread" }),
     );
     await screen.findByText("First");
-    expect(screen.getAllByRole("button", { name: "Mark as read" })).toHaveLength(2);
+    expect(
+      screen.getAllByRole("button", { name: "Mark as read" }),
+    ).toHaveLength(2);
 
     await userEvent.click(
       screen.getByRole("button", { name: "Mark all as read" }),

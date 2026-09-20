@@ -8,7 +8,8 @@
     "submit": "Enviar",
     "load_more": "Cargar más",
     "remove": "Eliminar",
-    "upload": "Subir"
+    "upload": "Subir",
+    "undo": "Deshacer"
   },
   "status": {
     "loading": "Cargando…",
@@ -35,7 +36,8 @@
     "api_keys": "Claves de API",
     "webhooks": "Webhooks",
     "open_menu": "Abrir menú",
-    "menu": "Menú"
+    "menu": "Menú",
+    "skip_to_content": "Saltar al contenido"
   },
   "support": {
     "contact": "Contactar con soporte",
@@ -60,7 +62,12 @@
     "select_hint": "Establece este como el idioma de tu aplicación"
   },
   "dashboard": {
-    "empty": "Aún no hay nada aquí."
+    "empty": "Aún no hay nada aquí.",
+    "empty_title": "Bienvenido: tu espacio está listo",
+    "empty_body": "Aquí no hay nada todavía porque acabas de empezar. Elige uno de los pasos de abajo o usa el botón de búsqueda de la cabecera (o pulsa Ctrl/Cmd + K) para ir a cualquier parte.",
+    "empty_action_files": "Sube tu primer archivo",
+    "empty_action_invite": "Invita a un compañero",
+    "empty_action_profile": "Completa tu perfil"
   },
   "not_found": {
     "title": "Página no encontrada",
@@ -319,5 +326,38 @@
   "maintenance": {
     "title": "Volvemos enseguida",
     "default_message": "El servicio no está disponible temporalmente por mantenimiento. Esta página se actualiza sola cuando terminemos; no hace falta recargarla."
+  },
+  "theme": {
+    "label": "Apariencia",
+    "light": "Claro",
+    "dark": "Oscuro",
+    "system": "Sistema",
+    "hint": "Sistema sigue la configuración clara u oscura de tu dispositivo."
+  },
+  "palette": {
+    "label": "Paleta de comandos",
+    "trigger": "Buscar",
+    "placeholder": "Busca páginas y acciones...",
+    "empty": "Sin resultados. Prueba con otra palabra.",
+    "recent": "Recientes",
+    "navigation": "Ir a",
+    "actions": "Acciones",
+    "toggle_theme": "Cambiar tema",
+    "hint": "para abrir en cualquier lugar"
+  },
+  "shortcuts": {
+    "title": "Atajos de teclado",
+    "description": "Pulsa ? en cualquier página para ver esta lista.",
+    "category": {
+      "navigation": "Navegación",
+      "actions": "Acciones",
+      "view": "Vista"
+    },
+    "command_palette": "Abrir la paleta de comandos",
+    "help": "Mostrar los atajos de teclado",
+    "close": "Cerrar un diálogo o menú",
+    "goto_dashboard": "Ir al panel",
+    "goto_files": "Ir a los archivos",
+    "goto_settings": "Ir a los ajustes"
   }
 }

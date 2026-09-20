@@ -8,7 +8,8 @@
     "submit": "Envoyer",
     "load_more": "Charger plus",
     "remove": "Supprimer",
-    "upload": "Importer"
+    "upload": "Importer",
+    "undo": "Annuler"
   },
   "status": {
     "loading": "Chargement…",
@@ -35,7 +36,8 @@
     "api_keys": "Clés d'API",
     "webhooks": "Webhooks",
     "open_menu": "Ouvrir le menu",
-    "menu": "Menu"
+    "menu": "Menu",
+    "skip_to_content": "Aller au contenu"
   },
   "support": {
     "contact": "Contacter le support",
@@ -60,7 +62,12 @@
     "select_hint": "Définit cette langue comme langue de l'application"
   },
   "dashboard": {
-    "empty": "Rien à afficher pour le moment."
+    "empty": "Rien à afficher pour le moment.",
+    "empty_title": "Bienvenue — votre espace est prêt",
+    "empty_body": "Il n'y a encore rien ici parce que vous venez de commencer. Choisissez une des étapes ci-dessous, ou utilisez la recherche dans l'en-tête (ou appuyez sur Ctrl/Cmd + K) pour aller n'importe où.",
+    "empty_action_files": "Importer votre premier fichier",
+    "empty_action_invite": "Inviter un collègue",
+    "empty_action_profile": "Compléter votre profil"
   },
   "not_found": {
     "title": "Page introuvable",
@@ -319,5 +326,38 @@
   "maintenance": {
     "title": "Nous revenons très vite",
     "default_message": "Le service est temporairement indisponible pour maintenance. Cette page se met à jour toute seule une fois que nous avons terminé — inutile de la recharger."
+  },
+  "theme": {
+    "label": "Apparence",
+    "light": "Clair",
+    "dark": "Sombre",
+    "system": "Système",
+    "hint": "Système suit le réglage clair ou sombre de votre appareil."
+  },
+  "palette": {
+    "label": "Palette de commandes",
+    "trigger": "Rechercher",
+    "placeholder": "Rechercher des pages et des actions...",
+    "empty": "Aucun résultat. Essayez un autre mot.",
+    "recent": "Récents",
+    "navigation": "Aller à",
+    "actions": "Actions",
+    "toggle_theme": "Changer de thème",
+    "hint": "pour ouvrir partout"
+  },
+  "shortcuts": {
+    "title": "Raccourcis clavier",
+    "description": "Appuyez sur ? sur n'importe quelle page pour voir cette liste.",
+    "category": {
+      "navigation": "Navigation",
+      "actions": "Actions",
+      "view": "Affichage"
+    },
+    "command_palette": "Ouvrir la palette de commandes",
+    "help": "Afficher les raccourcis clavier",
+    "close": "Fermer une boîte de dialogue ou un menu",
+    "goto_dashboard": "Aller au tableau de bord",
+    "goto_files": "Aller aux fichiers",
+    "goto_settings": "Aller aux paramètres"
   }
 }

@@ -2,7 +2,9 @@
   "page": {
     "title": "Tiedostot",
     "empty": "Ei tiedostoja vielä. Lataa yksi aloittaaksesi.",
-    "error_load": "Tiedostojen lataaminen epäonnistui."
+    "error_load": "Tiedostojen lataaminen epäonnistui.",
+    "empty_title": "Ei vielä tiedostoja",
+    "empty_body": "Tänne lataamasi tiedostot näkyvät vain organisaatiollesi, ja ne tarkistetaan virusten varalta ennen lataamista. Lisää ensimmäinen tiedosto yllä olevalla latauskentällä."
   },
   "uploader": {
     "drop_here": "Pudota tiedostot tähän",
@@ -34,7 +36,9 @@
   "action": {
     "download": "Lataa",
     "delete": "Poista",
-    "delete_confirm": "Poistaanko tämä tiedosto?"
+    "delete_confirm": "Poistaanko tämä tiedosto?",
+    "delete_confirm_title": "Poistetaanko tämä tiedosto?",
+    "delete_confirm_body": "{filename} poistetaan kaikilta organisaatiosi jäseniltä. Tätä ei voi kumota."
   },
   "picker": {
     "upload_button": "Lataa",

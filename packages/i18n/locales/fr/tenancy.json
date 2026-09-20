@@ -132,7 +132,9 @@
     "error_load": "Impossible de charger les clés d'API.",
     "error_create": "Impossible de créer la clé.",
     "error_revoke": "Impossible de révoquer la clé.",
-    "error_no_scopes": "Choisissez au moins une portée."
+    "error_no_scopes": "Choisissez au moins une portée.",
+    "empty_title": "Aucune clé d'API pour le moment",
+    "empty_body": "Les clés d'API permettent aux scripts et aux intégrations d'appeler l'API au nom de votre organisation, avec les seules portées que vous accordez. Créez-en une pour commencer — la clé n'est affichée qu'une fois."
   },
   "webhooks": {
     "title": "Webhooks",
@@ -209,6 +211,8 @@
     "error_rotate": "Impossible de changer le secret.",
     "error_delete": "Impossible de supprimer le point de terminaison.",
     "error_replay": "Impossible de rejouer la livraison.",
-    "error_no_events": "Choisissez au moins un événement."
+    "error_no_events": "Choisissez au moins un événement.",
+    "empty_title": "Aucun endpoint pour le moment",
+    "empty_body": "Les webhooks envoient les événements à une URL que vous contrôlez dès qu'ils se produisent, sans interrogation de votre part. Ajoutez un endpoint et choisissez les événements à recevoir."
   }
 }

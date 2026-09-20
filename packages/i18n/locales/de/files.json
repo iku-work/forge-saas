@@ -2,7 +2,9 @@
   "page": {
     "title": "Dateien",
     "empty": "Noch keine Dateien. Laden Sie eine hoch, um loszulegen.",
-    "error_load": "Dateien konnten nicht geladen werden."
+    "error_load": "Dateien konnten nicht geladen werden.",
+    "empty_title": "Noch keine Dateien",
+    "empty_body": "Hier hochgeladene Dateien sind nur für deine Organisation sichtbar und werden vor dem Herunterladen auf Viren geprüft. Lade oben deine erste Datei hoch."
   },
   "uploader": {
     "drop_here": "Dateien hier ablegen",
@@ -34,7 +36,9 @@
   "action": {
     "download": "Herunterladen",
     "delete": "Löschen",
-    "delete_confirm": "Diese Datei löschen?"
+    "delete_confirm": "Diese Datei löschen?",
+    "delete_confirm_title": "Diese Datei löschen?",
+    "delete_confirm_body": "{filename} wird für alle in deiner Organisation entfernt. Das kann nicht rückgängig gemacht werden."
   },
   "picker": {
     "upload_button": "Hochladen",

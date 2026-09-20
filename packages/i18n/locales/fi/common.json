@@ -8,7 +8,8 @@
     "submit": "Lähetä",
     "load_more": "Lataa lisää",
     "remove": "Poista",
-    "upload": "Lataa"
+    "upload": "Lataa",
+    "undo": "Kumoa"
   },
   "status": {
     "loading": "Latautuu…",
@@ -31,7 +32,8 @@
     "reports": "Edistyneet raportit",
     "logout": "Kirjaudu ulos",
     "open_menu": "Avaa valikko",
-    "menu": "Valikko"
+    "menu": "Valikko",
+    "skip_to_content": "Siirry sisältöön"
   },
   "support": {
     "contact": "Ota yhteyttä tukeen",
@@ -52,7 +54,12 @@
     "label": "Kieli"
   },
   "dashboard": {
-    "empty": "Ei sisältöä vielä."
+    "empty": "Ei sisältöä vielä.",
+    "empty_title": "Tervetuloa — työtilasi on valmis",
+    "empty_body": "Täällä ei ole vielä mitään, koska olet juuri aloittanut. Valitse jokin alla olevista vaiheista tai käytä yläpalkin hakua (tai paina Ctrl/Cmd + K) siirtyäksesi minne tahansa.",
+    "empty_action_files": "Lataa ensimmäinen tiedostosi",
+    "empty_action_invite": "Kutsu tiimiläinen",
+    "empty_action_profile": "Viimeistele profiilisi"
   },
   "not_found": {
     "title": "Sivua ei löytynyt",
@@ -134,5 +141,38 @@
   "maintenance": {
     "title": "Palaamme pian",
     "default_message": "Palvelu on tilapäisesti pois käytöstä huoltotöiden vuoksi. Tämä sivu päivittyy itsestään, kun olemme valmiit — sivua ei tarvitse ladata uudelleen."
+  },
+  "theme": {
+    "label": "Ulkoasu",
+    "light": "Vaalea",
+    "dark": "Tumma",
+    "system": "Järjestelmä",
+    "hint": "Järjestelmä seuraa laitteesi vaalean tai tumman asetusta."
+  },
+  "palette": {
+    "label": "Komentopaletti",
+    "trigger": "Haku",
+    "placeholder": "Hae sivuja ja toimintoja...",
+    "empty": "Ei osumia. Kokeile toista sanaa.",
+    "recent": "Viimeisimmät",
+    "navigation": "Siirry",
+    "actions": "Toiminnot",
+    "toggle_theme": "Vaihda teemaa",
+    "hint": "avaa missä tahansa"
+  },
+  "shortcuts": {
+    "title": "Pikanäppäimet",
+    "description": "Paina ? millä tahansa sivulla nähdäksesi tämän listan.",
+    "category": {
+      "navigation": "Navigointi",
+      "actions": "Toiminnot",
+      "view": "Näkymä"
+    },
+    "command_palette": "Avaa komentopaletti",
+    "help": "Näytä pikanäppäimet",
+    "close": "Sulje valintaikkuna tai valikko",
+    "goto_dashboard": "Siirry koontinäyttöön",
+    "goto_files": "Siirry tiedostoihin",
+    "goto_settings": "Siirry asetuksiin"
   }
 }

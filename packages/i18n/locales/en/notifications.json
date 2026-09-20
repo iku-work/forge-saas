@@ -19,7 +19,9 @@
     "view_hint": "Opens the linked page for this notification",
     "loading": "Loading notifications…",
     "error": "Couldn't load notifications.",
-    "empty": "You're all caught up."
+    "empty": "You're all caught up.",
+    "marked_read": "Marked as read",
+    "error_mark_read": "Couldn't update that notification. Try again."
   },
   "banner": {
     "dismiss_hint": "Dismisses this notification"
