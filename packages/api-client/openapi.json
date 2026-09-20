@@ -4075,6 +4075,17 @@
               }
             ],
             "title": "Locale"
+          },
+          "theme": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Theme"
           }
         },
         "title": "UpdateMeRequest",
@@ -4232,6 +4243,11 @@
             },
             "title": "Notification Preferences",
             "type": "object"
+          },
+          "theme": {
+            "default": "system",
+            "title": "Theme",
+            "type": "string"
           },
           "totp_enabled": {
             "title": "Totp Enabled",

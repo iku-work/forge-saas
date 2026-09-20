@@ -59,6 +59,16 @@ class User(RedactedReprMixin, UUIDPKMixin, TimestampMixin, SoftDeleteMixin, SQLM
     is_superadmin: bool = Field(default=False)
     totp_enabled: bool = Field(default=False)
     locale: str = Field(default="en")
+    # F-004. "system" means "follow prefers-color-scheme", and is the default
+    # because a first-time user's OS preference is a better guess than either
+    # fixed choice -- and because it is the only value that keeps honouring
+    # the OS when the user changes it later.
+    #
+    # A plain string column rather than a native enum, matching `locale`
+    # directly above: the set of values is owned by the API schema
+    # (UpdateMeRequest._check_theme), which can add one without a migration.
+    # An ALTER TYPE would be the wrong unit of change for a UI preference.
+    theme: str = Field(default="system")
     failed_login_count: int = Field(default=0)
     locked_until: datetime | None = Field(default=None, sa_type=_TZ_DATETIME)  # type: ignore[call-overload]
     # Maps an event name to enabled channels, e.g. member_invited -> email/in_app/push.

@@ -215,3 +215,49 @@
     font-family: var(--font-sans);
   }
 }
+
+/* -- Reduced motion (F-003) ------------------------------------------------
+ *
+ * WCAG 2.3.3 is AAA, but vestibular disorders are not a AAA concern: an
+ * unwanted transform can cause real nausea, so this is treated as required.
+ *
+ * Deliberately *outside* `@layer base`. Everything here has to beat
+ * `tw-animate-css`'s keyframe classes, Radix's inline animation styles and
+ * any utility a component carries -- and an unlayered rule outranks every
+ * layered one regardless of specificity. `!important` alone would not be
+ * enough against an inline style, which is where Radix puts its durations.
+ *
+ * Near-zero rather than `none`, because both matter:
+ *   - `animation: none` would stop `animationend`/`transitionend` from
+ *     firing at all, and Radix's Presence primitive waits for that event
+ *     before unmounting an exiting dialog or popover -- so `none` leaves a
+ *     closed dropdown on screen forever. 0.01ms fires the event on the next
+ *     frame, which is exactly what we want: instant, but still an event.
+ *   - `animation-iteration-count: 1` stops infinite loops (the Skeleton
+ *     pulse, spinners) settling into a steady state instead of running.
+ *
+ * What is deliberately NOT neutralised: focus rings, hover colour changes
+ * and anything else that only changes paint. Those are non-motion feedback
+ * and removing them would cost the user information -- but they are
+ * *transitions* here, so they become instant rather than absent. That is the
+ * correct reading: the user asked for less motion, not less feedback.
+ */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-delay: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    transition-delay: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+
+  /* `scroll-behavior` is not inherited and is read off the *scrolling*
+     element, so the universal rule above does not reach a smooth scroll
+     requested on the root. Tailwind's `scroll-smooth` sets it here. */
+  html {
+    scroll-behavior: auto !important;
+  }
+}

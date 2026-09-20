@@ -57,6 +57,7 @@ import {
 } from "@forge/ui";
 
 import { GlobalBanner } from "../components/GlobalBanner";
+import { MAIN_CONTENT_ID, SkipLink } from "../components/SkipLink";
 import { MaintenanceScreen } from "../components/MaintenanceScreen";
 import { CreateOrgForm } from "../features/settings/CreateOrgForm";
 import { NotificationBell } from "../features/notifications/NotificationBell";
@@ -498,6 +499,9 @@ export function AppLayout({ children }: { children: ReactNode }) {
     // T-263: the banner sits *outside* the shell's flex row, above everything,
     // so it pushes the whole app down rather than landing inside one column.
     <div className="flex min-h-dvh flex-col" data-testid="app-shell">
+      {/* First child, before the banner: the skip link only does its job if
+          it is the first thing Tab reaches (F-013). */}
+      <SkipLink />
       <GlobalBanner />
       <div className="flex flex-1">
         {/* One nav, two presentations. Below `md` it is a drawer behind the
@@ -561,7 +565,17 @@ export function AppLayout({ children }: { children: ReactNode }) {
               </button>
             )}
           </header>
-          <main className="flex-1 overflow-auto">{children}</main>
+          {/* tabIndex={-1} so the skip link actually moves focus here.
+              Without it the fragment jump scrolls the viewport but leaves
+              focus on <body>, and the next Tab starts from the top of the
+              document again -- the exact trap the link exists to avoid. */}
+          <main
+            id={MAIN_CONTENT_ID}
+            tabIndex={-1}
+            className="flex-1 overflow-auto focus:outline-none"
+          >
+            {children}
+          </main>
         </div>
       </div>
       <Toaster />

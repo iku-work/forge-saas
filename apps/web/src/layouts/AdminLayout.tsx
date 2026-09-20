@@ -14,6 +14,7 @@ import { useAuth } from "@forge/hooks";
 import { Badge, Toaster } from "@forge/ui";
 
 import { GlobalBanner } from "../components/GlobalBanner";
+import { MAIN_CONTENT_ID, SkipLink } from "../components/SkipLink";
 import { stripLocale } from "../lib/locale-url";
 import { useRouteLocale } from "../lib/useRouteLocale";
 
@@ -87,6 +88,7 @@ export function AdminLayout({ children }: { children: ReactNode }) {
 
   return (
     <div className="flex min-h-dvh flex-col bg-slate-950 text-slate-100">
+      <SkipLink />
       {/* Wraps, because this bar holds a wordmark, four nav links and an
           account block -- 901px of content that used to sit in one
           unwrappable row, so every admin page scrolled sideways on a phone
@@ -147,7 +149,11 @@ export function AdminLayout({ children }: { children: ReactNode }) {
           is only visible outside the admin surface is one nobody notices they
           left up. */}
       <GlobalBanner />
-      <main className="flex-1 overflow-auto bg-background text-foreground">
+      <main
+        id={MAIN_CONTENT_ID}
+        tabIndex={-1}
+        className="flex-1 overflow-auto bg-background text-foreground focus:outline-none"
+      >
         {children}
       </main>
       <Toaster />

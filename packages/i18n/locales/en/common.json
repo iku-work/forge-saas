@@ -35,7 +35,8 @@
     "api_keys": "API keys",
     "webhooks": "Webhooks",
     "open_menu": "Open menu",
-    "menu": "Menu"
+    "menu": "Menu",
+    "skip_to_content": "Skip to content"
   },
   "support": {
     "contact": "Contact support",
@@ -319,5 +320,12 @@
   "maintenance": {
     "title": "We'll be right back",
     "default_message": "The service is temporarily down for maintenance. This page updates itself when we're done — there's no need to reload."
+  },
+  "theme": {
+    "label": "Appearance",
+    "light": "Light",
+    "dark": "Dark",
+    "system": "System",
+    "hint": "System follows your device's light or dark setting."
   }
 }

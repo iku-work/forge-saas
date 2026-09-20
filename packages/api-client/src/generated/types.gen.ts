@@ -2000,6 +2000,10 @@ export type UpdateMeRequest = {
      * Locale
      */
     locale?: string | null;
+    /**
+     * Theme
+     */
+    theme?: string | null;
 };
 
 /**
@@ -2089,6 +2093,10 @@ export type UserPublic = {
             [key: string]: boolean;
         };
     };
+    /**
+     * Theme
+     */
+    theme?: string;
     /**
      * Totp Enabled
      */

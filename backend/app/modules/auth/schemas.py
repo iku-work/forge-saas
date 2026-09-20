@@ -1072,6 +1072,10 @@ class UserPublic(AppBaseModel):
     # a user object that gets stored, logged and re-serialised.
     has_uploaded_avatar: bool = False
     locale: str
+    # F-004. Sent on every session-bearing response so the web app can apply
+    # the saved theme on the first render after login, rather than painting
+    # the pre-login guess and then correcting it.
+    theme: str = "system"
     email_verified_at: datetime | None
     totp_enabled: bool
     # T-143: the web app needs this to decide whether to render the "Admin"
@@ -1092,6 +1096,11 @@ class UserPublic(AppBaseModel):
 # ~200 characters) and short enough that the column, the app shell and the
 # admin directory are not a place to paste an essay.
 _FULL_NAME_MAX_LENGTH = 200
+
+# F-004. "system" follows prefers-color-scheme; the other two pin it. Kept
+# here rather than as a native PG enum so adding a value (a high-contrast
+# theme, say) is a schema change and not a migration -- see User.theme.
+_THEMES = frozenset({"light", "dark", "system"})
 
 
 class UpdateMeRequest(AppBaseModel):
@@ -1115,6 +1124,9 @@ class UpdateMeRequest(AppBaseModel):
     # wrote NULL into the column and 500'd. Caught by the schemathesis
     # contract test, which sends exactly that.
     locale: str | None = None
+    # Same nullability reasoning as `locale`: nullable only so it can be
+    # omitted. User.theme is NOT NULL and "no theme" is spelled "system".
+    theme: str | None = None
     # Capped because it is rendered in the app shell, in emails and in the
     # admin directory. EncryptedString on the model side (see User.full_name)
     # so it is encrypted at rest and redacted from audit diffs.
@@ -1129,11 +1141,29 @@ class UpdateMeRequest(AppBaseModel):
     def _reject_an_explicitly_null_locale(self) -> Self:
         """Omitting `locale` leaves it; sending `null` is not a way to unset
         it, because there is nothing to unset it to -- the column is NOT NULL
-        and every user has one."""
-        if "locale" in self.model_fields_set and self.locale is None:
-            msg = "locale must not be null -- omit the field to leave it unchanged"
-            raise ValueError(msg)
+        and every user has one.
+
+        The same holds for `theme` (F-004), which is why it is checked here
+        rather than in a second validator: both columns are NOT NULL, and the
+        schemathesis contract test sends an explicit null for every nullable
+        field it finds, so an unchecked one reaches the database as NULL and
+        500s.
+        """
+        for field in ("locale", "theme"):
+            if field in self.model_fields_set and getattr(self, field) is None:
+                msg = f"{field} must not be null -- omit the field to leave it unchanged"
+                raise ValueError(msg)
         return self
+
+    @field_validator("theme")
+    @classmethod
+    def _check_theme(cls, theme: str | None) -> str | None:
+        if theme is None:
+            return None
+        if theme not in _THEMES:
+            msg = f"Unsupported theme '{theme}'. Supported: {', '.join(sorted(_THEMES))}."
+            raise ValueError(msg)
+        return theme
 
     @field_validator("full_name")
     @classmethod

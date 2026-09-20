@@ -35,7 +35,8 @@
     "api_keys": "API-Schlüssel",
     "webhooks": "Webhooks",
     "open_menu": "Menü öffnen",
-    "menu": "Menü"
+    "menu": "Menü",
+    "skip_to_content": "Zum Inhalt springen"
   },
   "support": {
     "contact": "Support kontaktieren",
@@ -319,5 +320,12 @@
   "maintenance": {
     "title": "Wir sind gleich zurück",
     "default_message": "Der Dienst ist vorübergehend wegen Wartungsarbeiten nicht verfügbar. Diese Seite aktualisiert sich von selbst, sobald wir fertig sind — ein Neuladen ist nicht nötig."
+  },
+  "theme": {
+    "label": "Darstellung",
+    "light": "Hell",
+    "dark": "Dunkel",
+    "system": "System",
+    "hint": "System folgt der Hell-/Dunkel-Einstellung deines Geräts."
   }
 }

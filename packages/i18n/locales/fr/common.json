@@ -35,7 +35,8 @@
     "api_keys": "Clés d'API",
     "webhooks": "Webhooks",
     "open_menu": "Ouvrir le menu",
-    "menu": "Menu"
+    "menu": "Menu",
+    "skip_to_content": "Aller au contenu"
   },
   "support": {
     "contact": "Contacter le support",
@@ -319,5 +320,12 @@
   "maintenance": {
     "title": "Nous revenons très vite",
     "default_message": "Le service est temporairement indisponible pour maintenance. Cette page se met à jour toute seule une fois que nous avons terminé — inutile de la recharger."
+  },
+  "theme": {
+    "label": "Apparence",
+    "light": "Clair",
+    "dark": "Sombre",
+    "system": "Système",
+    "hint": "Système suit le réglage clair ou sombre de votre appareil."
   }
 }

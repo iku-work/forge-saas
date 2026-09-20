@@ -31,7 +31,8 @@
     "reports": "Edistyneet raportit",
     "logout": "Kirjaudu ulos",
     "open_menu": "Avaa valikko",
-    "menu": "Valikko"
+    "menu": "Valikko",
+    "skip_to_content": "Siirry sisältöön"
   },
   "support": {
     "contact": "Ota yhteyttä tukeen",
@@ -134,5 +135,12 @@
   "maintenance": {
     "title": "Palaamme pian",
     "default_message": "Palvelu on tilapäisesti pois käytöstä huoltotöiden vuoksi. Tämä sivu päivittyy itsestään, kun olemme valmiit — sivua ei tarvitse ladata uudelleen."
+  },
+  "theme": {
+    "label": "Ulkoasu",
+    "light": "Vaalea",
+    "dark": "Tumma",
+    "system": "Järjestelmä",
+    "hint": "Järjestelmä seuraa laitteesi vaalean tai tumman asetusta."
   }
 }

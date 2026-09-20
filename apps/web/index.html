@@ -4,6 +4,27 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>ForgeSaaS</title>
+    <!--
+      F-004. Synchronous and in <head> on purpose: it has to run before the
+      stylesheet paints, and a type="module" script (main.tsx, below) is
+      deferred by definition, so anything there is already a frame too late
+      and the user sees a white flash on the way into a dark app.
+
+      Kept in step with apps/web/src/lib/theme.ts, whose THEME_BOOT_SNIPPET
+      is this exact source and whose test asserts the two match.
+    -->
+    <script>
+      try {
+        var p = localStorage.getItem("forge.theme");
+        if (p !== "light" && p !== "dark") p = "system";
+        var d =
+          p === "dark" ||
+          (p === "system" &&
+            matchMedia("(prefers-color-scheme: dark)").matches);
+        document.documentElement.classList.toggle("dark", d);
+        document.documentElement.style.colorScheme = d ? "dark" : "light";
+      } catch (e) {}
+    </script>
   </head>
   <body>
     <div id="root"></div>
