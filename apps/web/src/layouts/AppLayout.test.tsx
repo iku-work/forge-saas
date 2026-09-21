@@ -1,5 +1,6 @@
 import { http, HttpResponse } from "msw";
 import { screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it } from "vitest";
 
 import { getApiBaseUrl } from "@forge/api-client";
@@ -34,14 +35,52 @@ describe("AppLayout (owner, one org)", () => {
     );
   });
 
-  it("renders the dashboard with the org switcher and full nav for an owner", async () => {
+  it("renders the dashboard with the org switcher and the primary nav for an owner", async () => {
     renderApp({ initialPath: "/", user });
 
     expect(
       await screen.findByRole("heading", { name: "Dashboard" }),
     ).toBeInTheDocument();
     expect(screen.getByText("Acme Inc")).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Billing" })).toBeInTheDocument();
+    expect(screen.getByTestId("sidebar-primary-nav")).toBeInTheDocument();
+    expect(screen.getByTestId("nav-dashboard")).toBeInTheDocument();
+  });
+
+  it("keeps the settings pages out of the sidebar outside settings", async () => {
+    // The sidebar shows one group at a time now. Billing is the check because
+    // it is owner-only and module-gated, so its absence here has to come from
+    // the mode rather than from a gate.
+    renderApp({ initialPath: "/", user });
+
+    await screen.findByTestId("sidebar-primary-nav");
+    expect(
+      screen.queryByTestId("sidebar-settings-nav"),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("link", { name: "Billing" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("swaps the sidebar to the settings group on a settings route", async () => {
+    renderApp({ initialPath: "/settings/billing", user });
+
+    expect(
+      await screen.findByRole("heading", { name: "Billing" }),
+    ).toBeInTheDocument();
+    expect(screen.getByTestId("sidebar-settings-nav")).toBeInTheDocument();
+    expect(screen.queryByTestId("sidebar-primary-nav")).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Profile" })).toBeInTheDocument();
+  });
+
+  it("offers Dashboard and Settings from the user menu", async () => {
+    // With the settings pages out of the sidebar, this menu is the only
+    // pointer route into them -- and the only way back out of settings.
+    renderApp({ initialPath: "/", user });
+
+    await userEvent.click(await screen.findByTestId("user-menu-trigger"));
+
+    expect(await screen.findByTestId("user-menu-settings")).toBeInTheDocument();
+    expect(screen.getByTestId("user-menu-dashboard")).toBeInTheDocument();
   });
 
   it("renders settings pages nested under the guarded layout", async () => {
@@ -77,9 +116,10 @@ describe("AppLayout (owner, one org)", () => {
   it("hides the Advanced reports nav item when the flag is disabled (the default handler)", async () => {
     renderApp({ initialPath: "/", user });
 
-    // Wait for a link that's always present once the shell resolves, so the
-    // absence check below isn't just catching an early/loading render.
-    await screen.findByRole("link", { name: "Billing" });
+    // Wait for something that's always present once the shell resolves, so
+    // the absence check below isn't just catching an early/loading render.
+    // (Not a settings link any more -- those left the sidebar.)
+    await screen.findByTestId("nav-dashboard");
     expect(
       screen.queryByRole("link", { name: "Advanced reports" }),
     ).not.toBeInTheDocument();

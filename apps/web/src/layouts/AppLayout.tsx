@@ -5,8 +5,10 @@ import {
   Check,
   Search,
   ChevronsUpDown,
+  LayoutDashboard,
   LogOut,
   Plus,
+  Settings,
   ShieldAlert,
   Menu,
 } from "lucide-react";
@@ -207,33 +209,66 @@ function UserMenu() {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
+        {/* Sized by its own content now that it lives in the header rather
+            than filling the sidebar's width. min-h-11 keeps it on the WCAG
+            2.2 target-size floor with room to spare (F-014). */}
         <button
           type="button"
-          className="flex w-full items-center gap-2 rounded-md px-2 py-2 text-start text-sm hover:bg-accent"
+          data-testid="user-menu-trigger"
+          className="flex min-h-11 items-center gap-2 rounded-md px-2 text-sm hover:bg-accent"
         >
           <Avatar className="size-7" data-testid="user-menu-avatar">
             {avatarSrc ? <AvatarImage src={avatarSrc} alt="" /> : null}
             <AvatarFallback>{initialsFor(user.email)}</AvatarFallback>
           </Avatar>
-          <span className="flex-1 truncate">
+          {/* Hidden below `sm`: on a phone the header also carries the drawer
+              trigger, the breadcrumb, search and the bell, and the name is
+              the one thing there that the avatar already stands for. */}
+          <span className="hidden max-w-32 truncate sm:inline">
             {user.full_name ?? user.email}
           </span>
         </button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="start" className="w-56">
+      {/* `end`, because the trigger is now at the end of the header rather
+          than at the start of the sidebar -- aligning to `start` would hang
+          the menu off the edge of the viewport. Logical, so it stays correct
+          under rtl. */}
+      <DropdownMenuContent align="end" className="w-56">
         <DropdownMenuLabel className="truncate">{user.email}</DropdownMenuLabel>
         <DropdownMenuSeparator />
+        {/* The settings pages left the sidebar, so this menu is now the only
+            way to reach them by pointer -- and Dashboard is here as its
+            counterpart, because the sidebar no longer shows the primary nav
+            while you are inside settings. */}
+        <DropdownMenuItem asChild>
+          <Link
+            to="/$locale"
+            params={{ locale }}
+            data-testid="user-menu-dashboard"
+          >
+            <LayoutDashboard className="size-4" aria-hidden="true" />
+            {t("common.nav.dashboard")}
+          </Link>
+        </DropdownMenuItem>
+        <DropdownMenuItem asChild>
+          <Link
+            to="/$locale/settings/profile"
+            params={{ locale }}
+            data-testid="user-menu-settings"
+          >
+            <Settings className="size-4" aria-hidden="true" />
+            {t("common.nav.settings")}
+          </Link>
+        </DropdownMenuItem>
         {user.is_superadmin ? (
-          <>
-            <DropdownMenuItem asChild>
-              <Link to="/$locale/admin" params={{ locale }}>
-                <ShieldAlert className="size-4" aria-hidden="true" />
-                {t("common.admin.user_menu_link")}
-              </Link>
-            </DropdownMenuItem>
-            <DropdownMenuSeparator />
-          </>
+          <DropdownMenuItem asChild>
+            <Link to="/$locale/admin" params={{ locale }}>
+              <ShieldAlert className="size-4" aria-hidden="true" />
+              {t("common.admin.user_menu_link")}
+            </Link>
+          </DropdownMenuItem>
         ) : null}
+        <DropdownMenuSeparator />
         <DropdownMenuItem
           onSelect={() => {
             void handleLogout();
@@ -274,15 +309,32 @@ function CreateFirstOrgPrompt() {
   );
 }
 
+/**
+ * The sidebar shows one group at a time, chosen by where you are.
+ *
+ * Settings used to sit under the primary nav as a second, permanently
+ * expanded list, which made the sidebar eleven items long and put
+ * "Notifications" and "Webhooks" at the same level as "Dashboard" -- two
+ * things a user reaches for at very different rates. Hick's law is the
+ * argument (§1.2: five to seven items per level), and the settings pages are
+ * a mode you enter rather than destinations you keep beside your work.
+ *
+ * Getting back out is the cost, so there are three ways: the user menu has
+ * Dashboard in it, the breadcrumb names the section, and ⌘K still reaches
+ * every page from either mode.
+ */
 function SidebarNav({
   modules,
+  inSettings,
   onNavigate,
 }: {
   modules: ActiveModules;
+  inSettings: boolean;
   onNavigate?: () => void;
 }) {
   const { t } = useTranslation();
   const nav = useVisibleNavItems();
+  const items = inSettings ? nav.settings : nav.primary;
 
   return (
     <>
@@ -297,20 +349,25 @@ function SidebarNav({
       {/* onClick rather than a route subscription: tapping a link in the
           drawer has to close it, and the drawer does not unmount on
           navigation because the shell that owns it never unmounts. */}
-      <nav className="flex flex-1 flex-col gap-1" onClick={onNavigate}>
-        {nav.primary.map((item) => (
-          <NavLink key={item.to} item={item} />
-        ))}
-        <div className="mt-4 px-3 text-caption font-medium uppercase text-muted-foreground">
-          {t("common.nav.settings")}
-        </div>
-        {nav.settings.map((item) => (
+      <nav
+        className="flex flex-1 flex-col gap-1"
+        onClick={onNavigate}
+        data-testid={
+          inSettings ? "sidebar-settings-nav" : "sidebar-primary-nav"
+        }
+      >
+        {inSettings ? (
+          <div className="px-3 pb-1 text-caption font-medium uppercase tracking-wide text-muted-foreground">
+            {t("common.nav.settings")}
+          </div>
+        ) : null}
+        {items.map((item) => (
           <NavLink key={item.to} item={item} />
         ))}
       </nav>
+      {/* The user menu moved to the header; support stays pinned here. */}
       <div className="border-t pt-2">
         <SupportLink />
-        <UserMenu />
       </div>
     </>
   );
@@ -332,6 +389,10 @@ export function AppLayout({ children }: { children: ReactNode }) {
   const navigate = useNavigate();
   const locale = useRouteLocale();
   const activePath = stripLocale(location.pathname);
+  // Which group the sidebar shows. Prefix match rather than an exact list, so
+  // a settings page added later is in the right mode without being registered
+  // anywhere a second time.
+  const inSettings = activePath.startsWith("/settings");
 
   // F-005. Recorded from the shell rather than from each page: this is the
   // one place that sees every in-app navigation, and a page-level call would
@@ -401,7 +462,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
             was. Rendering the same <SidebarNav> in both is what stops the
             phone getting a nav that quietly drifts from the desktop one. */}
         <aside className="hidden w-64 shrink-0 flex-col border-e p-4 md:flex">
-          <SidebarNav modules={modules} />
+          <SidebarNav modules={modules} inSettings={inSettings} />
         </aside>
 
         {/* min-w-0 is load-bearing, not tidying. A flex item defaults to
@@ -431,6 +492,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
                 </SheetTitle>
                 <SidebarNav
                   modules={modules}
+                  inSettings={inSettings}
                   onNavigate={() => {
                     setNavOpen(false);
                   }}
@@ -483,6 +545,9 @@ export function AppLayout({ children }: { children: ReactNode }) {
                 <Bell className="size-4" aria-hidden="true" />
               </button>
             )}
+            {/* Last in the header, and the only place the account lives now
+                that the sidebar is scoped to one navigation group. */}
+            <UserMenu />
           </header>
           {/* tabIndex={-1} so the skip link actually moves focus here.
               Without it the fragment jump scrolls the viewport but leaves
