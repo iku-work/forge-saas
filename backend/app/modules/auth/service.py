@@ -60,6 +60,7 @@ from app.modules.auth.repository import (
     WebAuthnCredentialRepository,
 )
 from app.modules.auth.schemas import LoginRequest, OAuthProfile, RegisterRequest
+from app.modules.auth.session_rules import is_session_usable
 from app.modules.auth.utils import (
     PasswordCheck,
     check_password,
@@ -411,10 +412,10 @@ class AuthService:
                 fallback="Your session is no longer valid. Please log in again.",
             )
 
-        settings = get_settings()
-        now = utcnow()
-        idle_cutoff = now - timedelta(minutes=settings.REFRESH_TOKEN_IDLE_TIMEOUT_MINUTES)
-        if session.expires_at <= now or session.last_seen_at < idle_cutoff:
+        # Same rule the session list and the active-sessions gauge apply, from
+        # one definition (session_rules) -- they disagreed until 2026-09-21,
+        # and the list was the one that was wrong.
+        if not is_session_usable(session):
             await self._sessions.revoke(session.id)
             raise AuthenticationError(
                 "errors.session_invalid",
