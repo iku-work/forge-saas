@@ -129,7 +129,23 @@ async def list_files(  # noqa: PLR0913 — cursor pagination (§0.3) needs after
     redis: Annotated[Redis, Depends(get_redis)],
     after: Annotated[UUID | None, Query()] = None,
     limit: Annotated[int, Query(ge=1, le=100)] = 20,
-    bucket: Annotated[str | None, Query()] = None,
+    # Defaults to the general-purpose bucket rather than to "every bucket".
+    #
+    # `bucket` is the seam for storing things that are not the user's
+    # documents -- avatars today (set by the profile page, which uploads
+    # through this same module), exports and thumbnails plausibly later. With
+    # no default, GET /files returned all of them, so the Files page listed
+    # every profile picture anyone in the org had ever uploaded. Measured on
+    # one production org: 3 live avatars against 2 actual files.
+    #
+    # An allowlist rather than "not avatars", so the next special-purpose
+    # bucket is invisible here without anyone having to remember this comment.
+    # Asking for one explicitly still works.
+    #
+    # Quota accounting is deliberately unaffected: total_bytes_for_org and
+    # count_files_for_org are separate queries over every bucket, which is
+    # right -- an avatar occupies storage whether or not it is listed here.
+    bucket: Annotated[str, Query()] = "default",
 ) -> Envelope[list[StoredFilePublic]]:
     org, _membership = org_and_membership
     files, next_cursor = await StorageService(session, org.id, redis).list_files(

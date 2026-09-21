@@ -333,14 +333,26 @@ function SidebarNav({
   onNavigate?: () => void;
 }) {
   const { t } = useTranslation();
+  const locale = useRouteLocale();
   const nav = useVisibleNavItems();
   const items = inSettings ? nav.settings : nav.primary;
 
   return (
     <>
-      <div className="px-2 pb-4 text-lg font-semibold">
+      {/* The wordmark is a link home, which is where every other product on
+          the web puts one -- Jakob's law, and it matters more here than it
+          used to: inside settings the sidebar no longer shows Dashboard at
+          all, so this is a second way back beside the user menu.
+          `block` so the target is the full width of the sidebar rather than
+          just the glyphs. */}
+      <Link
+        to="/$locale"
+        params={{ locale }}
+        data-testid="sidebar-wordmark"
+        className="block rounded-md px-2 pb-4 text-lg font-semibold hover:text-primary"
+      >
         {t("common.app.name")}
-      </div>
+      </Link>
       {modules.multiOrg ? (
         <div className="pb-4">
           <OrgSwitcher />
