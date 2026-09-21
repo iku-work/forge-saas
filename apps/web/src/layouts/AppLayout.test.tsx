@@ -72,6 +72,17 @@ describe("AppLayout (owner, one org)", () => {
     expect(screen.getByRole("link", { name: "Profile" })).toBeInTheDocument();
   });
 
+  it("points the wordmark at the dashboard", async () => {
+    // Matters more since settings became its own mode: the sidebar shows no
+    // Dashboard link at all while you are in there, so this is the second way
+    // home beside the user menu.
+    renderApp({ initialPath: "/settings/billing", user });
+
+    const wordmark = await screen.findByTestId("sidebar-wordmark");
+
+    expect(wordmark).toHaveAttribute("href", "/en");
+  });
+
   it("offers Dashboard and Settings from the user menu", async () => {
     // With the settings pages out of the sidebar, this menu is the only
     // pointer route into them -- and the only way back out of settings.

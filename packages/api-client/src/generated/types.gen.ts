@@ -3897,7 +3897,7 @@ export type ListFilesApiV1FilesGetData = {
         /**
          * Bucket
          */
-        bucket?: string | null;
+        bucket?: string;
     };
     url: '/api/v1/files';
 };

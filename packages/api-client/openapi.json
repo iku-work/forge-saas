@@ -7363,15 +7363,9 @@
             "name": "bucket",
             "required": false,
             "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Bucket"
+              "default": "default",
+              "title": "Bucket",
+              "type": "string"
             }
           },
           {

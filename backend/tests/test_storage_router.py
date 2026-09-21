@@ -517,6 +517,46 @@ async def test_list_files_filters_by_bucket(
     assert data[0]["bucket"] == "avatars"
 
 
+async def test_list_files_omits_avatars_by_default(
+    client: httpx.AsyncClient, owner: User, org: Organization
+) -> None:
+    """The Files page is the user's documents, not every object the app has
+    stored for them.
+
+    Avatars go through this same module (bucket="avatars"), so with no default
+    they listed alongside real uploads -- on one production org, 3 live
+    avatars against 2 actual files, which is what the page showed.
+    """
+    await _presign(client, owner, org, filename="report.pdf", bucket="default")
+    await _presign(
+        client, owner, org, filename="avatar.png", content_type="image/png", bucket="avatars"
+    )
+
+    response = await client.get("/api/v1/files", headers=_headers(owner, org))
+
+    assert response.status_code == 200
+    data = response.json()["data"]
+    assert [f["filename"] for f in data] == ["report.pdf"]
+    assert all(f["bucket"] == "default" for f in data)
+
+
+async def test_list_files_omits_any_special_purpose_bucket_by_default(
+    client: httpx.AsyncClient, owner: User, org: Organization
+) -> None:
+    """An allowlist, not a deny-list for "avatars".
+
+    The next internal bucket -- exports, thumbnails -- should be invisible
+    here without anyone remembering to exclude it.
+    """
+    await _presign(client, owner, org, filename="report.pdf", bucket="default")
+    await _presign(client, owner, org, filename="export.pdf", bucket="exports")
+
+    response = await client.get("/api/v1/files", headers=_headers(owner, org))
+
+    assert response.status_code == 200
+    assert [f["filename"] for f in response.json()["data"]] == ["report.pdf"]
+
+
 # --- GET /files/{id}/download -------------------------------------------------------------
 
 
