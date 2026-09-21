@@ -31,6 +31,7 @@ from app.modules.auth.models import (
 from app.modules.auth.models import (
     Session as SessionModel,
 )
+from app.modules.auth.session_rules import idle_cutoff, usable_session_clauses
 
 
 class UserRepository:
@@ -197,24 +198,54 @@ class SessionRepository:
         await self.session.flush()
 
     async def list_active_for_user(self, user_id: UUID) -> list[SessionModel]:
+        """What the security page calls "devices currently signed in".
+
+        Both expiry rules, via session_rules -- this used to apply only the
+        absolute cap, so a session idle past the 12h timeout (unusable; the
+        next refresh would reject and revoke it) still listed as a signed-in
+        device for up to thirty days.
+        """
         m = cast("Any", SessionModel)
         stmt = select(SessionModel).where(
             m.user_id == user_id,
-            m.revoked_at.is_(None),
-            m.expires_at > utcnow(),
+            *usable_session_clauses(),
         )
         result = await self.session.execute(stmt)
         return list(result.scalars().all())
 
     async def count_active(self) -> int:
-        m = cast("Any", SessionModel)
-        stmt = (
-            select(func.count())
-            .select_from(SessionModel)
-            .where(m.revoked_at.is_(None), m.expires_at > utcnow())
-        )
+        """Backs the `forge_active_sessions` gauge, and had the same gap --
+        the number it reported counted sessions nobody could still use."""
+        stmt = select(func.count()).select_from(SessionModel).where(*usable_session_clauses())
         result = await self.session.execute(stmt)
         return result.scalar_one()
+
+    async def revoke_idle(self) -> int:
+        """Revoke sessions that have passed the idle cap but not yet the
+        absolute one.
+
+        Filtering them out of the list above is what fixes the display;
+        this is what stops them accumulating in the table, and it makes the
+        stored state agree with what every reader now reports. Revoked
+        rather than deleted, so `prune_expired` remains the single place a
+        session row is actually removed, and so an operator looking at the
+        table can still tell a timed-out session from one that was never
+        there.
+        """
+        m = cast("Any", SessionModel)
+        now = utcnow()
+        stmt = select(SessionModel).where(
+            m.revoked_at.is_(None),
+            m.expires_at > now,
+            m.last_seen_at <= idle_cutoff(now),
+        )
+        result = await self.session.execute(stmt)
+        revoked = 0
+        for session_obj in result.scalars().all():
+            session_obj.revoked_at = now
+            revoked += 1
+        await self.session.flush()
+        return revoked
 
     async def prune_expired(self) -> int:
         m = cast("Any", SessionModel)

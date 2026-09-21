@@ -236,6 +236,49 @@ async def test_cleanup_expired_sessions_prunes_expired_rows(
         assert await verify_repo.get_by_token_hash("gone") is None
 
 
+async def test_cleanup_expired_sessions_revokes_idle_rows_without_deleting_them(
+    session: AsyncSession, session_factory: async_sessionmaker[AsyncSession]
+) -> None:
+    """The other half of session ageing.
+
+    An idle-capped session is unusable but still inside its absolute cap, so
+    it must be revoked here rather than deleted -- prune_expired stays the one
+    place a row leaves the table. Before this, these accumulated until their
+    thirtieth day and every reader that forgot the idle rule called them live.
+    """
+    user = await _seed_user(session)
+    repo = SessionRepository(session)
+    idle = await repo.create(
+        user_id=user.id,
+        token_hash="idle",
+        device_label=None,
+        ip_address="127.0.0.1",
+        user_agent="pytest",
+        expires_at=_future(hours=24 * 20),
+    )
+    idle.last_seen_at = datetime.now(UTC) - timedelta(days=3)
+    await repo.create(
+        user_id=user.id,
+        token_hash="active",
+        device_label=None,
+        ip_address="127.0.0.1",
+        user_agent="pytest",
+        expires_at=_future(),
+    )
+    await session.commit()
+
+    await cleanup_expired_sessions({})
+
+    async with session_factory() as verify_session:
+        verify_repo = SessionRepository(verify_session)
+        still_there = await verify_repo.get_by_token_hash("idle")
+        assert still_there is not None, "an idle session is revoked, not deleted"
+        assert still_there.revoked_at is not None
+        untouched = await verify_repo.get_by_token_hash("active")
+        assert untouched is not None
+        assert untouched.revoked_at is None
+
+
 # --- cleanup_expired_tokens -----------------------------------------------------
 
 

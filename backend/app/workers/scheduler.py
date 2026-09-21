@@ -64,10 +64,27 @@ async def with_distributed_lock(
 
 
 async def cleanup_expired_sessions(ctx: dict[str, Any]) -> None:  # noqa: ARG001 -- ARQ/APScheduler calling convention
+    """Both halves of session ageing, in the order they have to happen.
+
+    `revoke_idle` marks sessions that passed the idle cap; `prune_expired`
+    deletes rows that passed the absolute one. Revoking first means a session
+    that crossed both since the last tick is recorded as timed out on its way
+    to being deleted, rather than skipping that state -- which matters only
+    for anyone reading the table, but costs nothing.
+
+    Without the revoke half these rows sat in the table until their thirtieth
+    day, and every reader that forgot the idle rule reported them as live.
+    """
     async with async_session_factory() as session:
-        pruned = await SessionRepository(session).prune_expired()
+        repo = SessionRepository(session)
+        idled = await repo.revoke_idle()
+        pruned = await repo.prune_expired()
         await session.commit()
-    logger.info("cleanup_expired_sessions: pruned %d expired sessions", pruned)
+    logger.info(
+        "cleanup_expired_sessions: revoked %d idle sessions, pruned %d expired",
+        idled,
+        pruned,
+    )
 
 
 async def cleanup_expired_tokens(ctx: dict[str, Any]) -> None:  # noqa: ARG001

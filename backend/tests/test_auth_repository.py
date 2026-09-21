@@ -40,6 +40,7 @@ from app.modules.auth.repository import (
     UserRepository,
     _TokenRepository,
 )
+from app.modules.auth.session_rules import is_session_usable
 
 _TABLES = [
     User.__table__,
@@ -395,6 +396,180 @@ async def test_list_active_for_user_excludes_revoked_and_expired(
     active_sessions = await session_repo.list_active_for_user(existing_user.id)
 
     assert [s.id for s in active_sessions] == [active.id]
+
+
+async def test_list_active_for_user_excludes_sessions_past_the_idle_cap(
+    session_repo: SessionRepository, existing_user: User
+) -> None:
+    """The defect this file did not catch.
+
+    A session inside its absolute cap but idle past
+    REFRESH_TOKEN_IDLE_TIMEOUT_MINUTES cannot be refreshed -- the next attempt
+    rejects and revokes it. It was still listed as a signed-in device, for up
+    to the full thirty days. Measured in production before the fix: 15 rows
+    listed, 14 of them in this state.
+    """
+    fresh = await session_repo.create(
+        user_id=existing_user.id,
+        token_hash="token-hash-idle-1",
+        device_label=None,
+        ip_address="127.0.0.1",
+        user_agent="pytest",
+        expires_at=_future(),
+    )
+    idle = await session_repo.create(
+        user_id=existing_user.id,
+        token_hash="token-hash-idle-2",
+        device_label=None,
+        ip_address="127.0.0.1",
+        user_agent="pytest",
+        # Well inside the 30-day absolute cap, well outside the 12h idle one.
+        expires_at=_future(minutes=60 * 24 * 20),
+    )
+    idle.last_seen_at = datetime.now(UTC) - timedelta(days=3)
+    await session_repo.session.flush()
+
+    listed = await session_repo.list_active_for_user(existing_user.id)
+
+    assert [s.id for s in listed] == [fresh.id]
+
+
+async def test_count_active_excludes_sessions_past_the_idle_cap(
+    session_repo: SessionRepository, existing_user: User
+) -> None:
+    """The same gap, in the number behind the forge_active_sessions gauge."""
+    await session_repo.create(
+        user_id=existing_user.id,
+        token_hash="token-hash-idle-count-1",
+        device_label=None,
+        ip_address="127.0.0.1",
+        user_agent="pytest",
+        expires_at=_future(),
+    )
+    idle = await session_repo.create(
+        user_id=existing_user.id,
+        token_hash="token-hash-idle-count-2",
+        device_label=None,
+        ip_address="127.0.0.1",
+        user_agent="pytest",
+        expires_at=_future(minutes=60 * 24 * 20),
+    )
+    idle.last_seen_at = datetime.now(UTC) - timedelta(days=3)
+    await session_repo.session.flush()
+
+    assert await session_repo.count_active() == 1
+
+
+async def test_revoke_idle_marks_only_the_timed_out_sessions(
+    session_repo: SessionRepository, existing_user: User
+) -> None:
+    """Filtering the list fixes the display; this stops the rows piling up.
+
+    The already-expired one is left alone deliberately -- prune_expired
+    deletes those, and revoking on the way out would be a write for nothing.
+    """
+    fresh = await session_repo.create(
+        user_id=existing_user.id,
+        token_hash="token-hash-revoke-idle-1",
+        device_label=None,
+        ip_address="127.0.0.1",
+        user_agent="pytest",
+        expires_at=_future(),
+    )
+    idle = await session_repo.create(
+        user_id=existing_user.id,
+        token_hash="token-hash-revoke-idle-2",
+        device_label=None,
+        ip_address="127.0.0.1",
+        user_agent="pytest",
+        expires_at=_future(minutes=60 * 24 * 20),
+    )
+    idle.last_seen_at = datetime.now(UTC) - timedelta(days=3)
+    expired = await session_repo.create(
+        user_id=existing_user.id,
+        token_hash="token-hash-revoke-idle-3",
+        device_label=None,
+        ip_address="127.0.0.1",
+        user_agent="pytest",
+        expires_at=_past(),
+    )
+    await session_repo.session.flush()
+
+    revoked = await session_repo.revoke_idle()
+
+    assert revoked == 1
+    refetched_idle = await session_repo.get_by_token_hash("token-hash-revoke-idle-2")
+    assert refetched_idle is not None
+    assert refetched_idle.revoked_at is not None
+    refetched_fresh = await session_repo.get_by_token_hash("token-hash-revoke-idle-1")
+    assert refetched_fresh is not None
+    assert refetched_fresh.revoked_at is None
+    refetched_expired = await session_repo.get_by_token_hash("token-hash-revoke-idle-3")
+    assert refetched_expired is not None
+    assert refetched_expired.revoked_at is None
+    assert fresh.id != expired.id  # both created, so the filter is doing the work
+
+
+async def test_revoke_idle_is_idempotent(
+    session_repo: SessionRepository, existing_user: User
+) -> None:
+    """It runs on a schedule, so a second tick over the same rows must be a
+    no-op rather than re-stamping revoked_at."""
+    idle = await session_repo.create(
+        user_id=existing_user.id,
+        token_hash="token-hash-revoke-idle-twice",
+        device_label=None,
+        ip_address="127.0.0.1",
+        user_agent="pytest",
+        expires_at=_future(minutes=60 * 24 * 20),
+    )
+    idle.last_seen_at = datetime.now(UTC) - timedelta(days=3)
+    await session_repo.session.flush()
+
+    assert await session_repo.revoke_idle() == 1
+    assert await session_repo.revoke_idle() == 0
+
+
+async def test_the_query_and_in_memory_forms_of_the_rule_agree(
+    session_repo: SessionRepository, existing_user: User
+) -> None:
+    """session_rules exposes the rule twice -- as WHERE clauses for the list
+    and the count, and as a predicate for refresh(), which works from a row it
+    already has. Two forms of one rule is exactly how they drift, so this
+    walks every combination of the three conditions and asserts they answer
+    the same."""
+    cases = {
+        "usable": (_future(), datetime.now(UTC), None),
+        "expired": (_past(), datetime.now(UTC), None),
+        "idle": (_future(), datetime.now(UTC) - timedelta(days=3), None),
+        "revoked": (_future(), datetime.now(UTC), datetime.now(UTC)),
+        "idle and expired": (
+            _past(),
+            datetime.now(UTC) - timedelta(days=3),
+            None,
+        ),
+    }
+    created: dict[str, Any] = {}
+    for name, (expires_at, last_seen_at, revoked_at) in cases.items():
+        row = await session_repo.create(
+            user_id=existing_user.id,
+            token_hash=f"token-hash-agree-{name}",
+            device_label=None,
+            ip_address="127.0.0.1",
+            user_agent="pytest",
+            expires_at=expires_at,
+        )
+        row.last_seen_at = last_seen_at
+        row.revoked_at = revoked_at
+        created[name] = row
+    await session_repo.session.flush()
+
+    listed = {s.id for s in await session_repo.list_active_for_user(existing_user.id)}
+
+    for name, row in created.items():
+        assert (row.id in listed) is is_session_usable(row), (
+            f"query and in-memory forms disagree for the {name!r} case"
+        )
 
 
 async def test_list_active_for_user_excludes_other_users(
