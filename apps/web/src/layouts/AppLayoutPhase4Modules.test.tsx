@@ -29,7 +29,9 @@ describe("AppLayout (public_api and outbound_webhooks enabled)", () => {
       http.post(`${API}/api/v1/auth/refresh`, () =>
         HttpResponse.json(envelope({ access_token: "token" })),
       ),
-      http.get(`${API}/api/v1/auth/me`, () => HttpResponse.json(envelope(user))),
+      http.get(`${API}/api/v1/auth/me`, () =>
+        HttpResponse.json(envelope(user)),
+      ),
       http.get(`${API}/api/v1/orgs`, () =>
         HttpResponse.json(envelope([fixtureOrg])),
       ),
@@ -52,10 +54,12 @@ describe("AppLayout (public_api and outbound_webhooks enabled)", () => {
   });
 
   it("shows the API keys and Webhooks nav links to an owner", async () => {
-    renderApp({ initialPath: "/", user });
+    // From a settings route: both are settings pages, and the sidebar only
+    // renders that group while you are inside it.
+    renderApp({ initialPath: "/settings/profile", user });
 
     expect(
-      await screen.findByRole("heading", { name: "Dashboard" }),
+      await screen.findByRole("heading", { name: "Profile" }),
     ).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "API keys" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Webhooks" })).toBeInTheDocument();
