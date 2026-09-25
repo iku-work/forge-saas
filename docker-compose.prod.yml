@@ -190,10 +190,20 @@ services:
     # ConcurrentDatabaseReload loads the *new* database before releasing the
     # old one, so memory roughly doubles for the duration of a reload -- which
     # happens unattended, several times a day. A limit sized to steady state
-    # is a limit that OOM-kills the scanner on a schedule. If 2G is too much
-    # for the host, set `ConcurrentDatabaseReload no` in clamd.conf instead of
-    # lowering this: reloads then block scans briefly rather than doubling.
+    # is a limit that OOM-kills the scanner on a schedule.
     mem_limit: 2g
+    environment:
+      # ...and this is why 2G is enough to be worth setting. Concurrent
+      # reload is what would need ~2x, and a 4 GB host does not have that
+      # spare on top of Postgres, Redis, MinIO, the backend and the worker.
+      # Turning it off makes a reload swap the database in place: scans block
+      # for a few seconds while it happens, which nobody notices, instead of
+      # the peak that gets something OOM-killed.
+      #
+      # `CLAMD_CONF_<Setting>` is the official image's own mechanism -- its
+      # /init writes each one into /etc/clamav/clamd.conf before starting
+      # clamd, so this needs no mounted config file to drift from the repo.
+      CLAMD_CONF_ConcurrentDatabaseReload: "no"
     networks:
       - forge-net
 
