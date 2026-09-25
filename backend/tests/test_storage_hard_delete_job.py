@@ -20,7 +20,7 @@ from collections.abc import AsyncGenerator, Awaitable, Callable
 from dataclasses import dataclass, field
 from datetime import timedelta
 from typing import Any
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import pytest
 from sqlalchemy.ext.asyncio import (
@@ -313,7 +313,7 @@ async def test_it_enqueues_a_scan_for_a_confirmed_file_with_no_verdict(
 ) -> None:
     stored = await _make_scanned_file(session, status="ready", verdict=None)
 
-    enqueued = await rescan_unscanned_files(ctx)
+    enqueued, _ = await rescan_unscanned_files(ctx)
 
     assert enqueued == 1
     assert ("virus_scan", {"file_id": stored.id}) in enqueued_jobs
@@ -339,7 +339,9 @@ async def test_it_leaves_every_other_state_alone(
     # retry loop that could eventually flip a known-bad file to downloadable.
     await _make_scanned_file(session, status=status, verdict=verdict)
 
-    assert await rescan_unscanned_files(ctx) == 0
+    enqueued, _ = await rescan_unscanned_files(ctx)
+
+    assert enqueued == 0
     assert [name for name, _ in enqueued_jobs if name == "virus_scan"] == []
 
 
@@ -348,7 +350,7 @@ async def test_it_ignores_deleted_files(session: AsyncSession, ctx: dict[str, An
     stored.deleted_at = utcnow()
     await session.commit()
 
-    assert await rescan_unscanned_files(ctx) == 0
+    assert (await rescan_unscanned_files(ctx))[0] == 0
 
 
 async def test_it_is_batched_so_a_backlog_can_be_drained_in_steps(
@@ -359,7 +361,7 @@ async def test_it_is_batched_so_a_backlog_can_be_drained_in_steps(
     for _ in range(3):
         await _make_scanned_file(session, status="ready", verdict=None)
 
-    assert await rescan_unscanned_files(ctx, limit=2) == 2
+    assert (await rescan_unscanned_files(ctx, limit=2))[0] == 2
 
 
 # --- the file_storage toggle -----------------------------------------------------------------
@@ -390,3 +392,65 @@ async def test_every_job_no_ops_when_file_storage_is_off(
     await job(ctx, **kwargs)
 
     assert fake_backend.deleted == []
+
+
+async def test_the_drain_loop_moves_past_rows_it_has_already_enqueued(
+    session: AsyncSession,
+    ctx: dict[str, Any],
+    enqueued_jobs: list[tuple[str, dict[str, Any]]],
+) -> None:
+    """The bug this cursor exists for, reproduced.
+
+    Enqueuing a scan does not change the row -- the worker does that later,
+    asynchronously -- so a drain loop that just re-ran the query selected the
+    same rows over and over until the worker caught up. On a real deployment
+    with five unscanned files it enqueued 682 jobs before settling.
+
+    A second call carrying the first's cursor must return nothing, even
+    though every row still looks exactly as unscanned as it did before.
+    """
+    for _ in range(3):
+        await _make_scanned_file(session, status="ready", verdict=None)
+
+    first, cursor = await rescan_unscanned_files(ctx, limit=2)
+    assert first == 2
+    assert cursor is not None
+
+    second, _ = await rescan_unscanned_files(ctx, limit=2, after=cursor)
+
+    # The third row, and only the third -- not the two already enqueued.
+    assert second == 1
+    scans = [kwargs["file_id"] for name, kwargs in enqueued_jobs if name == "virus_scan"]
+    assert len(scans) == len(set(scans)), "a file was enqueued for scanning twice"
+
+
+async def test_the_cursor_is_stable_when_rows_share_a_timestamp(
+    session: AsyncSession, ctx: dict[str, Any]
+) -> None:
+    """Keyset on `(created_at, id)`, not on `created_at` alone.
+
+    A bulk import writes rows in the same instant, so a timestamp-only
+    cursor would either skip the rest of that instant or loop on it forever.
+    """
+    shared = utcnow()
+    for _ in range(4):
+        stored = await _make_scanned_file(session, status="ready", verdict=None)
+        stored.created_at = shared
+    await session.commit()
+
+    seen: list[UUID] = []
+    cursor = None
+    # Bounded, and the bound is the assertion. A cursor that fails to
+    # advance makes this loop run forever, and a hanging test says far less
+    # than a failing one -- four rows at two per batch is two batches plus
+    # the empty one that ends it, so anything past five is the bug.
+    for _ in range(5):
+        count, cursor = await rescan_unscanned_files(ctx, limit=2, after=cursor)
+        if count == 0:
+            break
+        assert cursor is not None
+        seen.append(cursor[1])
+    else:
+        pytest.fail("cursor never reached the end of the table -- it is not advancing")
+
+    assert len(seen) == len(set(seen))

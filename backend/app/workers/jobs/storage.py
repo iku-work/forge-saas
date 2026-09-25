@@ -40,10 +40,11 @@ runs it should be watching a real scanner come up behind it.
 import argparse
 import asyncio
 import logging
+from datetime import datetime
 from typing import Any, cast
 from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import select, tuple_
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core import jobs
@@ -148,43 +149,55 @@ async def rescan_unscanned_files(
     ctx: dict[str, Any],  # noqa: ARG001 -- ARQ/CLI calling convention
     *,
     limit: int = _RESCAN_DEFAULT_LIMIT,
-) -> int:
+    after: tuple[datetime, UUID] | None = None,
+) -> tuple[int, tuple[datetime, UUID] | None]:
     """Re-enqueue a scan for confirmed files that never got a verdict.
 
-    Returns how many were enqueued, so an operator draining a backlog can
-    loop until it returns 0.
+    Returns (how many were enqueued, a cursor to continue from).
+
+    **The cursor is the whole point, and it is not an optimisation.**
+    Enqueuing a scan does not change the row -- the worker does that, later,
+    asynchronously -- so a caller that simply re-ran this query would select
+    the same rows again and again until the worker happened to catch up.
+    Draining a backlog that way is not slow, it is unbounded: run against
+    five unscanned files on a real deployment, the loop enqueued 682 jobs
+    before the worker finished the first five. At a hundred thousand files
+    it would be millions of duplicate jobs and a Redis problem rather than a
+    storage one.
+
+    Keyset on `(created_at, id)`, per §0.3 -- so each batch moves past the
+    last one whether or not anything has been scanned in the meantime.
 
     Only touches rows that are `ready` with no `virus_scan_result`: a file
     already marked clean is left alone, an `infected` or `failed` one is a
     verdict that was reached and must not be quietly retried into
     downloadable, and a `pending` one never finished uploading.
-
-    Safe to run repeatedly. virus_scan itself re-reads the row and skips
-    anything not still `ready`, so a duplicate enqueue costs one wasted job
-    rather than a double verdict.
     """
     if not is_enabled("file_storage"):
-        return 0
+        return 0, None
     model = cast("Any", StoredFile)
 
     async with async_session_factory() as session:
-        stmt = (
-            select(StoredFile)
-            .where(
-                model.status == "ready",
-                model.virus_scan_result.is_(None),
-                model.deleted_at.is_(None),
-            )
-            .order_by(model.created_at)
-            .limit(limit)
+        stmt = select(StoredFile).where(
+            model.status == "ready",
+            model.virus_scan_result.is_(None),
+            model.deleted_at.is_(None),
         )
+        if after is not None:
+            # Row-value comparison rather than `created_at > x OR (= x AND
+            # id > y)`: one index scan, and no ambiguity when several files
+            # share a timestamp -- which they do, because a bulk import
+            # writes them in the same instant.
+            stmt = stmt.where(tuple_(model.created_at, model.id) > after)
+        stmt = stmt.order_by(model.created_at, model.id).limit(limit)
         rows = list((await session.execute(stmt)).scalars().all())
 
     for stored_file in rows:
         await jobs.enqueue_job("virus_scan", file_id=stored_file.id)
 
     logger.info("rescan_unscanned_files: enqueued %d scan(s)", len(rows))
-    return len(rows)
+    cursor = (rows[-1].created_at, rows[-1].id) if rows else None
+    return len(rows), cursor
 
 
 async def _main(argv: list[str] | None = None) -> int:
@@ -206,8 +219,9 @@ async def _main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     total = 0
+    cursor: tuple[datetime, UUID] | None = None
     while True:
-        enqueued = await rescan_unscanned_files({}, limit=args.batch_size)
+        enqueued, cursor = await rescan_unscanned_files({}, limit=args.batch_size, after=cursor)
         total += enqueued
         print(f"enqueued {enqueued} (total {total})")  # noqa: T201 -- this *is* the CLI output
         if enqueued == 0 or args.once:
