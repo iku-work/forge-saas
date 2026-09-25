@@ -117,5 +117,9 @@
   "card_declined": "Tu tarjeta fue rechazada.",
   "payment_provider_error": "El proveedor de pagos no pudo completar esta solicitud. Si el problema persiste, contacta con soporte.",
   "avatar_file_invalid": "Ese archivo no se puede usar como foto de perfil.",
-  "avatar_not_found": "No hay ninguna foto de perfil subida."
+  "avatar_not_found": "No hay ninguna foto de perfil subida.",
+  "file_not_ready": "La subida de este archivo aún no ha terminado.",
+  "file_scan_pending": "Este archivo todavía se está analizando en busca de malware. Inténtalo de nuevo en unos instantes.",
+  "file_scan_failed": "No se ha podido analizar este archivo en busca de malware, así que no se puede descargar.",
+  "file_infected": "Se ha detectado malware en este archivo y ya no está disponible."
 }

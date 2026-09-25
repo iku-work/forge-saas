@@ -21,6 +21,7 @@ from app.workers.jobs.email import send_email
 from app.workers.jobs.encryption import rotate_encryption_keys_job
 from app.workers.jobs.gdpr import export_user_data, purge_user_data
 from app.workers.jobs.notifications import backfill_notification_preferences, send_push
+from app.workers.jobs.storage import hard_delete_stored_file
 from app.workers.jobs.virus_scan import virus_scan
 from app.workers.jobs.webhooks import deliver_webhook
 from app.workers.scheduler import create_scheduler
@@ -69,6 +70,12 @@ class WorkerSettings:
         # rather than sent -- which a missing registration could not do (arq
         # would simply fail to resolve the job name and log it as an error).
         deliver_webhook,
+        # StorageService.delete_file has enqueued this name since T-112.
+        # Until it appeared here, arq had nothing to resolve it to and every
+        # deletion left its object in the bucket -- see the job's module
+        # docstring, and tests/test_worker_registration.py for the sweep that
+        # now stops a name/registration pair drifting apart again.
+        hard_delete_stored_file,
     ]
     # Shared with app.core.jobs so the enqueue side and the consume side
     # cannot disagree about TLS -- see redis_settings()'s docstring.

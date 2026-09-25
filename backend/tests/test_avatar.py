@@ -50,13 +50,18 @@ async def owner(session: AsyncSession) -> User:
     return user
 
 
-async def _make_file(
+async def _make_file(  # noqa: PLR0913 -- a row factory; every field is a test knob
     session: AsyncSession,
     *,
     uploaded_by: UUID,
     org_id: UUID,
     bucket: str = AVATAR_BUCKET,
     status: str = "ready",
+    # An avatar is an attacker-supplied file handed to a browser with an
+    # image content type, so it passes the same scan gate as every other
+    # download. The default here is the post-scan state; the tests at the
+    # bottom of this file cover what happens before one.
+    virus_scan_result: str | None = "clean",
 ) -> StoredFile:
     stored = StoredFile(
         org_id=org_id,
@@ -67,6 +72,7 @@ async def _make_file(
         size_bytes=1024,
         bucket=bucket,
         status=status,
+        virus_scan_result=virus_scan_result,
     )
     session.add(stored)
     await session.flush()
@@ -180,3 +186,32 @@ async def test_clearing_an_avatar_needs_no_storage_module(
     )
 
     assert await AuthService(session).resolve_avatar_change(owner.id, None) is None
+
+
+async def test_an_unscanned_avatar_does_not_resolve(
+    session: AsyncSession, owner: User, org: Organization
+) -> None:
+    """The same gate the documents path got, on the path that needs it more.
+
+    `resolve_own_avatar_key` is the *only* thing between a stored object and
+    `presign_avatar`: an avatar has no org, so it never passes through
+    StorageService and never met that gate. A confirmed-but-unscanned avatar
+    is still an attacker-supplied file about to be served to a browser.
+    """
+    stored = await _make_file(session, uploaded_by=owner.id, org_id=org.id, virus_scan_result=None)
+
+    assert await resolve_own_avatar_key(session, user_id=owner.id, file_id=stored.id) is None
+
+
+async def test_an_infected_avatar_does_not_resolve(
+    session: AsyncSession, owner: User, org: Organization
+) -> None:
+    stored = await _make_file(
+        session,
+        uploaded_by=owner.id,
+        org_id=org.id,
+        status="infected",
+        virus_scan_result="Eicar-Test-Signature",
+    )
+
+    assert await resolve_own_avatar_key(session, user_id=owner.id, file_id=stored.id) is None

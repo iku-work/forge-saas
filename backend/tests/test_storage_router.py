@@ -13,7 +13,7 @@ from collections.abc import AsyncGenerator, Callable, Iterator
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from typing import Any
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import httpx
 import pytest
@@ -590,10 +590,28 @@ async def test_download_cross_tenant_returns_404(
     assert response.status_code == 404
 
 
+async def _mark_scanned(
+    session: AsyncSession, file_id: str, *, status: str = "ready", verdict: str | None = "clean"
+) -> None:
+    """Put a presigned row into the state a completed scan would leave it in.
+
+    Every download test needs this now. They used to call `_presign` and then
+    expect a 200, which is worth stating plainly: the row was still
+    `pending` -- nothing had been uploaded to that key at all, let alone
+    scanned -- and the endpoint signed it anyway. That is the finding.
+    """
+    stored = await session.get(StoredFile, UUID(file_id))
+    assert stored is not None
+    stored.status = status
+    stored.virus_scan_result = verdict
+    await session.commit()
+
+
 async def test_download_happy_path(
-    client: httpx.AsyncClient, owner: User, org: Organization
+    client: httpx.AsyncClient, session: AsyncSession, owner: User, org: Organization
 ) -> None:
     presigned = (await _presign(client, owner, org)).json()["data"]
+    await _mark_scanned(session, presigned["file_id"])
 
     response = await client.get(
         f"/api/v1/files/{presigned['file_id']}/download", headers=_headers(owner, org)
@@ -601,6 +619,42 @@ async def test_download_happy_path(
 
     assert response.status_code == 200
     assert response.json()["data"]["url"]
+
+
+@pytest.mark.parametrize(
+    ("status", "verdict", "code"),
+    [
+        ("pending", None, "errors.file_not_ready"),
+        ("ready", None, "errors.file_scan_pending"),
+        ("failed", None, "errors.file_scan_failed"),
+        ("infected", "Eicar-Test-Signature", "errors.file_infected"),
+    ],
+)
+async def test_download_is_refused_without_a_clean_verdict(  # noqa: PLR0913 -- parametrised over the fixture set
+    client: httpx.AsyncClient,
+    session: AsyncSession,
+    owner: User,
+    org: Organization,
+    status: str,
+    verdict: str | None,
+    code: str,
+) -> None:
+    """Through HTTP, not the service: the router is where the gate has to hold.
+
+    409 rather than 404 -- the caller has already proved it may see this
+    file, so hiding it would turn a transient state into a missing file. The
+    distinct message keys are what let the UI tell "try again shortly" apart
+    from "this file is gone".
+    """
+    presigned = (await _presign(client, owner, org)).json()["data"]
+    await _mark_scanned(session, presigned["file_id"], status=status, verdict=verdict)
+
+    response = await client.get(
+        f"/api/v1/files/{presigned['file_id']}/download", headers=_headers(owner, org)
+    )
+
+    assert response.status_code == 409
+    assert response.json()["error"]["message_key"] == code
 
 
 # --- DELETE /files/{id} ---------------------------------------------------------------------

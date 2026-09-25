@@ -8,10 +8,15 @@ the key is always server-generated with a UUID component (a client-supplied
 to ignore), and `filename` only ever feeds the human-readable tail of that
 key via `_slugify_filename` -- never the lookup itself.
 
-`virus_scan` and `hard_delete_stored_file` are enqueued by name (app.core.jobs)
-before either worker function exists, the same forward-reference pattern
-app.modules.gdpr.service already uses for its own ARQ jobs -- T-113 and a
-future hard-delete task each register the function side once they land.
+`virus_scan` and `hard_delete_stored_file` are enqueued by name
+(app.core.jobs), the same indirection app.modules.gdpr.service uses for its
+own ARQ jobs. Both now exist -- app.workers.jobs.virus_scan and
+app.workers.jobs.storage respectively -- and both are registered in
+WorkerSettings.functions, which is the half that matters: arq resolves these
+strings at run time, so an unregistered name is not an import error but a
+job that silently never runs. `hard_delete_stored_file` spent its first
+release in exactly that state, which is why
+tests/test_worker_registration.py now asserts every enqueued name resolves.
 """
 
 import re
@@ -32,12 +37,16 @@ from app.modules.notifications.service import NotificationService
 from app.modules.storage.backend import get_storage_backend
 from app.modules.storage.models import StoredFile
 from app.modules.storage.repository import StoredFileRepository
+from app.modules.storage.scan_gate import require_clean_scan
 from app.modules.webhooks import service as webhooks
 from app.modules.webhooks.events import EventType, FilePayload
 
 _SIZE_TOLERANCE_BYTES = 1024
 _DOWNLOAD_EXPIRES_IN_SECONDS = 3600
-_HARD_DELETE_GRACE_PERIOD = timedelta(days=7)
+# Public: app.workers.jobs.storage's reconciliation sweep has to use the
+# same window, and a sweep that disagreed with this would delete objects
+# whose grace period is still open.
+HARD_DELETE_GRACE_PERIOD = timedelta(days=7)
 # T-225/ASVS V12.2.1: content-sniffing only needs enough bytes for libmagic's
 # signature tables, never the whole object.
 _SNIFF_PREFIX_BYTES = 2048
@@ -195,12 +204,14 @@ class StorageService:
         if stored_file.content_type not in _SNIFF_EXEMPT_CONTENT_TYPES:
             await self._verify_content_sniff(stored_file)
 
-        checksum = metadata.get("ETag")
-        updated = await self._repo.update(
-            file_id,
-            status="ready",
-            checksum_sha256=checksum.strip('"') if checksum else None,
-        )
+        # checksum_sha256 is deliberately left unset here. It used to be
+        # filled from the object's ETag, which is not a SHA-256 -- for a
+        # multipart upload it is not even an MD5 of the content -- so the
+        # column said one thing and meant another, and VirusTotalScanner's
+        # hash lookup could never match. app.workers.jobs.virus_scan sets it
+        # from the bytes it actually reads, which also binds the digest to
+        # the object version the verdict was reached on.
+        updated = await self._repo.update(file_id, status="ready")
         await self._repo.invalidate_total_bytes_cache()
 
         await jobs.enqueue_job("virus_scan", file_id=updated.id)
@@ -259,6 +270,7 @@ class StorageService:
 
     async def get_download_url(self, file_id: UUID) -> tuple[str, datetime]:
         stored_file = await self._repo.get_or_raise(file_id)
+        require_clean_scan(stored_file)
         url = await self._backend.presign_download(
             stored_file.key, _DOWNLOAD_EXPIRES_IN_SECONDS, filename=stored_file.filename
         )
@@ -273,7 +285,7 @@ class StorageService:
         await jobs.enqueue_job(
             "hard_delete_stored_file",
             file_id=stored_file.id,
-            _defer_by=_HARD_DELETE_GRACE_PERIOD,
+            _defer_by=HARD_DELETE_GRACE_PERIOD,
         )
 
         await self._audit.log(

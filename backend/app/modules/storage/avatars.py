@@ -25,6 +25,7 @@ from sqlalchemy import select
 
 from app.modules.storage.backend import get_storage_backend
 from app.modules.storage.models import StoredFile
+from app.modules.storage.scan_gate import downloadable_where
 
 if TYPE_CHECKING:
     from uuid import UUID
@@ -45,18 +46,24 @@ async def resolve_own_avatar_key(
 ) -> str | None:
     """The object key of `file_id`, if it really is this user's avatar.
 
-    None -- never an exception -- when the file does not exist, is not ready,
-    is not in the avatars bucket, or was uploaded by somebody else. The caller
-    turns that into a 422; there is nothing here worth distinguishing for the
-    client, and saying which of the four failed would confirm the existence of
-    another user's file.
+    None -- never an exception -- when the file does not exist, has no clean
+    malware verdict, is not in the avatars bucket, or was uploaded by somebody
+    else. The caller turns that into a 422; there is nothing here worth
+    distinguishing for the client, and saying which of the four failed would
+    confirm the existence of another user's file.
+
+    The scan gate matters as much here as on the documents path, and is
+    easier to miss: this function is the *only* thing between a stored object
+    and `presign_avatar`, because an avatar has no org and so never passes
+    through StorageService. An unscanned avatar is still an attacker-supplied
+    file being handed to a browser with an image content type.
     """
     model = cast("Any", StoredFile)
     stmt = select(StoredFile).where(
         model.id == file_id,
         model.uploaded_by == user_id,
         model.bucket == AVATAR_BUCKET,
-        model.status == "ready",
+        *downloadable_where(),
         model.deleted_at.is_(None),
     )
     stored_file = (await session.execute(stmt)).scalar_one_or_none()

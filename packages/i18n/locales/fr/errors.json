@@ -117,5 +117,9 @@
   "card_declined": "Votre carte a été refusée.",
   "payment_provider_error": "Le prestataire de paiement n'a pas pu traiter cette demande. Si le problème persiste, contactez le support.",
   "avatar_file_invalid": "Ce fichier ne peut pas servir de photo de profil.",
-  "avatar_not_found": "Aucune photo de profil téléversée."
+  "avatar_not_found": "Aucune photo de profil téléversée.",
+  "file_not_ready": "L'envoi de ce fichier n'est pas encore terminé.",
+  "file_scan_pending": "Ce fichier est encore en cours d'analyse antivirus. Réessayez dans un instant.",
+  "file_scan_failed": "Ce fichier n'a pas pu être analysé pour détecter des logiciels malveillants, il ne peut donc pas être téléchargé.",
+  "file_infected": "Ce fichier contient un logiciel malveillant et n'est plus disponible."
 }

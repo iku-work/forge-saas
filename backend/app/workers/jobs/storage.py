@@ -1,0 +1,221 @@
+"""
+ARQ jobs for the storage module.
+
+hard_delete_stored_file: the physical half of StorageService.delete_file.
+That method soft-deletes the row and enqueues this job with a seven-day
+defer, so a deletion can still be undone during the grace window; this is
+what finally removes the object from the bucket and the row from the table.
+
+It is written now because it was never written then. `delete_file` has been
+enqueueing `"hard_delete_stored_file"` by name since T-112, against a worker
+that has never had a function by that name registered -- arq resolves the
+name at run time and simply logs an unresolved-job error, so every deletion
+since has quietly left its object in the bucket. The row's quota
+contribution disappeared with the soft delete while the bytes stayed, which
+means repeated upload/delete cycles could grow real storage without ever
+moving the number the quota check reads.
+
+`sweep_orphaned_objects` exists because of that history rather than in spite
+of it: a deferred arq job is a single Redis entry, and anything that loses
+it -- a flushed queue, a Redis failover, a worker that was not running when
+the defer elapsed, or the two years this template spent enqueueing a job
+nobody had implemented -- loses the deletion with no trace. The sweep is the
+reconciliation pass that makes the delayed job an optimisation rather than
+the only thing standing between a deleted file and a bill for it.
+
+Both are idempotent. Both re-check `deleted_at` before touching anything, so
+a file whose deletion was cancelled during the grace window survives even if
+its job still fires.
+
+`rescan_unscanned_files` is the migration path for the download gate that
+now requires a clean verdict (app.modules.storage.scan_gate). Every file
+uploaded before that gate existed has `virus_scan_result` NULL -- they were
+confirmed and then never actually scanned, which is the whole finding -- so
+on the build that introduces the gate they all become undownloadable at
+once. This re-enqueues a scan for them. It is operator-triggered rather than
+scheduled: the first run is a backlog the size of the bucket, and whoever
+runs it should be watching a real scanner come up behind it.
+"""
+
+import argparse
+import asyncio
+import logging
+from typing import Any, cast
+from uuid import UUID
+
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.core import jobs
+from app.core.db import async_session_factory, dispose_engine
+from app.core.module_loader import is_enabled
+from app.core.tracing import trace_job
+from app.models._mixins import utcnow
+from app.modules.storage.backend import StorageBackend, get_storage_backend
+from app.modules.storage.models import StoredFile
+
+# Imported, never redeclared: the sweep and the deferred job have to agree on
+# the grace window, or the sweep deletes objects whose window is still open
+# and whose deferred job is still pending.
+from app.modules.storage.service import HARD_DELETE_GRACE_PERIOD
+
+logger = logging.getLogger(__name__)
+
+# Bounds one sweep's work: a backlog is drained over several ticks rather
+# than in one long transaction holding a connection from a pool of 20.
+_SWEEP_BATCH_SIZE = 200
+
+# One rescan batch. Deliberately larger than the sweep's: this enqueues jobs
+# rather than doing the work, and the queue is what paces the scanner.
+_RESCAN_DEFAULT_LIMIT = 500
+
+
+@trace_job
+async def hard_delete_stored_file(
+    ctx: dict[str, Any],  # noqa: ARG001 -- ARQ calling convention
+    *,
+    file_id: UUID,
+) -> None:
+    if not is_enabled("file_storage"):
+        # Same shape as prune_webhook_deliveries': registered unconditionally,
+        # guarded here. `stored_file` does not exist in a product that
+        # switched file storage off, so a job that assumed otherwise would
+        # fail on a missing relation rather than no-op.
+        return
+    async with async_session_factory() as session:
+        stored_file = await session.get(StoredFile, file_id)
+        if stored_file is None:
+            # Already hard-deleted, by an earlier run of this job or by the
+            # sweep. Idempotent by design: arq retries, and the sweep can
+            # reach the same row from the other direction.
+            logger.info("hard_delete_stored_file: file_id=%s already gone", file_id)
+            return
+        if stored_file.deleted_at is None:
+            # The deletion was cancelled during the grace window. Not an
+            # error -- that window exists precisely so this can happen.
+            logger.info("hard_delete_stored_file: file_id=%s no longer deleted, skipping", file_id)
+            return
+
+        await _purge(session, get_storage_backend(), stored_file)
+        await session.commit()
+
+
+async def sweep_orphaned_objects(
+    ctx: dict[str, Any],  # noqa: ARG001 -- scheduler calling convention
+) -> None:
+    """Hard-delete soft-deleted files whose deferred job never ran."""
+    if not is_enabled("file_storage"):
+        return
+    cutoff = utcnow() - HARD_DELETE_GRACE_PERIOD
+    model = cast("Any", StoredFile)
+
+    async with async_session_factory() as session:
+        stmt = (
+            select(StoredFile)
+            .where(model.deleted_at.is_not(None), model.deleted_at < cutoff)
+            .order_by(model.deleted_at)
+            .limit(_SWEEP_BATCH_SIZE)
+        )
+        rows = list((await session.execute(stmt)).scalars().all())
+        if not rows:
+            return
+
+        backend = get_storage_backend()
+        for stored_file in rows:
+            await _purge(session, backend, stored_file)
+        await session.commit()
+
+    logger.info("sweep_orphaned_objects: hard-deleted %d file(s) past the grace period", len(rows))
+
+
+async def _purge(session: AsyncSession, backend: StorageBackend, stored_file: StoredFile) -> None:
+    """Remove the object, then the row -- in that order, and never the reverse.
+
+    If the object delete fails the row stays, so the sweep retries it. The
+    opposite order would drop the only record of which object to delete and
+    leak it permanently, which is the failure this whole module exists to
+    stop.
+
+    An object that is already absent is a success: "infected" files are
+    deleted by the scan job at verdict time, and a retry of this job has
+    normally already removed it.
+    """
+    await backend.delete(stored_file.key)
+    await session.delete(stored_file)
+
+
+async def rescan_unscanned_files(
+    ctx: dict[str, Any],  # noqa: ARG001 -- ARQ/CLI calling convention
+    *,
+    limit: int = _RESCAN_DEFAULT_LIMIT,
+) -> int:
+    """Re-enqueue a scan for confirmed files that never got a verdict.
+
+    Returns how many were enqueued, so an operator draining a backlog can
+    loop until it returns 0.
+
+    Only touches rows that are `ready` with no `virus_scan_result`: a file
+    already marked clean is left alone, an `infected` or `failed` one is a
+    verdict that was reached and must not be quietly retried into
+    downloadable, and a `pending` one never finished uploading.
+
+    Safe to run repeatedly. virus_scan itself re-reads the row and skips
+    anything not still `ready`, so a duplicate enqueue costs one wasted job
+    rather than a double verdict.
+    """
+    if not is_enabled("file_storage"):
+        return 0
+    model = cast("Any", StoredFile)
+
+    async with async_session_factory() as session:
+        stmt = (
+            select(StoredFile)
+            .where(
+                model.status == "ready",
+                model.virus_scan_result.is_(None),
+                model.deleted_at.is_(None),
+            )
+            .order_by(model.created_at)
+            .limit(limit)
+        )
+        rows = list((await session.execute(stmt)).scalars().all())
+
+    for stored_file in rows:
+        await jobs.enqueue_job("virus_scan", file_id=stored_file.id)
+
+    logger.info("rescan_unscanned_files: enqueued %d scan(s)", len(rows))
+    return len(rows)
+
+
+async def _main(argv: list[str] | None = None) -> int:
+    """`python -m app.workers.jobs.storage` -- drain the rescan backlog.
+
+    Same shape as app.workers.jobs.encryption's CLI, and for the same
+    reason: this is a one-off operator action with a backlog behind it, not
+    something to schedule. It loops until nothing is left rather than making
+    the operator run it repeatedly, and prints a count per batch so a long
+    drain shows progress.
+    """
+    parser = argparse.ArgumentParser(description="Re-enqueue scans for unscanned files.")
+    parser.add_argument("--batch-size", type=int, default=_RESCAN_DEFAULT_LIMIT)
+    parser.add_argument(
+        "--once",
+        action="store_true",
+        help="enqueue a single batch instead of draining the whole backlog",
+    )
+    args = parser.parse_args(argv)
+
+    total = 0
+    while True:
+        enqueued = await rescan_unscanned_files({}, limit=args.batch_size)
+        total += enqueued
+        print(f"enqueued {enqueued} (total {total})")  # noqa: T201 -- this *is* the CLI output
+        if enqueued == 0 or args.once:
+            break
+
+    await dispose_engine()
+    return total
+
+
+if __name__ == "__main__":
+    asyncio.run(_main())

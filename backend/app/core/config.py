@@ -7,6 +7,13 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from app.core.module_loader import is_enabled
 
+# VIRUS_SCANNER values that cannot establish a file is safe, and so must not
+# be selected outside dev. "noop" returns clean without looking; "virustotal"
+# is a reputation lookup that has no record of any novel file -- including,
+# by definition, every targeted one -- so it fails closed there rather than
+# guessing. See app.modules.storage.scanner's module docstring.
+_NON_SCANNING_VIRUS_SCANNERS = frozenset({"noop", "virustotal"})
+
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="forbid")
@@ -336,8 +343,11 @@ class Settings(BaseSettings):
     # only job is to return 200 and enqueue something.
     WEBHOOK_TIMEOUT_SECONDS: float = 10.0
 
-    # Virus scanning (T-113) — "clamav" | "virustotal" | "noop". "noop" (the
-    # dev default) marks every uploaded file "clean" immediately.
+    # Virus scanning (T-113) — "clamav" | "virustotal" | "noop". Only "clamav"
+    # actually scans: "noop" (the dev default) marks every uploaded file
+    # "clean" immediately, and "virustotal" is a hash lookup that fails closed
+    # on anything it has not seen before. Both are refused outside dev by
+    # _NON_SCANNING_VIRUS_SCANNERS below.
     VIRUS_SCANNER: Literal["clamav", "virustotal", "noop"] = "noop"
     CLAMAV_HOST: str = "localhost"
     CLAMAV_PORT: int = 3310
@@ -421,10 +431,14 @@ class Settings(BaseSettings):
                 raise RuntimeError("ALLOWED_ORIGINS must not contain '*' outside dev")
             if not self.FORCE_HTTPS:
                 raise RuntimeError("FORCE_HTTPS must be true in non-dev environments")
-            if self.VIRUS_SCANNER == "noop":
+            if self.VIRUS_SCANNER in _NON_SCANNING_VIRUS_SCANNERS:
                 raise RuntimeError(
-                    "VIRUS_SCANNER must not be 'noop' outside dev — uploaded files would "
-                    "never actually be scanned. Set it to 'clamav' or 'virustotal'."
+                    f"VIRUS_SCANNER={self.VIRUS_SCANNER!r} does not scan anything and must "
+                    f"not be used outside dev. 'noop' marks every file clean; 'virustotal' "
+                    f"only looks a hash up in a reputation database, which can report a "
+                    f"file known-bad but can never establish that an unknown one is safe. "
+                    f"Set VIRUS_SCANNER=clamav (docker-compose.prod.yml ships a clamav "
+                    f"service behind the 'clamav' profile)."
                 )
             if not self.PASSWORD_PEPPER:
                 raise RuntimeError("PASSWORD_PEPPER must be set outside dev")

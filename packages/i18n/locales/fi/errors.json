@@ -90,5 +90,9 @@
   "card_declined": "Korttisi hylättiin.",
   "payment_provider_error": "Maksupalveluntarjoaja ei voinut suorittaa tätä pyyntöä. Jos ongelma jatkuu, ota yhteyttä tukeen.",
   "avatar_file_invalid": "Tätä tiedostoa ei voi käyttää profiilikuvana.",
-  "avatar_not_found": "Profiilikuvaa ei ole ladattu."
+  "avatar_not_found": "Profiilikuvaa ei ole ladattu.",
+  "file_not_ready": "Tämän tiedoston lataus ei ole vielä valmis.",
+  "file_scan_pending": "Tiedostoa tarkistetaan vielä haittaohjelmien varalta. Yritä hetken kuluttua uudelleen.",
+  "file_scan_failed": "Tiedostoa ei voitu tarkistaa haittaohjelmien varalta, joten sitä ei voi ladata.",
+  "file_infected": "Tiedostosta löytyi haittaohjelma, eikä se ole enää saatavilla."
 }

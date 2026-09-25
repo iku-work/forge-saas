@@ -77,11 +77,34 @@ def test_force_https_true_in_prod_does_not_raise(monkeypatch: pytest.MonkeyPatch
 
 
 @pytest.mark.owasp("A05")
-def test_virus_scanner_noop_outside_dev_raises(monkeypatch: pytest.MonkeyPatch) -> None:
+@pytest.mark.parametrize("scanner", ["noop", "virustotal"])
+def test_a_non_scanning_scanner_outside_dev_raises(
+    monkeypatch: pytest.MonkeyPatch, scanner: str
+) -> None:
+    """Neither of these can establish that a file is safe.
+
+    "noop" returns clean without looking. "virustotal" is a reputation
+    lookup: it can report a hash known-bad, and has no record of any novel
+    file -- which is every targeted one. Production ran on "virustotal" while
+    that scanner returned clean for an unknown hash, so every genuinely new
+    file was certified without being scanned. Only "clamav" is a scanner.
+    """
     _clear_settings_env(monkeypatch)
 
     with pytest.raises(RuntimeError, match="VIRUS_SCANNER"):
-        Settings(_env_file=FIXTURE_ENV_FILE, **{**_PROD_SAFE_OVERRIDES, "VIRUS_SCANNER": "noop"})
+        Settings(_env_file=FIXTURE_ENV_FILE, **{**_PROD_SAFE_OVERRIDES, "VIRUS_SCANNER": scanner})
+
+
+def test_clamav_outside_dev_is_accepted(monkeypatch: pytest.MonkeyPatch) -> None:
+    # The converse of the guard above: the one setting that does scan must
+    # still boot, or the guard is just an outage.
+    _clear_settings_env(monkeypatch)
+
+    settings = Settings(
+        _env_file=FIXTURE_ENV_FILE, **{**_PROD_SAFE_OVERRIDES, "VIRUS_SCANNER": "clamav"}
+    )
+
+    assert settings.VIRUS_SCANNER == "clamav"
 
 
 def test_password_pepper_required_outside_dev(monkeypatch: pytest.MonkeyPatch) -> None:

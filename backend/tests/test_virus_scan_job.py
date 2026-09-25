@@ -26,11 +26,13 @@ test_storage_scanner.py (T-113) respectively; this file only verifies the
 job's own orchestration.
 """
 
+import hashlib
 from collections.abc import AsyncGenerator
 from dataclasses import dataclass, field
 from typing import Any
 from uuid import uuid4
 
+import httpx
 import pytest
 from arq.worker import Retry
 from redis.asyncio import Redis
@@ -55,6 +57,12 @@ from app.modules.storage.scanner import ScannerError, ScanResult
 from app.modules.tenancy.models import Organization
 from app.workers.jobs import virus_scan as virus_scan_module
 from app.workers.jobs.virus_scan import virus_scan
+
+# Bound at import, before the autouse `fake_download` fixture replaces the
+# module attribute -- the fetch tests at the bottom of this file drive the
+# real implementation, and looking it up through the module would get them
+# the fake like everybody else.
+_real_download = virus_scan_module._download
 
 _TABLES = [
     User.__table__,
@@ -145,8 +153,14 @@ class _FakeBackend:
 class _FakeScanner:
     outcomes: list[ScanResult | ScannerError]
     calls: int = 0
+    # What the job actually handed over, so a test can assert the scanner saw
+    # the object's real bytes and their real digest rather than the row's.
+    seen_content: list[bytes] = field(default_factory=list)
+    seen_checksums: list[str] = field(default_factory=list)
 
-    async def scan(self, *, download_url: str, checksum_sha256: str | None) -> ScanResult:  # noqa: ARG002
+    async def scan(self, *, content: bytes, checksum_sha256: str) -> ScanResult:
+        self.seen_content.append(content)
+        self.seen_checksums.append(checksum_sha256)
         outcome = self.outcomes[min(self.calls, len(self.outcomes) - 1)]
         self.calls += 1
         if isinstance(outcome, ScannerError):
@@ -159,6 +173,33 @@ def fake_backend(monkeypatch: pytest.MonkeyPatch) -> _FakeBackend:
     backend = _FakeBackend()
     monkeypatch.setattr(virus_scan_module, "get_storage_backend", lambda: backend)
     return backend
+
+
+# The object's bytes and their real digest. The row is seeded with a
+# *different* checksum ("deadbeef") on purpose, so any test asserting on
+# _OBJECT_SHA256 is proving the job hashed what it fetched rather than
+# trusting the column -- which is the whole point of moving the digest here.
+_OBJECT_BYTES = b"%PDF-1.7 the object's actual bytes"
+_OBJECT_SHA256 = hashlib.sha256(_OBJECT_BYTES).hexdigest()
+
+
+@pytest.fixture(autouse=True)
+def fake_download(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Stand in for the presigned GET the job now makes.
+
+    Patched at `_download` rather than at the httpx layer: this file covers
+    the job's orchestration, and the streaming/size-limit behaviour of the
+    fetch itself has its own tests below that drive it through
+    httpx.MockTransport.
+    """
+
+    async def _fake(
+        download_url: str,  # noqa: ARG001 -- canned response, url is the fake backend's
+        transport: object | None = None,  # noqa: ARG001 -- matches the real signature
+    ) -> bytes:
+        return _OBJECT_BYTES
+
+    monkeypatch.setattr(virus_scan_module, "_download", _fake)
 
 
 def _install_scanner(
@@ -263,6 +304,68 @@ async def test_clean_scan_leaves_file_ready_with_clean_result(
         assert refreshed.status == "ready"
         assert refreshed.virus_scan_result == "clean"
     assert fake_backend.deleted == []
+
+
+# --- the digest ------------------------------------------------------------------------------
+
+
+async def test_a_clean_scan_records_the_digest_of_the_bytes_it_scanned(
+    session: AsyncSession,
+    session_factory: async_sessionmaker[AsyncSession],
+    ctx: dict[str, Any],
+    fake_backend: _FakeBackend,  # noqa: ARG001
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # The row arrives carrying "deadbeef" -- what confirm_upload used to put
+    # there from the object's ETag, which is not a SHA-256 at all. After the
+    # scan the column holds the digest of the bytes that were actually read.
+    stored_file = await _seed(session, checksum_sha256="deadbeef")
+    _install_scanner(monkeypatch, ScanResult(clean=True))
+
+    await virus_scan(ctx, file_id=stored_file.id)
+
+    async with session_factory() as verify_session:
+        refreshed = await verify_session.get(StoredFile, stored_file.id)
+        assert refreshed is not None
+        assert refreshed.checksum_sha256 == _OBJECT_SHA256
+
+
+async def test_the_scanner_is_given_the_fetched_bytes_and_their_own_digest(
+    session: AsyncSession,
+    ctx: dict[str, Any],
+    fake_backend: _FakeBackend,  # noqa: ARG001
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # VirusTotalScanner looks a file up *by* this digest, so handing it the
+    # row's stale value meant querying a hash that could never match.
+    stored_file = await _seed(session, checksum_sha256="deadbeef")
+    scanner = _install_scanner(monkeypatch, ScanResult(clean=True))
+
+    await virus_scan(ctx, file_id=stored_file.id)
+
+    assert scanner.seen_content == [_OBJECT_BYTES]
+    assert scanner.seen_checksums == [_OBJECT_SHA256]
+
+
+async def test_an_infected_file_keeps_the_digest_of_what_was_found(
+    session: AsyncSession,
+    session_factory: async_sessionmaker[AsyncSession],
+    ctx: dict[str, Any],
+    fake_backend: _FakeBackend,  # noqa: ARG001
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # The object is deleted at this point, so the digest is the only record
+    # left of what was actually uploaded.
+    stored_file = await _seed(session, checksum_sha256=None)
+    _install_scanner(monkeypatch, ScanResult(clean=False, signature="Eicar-Test-Signature"))
+
+    await virus_scan(ctx, file_id=stored_file.id)
+
+    async with session_factory() as verify_session:
+        refreshed = await verify_session.get(StoredFile, stored_file.id)
+        assert refreshed is not None
+        assert refreshed.status == "infected"
+        assert refreshed.checksum_sha256 == _OBJECT_SHA256
 
 
 # --- infected outcome -------------------------------------------------------------------------
@@ -427,3 +530,95 @@ async def test_breaker_open_requeues_job_and_leaves_file_untouched(
         assert refreshed.status == "ready"  # untouched -- neither "failed" nor "infected"
         assert refreshed.virus_scan_result is None
     assert exc_info.value.defer_score == virus_scan_module._VIRUS_SCANNER_RETRY_DEFER_SECONDS * 1000
+
+
+# --- fetching the object ----------------------------------------------------------------------
+#
+# These drive the real `_fetch`/`_download` (the autouse fake_download
+# fixture is overridden or bypassed), because the memory bound they enforce
+# is the point: `response.content` on an unbounded presigned download used to
+# live inside ClamAVScanner, where one oversized upload could exhaust a
+# worker shared by 20 jobs.
+
+
+async def test_an_oversized_file_is_refused_before_it_is_fetched(
+    session: AsyncSession,
+    session_factory: async_sessionmaker[AsyncSession],
+    ctx: dict[str, Any],
+    fake_backend: _FakeBackend,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    org = await _make_org(session)
+    user = await _make_user(session)
+    stored_file = await _make_stored_file(session, org=org, user=user)
+    stored_file.size_bytes = virus_scan_module._MAX_SCAN_BYTES + 1
+    await session.commit()
+
+    fetched: list[str] = []
+
+    async def _never(
+        download_url: str,
+        transport: object | None = None,  # noqa: ARG001 -- matches the real signature
+    ) -> bytes:
+        fetched.append(download_url)
+        return b""
+
+    monkeypatch.setattr(virus_scan_module, "_download", _never)
+    scanner = _install_scanner(monkeypatch, ScanResult(clean=True))
+
+    await virus_scan(ctx, file_id=stored_file.id)
+
+    assert fetched == []  # declined on the row's size alone
+    assert scanner.calls == 0
+    async with session_factory() as verify_session:
+        refreshed = await verify_session.get(StoredFile, stored_file.id)
+        assert refreshed is not None
+        # "failed", never "clean": a file too big to scan must not become a
+        # file that skips scanning.
+        assert refreshed.status == "failed"
+        assert refreshed.virus_scan_result is None
+    assert fake_backend.deleted == []
+
+
+async def test_the_download_stops_reading_once_it_passes_the_limit(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # The row's claimed size and the object's real size are different facts,
+    # so the streaming loop is what actually bounds memory -- not the
+    # row-level check that runs before it.
+    monkeypatch.setattr(virus_scan_module, "_MAX_SCAN_BYTES", 1024)
+
+    def handler(request: httpx.Request) -> httpx.Response:  # noqa: ARG001 -- canned
+        return httpx.Response(200, content=b"x" * 2048)
+
+    with pytest.raises(virus_scan_module.ScanTooLargeError):
+        await _real_download("https://fake.example/o", httpx.MockTransport(handler))
+
+
+async def test_a_download_failure_is_a_scanner_error_not_a_verdict() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:  # noqa: ARG001
+        raise httpx.ConnectError("connection refused")
+
+    with pytest.raises(ScannerError):
+        await _real_download("https://fake.example/o", httpx.MockTransport(handler))
+
+
+async def test_a_download_http_error_is_a_scanner_error() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:  # noqa: ARG001
+        return httpx.Response(503)
+
+    with pytest.raises(ScannerError):
+        await _real_download("https://fake.example/o", httpx.MockTransport(handler))
+
+
+async def test_the_fetched_bytes_are_returned_whole() -> None:
+    # Several chunks' worth, reassembled in order -- the join is the part
+    # that would silently corrupt a scan if it were wrong.
+    body = bytes(i % 256 for i in range(5000))
+
+    def handler(request: httpx.Request) -> httpx.Response:  # noqa: ARG001
+        return httpx.Response(200, content=body)
+
+    fetched = await _real_download("https://fake.example/o", httpx.MockTransport(handler))
+
+    assert fetched == body

@@ -3,9 +3,14 @@ Verifies T-112's StorageService: content-type allowlist enforcement
 (per-bucket overrides included), the two plan-quota checks (per-file
 max_upload_mb cap, org-wide storage_gb cap), confirm_upload's three
 orchestration-layer security requirements (existence via head(), size
-tolerance, idempotent re-confirm), checksum extraction from ETag, the
-virus_scan job enqueue, and delete_file's soft-delete + deferred hard-delete
-enqueue.
+tolerance, idempotent re-confirm), the virus_scan job enqueue, delete_file's
+soft-delete + deferred hard-delete enqueue, and get_download_url's scan gate.
+
+The last of those is the reason the section at the bottom of this file
+exists. get_download_url had no tests at all, and no check that the file it
+was signing had been scanned -- so an object was downloadable from the
+moment confirm_upload marked it "ready", which happens *before* the scan job
+is even enqueued, and stayed downloadable if that scan later failed.
 
 The real S3-compatible wire protocol (presigned POST conditions, expiry,
 content-length-range, etc.) is T-111's own concern, fully covered by
@@ -23,7 +28,12 @@ import pytest
 from redis.asyncio import Redis
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.exceptions import NotFoundError, PlanLimitError, UnprocessableEntityError
+from app.core.exceptions import (
+    ConflictError,
+    NotFoundError,
+    PlanLimitError,
+    UnprocessableEntityError,
+)
 from app.modules.auth.repository import UserRepository
 from app.modules.billing.dependencies import OrgSubscription
 from app.modules.billing.models import Plan
@@ -385,7 +395,7 @@ async def test_confirm_upload_rejects_size_mismatch_and_deletes_object(
     assert presigned["key"] in fake_backend.deleted
 
 
-async def test_confirm_upload_happy_path_sets_ready_and_checksum_and_enqueues_scan(  # noqa: PLR0913 -- enqueued_jobs on top of the usual fixture set
+async def test_confirm_upload_happy_path_sets_ready_and_enqueues_scan(  # noqa: PLR0913 -- enqueued_jobs on top of the usual fixture set
     session: AsyncSession, redis: Redis, org, user_id, fake_backend, enqueued_jobs
 ) -> None:
     service = _service(session, redis, org)
@@ -398,8 +408,31 @@ async def test_confirm_upload_happy_path_sets_ready_and_checksum_and_enqueues_sc
     updated = await service.confirm_upload(user_id, presigned["file_id"])
 
     assert updated.status == "ready"
-    assert updated.checksum_sha256 == "deadbeef"
     assert ("virus_scan", {"file_id": updated.id}) in enqueued_jobs
+
+
+async def test_confirm_upload_does_not_put_the_etag_in_the_sha256_column(  # noqa: PLR0913 -- matches the fixture set above
+    session: AsyncSession,
+    redis: Redis,
+    org,
+    user_id,
+    fake_backend,
+    enqueued_jobs,  # noqa: ARG001
+) -> None:
+    # It used to. An ETag is not a SHA-256 -- for a multipart upload it is not
+    # even an MD5 of the content -- so the column named one thing and held
+    # another, and the hash-lookup scanner it fed could never match. The
+    # digest is now the scan job's to write, from the bytes it reads.
+    service = _service(session, redis, org)
+    presigned = await service.presign_upload(
+        user_id, filename="f.pdf", content_type="application/pdf", size_bytes=1024, org_sub=None
+    )
+    await session.commit()
+    fake_backend.uploaded[presigned["key"]] = {"ContentLength": 1024, "ETag": '"deadbeef"'}
+
+    updated = await service.confirm_upload(user_id, presigned["file_id"])
+
+    assert updated.checksum_sha256 is None
 
 
 async def test_confirm_upload_within_tolerance_succeeds(
@@ -524,3 +557,99 @@ async def test_delete_file_invalidates_total_bytes_cache(
     await service.delete_file(user_id, presigned["file_id"])
 
     assert await repo.total_bytes_for_org() == 0
+
+
+# --- get_download_url: the scan gate --------------------------------------------------------
+#
+# The finding this section exists to keep closed: get_download_url checked
+# tenancy and then signed the object, with no reference to whether it had
+# been scanned. confirm_upload sets "ready" and *then* enqueues the scan, so
+# every confirmed file was signable during the window before a verdict
+# existed -- and stayed signable if the scan came back "failed".
+
+
+async def _confirmed_file(service: StorageService, user_id, fake_backend, session: AsyncSession):
+    presigned = await service.presign_upload(
+        user_id, filename="f.pdf", content_type="application/pdf", size_bytes=1024, org_sub=None
+    )
+    await session.commit()
+    fake_backend.uploaded[presigned["key"]] = {"ContentLength": 1024, "ETag": '"x"'}
+    return await service.confirm_upload(user_id, presigned["file_id"])
+
+
+@pytest.mark.parametrize(
+    ("status", "verdict", "expected_key"),
+    [
+        ("ready", None, "errors.file_scan_pending"),
+        ("pending", None, "errors.file_not_ready"),
+        ("failed", None, "errors.file_scan_failed"),
+        ("infected", "Eicar-Test-Signature", "errors.file_infected"),
+    ],
+)
+async def test_download_is_refused_until_a_clean_verdict_exists(  # noqa: PLR0913 -- parametrised over the fixture set
+    session: AsyncSession,
+    redis: Redis,
+    org,
+    user_id,
+    fake_backend,
+    status: str,
+    verdict: str | None,
+    expected_key: str,
+) -> None:
+    service = _service(session, redis, org)
+    stored_file = await _confirmed_file(service, user_id, fake_backend, session)
+    stored_file.status = status
+    stored_file.virus_scan_result = verdict
+    await session.commit()
+
+    with pytest.raises(ConflictError) as exc_info:
+        await service.get_download_url(stored_file.id)
+
+    # Each state says something different on purpose: "try again shortly" and
+    # "this file is gone" are not the same instruction to a user.
+    assert exc_info.value.message_key == expected_key
+
+
+async def test_download_succeeds_once_the_scan_reports_clean(
+    session: AsyncSession, redis: Redis, org, user_id, fake_backend
+) -> None:
+    service = _service(session, redis, org)
+    stored_file = await _confirmed_file(service, user_id, fake_backend, session)
+    stored_file.virus_scan_result = "clean"
+    await session.commit()
+
+    url, expires_at = await service.get_download_url(stored_file.id)
+
+    assert url.startswith("https://fake.example/download/")
+    assert expires_at > datetime.now(UTC)
+
+
+async def test_a_file_confirmed_but_not_yet_scanned_is_not_downloadable(
+    session: AsyncSession, redis: Redis, org, user_id, fake_backend
+) -> None:
+    # The exact window the original bug lived in: confirm_upload has returned
+    # "ready" and the virus_scan job has been enqueued but has not run.
+    service = _service(session, redis, org)
+    stored_file = await _confirmed_file(service, user_id, fake_backend, session)
+
+    assert stored_file.status == "ready"
+    assert stored_file.virus_scan_result is None
+    with pytest.raises(ConflictError):
+        await service.get_download_url(stored_file.id)
+
+
+async def test_the_scan_gate_does_not_replace_the_tenancy_check(
+    session: AsyncSession, redis: Redis, org, user_id, fake_backend
+) -> None:
+    # Ordering matters: a clean file belonging to another org must still be a
+    # NotFoundError from the repository, not a ConflictError that confirms it
+    # exists and is merely unscanned.
+    service = _service(session, redis, org)
+    stored_file = await _confirmed_file(service, user_id, fake_backend, session)
+    stored_file.virus_scan_result = "clean"
+    await session.commit()
+
+    other_org_service = StorageService(session, uuid4(), redis)
+
+    with pytest.raises(NotFoundError):
+        await other_org_service.get_download_url(stored_file.id)

@@ -1,0 +1,392 @@
+"""
+app.workers.jobs.storage: the physical deletion that StorageService.delete_file
+has been enqueueing, by name, since T-112 -- against a worker that had no
+function by that name. Every deleted file's object stayed in the bucket.
+
+Two entry points, both idempotent and both re-checking `deleted_at` before
+they touch anything: `hard_delete_stored_file` (the deferred job, seven days
+after the soft delete) and `sweep_orphaned_objects` (the daily
+reconciliation pass for the ones whose deferred job was lost).
+
+Same real-Postgres testcontainers shape as test_virus_scan_job.py: the job
+module's own `async_session_factory` is monkeypatched onto a dedicated test
+engine, and StorageBackend is faked -- the S3 wire protocol is
+test_storage_backend.py's concern, and what matters here is the ordering
+(object first, row second) and the conditions under which nothing happens at
+all.
+"""
+
+from collections.abc import AsyncGenerator, Awaitable, Callable
+from dataclasses import dataclass, field
+from datetime import timedelta
+from typing import Any
+from uuid import uuid4
+
+import pytest
+from sqlalchemy.ext.asyncio import (
+    AsyncEngine,
+    AsyncSession,
+    async_sessionmaker,
+    create_async_engine,
+)
+from sqlmodel import SQLModel
+from testcontainers.postgres import PostgresContainer
+
+from app.models._mixins import utcnow
+from app.modules.auth.models import User
+from app.modules.billing.models import Plan
+from app.modules.storage.models import StoredFile
+from app.modules.storage.service import HARD_DELETE_GRACE_PERIOD
+from app.modules.tenancy.models import Organization
+from app.workers.jobs import storage as storage_job_module
+from app.workers.jobs.storage import (
+    hard_delete_stored_file,
+    rescan_unscanned_files,
+    sweep_orphaned_objects,
+)
+
+pytestmark = pytest.mark.module_dependent  # stored_file
+
+_TABLES = [
+    User.__table__,
+    Plan.__table__,
+    Organization.__table__,
+    StoredFile.__table__,
+]
+
+
+@pytest.fixture(scope="module")
+def postgres_container() -> "PostgresContainer":
+    with PostgresContainer("postgres:16-alpine") as container:
+        yield container
+
+
+@pytest.fixture
+async def test_engine(postgres_container: "PostgresContainer") -> AsyncGenerator[AsyncEngine, None]:
+    url = postgres_container.get_connection_url().replace("psycopg2", "asyncpg")
+    engine = create_async_engine(url)
+    async with engine.begin() as conn:
+        await conn.run_sync(SQLModel.metadata.create_all, tables=_TABLES)
+    yield engine
+    async with engine.begin() as conn:
+        await conn.run_sync(SQLModel.metadata.drop_all, tables=_TABLES)
+    await engine.dispose()
+
+
+@pytest.fixture
+def session_factory(test_engine: AsyncEngine) -> async_sessionmaker[AsyncSession]:
+    return async_sessionmaker(test_engine, expire_on_commit=False, class_=AsyncSession)
+
+
+@pytest.fixture(autouse=True)
+def _use_test_engine(
+    monkeypatch: pytest.MonkeyPatch, session_factory: async_sessionmaker[AsyncSession]
+) -> None:
+    monkeypatch.setattr(storage_job_module, "async_session_factory", session_factory)
+
+
+@pytest.fixture
+async def session(
+    session_factory: async_sessionmaker[AsyncSession],
+) -> AsyncGenerator[AsyncSession, None]:
+    async with session_factory() as s:
+        yield s
+
+
+@dataclass
+class _FakeBackend:
+    deleted: list[str] = field(default_factory=list)
+    fail_on: set[str] = field(default_factory=set)
+
+    async def delete(self, key: str) -> None:
+        if key in self.fail_on:
+            raise RuntimeError("object store is unavailable")
+        self.deleted.append(key)
+
+
+@pytest.fixture
+def fake_backend(monkeypatch: pytest.MonkeyPatch) -> _FakeBackend:
+    backend = _FakeBackend()
+    monkeypatch.setattr(storage_job_module, "get_storage_backend", lambda: backend)
+    return backend
+
+
+@pytest.fixture
+def ctx() -> dict[str, Any]:
+    return {}
+
+
+async def _make_file(session: AsyncSession, *, deleted_ago: timedelta | None = None) -> StoredFile:
+    org = Organization(name="Acme", slug=f"acme-{uuid4().hex[:8]}")
+    session.add(org)
+    user = User(email=f"user-{uuid4()}@example.com")
+    session.add(user)
+    await session.flush()
+
+    stored = StoredFile(
+        org_id=org.id,
+        uploaded_by=user.id,
+        key=f"{org.id}/default/{uuid4()}/report.pdf",
+        filename="report.pdf",
+        content_type="application/pdf",
+        size_bytes=1024,
+        status="ready",
+        virus_scan_result="clean",
+        deleted_at=None if deleted_ago is None else utcnow() - deleted_ago,
+    )
+    session.add(stored)
+    await session.commit()
+    return stored
+
+
+# --- hard_delete_stored_file -----------------------------------------------------------------
+
+
+async def test_it_removes_the_object_and_the_row(
+    session: AsyncSession,
+    session_factory: async_sessionmaker[AsyncSession],
+    ctx: dict[str, Any],
+    fake_backend: _FakeBackend,
+) -> None:
+    stored = await _make_file(session, deleted_ago=HARD_DELETE_GRACE_PERIOD)
+
+    await hard_delete_stored_file(ctx, file_id=stored.id)
+
+    assert fake_backend.deleted == [stored.key]
+    async with session_factory() as verify:
+        assert await verify.get(StoredFile, stored.id) is None
+
+
+async def test_a_cancelled_deletion_survives_its_own_job(
+    session: AsyncSession,
+    session_factory: async_sessionmaker[AsyncSession],
+    ctx: dict[str, Any],
+    fake_backend: _FakeBackend,
+) -> None:
+    # The grace window exists so a deletion can be undone. The deferred job
+    # still fires at the end of it, and must do nothing.
+    stored = await _make_file(session, deleted_ago=None)
+
+    await hard_delete_stored_file(ctx, file_id=stored.id)
+
+    assert fake_backend.deleted == []
+    async with session_factory() as verify:
+        assert await verify.get(StoredFile, stored.id) is not None
+
+
+async def test_running_twice_is_not_an_error(
+    session: AsyncSession, ctx: dict[str, Any], fake_backend: _FakeBackend
+) -> None:
+    # arq retries, and the sweep can reach the same row from the other side.
+    stored = await _make_file(session, deleted_ago=HARD_DELETE_GRACE_PERIOD)
+
+    await hard_delete_stored_file(ctx, file_id=stored.id)
+    await hard_delete_stored_file(ctx, file_id=stored.id)
+
+    assert fake_backend.deleted == [stored.key]
+
+
+async def test_an_unknown_file_is_not_an_error(
+    ctx: dict[str, Any], fake_backend: _FakeBackend
+) -> None:
+    await hard_delete_stored_file(ctx, file_id=uuid4())
+
+    assert fake_backend.deleted == []
+
+
+async def test_the_row_survives_when_the_object_cannot_be_deleted(
+    session: AsyncSession,
+    session_factory: async_sessionmaker[AsyncSession],
+    ctx: dict[str, Any],
+    fake_backend: _FakeBackend,
+) -> None:
+    # Object first, row second, and never the reverse: dropping the row while
+    # the object survives loses the only record of what to delete, and leaks
+    # it permanently. So a failing object store leaves work for the sweep.
+    stored = await _make_file(session, deleted_ago=HARD_DELETE_GRACE_PERIOD)
+    fake_backend.fail_on.add(stored.key)
+
+    with pytest.raises(RuntimeError):
+        await hard_delete_stored_file(ctx, file_id=stored.id)
+
+    async with session_factory() as verify:
+        assert await verify.get(StoredFile, stored.id) is not None
+
+
+# --- sweep_orphaned_objects ------------------------------------------------------------------
+
+
+async def test_the_sweep_collects_files_whose_job_never_ran(
+    session: AsyncSession,
+    session_factory: async_sessionmaker[AsyncSession],
+    ctx: dict[str, Any],
+    fake_backend: _FakeBackend,
+) -> None:
+    # The backlog case: rows soft-deleted long ago whose deferred job was
+    # lost -- or, as it happens, never existed.
+    stale = await _make_file(session, deleted_ago=HARD_DELETE_GRACE_PERIOD + timedelta(days=30))
+
+    await sweep_orphaned_objects(ctx)
+
+    assert fake_backend.deleted == [stale.key]
+    async with session_factory() as verify:
+        assert await verify.get(StoredFile, stale.id) is None
+
+
+async def test_the_sweep_leaves_the_grace_window_alone(
+    session: AsyncSession,
+    session_factory: async_sessionmaker[AsyncSession],
+    ctx: dict[str, Any],
+    fake_backend: _FakeBackend,
+) -> None:
+    # Still recoverable, and its deferred job is still pending. Deleting it
+    # here would silently shorten the undo window to "until 04:00".
+    recent = await _make_file(session, deleted_ago=timedelta(hours=1))
+
+    await sweep_orphaned_objects(ctx)
+
+    assert fake_backend.deleted == []
+    async with session_factory() as verify:
+        assert await verify.get(StoredFile, recent.id) is not None
+
+
+async def test_the_sweep_ignores_live_files(
+    session: AsyncSession,
+    session_factory: async_sessionmaker[AsyncSession],
+    ctx: dict[str, Any],
+    fake_backend: _FakeBackend,
+) -> None:
+    live = await _make_file(session, deleted_ago=None)
+
+    await sweep_orphaned_objects(ctx)
+
+    assert fake_backend.deleted == []
+    async with session_factory() as verify:
+        assert await verify.get(StoredFile, live.id) is not None
+
+
+async def test_the_sweep_is_bounded_per_tick(
+    session: AsyncSession,
+    ctx: dict[str, Any],
+    fake_backend: _FakeBackend,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # A backlog is drained over several ticks rather than in one long
+    # transaction holding a connection from a pool of 20.
+    monkeypatch.setattr(storage_job_module, "_SWEEP_BATCH_SIZE", 2)
+    for _ in range(3):
+        await _make_file(session, deleted_ago=HARD_DELETE_GRACE_PERIOD + timedelta(days=1))
+
+    await sweep_orphaned_objects(ctx)
+
+    assert len(fake_backend.deleted) == 2
+
+
+async def test_an_empty_sweep_does_nothing(ctx: dict[str, Any], fake_backend: _FakeBackend) -> None:
+    await sweep_orphaned_objects(ctx)
+
+    assert fake_backend.deleted == []
+
+
+# --- rescan_unscanned_files ------------------------------------------------------------------
+#
+# The migration path for the download gate. Files confirmed before the gate
+# existed have no verdict, so they all became undownloadable on the build
+# that added it -- correctly, since they had never been scanned, but they
+# need a way back.
+
+
+async def _make_scanned_file(
+    session: AsyncSession, *, status: str, verdict: str | None
+) -> StoredFile:
+    stored = await _make_file(session)
+    stored.status = status
+    stored.virus_scan_result = verdict
+    await session.commit()
+    return stored
+
+
+async def test_it_enqueues_a_scan_for_a_confirmed_file_with_no_verdict(
+    session: AsyncSession,
+    ctx: dict[str, Any],
+    enqueued_jobs: list[tuple[str, dict[str, Any]]],
+) -> None:
+    stored = await _make_scanned_file(session, status="ready", verdict=None)
+
+    enqueued = await rescan_unscanned_files(ctx)
+
+    assert enqueued == 1
+    assert ("virus_scan", {"file_id": stored.id}) in enqueued_jobs
+
+
+@pytest.mark.parametrize(
+    ("status", "verdict"),
+    [
+        ("ready", "clean"),  # already has a verdict
+        ("infected", "Eicar-Test-Signature"),  # a verdict was reached
+        ("failed", None),  # a verdict was attempted and failed
+        ("pending", None),  # never finished uploading
+    ],
+)
+async def test_it_leaves_every_other_state_alone(
+    session: AsyncSession,
+    ctx: dict[str, Any],
+    enqueued_jobs: list[tuple[str, dict[str, Any]]],
+    status: str,
+    verdict: str | None,
+) -> None:
+    # "infected" and "failed" matter most here: re-running those would be a
+    # retry loop that could eventually flip a known-bad file to downloadable.
+    await _make_scanned_file(session, status=status, verdict=verdict)
+
+    assert await rescan_unscanned_files(ctx) == 0
+    assert [name for name, _ in enqueued_jobs if name == "virus_scan"] == []
+
+
+async def test_it_ignores_deleted_files(session: AsyncSession, ctx: dict[str, Any]) -> None:
+    stored = await _make_scanned_file(session, status="ready", verdict=None)
+    stored.deleted_at = utcnow()
+    await session.commit()
+
+    assert await rescan_unscanned_files(ctx) == 0
+
+
+async def test_it_is_batched_so_a_backlog_can_be_drained_in_steps(
+    session: AsyncSession, ctx: dict[str, Any]
+) -> None:
+    # The first run against a real deployment is a backlog the size of the
+    # bucket; the caller loops until this returns 0.
+    for _ in range(3):
+        await _make_scanned_file(session, status="ready", verdict=None)
+
+    assert await rescan_unscanned_files(ctx, limit=2) == 2
+
+
+# --- the file_storage toggle -----------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "job",
+    [hard_delete_stored_file, sweep_orphaned_objects, rescan_unscanned_files],
+)
+async def test_every_job_no_ops_when_file_storage_is_off(
+    ctx: dict[str, Any],
+    fake_backend: _FakeBackend,
+    monkeypatch: pytest.MonkeyPatch,
+    job: Callable[..., Awaitable[object]],
+) -> None:
+    """`stored_file` does not exist in a product that switched storage off.
+
+    These are registered unconditionally -- in WorkerSettings.functions and
+    on the scheduler -- so the guard has to be in the function, the same
+    shape prune_webhook_deliveries uses. Without it the minimum-surface
+    configuration gets a nightly job failing on a missing relation.
+    """
+    monkeypatch.setattr(
+        storage_job_module, "is_enabled", lambda name: name != "file_storage", raising=True
+    )
+
+    kwargs = {"file_id": uuid4()} if job is hard_delete_stored_file else {}
+    await job(ctx, **kwargs)
+
+    assert fake_backend.deleted == []

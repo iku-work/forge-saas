@@ -26,10 +26,12 @@ exhausts its retries *without* tripping the breaker marks the file "failed"
 verdict *was* reached) and is audit-logged, per T-113's own spec.
 """
 
+import hashlib
 import logging
 from typing import TYPE_CHECKING, Any
 from uuid import UUID
 
+import httpx
 import sentry_sdk
 from arq.worker import Retry
 
@@ -39,7 +41,7 @@ from app.core.resilience import resilient
 from app.core.tracing import trace_job
 from app.modules.audit.service import AuditService
 from app.modules.notifications.service import NotificationService
-from app.modules.storage.backend import get_storage_backend
+from app.modules.storage.backend import StorageBackend, get_storage_backend
 from app.modules.storage.models import StoredFile
 from app.modules.storage.scanner import ScannerError, ScanResult, VirusScanner, get_virus_scanner
 
@@ -49,10 +51,26 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 _DOWNLOAD_EXPIRES_IN_SECONDS = 300  # the scan window
+_DOWNLOAD_TIMEOUT_SECONDS = 60.0
+# Bounds the worker's memory per scan. Deliberately a hard ceiling rather than
+# a plan feature: a file too big to scan must not become a file that skips
+# scanning, so anything over this is "failed" (undownloadable), not "clean".
+# Raising it means raising the worker's memory budget with it.
+_MAX_SCAN_BYTES = 256 * 1024 * 1024
 # >= app.core.resilience's reset_timeout (30s): re-queuing sooner than the
 # breaker could possibly have recovered would just spend an ARQ retry on
 # another guaranteed CircuitBreakerError.
 _VIRUS_SCANNER_RETRY_DEFER_SECONDS = 30
+
+
+class ScanTooLargeError(Exception):
+    """The object is too big to scan in memory -- permanent, not transient.
+
+    Separate from ScannerError on purpose: is_transient_error classifies
+    every ScannerError as retryable (and so excludes it from the breaker's
+    failure count), which is right for "clamd refused the connection" and
+    wrong for "this file is 4GB".
+    """
 
 
 @trace_job
@@ -71,19 +89,19 @@ async def virus_scan(
             logger.info("virus_scan: file_id=%s not pending scan, skipping", file_id)
             return
 
-        download_url = await backend.presign_download(stored_file.key, _DOWNLOAD_EXPIRES_IN_SECONDS)
-
         audit = AuditService(session)
 
         try:
-            result = await _scan(
-                scanner, download_url=download_url, checksum_sha256=stored_file.checksum_sha256
-            )
+            content = await _fetch(backend, stored_file.key, stored_file.size_bytes)
+            checksum = hashlib.sha256(content).hexdigest()
+            result = await _scan(scanner, content=content, checksum_sha256=checksum)
         except ExternalServiceUnavailableError:
-            # The "virus_scanner" breaker is open -- re-queue the whole job
-            # rather than marking the file failed; see module docstring.
+            # Either breaker in play here is open -- "virus_scanner" (clamd
+            # is down) or "s3" (the object store is). Both mean "we cannot
+            # get a verdict right now", which is a re-queue, not a verdict;
+            # see the module docstring.
             raise Retry(defer=_VIRUS_SCANNER_RETRY_DEFER_SECONDS) from None
-        except ScannerError as exc:
+        except (ScannerError, ScanTooLargeError) as exc:
             logger.exception("virus_scan: scanner failed for file_id=%s", file_id)
             sentry_sdk.capture_exception(exc)
             stored_file.status = "failed"
@@ -97,11 +115,16 @@ async def virus_scan(
             return
 
         if result.clean:
+            # Written here rather than in confirm_upload, and only now: this
+            # is the digest of the bytes that were actually scanned, so the
+            # column and the verdict describe the same object version.
+            stored_file.checksum_sha256 = checksum
             stored_file.virus_scan_result = "clean"
             await session.commit()
             return
 
         stored_file.status = "infected"
+        stored_file.checksum_sha256 = checksum  # forensics: the object is about to be deleted
         stored_file.virus_scan_result = result.signature or "infected"
         await backend.delete(stored_file.key)
 
@@ -121,8 +144,66 @@ async def virus_scan(
         await session.commit()
 
 
+async def _fetch(backend: StorageBackend, key: str, claimed_size_bytes: int) -> bytes:
+    """The object's bytes, once, for both hashing and scanning.
+
+    Refuses anything over _MAX_SCAN_BYTES *before* reading it.
+    `claimed_size_bytes` is confirm_upload's already-verified size (it heads
+    the object and rejects a mismatch), so this can decline without a fetch.
+    """
+    if claimed_size_bytes > _MAX_SCAN_BYTES:
+        raise ScanTooLargeError(
+            f"object is {claimed_size_bytes} bytes, over the {_MAX_SCAN_BYTES}-byte scan limit"
+        )
+    download_url = await backend.presign_download(key, _DOWNLOAD_EXPIRES_IN_SECONDS)
+    return await _download(download_url)
+
+
+@resilient("s3")
+async def _download(
+    download_url: str,
+    transport: httpx.AsyncBaseTransport | None = None,
+) -> bytes:
+    """Streamed, size-bounded read of a presigned URL.
+
+    Bounded because the old code did `response.content` on an unbounded
+    download inside ClamAVScanner: one large upload could exhaust the
+    worker's memory and, with max_jobs=20 in a single process, take every
+    other job with it.
+
+    Under `@resilient("s3")` so a blip fetching the object is retried rather
+    than condemning the file -- which is what ClamAVScanner's download got
+    for free when it lived inside the `@resilient("virus_scanner")` call.
+    ScanTooLargeError is deliberately not a ScannerError: is_transient_error
+    treats every ScannerError as retryable, and a file that is too big will
+    still be too big three attempts later.
+
+    `transport` is the same test-only seam app.modules.auth.oauth's
+    _AuthlibOAuthClient uses; the job never passes it.
+    """
+    try:
+        async with (
+            httpx.AsyncClient(timeout=_DOWNLOAD_TIMEOUT_SECONDS, transport=transport) as client,
+            client.stream("GET", download_url) as response,
+        ):
+            response.raise_for_status()
+            chunks: list[bytes] = []
+            total = 0
+            async for chunk in response.aiter_bytes():
+                total += len(chunk)
+                if total > _MAX_SCAN_BYTES:
+                    # The size the row claims and the size the object actually
+                    # is are different facts; this loop is what bounds memory.
+                    raise ScanTooLargeError(
+                        f"object exceeded the {_MAX_SCAN_BYTES}-byte scan limit"
+                    )
+                chunks.append(chunk)
+    except httpx.HTTPError as exc:
+        raise ScannerError(f"failed to download file for scanning: {exc}") from exc
+
+    return b"".join(chunks)
+
+
 @resilient("virus_scanner")
-async def _scan(
-    scanner: VirusScanner, *, download_url: str, checksum_sha256: str | None
-) -> ScanResult:
-    return await scanner.scan(download_url=download_url, checksum_sha256=checksum_sha256)
+async def _scan(scanner: VirusScanner, *, content: bytes, checksum_sha256: str) -> ScanResult:
+    return await scanner.scan(content=content, checksum_sha256=checksum_sha256)
