@@ -3023,9 +3023,11 @@ export type ConsumeMagicLinkApiV1AuthMagicLinkConsumePostError = ConsumeMagicLin
 
 export type ConsumeMagicLinkApiV1AuthMagicLinkConsumePostResponses = {
     /**
+     * Response Consume Magic Link Api V1 Auth Magic Link Consume Post
+     *
      * Successful Response
      */
-    200: EnvelopeLoginResponse;
+    200: EnvelopeLoginResponse | EnvelopeTwoFactorRequiredResponse;
 };
 
 export type ConsumeMagicLinkApiV1AuthMagicLinkConsumePostResponse = ConsumeMagicLinkApiV1AuthMagicLinkConsumePostResponses[keyof ConsumeMagicLinkApiV1AuthMagicLinkConsumePostResponses];
@@ -3163,9 +3165,11 @@ export type OauthCallbackApiV1AuthOauthProviderCallbackGetError = OauthCallbackA
 
 export type OauthCallbackApiV1AuthOauthProviderCallbackGetResponses = {
     /**
+     * Response Oauth Callback Api V1 Auth Oauth  Provider  Callback Get
+     *
      * Successful Response
      */
-    200: EnvelopeLoginResponse;
+    200: EnvelopeLoginResponse | EnvelopeTwoFactorRequiredResponse;
 };
 
 export type OauthCallbackApiV1AuthOauthProviderCallbackGetResponse = OauthCallbackApiV1AuthOauthProviderCallbackGetResponses[keyof OauthCallbackApiV1AuthOauthProviderCallbackGetResponses];

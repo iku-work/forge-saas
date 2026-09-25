@@ -49,7 +49,7 @@ from app.core.dependencies import get_current_org, get_redis
 from app.core.handlers import register_exception_handlers
 from app.middleware.rate_limit import register_rate_limiting
 from app.modules.audit.models import AuditEvent
-from app.modules.auth.models import OAuthAccount, User
+from app.modules.auth.models import OAuthAccount, User, WebAuthnCredential
 from app.modules.auth.permissions import MemberRole
 from app.modules.auth.repository import UserRepository
 from app.modules.auth.utils import hash_password
@@ -648,6 +648,50 @@ async def test_an_amr_claim_naming_a_second_factor_satisfies_totp(
     # A session, not a challenge: the IdP already did the second factor.
     assert body["access_token"]
     assert body["user"]["id"] == str(user.id)
+
+
+async def test_sso_challenges_a_user_whose_only_second_factor_is_a_security_key(
+    session: AsyncSession, api_client: ClientFactory, idp: _MockIdp
+) -> None:
+    """The half this gate used to miss.
+
+    It tested `user.totp_enabled` directly, so an account whose only second
+    factor was a registered security key went straight to a session -- the
+    IdP had proven who they were, and the factor its owner had enrolled here
+    was never asked for. All four sign-in paths now ask the same helper,
+    which treats a key as an alternative to TOTP rather than something else
+    entirely.
+    """
+    org, _ = await _make_org(session)
+    await _connect(session, org)
+    user = await UserRepository(session).create(
+        # Must be the address the mock IdP asserts, or the callback
+        # JIT-provisions a *different* user and the credential below belongs
+        # to nobody in the flow.
+        email=f"newcomer@{_DOMAIN}",
+        hashed_password=hash_password("Correct-Horse9"),
+        email_verified_at=datetime.now(UTC),
+    )
+    session.add(
+        WebAuthnCredential(
+            user_id=user.id,
+            credential_id=f"cred-{uuid4()}",
+            public_key="cHVibGljLWtleQ==",
+            sign_count=0,
+            aaguid="00000000-0000-0000-0000-000000000000",
+        )
+    )
+    await session.flush()
+    client = api_client()
+
+    state, nonce = await _start(client, org.slug)
+    idp.nonce = nonce
+    response = await client.get(f"{_PREFIX}/callback", params={"code": "c", "state": state})
+
+    assert response.status_code == 200, response.text
+    body = response.json()["data"]
+    assert body["temp_token"]
+    assert "access_token" not in body
 
 
 async def test_a_discovery_document_missing_a_required_field_names_it(

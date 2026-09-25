@@ -43,7 +43,8 @@ from app.core.dependencies import get_redis
 from app.core.exceptions import AuthenticationError
 from app.main import app
 from app.middleware import rate_limit as rate_limit_module
-from app.modules.auth.models import OAuthAccount, User
+from app.models._mixins import utcnow
+from app.modules.auth.models import OAuthAccount, User, WebAuthnCredential
 from app.modules.auth.models import Session as SessionModel
 from app.modules.auth.oauth import (
     GitHubOAuthClient,
@@ -56,7 +57,14 @@ from app.modules.auth.schemas import OAuthProfile
 from app.modules.auth.service import AuthService
 from app.modules.auth.utils import create_access_token, hash_password
 
-_TABLES = [User.__table__, SessionModel.__table__, OAuthAccount.__table__]
+# WebAuthnCredential: social sign-in now asks whether the account has a
+# second factor enrolled locally, like every other entry point.
+_TABLES = [
+    User.__table__,
+    SessionModel.__table__,
+    OAuthAccount.__table__,
+    WebAuthnCredential.__table__,
+]
 _VALID_PASSWORD = "Correct-Horse9"
 
 
@@ -910,3 +918,73 @@ async def test_github_oauth_client_fetch_profile_http_error_raises_authenticatio
         await client.fetch_profile(
             code="auth-code", redirect_uri="https://app.example.com/callback"
         )
+
+
+# --- the social-login MFA bypass -----------------------------------------------------------
+#
+# This path called _create_session directly, so a verified Google or GitHub
+# identity produced a full session for an account with TOTP or a security key
+# enrolled -- neither was ever asked for. It was a deliberate decision, on the
+# reasoning that for a social provider "the account is the factor". That is a
+# claim about the provider, and not ours to make on the user's behalf:
+# somebody who enrolled a second factor here asked for it to be checked here.
+
+
+async def test_social_login_does_not_bypass_an_enrolled_authenticator(
+    client: httpx.AsyncClient,
+    oauth_clients: dict[str, OAuthClient],
+    session: AsyncSession,
+    user_repo: UserRepository,
+) -> None:
+    existing = await user_repo.create(
+        email="mfa-user@example.com", email_verified_at=utcnow(), totp_enabled=True
+    )
+    await session.commit()
+    oauth_clients["google"] = _FakeOAuthClient(
+        profile=OAuthProfile(
+            provider_user_id="g-mfa",
+            email=existing.email,
+            email_verified=True,
+            full_name="MFA User",
+        )
+    )
+    state = await _start_oauth_flow(client)
+
+    response = await client.get(
+        "/api/v1/auth/oauth/google/callback",
+        params={"code": "x", "state": state},
+        cookies={"oauth_state": state},
+    )
+
+    assert response.status_code == 200
+    data = response.json()["data"]
+    assert data["temp_token"]
+    assert "access_token" not in data
+    # No session was issued, so nothing should have been set to resume one.
+    assert "refresh_token" not in response.cookies
+
+
+async def test_social_login_still_signs_in_an_account_with_no_second_factor(
+    client: httpx.AsyncClient,
+    oauth_clients: dict[str, OAuthClient],
+) -> None:
+    # The converse: the gate must not turn every social sign-in into a
+    # challenge, which is the easy way to "fix" the test above.
+    oauth_clients["google"] = _FakeOAuthClient(
+        profile=OAuthProfile(
+            provider_user_id="g-plain",
+            email="plain-oauth@example.com",
+            email_verified=True,
+            full_name="Plain User",
+        )
+    )
+    state = await _start_oauth_flow(client)
+
+    response = await client.get(
+        "/api/v1/auth/oauth/google/callback",
+        params={"code": "x", "state": state},
+        cookies={"oauth_state": state},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["data"]["access_token"]

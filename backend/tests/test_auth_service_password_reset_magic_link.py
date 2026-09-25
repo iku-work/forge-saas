@@ -10,6 +10,7 @@ test_auth_service_refresh.py.
 from collections.abc import AsyncGenerator
 from datetime import UTC, datetime, timedelta
 from typing import Any
+from uuid import uuid4
 
 import pytest
 from sqlalchemy import func, select
@@ -23,7 +24,7 @@ from sqlmodel import SQLModel
 from testcontainers.postgres import PostgresContainer
 
 from app.core.exceptions import AuthenticationError
-from app.modules.auth.models import MagicLinkToken, PasswordResetToken, User
+from app.modules.auth.models import MagicLinkToken, PasswordResetToken, User, WebAuthnCredential
 from app.modules.auth.models import Session as SessionModel
 from app.modules.auth.repository import (
     MagicLinkTokenRepository,
@@ -31,7 +32,7 @@ from app.modules.auth.repository import (
     SessionRepository,
     UserRepository,
 )
-from app.modules.auth.service import AuthService
+from app.modules.auth.service import AuthService, TwoFactorChallenge
 from app.modules.auth.utils import (
     generate_refresh_token,
     hash_password,
@@ -44,6 +45,11 @@ _TABLES = [
     SessionModel.__table__,
     PasswordResetToken.__table__,
     MagicLinkToken.__table__,
+    # Every sign-in now asks whether the account has a second factor, and a
+    # security key is one of the two answers -- see
+    # AuthService._second_factor_challenge. Consuming a magic link reaches
+    # that question like every other entry point does.
+    WebAuthnCredential.__table__,
 ]
 _VALID_PASSWORD = "Correct-Horse9"
 _NEW_PASSWORD = "Even-Better-Horse8"
@@ -421,3 +427,94 @@ async def test_magic_link_points_at_the_route_the_spa_actually_serves(
     login_url: str = kwargs["context"]["login_url"]
     assert "/de/magic-link?token=" in login_url
     assert "/magic-link/consume" not in login_url
+
+
+# --- the magic-link MFA bypass -----------------------------------------------------------
+#
+# A magic link proves control of an inbox. For an account whose owner
+# enrolled a second factor that is one factor, not two -- but this path
+# called _create_session directly, so the link alone produced a full session
+# and the enrolled factor was never asked for. Password login had always
+# challenged; three of the four sign-in paths disagreed with it.
+
+
+async def test_a_magic_link_does_not_bypass_an_enrolled_authenticator(
+    service: AuthService,
+    verified_user: User,
+    magic_link_repo: MagicLinkTokenRepository,
+    session: AsyncSession,
+) -> None:
+    verified_user.totp_enabled = True
+    await session.commit()
+    plain = await _issue_magic_link_token(magic_link_repo, verified_user)
+
+    result = await service.consume_magic_link(plain, _IP, _USER_AGENT)
+
+    assert isinstance(result, TwoFactorChallenge)
+    assert result.temp_token
+
+
+async def test_a_magic_link_does_not_bypass_an_enrolled_security_key(
+    service: AuthService,
+    verified_user: User,
+    magic_link_repo: MagicLinkTokenRepository,
+    session: AsyncSession,
+) -> None:
+    # The half SSO also got wrong: it tested `totp_enabled` directly, so a
+    # user whose only second factor was a security key was never challenged.
+    session.add(
+        WebAuthnCredential(
+            user_id=verified_user.id,
+            credential_id=f"cred-{uuid4()}",
+            public_key="cHVibGljLWtleQ==",
+            sign_count=0,
+            aaguid="00000000-0000-0000-0000-000000000000",
+            nickname="YubiKey",
+        )
+    )
+    await session.commit()
+    plain = await _issue_magic_link_token(magic_link_repo, verified_user)
+
+    result = await service.consume_magic_link(plain, _IP, _USER_AGENT)
+
+    assert isinstance(result, TwoFactorChallenge)
+
+
+async def test_the_link_is_still_spent_when_a_second_factor_is_owed(
+    service: AuthService,
+    verified_user: User,
+    magic_link_repo: MagicLinkTokenRepository,
+    session: AsyncSession,
+) -> None:
+    """Single-use means single-use, challenge or not.
+
+    The token proved control of the inbox, which is all it was ever good
+    for. Leaving it unspent because the sign-in was not finished would make
+    it replayable for its whole TTL.
+    """
+    verified_user.totp_enabled = True
+    await session.commit()
+    plain = await _issue_magic_link_token(magic_link_repo, verified_user)
+
+    assert isinstance(await service.consume_magic_link(plain, _IP, _USER_AGENT), TwoFactorChallenge)
+
+    with pytest.raises(AuthenticationError):
+        await service.consume_magic_link(plain, _IP, _USER_AGENT)
+
+
+async def test_no_session_exists_until_the_second_factor_is_cleared(
+    service: AuthService,
+    verified_user: User,
+    magic_link_repo: MagicLinkTokenRepository,
+    session_repo: SessionRepository,
+    session: AsyncSession,
+) -> None:
+    # The assertion that would have caught the original bug: a challenge is
+    # not a session, and nothing signed-in should exist yet.
+    verified_user.totp_enabled = True
+    await session.commit()
+    plain = await _issue_magic_link_token(magic_link_repo, verified_user)
+
+    await service.consume_magic_link(plain, _IP, _USER_AGENT)
+
+    assert await session_repo.list_active_for_user(verified_user.id) == []

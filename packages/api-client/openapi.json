@@ -5879,7 +5879,15 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Envelope_LoginResponse_"
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/Envelope_LoginResponse_"
+                    },
+                    {
+                      "$ref": "#/components/schemas/Envelope_TwoFactorRequiredResponse_"
+                    }
+                  ],
+                  "title": "Response Consume Magic Link Api V1 Auth Magic Link Consume Post"
                 }
               }
             },
@@ -6102,7 +6110,15 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Envelope_LoginResponse_"
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/Envelope_LoginResponse_"
+                    },
+                    {
+                      "$ref": "#/components/schemas/Envelope_TwoFactorRequiredResponse_"
+                    }
+                  ],
+                  "title": "Response Oauth Callback Api V1 Auth Oauth  Provider  Callback Get"
                 }
               }
             },

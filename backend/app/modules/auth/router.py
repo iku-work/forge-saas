@@ -281,14 +281,24 @@ async def consume_magic_link(
     response: Response,
     body: MagicLinkConsumeRequest,
     session: Annotated[AsyncSession, Depends(get_session)],
-) -> Envelope[LoginResponse]:
+) -> Envelope[LoginResponse] | Envelope[TwoFactorRequiredResponse]:
     # impersonation-ok: the second leg of a login, gated on a token from the
     # user's inbox -- /auth/magic-link, the leg that *sends* that mail, is the
     # one that carries the block.
-    access_token, refresh_plain, user = await AuthService(session).consume_magic_link(
+    result = await AuthService(session).consume_magic_link(
         body.token, _client_ip(request), request.headers.get("user-agent", "")
     )
     await session.commit()
+    if isinstance(result, TwoFactorChallenge):
+        # A magic link proves control of an inbox. For an account with a
+        # second factor enrolled that is one factor, not two, so this
+        # finishes at /auth/2fa/login like any other challenge.
+        return Envelope(
+            data=TwoFactorRequiredResponse(temp_token=result.temp_token),
+            meta=Meta(request_id=_request_id(request)),
+        )
+
+    access_token, refresh_plain, user = result
     _set_refresh_cookie(response, refresh_plain)
     data = LoginResponse(
         access_token=access_token,

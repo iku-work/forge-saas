@@ -337,21 +337,9 @@ class AuthService:
                 },
             )
 
-        # §T-217: a registered security key is treated as an alternative to
-        # TOTP at this same gate, not an additional required factor -- a user
-        # with only a WebAuthn credential (no TOTP) still needs to clear this
-        # challenge, just via /auth/webauthn/login instead of /auth/2fa/login.
-        has_webauthn = await self._webauthn_credentials.exists_for_user(user.id)
-        if user.totp_enabled or has_webauthn:
-            # Password is correct, but that alone isn't enough to issue real
-            # tokens -- temp_token only proves this much and must be traded
-            # for a code at /auth/2fa/login (confirm_login_2fa below) or a
-            # security-key assertion at /auth/webauthn/login/options+/login.
-            temp_token = sign_url_token(
-                {"user_id": str(user.id), "purpose": _TOTP_LOGIN_PURPOSE},
-                _TOTP_LOGIN_TOKEN_TTL_SECONDS,
-            )
-            return TwoFactorChallenge(temp_token=temp_token)
+        challenge = await self._second_factor_challenge(user)
+        if challenge is not None:
+            return challenge
 
         result = await self._create_session(user, ip, user_agent)
         await self._audit.log(
@@ -364,6 +352,46 @@ class AuthService:
             ua=user_agent,
         )
         return result
+
+    async def _second_factor_challenge(self, user: User) -> TwoFactorChallenge | None:
+        """The one place any sign-in decides whether a second factor is owed.
+
+        None means "issue a session"; a challenge means the caller must
+        return it instead, and the holder trades it for a code at
+        /auth/2fa/login or a security-key assertion at
+        /auth/webauthn/login/options+/login.
+
+        Every entry point consults this -- password, magic link, social
+        OAuth, enterprise SSO -- and that is the point. They used to decide
+        separately, and three of the four decided wrong:
+
+        - magic link and social OAuth called `_create_session` directly, so
+          an account with TOTP or a security key enrolled could be signed
+          into with neither. Possession of an inbox, or of a Google session,
+          was enough.
+        - SSO checked `totp_enabled` alone, so a user whose only second
+          factor was a security key was never challenged.
+
+        The social case was a deliberate decision once, on the reasoning that
+        for Google or GitHub "the account *is* the factor". That is a claim
+        about the provider, and it is not ours to make on the user's behalf:
+        someone who enrolled a second factor here asked for it to be checked
+        here. If we want to accept the provider's own MFA we should read its
+        `amr` claim and say so, rather than assume it.
+
+        §T-217: a registered security key is an alternative to TOTP at this
+        gate, not an additional factor -- a user with only WebAuthn still
+        clears it, via a different endpoint.
+        """
+        # Short-circuited rather than `totp_enabled or exists_for_user(...)`:
+        # the answer is already yes, and this runs on every sign-in.
+        if not user.totp_enabled and not await self._webauthn_credentials.exists_for_user(user.id):
+            return None
+        temp_token = sign_url_token(
+            {"user_id": str(user.id), "purpose": _TOTP_LOGIN_PURPOSE},
+            _TOTP_LOGIN_TOKEN_TTL_SECONDS,
+        )
+        return TwoFactorChallenge(temp_token=temp_token)
 
     async def _create_session(self, user: User, ip: str, user_agent: str) -> tuple[str, str, User]:
         settings = get_settings()
@@ -505,7 +533,7 @@ class AuthService:
 
     async def consume_magic_link(
         self, token: str, ip: str, user_agent: str
-    ) -> tuple[str, str, User]:
+    ) -> tuple[str, str, User] | TwoFactorChallenge:
         record = await self._magic_link_tokens.get_by_hash(hash_token(token))
         if record is None:
             raise AuthenticationError(
@@ -520,11 +548,18 @@ class AuthService:
 
         await self._magic_link_tokens.mark_used(record.id)
 
+        # The token is spent either way: it proved control of the inbox, and
+        # that is all it was ever good for. Whether that is enough to issue a
+        # session is _second_factor_challenge's call, not this method's.
+        challenge = await self._second_factor_challenge(user)
+        if challenge is not None:
+            return challenge
+
         return await self._create_session(user, ip, user_agent)
 
     async def oauth_login(
         self, provider: str, profile: OAuthProfile, ip: str, user_agent: str
-    ) -> tuple[str, str, User]:
+    ) -> tuple[str, str, User] | TwoFactorChallenge:
         oauth_account = await self._oauth_accounts.get_by_provider_account(
             provider, profile.provider_user_id
         )
@@ -571,6 +606,10 @@ class AuthService:
                 await self._enqueue_security_notification_email(
                     user, "oauth_linked", provider=provider
                 )
+
+        challenge = await self._second_factor_challenge(user)
+        if challenge is not None:
+            return challenge
 
         return await self._create_session(user, ip, user_agent)
 
@@ -629,15 +668,20 @@ class AuthService:
             ua=user_agent,
         )
 
-        if user.totp_enabled and not mfa_asserted:
-            # Same shape as the password path's challenge: the IdP has proven
-            # who they are, which is not yet enough to issue real tokens for
-            # an account whose owner asked for a second factor.
-            temp_token = sign_url_token(
-                {"user_id": str(user.id), "purpose": _TOTP_LOGIN_PURPOSE},
-                _TOTP_LOGIN_TOKEN_TTL_SECONDS,
-            )
-            return TwoFactorChallenge(temp_token=temp_token)
+        if not mfa_asserted:
+            # The IdP has proven who they are, which is not yet enough to
+            # issue real tokens for an account whose owner asked for a second
+            # factor. `mfa_asserted` is the one thing that skips it, and it
+            # comes from the IdP's own amr/acr claim -- an upstream factor we
+            # were actually told about, rather than one we assumed.
+            #
+            # This used to test `user.totp_enabled` directly, which meant a
+            # user whose only second factor was a security key was never
+            # challenged here. Going through the shared helper is what keeps
+            # the four sign-in paths from drifting apart again.
+            challenge = await self._second_factor_challenge(user)
+            if challenge is not None:
+                return challenge
 
         return await self._create_session(user, ip, user_agent)
 
