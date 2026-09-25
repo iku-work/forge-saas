@@ -1,0 +1,11 @@
+# The Content-Security-Policy in Caddyfile.prod carries a sha256 of the inline
+# theme-boot script in apps/web/index.html (see F-004 there), and a browser
+# hashes the exact bytes it receives. With git's default autocrlf those bytes
+# are CRLF in a Windows checkout and LF in the Linux build that actually
+# ships -- two different hashes for one script, so the policy would be right
+# on one platform and silently wrong on the other.
+#
+# Pinning the file to LF makes the hash machine-independent, which is what
+# lets the hash be a committed constant that a test can check rather than
+# something regenerated per build.
+apps/web/index.html text eol=lf

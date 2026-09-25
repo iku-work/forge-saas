@@ -246,8 +246,29 @@ services:
     # `docker compose config`, not assumed.
     image: ${CADDY_IMAGE:-caddy:2-alpine}
     restart: unless-stopped
-    env_file:
-      - ./backend/.env
+    # An explicit allowlist, never `env_file: ./backend/.env`. That file holds
+    # JWT_PRIVATE_KEY, ENCRYPTION_KEY, DATABASE_URL, STRIPE_SECRET_KEY and
+    # every other application secret, and handing the whole of it to the one
+    # container the internet can reach meant an edge compromise yielded token
+    # forgery, database access and decryption -- none of which Caddy needs to
+    # terminate TLS and proxy. It needs exactly these four, and all four are
+    # hostnames or CIDRs.
+    #
+    # Adding anything here is a decision about blast radius, not a
+    # convenience: tests/test_caddy_config.py fails the build if a name
+    # outside this list appears, and if a name the Caddyfiles *do* use goes
+    # missing.
+    #
+    # Empty is not the same as unset. Compose passes a set-but-empty variable
+    # through as the empty string, and Caddy then uses "" rather than the
+    # `{$VAR:default}` fallback -- which for MARKETING_DOMAIN produces a site
+    # block with no address and stops the whole edge, app host included. See
+    # docs/runbooks/deploy-render.md.
+    environment:
+      DOMAIN: ${DOMAIN:?DOMAIN must be set — see backend/.env.example}
+      MARKETING_DOMAIN: ${MARKETING_DOMAIN:-marketing.localhost}
+      STORAGE_DOMAIN: ${STORAGE_DOMAIN:-storage.localhost}
+      CADDY_TRUSTED_PROXIES: ${CADDY_TRUSTED_PROXIES:-10.0.0.0/8 172.16.0.0/12 192.168.0.0/16}
     volumes:
       - caddy_data:/data
     ports:

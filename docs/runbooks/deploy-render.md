@@ -136,6 +136,29 @@ if it fails. Do the other half by hand the first time, because a green
 - The negative check: hit the backend service's own Render URL directly. If it
   answers, it is reachable without going through your edge, and the TLS/header
   guarantees above are bypassable.
+- **The app origin's document headers.** `curl -sI https://$PROD_DOMAIN/` must
+  show `content-security-policy`, `x-frame-options`, `x-content-type-options`,
+  `referrer-policy` and `permissions-policy`. These come from the edge, not
+  from `app.middleware.security_headers` — that middleware protects API
+  responses and never sees the SPA's HTML, which Caddy serves straight off
+  disk. On Render, where there is no Caddy, the platform or CDN must supply
+  them; nothing in this repo will.
+- **Then open the app with the browser console visible and use it.** The CSP
+  is enforced, not report-only, and the two directives most likely to be
+  wrong for a given deployment are `img-src` and `connect-src`: an avatar is
+  either a presigned URL on your storage host or an absolute one from an
+  OAuth provider, and an upload POSTs directly to the storage host. The
+  template ships both as `https:`, which is permissive enough to work
+  anywhere and looser than a deployment that knows its own origins should
+  settle for. Narrow them in `Caddyfile.prod` once you know them, and re-run
+  this check — a blocked upload is silent apart from the console.
+
+  `script-src` is the part that must stay strict. It is `'self'` plus one
+  hash, which covers the inline theme-boot script in `apps/web/index.html`
+  (that script has to run before first paint, so it cannot become an external
+  file). Editing that script changes its hash and blocks it; the symptom is a
+  white flash into a dark app, and `backend/tests/test_caddy_config.py` fails
+  the build before it can reach you.
 
 ## Rollback
 
@@ -178,8 +201,39 @@ Two DNS records, two certificates, one edge:
 
 | Host | Serves | Where it is configured |
 |---|---|---|
-| `example.com` (apex) | `apps/marketing/dist`, statically | `MARKETING_DOMAIN` in `backend/.env` |
-| `app.example.com` | the API and the SPA | `DOMAIN` in `backend/.env` |
+| `example.com` (apex) | `apps/marketing/dist`, statically | `MARKETING_DOMAIN` in `backend/.env` **and** the compose `.env` |
+| `app.example.com` | the API and the SPA | `DOMAIN` in `backend/.env` **and** the compose `.env` |
+
+**Both names have to be in two places, and that is deliberate.** The edge
+container no longer takes `env_file: ./backend/.env`. That file holds
+`JWT_PRIVATE_KEY`, `ENCRYPTION_KEY`, `DATABASE_URL` and `STRIPE_SECRET_KEY`,
+and handing all of it to the one container the internet can reach meant an
+edge compromise yielded token forgery, database access and decryption — none
+of which Caddy needs in order to terminate TLS and proxy. It now gets an
+explicit allowlist of four non-secret values: `DOMAIN`, `MARKETING_DOMAIN`,
+`STORAGE_DOMAIN`, `CADDY_TRUSTED_PROXIES`.
+
+Compose interpolates `${...}` only from the shell and from the compose
+project's own `.env` (see `.env.example` at the repo root) — never from
+`backend/.env`, which it treats purely as a container env file. So those four
+must be in the root `.env` as well. `DOMAIN` has no default and compose
+refuses to start without it, which is the intended failure: an edge that
+booted on a fallback hostname would serve the wrong certificate.
+
+After deploying this change, confirm the edge is clean:
+
+```
+docker compose -f docker-compose.prod.yml exec caddy env | grep -E 'JWT|ENCRYPTION|DATABASE|STRIPE'
+```
+
+Expect no output. `backend/tests/test_caddy_config.py` fails the build if the
+allowlist grows a name the Caddyfiles do not use, or loses one they do.
+
+**Rotate afterwards.** These values were readable from an internet-facing
+container. There is no evidence anything read them, but the cheap move is to
+assume otherwise: `docs/runbooks/credential-rotation.md` covers the JWT and
+integration keys, and `docs/runbooks/encryption-key-rotation.md` covers
+`ENCRYPTION_KEY`, which rotates with no downtime via `ENCRYPTION_KEY_OLD`.
 
 **DNS.** An `A`/`AAAA` record for the apex and one for `app.`, both pointing at
 the host running the stack. Caddy obtains a certificate per hostname over
