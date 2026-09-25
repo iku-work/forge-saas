@@ -181,6 +181,19 @@ services:
       timeout: 10s
       retries: 5
       start_period: 180s # first boot downloads the virus definition database
+    # Measured, not guessed: 955 MiB resident with the database loaded, 167 MB
+    # of signatures on disk, 149 MB image. Nearly all of that memory is the
+    # signature set itself, so it is resident from boot rather than
+    # proportional to scanning.
+    #
+    # The limit is 2G rather than ~1.2G because of freshclam: clamd's default
+    # ConcurrentDatabaseReload loads the *new* database before releasing the
+    # old one, so memory roughly doubles for the duration of a reload -- which
+    # happens unattended, several times a day. A limit sized to steady state
+    # is a limit that OOM-kills the scanner on a schedule. If 2G is too much
+    # for the host, set `ConcurrentDatabaseReload no` in clamd.conf instead of
+    # lowering this: reloads then block scans briefly rather than doubling.
+    mem_limit: 2g
     networks:
       - forge-net
 
