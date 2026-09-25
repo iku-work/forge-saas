@@ -160,6 +160,48 @@ if it fails. Do the other half by hand the first time, because a green
   white flash into a dark app, and `backend/tests/test_caddy_config.py` fails
   the build before it can reach you.
 
+## Restarting one service on the compose host
+
+`docker compose` composes the **set of files you pass it**, and nothing warns
+you when that set is smaller than the one a container was created with. The
+missing overlays' contributions — bind mounts especially — are simply absent
+from the recreated container.
+
+This happened on 2026-09-25 and took the API down for about eight minutes.
+`docker compose -f docker-compose.prod.yml up -d --force-recreate backend worker`
+looks complete and is not: this host's stack was created with the TLS and
+host-build overlays too. Dropping the TLS one dropped `./certs:/certs:ro`, so
+`rediss://redis:6379/0?ssl_ca_certs=/certs/ca.crt` could not open its CA and
+every request touching Redis answered 500.
+
+**The failure is quiet in the worst way.** `docker ps` reported the backend
+*healthy* throughout, because its healthcheck hits `/health`, which touches
+nothing. `/health/ready` was the only endpoint telling the truth, and the SPA
+and marketing site stayed up because Caddy serves those off disk — so the
+site looked fine while every API call failed.
+
+Recover the real set from a container you have **not** recreated, rather than
+from memory or from this document:
+
+```bash
+docker inspect forge-caddy-1   --format '{{index .Config.Labels "com.docker.compose.project.config_files"}}'
+```
+
+Then pass all of them:
+
+```bash
+docker compose -f docker-compose.prod.yml   -f docker-compose.tls.yml -f docker-compose.host-build.yml   up -d --force-recreate backend worker
+```
+
+Afterwards, check the labels match what you started from, and check
+`/health/ready` rather than the container's health badge:
+
+```bash
+docker inspect forge-backend-1   --format '{{index .Config.Labels "com.docker.compose.project.config_files"}}'
+curl -s -o /dev/null -w '%{http_code}
+' https://$PROD_DOMAIN/health/ready
+```
+
 ## Rollback
 
 CI rolls itself back: its step 5 calls Render's rollback endpoint with the
