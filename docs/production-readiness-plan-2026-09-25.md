@@ -19,7 +19,10 @@ verifiable locally, against the Docker compose stack, without a green pipeline.
 | 1.2 Real SHA-256 | **Done.** Computed in the scan worker from the bytes it scans. |
 | 1.3 Scanner fails closed | **Done.** Unknown hash raises; `virustotal` refused outside dev. |
 | 1.4 Deletion job | **Done.** Implemented, registered, plus a reconciliation sweep and a test that every enqueued job name resolves. |
-| 2 onwards | Not started. |
+| 2.1 One session-issuance policy | **Done.** All four sign-in paths consult one helper; magic link, social OAuth and SSO each had a different hole. Web magic-link page finishes the challenge; api-client regenerated. |
+| 2.2 `amr`/`sid` claims | Not started. |
+| 2.3 Immediate revocation | Not started. |
+| 3 onwards | Not started. |
 
 **Deploying this build to the box is a breaking change for it.** The box runs
 `VIRUS_SCANNER=virustotal`, and this build refuses to start on that outside
