@@ -39,7 +39,11 @@ from app.models._mixins import utcnow
 from app.modules.audit.service import AuditService
 from app.modules.auth.models import User
 from app.modules.auth.permissions import ROLE_PERMISSIONS, Permission
-from app.modules.auth.repository import UserRepository, WebAuthnCredentialRepository
+from app.modules.auth.repository import (
+    SessionRepository,
+    UserRepository,
+    WebAuthnCredentialRepository,
+)
 from app.modules.auth.utils import AccessTokenPayload, bearer_token, verify_access_token
 from app.modules.tenancy.models import Membership, Organization
 from app.modules.tenancy.repository import MembershipRepository, OrganizationRepository
@@ -102,6 +106,28 @@ async def resolve_user_from_token(
         # revocation) lands here -- distinct from refresh-token rotation
         # (SessionRepository), which revokes a whole session, not one jti.
         raise AuthenticationError("errors.token_revoked", fallback="Token has been revoked")
+    if (
+        payload.sid is not None
+        and await SessionRepository(session).get_usable_by_id(payload.sid) is None
+    ):
+        # Repository audit finding 6. Revoking a session used to revoke only
+        # the *refresh* half: the access tokens already issued from it kept
+        # working until they expired, so "sign out all devices" was a promise
+        # about the next fifteen minutes rather than containment of a stolen
+        # bearer token. Every revocation path -- logout, logout-all, device
+        # revocation, password reset, refresh-token theft detection -- writes
+        # `revoked_at`, so all of them land here with nothing extra to
+        # remember.
+        #
+        # `sid is None` is not a bypass to be tightened later. It is how an
+        # impersonation token looks (T-142 issues no refresh token, so there
+        # is no session to check; the jti blocklist above is its revocation
+        # path), and how a token minted before this claim existed looks while
+        # it drains after a deploy.
+        raise AuthenticationError(
+            "errors.session_invalid",
+            fallback="Your session is no longer valid. Please log in again.",
+        )
     # T-218: stashed for require_recent_auth below to read without decoding
     # the token a second time -- FastAPI dedups get_current_user across
     # dependencies within one request, so this always runs first.

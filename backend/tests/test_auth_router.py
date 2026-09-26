@@ -1150,3 +1150,102 @@ async def test_cancel_email_change_invalid_token_returns_401(client: httpx.Async
 # which distinct target/user the test used, making the two limits
 # indistinguishable over HTTP. test_auth_service_email_change.py's
 # test_request_email_change_target_rate_limited exercises it directly instead.
+
+
+# --- revocation takes issued access tokens with it ------------------------------------
+#
+# Repository audit finding 6. Revoking a session revoked only the *refresh*
+# half: access tokens already issued from it kept working until they expired,
+# so "sign out all devices" was a promise about the next fifteen minutes
+# rather than containment of a stolen bearer token. The token now carries its
+# session's id, and every revocation path writes `revoked_at`.
+
+
+async def _login_bearer(client: httpx.AsyncClient, user: User) -> dict[str, str]:
+    """A bearer header from a *real* login, so the token carries a `sid`.
+
+    `_auth_header` mints one directly and has no session behind it, which is
+    the shape an impersonation token has -- useful elsewhere, useless here.
+    """
+    response = await client.post(
+        "/api/v1/auth/login", json={"email": user.email, "password": _VALID_PASSWORD}
+    )
+    assert response.status_code == 200, response.text
+    client.cookies.clear()
+    return {"Authorization": f"Bearer {response.json()['data']['access_token']}"}
+
+
+async def test_a_bearer_token_stops_working_the_moment_its_session_is_revoked(
+    client: httpx.AsyncClient, verified_user: User
+) -> None:
+    bearer = await _login_bearer(client, verified_user)
+    assert (await client.get("/api/v1/auth/me", headers=bearer)).status_code == 200
+
+    assert (await client.post("/api/v1/auth/logout-all", headers=bearer)).status_code == 200
+
+    # The assertion that was previously false: not "after it expires", now.
+    assert (await client.get("/api/v1/auth/me", headers=bearer)).status_code == 401
+
+
+async def test_revoking_one_device_leaves_the_others_signed_in(
+    client: httpx.AsyncClient, verified_user: User, session_repo: SessionRepository
+) -> None:
+    # Each login's session is identified by diffing the active set around it,
+    # not by ordering on created_at: two logins in one test land in the same
+    # clock tick often enough that "the older row" picks the wrong one, which
+    # is how the first version of this test managed to revoke a session and
+    # then assert against the token that was still valid.
+    before = {s.id for s in await session_repo.list_active_for_user(verified_user.id)}
+    first = await _login_bearer(client, verified_user)
+    after_first = {s.id for s in await session_repo.list_active_for_user(verified_user.id)}
+    first_session = (after_first - before).pop()
+
+    second = await _login_bearer(client, verified_user)
+    assert len(await session_repo.list_active_for_user(verified_user.id)) == 2
+
+    # Revoked through the endpoint the security page actually calls, rather
+    # than through the repository: `SessionRepository.revoke` only flushes,
+    # and each request gets its own session, so a repository-level revoke in
+    # the test transaction is invisible to the request under test.
+    revoked = await client.delete(f"/api/v1/auth/sessions/{first_session}", headers=second)
+    assert revoked.status_code == 200, revoked.text
+
+    assert (await client.get("/api/v1/auth/me", headers=first)).status_code == 401
+    assert (await client.get("/api/v1/auth/me", headers=second)).status_code == 200
+
+
+async def test_a_rotated_token_outlives_the_session_the_rotation_revoked(
+    client: httpx.AsyncClient, verified_user: User
+) -> None:
+    """The regression guard for minting order.
+
+    A refresh revokes the old session and creates its successor. The new
+    access token has to name the *successor* -- if it named the session that
+    was just revoked, every refresh would hand back a token that was already
+    dead, and the whole app would log itself out every fifteen minutes.
+    """
+    login = await client.post(
+        "/api/v1/auth/login", json={"email": verified_user.email, "password": _VALID_PASSWORD}
+    )
+    assert login.status_code == 200
+
+    refreshed = await client.post("/api/v1/auth/refresh")
+    assert refreshed.status_code == 200, refreshed.text
+    rotated = {"Authorization": f"Bearer {refreshed.json()['data']['access_token']}"}
+
+    assert (await client.get("/api/v1/auth/me", headers=rotated)).status_code == 200
+
+
+async def test_a_token_with_no_session_still_resolves(
+    client: httpx.AsyncClient, verified_user: User
+) -> None:
+    """`sid` absent is not a token to reject.
+
+    It is how an impersonation token looks -- T-142 issues one with no
+    refresh token, so there is no session to check and the jti blocklist is
+    its revocation path -- and how a token minted before the claim existed
+    looks while it drains after a deploy.
+    """
+    response = await client.get("/api/v1/auth/me", headers=_auth_header(verified_user))
+
+    assert response.status_code == 200

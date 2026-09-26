@@ -396,9 +396,10 @@ class AuthService:
     async def _create_session(self, user: User, ip: str, user_agent: str) -> tuple[str, str, User]:
         settings = get_settings()
         now = utcnow()
-        access_token = create_access_token(user.id, None, (), auth_time=now)
         refresh_plain, refresh_hash = generate_refresh_token()
-        await self._sessions.create(
+        # The session is created *before* the access token, not after, because
+        # the token now carries that session's id -- see AccessTokenPayload.sid.
+        session = await self._sessions.create(
             user_id=user.id,
             token_hash=refresh_hash,
             device_label=describe_device(user_agent),
@@ -407,6 +408,7 @@ class AuthService:
             expires_at=now + timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS),
             auth_time=now,
         )
+        access_token = create_access_token(user.id, None, (), auth_time=now, sid=session.id)
         return access_token, refresh_plain, user
 
     async def refresh(self, refresh_token_plain: str, ip: str, user_agent: str) -> tuple[str, str]:
@@ -452,9 +454,12 @@ class AuthService:
 
         await self._sessions.revoke(session.id)
 
-        access_token = create_access_token(session.user_id, None, (), auth_time=session.auth_time)
         refresh_plain, refresh_hash = generate_refresh_token()
-        await self._sessions.create(
+        # As in _create_session: the successor session has to exist before the
+        # token that names it. A rotation mints a token bound to the *new*
+        # session, so revoking the old one does not take the fresh token with
+        # it.
+        rotated = await self._sessions.create(
             user_id=session.user_id,
             token_hash=refresh_hash,
             # The chain keeps the identity it was created with -- a rotation
@@ -471,6 +476,9 @@ class AuthService:
             # target ASVS V3.3.2 asks for.
             expires_at=session.expires_at,
             auth_time=session.auth_time,
+        )
+        access_token = create_access_token(
+            session.user_id, None, (), auth_time=session.auth_time, sid=rotated.id
         )
 
         return access_token, refresh_plain

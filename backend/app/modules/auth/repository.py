@@ -176,6 +176,26 @@ class SessionRepository:
         result = await self.session.execute(stmt)
         return result.scalar_one_or_none()
 
+    async def get_usable_by_id(self, session_id: UUID) -> SessionModel | None:
+        """A still-usable session by id, or None if it is revoked or expired.
+
+        This is the read behind every authenticated request: an access token
+        carries its session's id (`AccessTokenPayload.sid`), and this is what
+        turns revoking that session into the token ceasing to work *now*
+        rather than whenever it happened to expire.
+
+        Deliberately uncached, and deliberately the same
+        `usable_session_clauses` every other caller uses. `get_current_org`
+        already accepts one uncached membership lookup per request for
+        exactly this reason -- a revoked membership has to stop working on
+        the next request, not at the end of a TTL -- and a revoked session is
+        the same class of fact.
+        """
+        m = cast("Any", SessionModel)
+        stmt = select(SessionModel).where(m.id == session_id, *usable_session_clauses())
+        result = await self.session.execute(stmt)
+        return result.scalar_one_or_none()
+
     async def revoke(self, session_id: UUID) -> None:
         session_obj = await self._get_or_raise(session_id)
         session_obj.revoked_at = utcnow()

@@ -146,6 +146,18 @@ class AccessTokenPayload:
     # always sets `exp`, so there is no token this can legitimately be missing
     # from, and a default would only ever paper over a decode bug.
     expires_at: datetime = field(kw_only=True)
+    # The Session row this token was minted from, so a revoked session can
+    # take its already-issued access tokens down with it rather than leaving
+    # them usable until they expire (repository audit finding 6: "sign out
+    # all devices" was not containment, it was a 15-minute promise).
+    #
+    # `None` has two legitimate meanings and both must keep working:
+    #   - an impersonation token (T-142), which is deliberately issued with
+    #     no refresh token and therefore has no session at all. It is revoked
+    #     through the jti blocklist instead.
+    #   - a token minted before this claim existed, still in flight during a
+    #     deploy. Those drain within one access-token lifetime.
+    sid: UUID | None = field(default=None, kw_only=True)
 
 
 def create_access_token(  # noqa: PLR0913 -- T-218 adds auth_time on top of T-142's existing impersonator_id/expire_minutes
@@ -156,6 +168,7 @@ def create_access_token(  # noqa: PLR0913 -- T-218 adds auth_time on top of T-14
     impersonator_id: UUID | None = None,
     expire_minutes: int | None = None,
     auth_time: datetime | None = None,
+    sid: UUID | None = None,
 ) -> str:
     settings = get_settings()
     now = datetime.now(UTC)
@@ -174,6 +187,11 @@ def create_access_token(  # noqa: PLR0913 -- T-218 adds auth_time on top of T-14
         # or json.dumps chokes on a raw datetime.
         "auth_time": (auth_time or now).timestamp(),
     }
+    if sid is not None:
+        # Omitted rather than set to null for an impersonation token: absence
+        # is what get_current_user reads as "this token has no session to
+        # check", and a null would have to mean the same thing twice.
+        claims["sid"] = str(sid)
     if impersonator_id is not None:
         claims["impersonator_id"] = str(impersonator_id)
     return jwt.encode(claims, settings.JWT_PRIVATE_KEY, algorithm=_JWT_ALGORITHM)
@@ -228,6 +246,7 @@ def verify_access_token(token: str) -> AccessTokenPayload:
         org = claims.get("org")
         impersonator_id = claims.get("impersonator_id")
         auth_time = claims.get("auth_time")
+        sid = claims.get("sid")
         return AccessTokenPayload(
             user_id=UUID(claims["sub"]),
             org_id=UUID(org) if org is not None else None,
@@ -240,6 +259,7 @@ def verify_access_token(token: str) -> AccessTokenPayload:
                 else datetime.fromtimestamp(claims["iat"], tz=UTC)
             ),
             expires_at=datetime.fromtimestamp(claims["exp"], tz=UTC),
+            sid=UUID(sid) if sid is not None else None,
         )
     except (JWTError, KeyError, ValueError, TypeError) as exc:
         raise AuthenticationError(
