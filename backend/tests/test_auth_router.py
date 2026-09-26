@@ -1142,14 +1142,19 @@ async def test_cancel_email_change_invalid_token_returns_401(client: httpx.Async
 
 
 # The per-target-address rate limit (AuthService._check_email_change_target_
-# rate_limit) isn't re-exercised at the HTTP layer here: every request in this
-# module's `client` shares one source address, and app.middleware.rate_limit's
-# _key_func falls back to get_remote_address whenever request.state.user_id
-# isn't set (which it never is in this codebase) -- so sensitive_limit's own
-# 3/minute-per-address cap would trip on the same 4th request regardless of
-# which distinct target/user the test used, making the two limits
-# indistinguishable over HTTP. test_auth_service_email_change.py's
+# rate_limit) isn't re-exercised at the HTTP layer here: these requests are
+# all one authenticated user, so sensitive_limit's own 3/minute cap trips on
+# the same 4th request whichever distinct target address the test names,
+# making the two limits indistinguishable over HTTP.
+# test_auth_service_email_change.py's
 # test_request_email_change_target_rate_limited exercises it directly instead.
+#
+# (This used to say the two were indistinguishable because _key_func always
+# fell back to the source address, "which it never is in this codebase" --
+# true at the time, and the bug: nothing set request.state.user_id, so every
+# authenticated caller shared one per-IP bucket. _key_func reads the bearer
+# token now. The conclusion here survives the fix because one user is still
+# one bucket; the reason it gave does not.)
 
 
 # --- revocation takes issued access tokens with it ------------------------------------

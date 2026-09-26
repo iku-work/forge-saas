@@ -20,9 +20,29 @@ verifiable locally, against the Docker compose stack, without a green pipeline.
 | 1.3 Scanner fails closed | **Done.** Unknown hash raises; `virustotal` refused outside dev. |
 | 1.4 Deletion job | **Done.** Implemented, registered, plus a reconciliation sweep and a test that every enqueued job name resolves. |
 | 2.1 One session-issuance policy | **Done.** All four sign-in paths consult one helper; magic link, social OAuth and SSO each had a different hole. Web magic-link page finishes the challenge; api-client regenerated. |
-| 2.2 `amr`/`sid` claims | Not started. |
-| 2.3 Immediate revocation | Not started. |
+| 2.2 `sid` claim | **Done.** Access tokens name their session. |
+| 2.2 `amr` claim | **Deferred deliberately — see below.** |
+| 2.3 Immediate revocation | **Done.** Every revocation path kills issued access tokens now, not in 15 minutes. |
 | 3 onwards | Not started. |
+
+**Why `amr` is deferred rather than done.** Its purpose is letting
+`require_superadmin` check that the current session *completed* a second
+factor, instead of checking that one is *enrolled*. Two things changed the
+calculus after 2.1 landed:
+
+- 2.1 already makes every sign-in path challenge an enrolled user, so for an
+  enrolled superadmin "enrolled" now implies "was challenged". `amr` turns an
+  inference into a proof, which is real defence-in-depth but not an open hole.
+- It cannot be done without a migration. `amr` has to survive refresh
+  rotation, and the only reason `auth_time` does is that it is a column on
+  `Session`. So this is a schema change plus a deploy step, for a marginal
+  gain over what 2.1 delivers.
+
+Meanwhile Stage 3 has two P1s that *are* open holes: single-use tokens and
+refresh rotation are not atomic, and general rate limiting keys on an
+attribute nothing ever sets, so every authenticated user is limited by IP.
+Those come first. Pick `amr` up with the next migration that ships for
+another reason.
 
 **Deploying this build to the box is a breaking change for it.** The box runs
 `VIRUS_SCANNER=virustotal`, and this build refuses to start on that outside

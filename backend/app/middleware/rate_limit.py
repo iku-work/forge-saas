@@ -1,4 +1,4 @@
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 from fastapi import FastAPI
 from limits.strategies import RateLimiter
@@ -11,10 +11,48 @@ from starlette.responses import JSONResponse
 
 from app.core.config import get_settings
 from app.core.envelope import Envelope, ErrorBody, Meta
+from app.core.exceptions import AuthenticationError
+from app.modules.auth.utils import verify_access_token
+
+
+def _authenticated_user_id(request: Request) -> UUID | None:
+    """The caller's user id, read from the bearer token itself.
+
+    Not from `request.state`. This used to read `request.state.user_id`, and
+    **nothing in the application ever set it** -- so the branch below was
+    dead and every authenticated request was limited by IP address. Two
+    people behind one office NAT shared a budget; one person on a phone and
+    a laptop got two. The per-user limit §0.6 describes did not exist.
+
+    It cannot come from a dependency either, which is why the first fix that
+    suggests itself does not work: `SlowAPIMiddleware` runs during the
+    middleware phase, before FastAPI has solved a single dependency, so
+    anything `get_current_user` stashes arrives too late to key on. Reading
+    the header here has no ordering relationship to anything.
+
+    This is *identity for throttling only*, and deliberately tolerant: a
+    token that fails to verify returns None and the caller falls back to the
+    IP, exactly as an anonymous request does. Authentication itself is still
+    `get_current_user`'s job, done again, properly, with the blocklist and
+    session checks this has no business repeating. The duplicated signature
+    verification is the cost, and it is the same RS256 verify the dependency
+    does moments later.
+
+    An API key (`fk_live_...`) is not a JWT, so it lands on the IP fallback
+    here -- its own per-key budget is app.modules.api_keys.rate_limit's, and
+    that one knows which key it is.
+    """
+    scheme, _, token = request.headers.get("authorization", "").partition(" ")
+    if scheme.lower() != "bearer" or not token:
+        return None
+    try:
+        return verify_access_token(token).user_id
+    except AuthenticationError:
+        return None
 
 
 def _key_func(request: Request) -> str:
-    user_id = getattr(request.state, "user_id", None)
+    user_id = _authenticated_user_id(request)
     if user_id is not None:
         return f"user:{user_id}"
     return get_remote_address(request)
