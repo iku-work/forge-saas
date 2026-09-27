@@ -233,7 +233,14 @@ class AuthService:
                 fallback="Invalid or expired verification token",
             )
 
-        await self._email_verification_tokens.mark_used(record.id)
+        if not await self._email_verification_tokens.consume(record.id):
+            # Lost the race to another request presenting the same
+            # token. Same answer a replay gets, because that is what
+            # it is -- see _TokenRepository.consume.
+            raise AuthenticationError(
+                "errors.invalid_verification_token",
+                fallback="Invalid or expired verification token",
+            )
         await self._users.mark_email_verified(record.user_id)
         return user
 
@@ -452,7 +459,17 @@ class AuthService:
                 fallback="Your session is no longer valid. Please log in again.",
             )
 
-        await self._sessions.revoke(session.id)
+        if not await self._sessions.revoke_if_active(session.id):
+            # Another request rotated this same session between the check
+            # above and here. One refresh token, two successors -- which is
+            # either a client racing itself or the theft this detector is
+            # for, and there is no way to tell them apart from here. Treat it
+            # as theft, exactly as a presented-after-revocation token is.
+            await self._sessions.revoke_all_for_user(session.user_id)
+            raise AuthenticationError(
+                "errors.session_invalid",
+                fallback="Your session is no longer valid. Please log in again.",
+            )
 
         refresh_plain, refresh_hash = generate_refresh_token()
         # As in _create_session: the successor session has to exist before the
@@ -511,7 +528,13 @@ class AuthService:
                 "errors.invalid_reset_token", fallback="Invalid or expired reset token"
             )
 
-        await self._password_reset_tokens.mark_used(record.id)
+        if not await self._password_reset_tokens.consume(record.id):
+            # Lost the race to another request presenting the same
+            # token. Same answer a replay gets, because that is what
+            # it is -- see _TokenRepository.consume.
+            raise AuthenticationError(
+                "errors.invalid_reset_token", fallback="Invalid or expired reset token"
+            )
         await self._users.update(
             user.id, hashed_password=await _hash_password_off_loop(new_password)
         )
@@ -554,7 +577,13 @@ class AuthService:
                 "errors.invalid_magic_link", fallback="Invalid or expired magic link"
             )
 
-        await self._magic_link_tokens.mark_used(record.id)
+        if not await self._magic_link_tokens.consume(record.id):
+            # Lost the race to another request presenting the same
+            # token. Same answer a replay gets, because that is what
+            # it is -- see _TokenRepository.consume.
+            raise AuthenticationError(
+                "errors.invalid_magic_link", fallback="Invalid or expired magic link"
+            )
 
         # The token is spent either way: it proved control of the inbox, and
         # that is all it was ever good for. Whether that is enough to issue a
@@ -885,7 +914,14 @@ class AuthService:
                 "errors.conflict", fallback="This email address is no longer available"
             )
 
-        await self._email_change_tokens.mark_used(record.id)
+        if not await self._email_change_tokens.consume(record.id):
+            # Lost the race to another request presenting the same
+            # token. Same answer a replay gets, because that is what
+            # it is -- see _TokenRepository.consume.
+            raise AuthenticationError(
+                "errors.invalid_email_change_token",
+                fallback="This email change link is invalid or has expired",
+            )
         old_email = user.email
         # Sent to the *old* address before the mutation below -- the User
         # object this method holds and the one UserRepository.update()
@@ -1130,18 +1166,33 @@ class AuthService:
             )
             await self._enqueue_security_notification_email(user, "totp_replay_rejected")
             return False
-        await self._totp_secrets.mark_step_consumed(record.user_id, step)
+        if not await self._totp_secrets.mark_step_consumed(record.user_id, step):
+            # Another request consumed this step (or a newer one) between the
+            # comparison above and here -- the same replay, arriving
+            # concurrently rather than sequentially.
+            logger.warning(
+                "auth.totp: concurrent replay rejected (user_id=%s, step=%s)",
+                record.user_id,
+                step,
+            )
+            await self._enqueue_security_notification_email(user, "totp_replay_rejected")
+            return False
         return True
 
     async def _consume_backup_code(self, record: TOTPSecret, code: str) -> bool:
-        hashed_codes: list[str] = json.loads(record.backup_codes_hash)
+        original = record.backup_codes_hash
+        hashed_codes: list[str] = json.loads(original)
         for hashed in hashed_codes:
             if await _verify_password_off_loop(code, hashed):
                 hashed_codes.remove(hashed)
-                await self._totp_secrets.update_backup_codes(
-                    record.user_id, json.dumps(hashed_codes)
+                # Compare-and-swap against the exact list we read. Losing
+                # means another request spent a code while argon2 was
+                # verifying this one -- seconds, at these parameters -- and
+                # writing our copy would put theirs back. Refusing is the
+                # safe side: the user retries with an unspent code.
+                return await self._totp_secrets.swap_backup_codes(
+                    record.user_id, expected=original, replacement=json.dumps(hashed_codes)
                 )
-                return True
         return False
 
     async def list_webauthn_credentials(self, user_id: UUID) -> list[WebAuthnCredential]:

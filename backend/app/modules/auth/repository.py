@@ -12,7 +12,7 @@ from datetime import datetime
 from typing import Any, ClassVar, Protocol, cast
 from uuid import UUID
 
-from sqlalchemy import CursorResult, delete, func, select, tuple_
+from sqlalchemy import CursorResult, delete, func, or_, select, tuple_, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import NotFoundError
@@ -201,6 +201,31 @@ class SessionRepository:
         session_obj.revoked_at = utcnow()
         await self.session.flush()
 
+    async def revoke_if_active(self, session_id: UUID) -> bool:
+        """Revoke a session, returning whether this caller is the one that did.
+
+        The atomic half of refresh-token rotation. `refresh()` used to check
+        `revoked_at is None` in Python and revoke a few statements later, so
+        two refreshes presenting the same token could both pass the check and
+        both rotate -- producing two live successor sessions from one refresh
+        token, with the theft detector silent because neither ever saw a
+        revoked row.
+
+        Losing this race is not a retry. It means the token was presented
+        twice concurrently, which is either a client bug or precisely the
+        theft the detector exists for, and `refresh()` treats it as theft.
+        """
+        m = cast("Any", SessionModel)
+        stmt = (
+            update(SessionModel)
+            .where(m.id == session_id, m.revoked_at.is_(None))
+            .values(revoked_at=utcnow())
+            .execution_options(synchronize_session=False)
+        )
+        result = await self.session.execute(stmt)
+        await self.session.flush()
+        return cast("CursorResult[Any]", result).rowcount == 1
+
     async def revoke_all_for_user(self, user_id: UUID, *, except_id: UUID | None = None) -> None:
         # T-216: except_id lets change_password() keep the session the
         # request itself is authenticated with alive while revoking every
@@ -376,10 +401,55 @@ class TOTPSecretRepository:
         record.backup_codes_hash = backup_codes_hash
         await self.session.flush()
 
-    async def mark_step_consumed(self, user_id: UUID, step: int) -> None:
-        record = await self._get_or_raise(user_id)
-        record.last_consumed_step = step
+    async def swap_backup_codes(self, user_id: UUID, *, expected: str, replacement: str) -> bool:
+        """Compare-and-swap the backup-code list, returning whether we won.
+
+        The list is one JSON column, and spending a code is read-modify-write
+        over the whole of it: load, remove one entry, write it all back. Two
+        requests doing that concurrently produce a last-writer-wins result --
+        the same code accepted twice, or worse, a *different* code that the
+        loser had removed reappearing in the winner's copy.
+
+        `expected` is the exact string the caller read. If the row still
+        holds it, nobody else has spent a code since, and the swap is safe.
+        If not, the caller is working from a stale list and must not write.
+        """
+        m = cast("Any", TOTPSecret)
+        stmt = (
+            update(TOTPSecret)
+            .where(m.user_id == user_id, m.backup_codes_hash == expected)
+            .values(backup_codes_hash=replacement)
+            .execution_options(synchronize_session=False)
+        )
+        result = await self.session.execute(stmt)
         await self.session.flush()
+        return cast("CursorResult[Any]", result).rowcount == 1
+
+    async def mark_step_consumed(self, user_id: UUID, step: int) -> bool:
+        """Advance the replay watermark, returning whether this caller did.
+
+        Monotonic on purpose: the UPDATE only matches when `step` is strictly
+        newer than what is stored. That makes the read-compare-write in
+        `_verify_totp_and_track_replay` safe against itself -- two requests
+        submitting the same code both read the old watermark and both decide
+        the code is fresh, and this is what stops both of them acting on it.
+
+        A False here means the step was already consumed, which is the replay
+        the caller is checking for.
+        """
+        m = cast("Any", TOTPSecret)
+        stmt = (
+            update(TOTPSecret)
+            .where(
+                m.user_id == user_id,
+                or_(m.last_consumed_step.is_(None), m.last_consumed_step < step),
+            )
+            .values(last_consumed_step=step)
+            .execution_options(synchronize_session=False)
+        )
+        result = await self.session.execute(stmt)
+        await self.session.flush()
+        return cast("CursorResult[Any]", result).rowcount == 1
 
     async def disable(self, user_id: UUID) -> None:
         record = await self._get_or_raise(user_id)
@@ -503,19 +573,40 @@ class _TokenRepository[T: _SingleUseToken]:
         result = await self.session.execute(stmt)
         return result.scalar_one_or_none()
 
-    async def mark_used(self, token_id: UUID) -> None:
+    async def consume(self, token_id: UUID) -> bool:
+        """Spend the token, returning whether *this* caller was the one who did.
+
+        Single-use has to mean single-use under concurrency, and the previous
+        version could not deliver that: it SELECTed the row, assigned
+        `used_at` in Python, and flushed. Two requests arriving together both
+        read `used_at IS NULL`, both assigned, and both proceeded -- so one
+        magic link signed in twice, and one password-reset link reset a
+        password twice.
+
+        The condition now lives in the UPDATE. Postgres serialises the two
+        statements on the row, the second re-evaluates `used_at IS NULL`
+        against the committed result of the first, and matches nothing. The
+        loser gets False and the caller raises the same "invalid or expired"
+        error a replay gets, which is exactly what it is.
+
+        `rowcount` rather than RETURNING because no caller needs the row
+        back: each already read it for its own checks, and re-reading it here
+        would only invite someone to trust the stale copy.
+        """
         m = cast("Any", self.model)
-        stmt = select(self.model).where(m.id == token_id)
+        stmt = (
+            update(self.model)
+            .where(m.id == token_id, m.used_at.is_(None))
+            .values(used_at=utcnow())
+            # The in-memory copy is deliberately not synchronised: callers
+            # hold a row they read *before* this ran, and nothing downstream
+            # reads `used_at` off it. 'auto' would issue an extra SELECT to
+            # keep a value nobody looks at current.
+            .execution_options(synchronize_session=False)
+        )
         result = await self.session.execute(stmt)
-        token = result.scalar_one_or_none()
-        if token is None:
-            raise NotFoundError(
-                "errors.resource_not_found",
-                fallback=f"{self.model.__name__} not found",
-                params={"resource": self.model.__name__},
-            )
-        token.used_at = utcnow()
         await self.session.flush()
+        return cast("CursorResult[Any]", result).rowcount == 1
 
     async def delete_expired(self) -> int:
         m = cast("Any", self.model)

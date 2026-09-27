@@ -7,7 +7,8 @@ cross-tenant isolation to check; the focus here is correct filtering
 mutating methods raise NotFoundError on a missing id.
 """
 
-from collections.abc import AsyncGenerator
+import asyncio
+from collections.abc import AsyncGenerator, Awaitable, Callable
 from datetime import UTC, datetime, timedelta
 from typing import Any
 from uuid import uuid4
@@ -27,6 +28,7 @@ from app.modules.auth.models import (
     EmailVerificationToken,
     MagicLinkToken,
     PasswordResetToken,
+    TOTPSecret,
     User,
 )
 from app.modules.auth.models import (
@@ -37,6 +39,7 @@ from app.modules.auth.repository import (
     MagicLinkTokenRepository,
     PasswordResetTokenRepository,
     SessionRepository,
+    TOTPSecretRepository,
     UserRepository,
     _TokenRepository,
 )
@@ -48,6 +51,7 @@ _TABLES = [
     EmailVerificationToken.__table__,
     PasswordResetToken.__table__,
     MagicLinkToken.__table__,
+    TOTPSecret.__table__,
 ]
 
 
@@ -665,19 +669,35 @@ async def test_token_get_by_hash_excludes_used(
         user_id=existing_user.id, token_hash="hash-used", expires_at=_future()
     )
 
-    await repo.mark_used(created.id)
+    assert await repo.consume(created.id) is True
 
     assert await repo.get_by_hash("hash-used") is None
 
 
 @pytest.mark.parametrize("repo_cls", _TOKEN_REPO_CLASSES)
-async def test_token_mark_used_raises_not_found_for_missing(
+async def test_token_consume_reports_false_for_a_missing_row(
     repo_cls: type[_TokenRepository[Any]], session: AsyncSession
 ) -> None:
+    # False rather than NotFoundError, which is what `mark_used` raised.
+    # Consuming is now a race the caller can lose, and "the row is gone" and
+    # "somebody else spent it first" are the same answer to the caller: this
+    # token is not yours to use.
     repo = repo_cls(session)
 
-    with pytest.raises(NotFoundError):
-        await repo.mark_used(uuid4())
+    assert await repo.consume(uuid4()) is False
+
+
+@pytest.mark.parametrize("repo_cls", _TOKEN_REPO_CLASSES)
+async def test_token_consume_is_refused_the_second_time(
+    repo_cls: type[_TokenRepository[Any]], session: AsyncSession, existing_user: User
+) -> None:
+    repo = repo_cls(session)
+    created = await repo.create(
+        user_id=existing_user.id, token_hash=f"hash-twice-{uuid4()}", expires_at=_future()
+    )
+
+    assert await repo.consume(created.id) is True
+    assert await repo.consume(created.id) is False
 
 
 @pytest.mark.parametrize("repo_cls", _TOKEN_REPO_CLASSES)
@@ -696,3 +716,166 @@ async def test_token_delete_expired_deletes_only_expired(
     # just hidden by that filter.
     assert await session.get(repo.model, kept.id) is not None
     assert await session.get(repo.model, gone.id) is None
+
+
+# --- consumption under concurrency ------------------------------------------------
+#
+# Repository audit finding 4. Single-use tokens and refresh rotation both
+# read a row, decided in Python that it was unused, and wrote a few
+# statements later. Two requests arriving together both passed the check.
+#
+# These are the tests that finding asked for and the suite did not have:
+# two independent connections, a barrier so both reach the write at the same
+# moment, and an assertion that exactly one wins. The existing replay tests
+# are sequential, and a sequential test cannot fail on a race.
+
+
+async def _run_concurrently(
+    test_engine: AsyncEngine,
+    work: Callable[[AsyncSession], Awaitable[bool]],
+) -> list[bool]:
+    """Run `work` twice on separate connections, released together.
+
+    Each task commits: the losing UPDATE only sees the winner's effect once
+    that transaction has committed, so a test that held both open would
+    deadlock rather than demonstrate anything.
+    """
+    factory = async_sessionmaker(test_engine, expire_on_commit=False, class_=AsyncSession)
+    barrier = asyncio.Barrier(2)
+
+    async def attempt() -> bool:
+        async with factory() as own_session:
+            await barrier.wait()
+            won = await work(own_session)
+            await own_session.commit()
+            return won
+
+    return list(await asyncio.gather(attempt(), attempt()))
+
+
+@pytest.mark.parametrize("repo_cls", _TOKEN_REPO_CLASSES)
+async def test_two_requests_racing_one_token_consume_it_once(
+    repo_cls: type[_TokenRepository[Any]],
+    test_engine: AsyncEngine,
+    session: AsyncSession,
+    existing_user: User,
+) -> None:
+    """One magic link, two clicks at once, one sign-in.
+
+    Before the conditional UPDATE this returned [True, True] -- the link
+    worked twice, and so did a password-reset link, which is the same code
+    path with a password write on the end of it.
+    """
+    token_hash = f"hash-race-{uuid4()}"
+    created = await repo_cls(session).create(
+        user_id=existing_user.id, token_hash=token_hash, expires_at=_future()
+    )
+    await session.commit()
+
+    outcomes = await _run_concurrently(test_engine, lambda s: repo_cls(s).consume(created.id))
+
+    assert sorted(outcomes) == [False, True], f"expected exactly one winner, got {outcomes}"
+
+
+async def test_two_requests_racing_one_refresh_token_rotate_it_once(
+    test_engine: AsyncEngine, session: AsyncSession, existing_user: User
+) -> None:
+    """The half with a security consequence rather than a correctness one.
+
+    Two successors from one refresh token is not just a duplicate: it is the
+    exact situation the theft detector exists to catch, and with the check in
+    Python neither request ever saw a revoked row, so it stayed silent.
+    """
+    created = await SessionRepository(session).create(
+        user_id=existing_user.id,
+        token_hash=f"refresh-race-{uuid4()}",
+        device_label="pytest",
+        ip_address="127.0.0.1",
+        user_agent="pytest",
+        expires_at=_future(minutes=60 * 24),
+        auth_time=datetime.now(UTC),
+    )
+    await session.commit()
+
+    outcomes = await _run_concurrently(
+        test_engine, lambda s: SessionRepository(s).revoke_if_active(created.id)
+    )
+
+    assert sorted(outcomes) == [False, True], f"expected exactly one winner, got {outcomes}"
+
+
+async def _make_totp(session: AsyncSession, user: User, *, codes: str = "[]") -> None:
+    repo = TOTPSecretRepository(session)
+    await repo.upsert_pending(user.id, "JBSWY3DPEHPK3PXP")
+    await repo.mark_enabled(user.id, codes)
+    await session.commit()
+
+
+async def test_two_requests_replaying_one_totp_code_consume_the_step_once(
+    test_engine: AsyncEngine, session: AsyncSession, existing_user: User
+) -> None:
+    """A TOTP code is single-use within its 30-second step.
+
+    `_verify_totp_and_track_replay` reads `last_consumed_step`, compares, and
+    writes -- so two requests submitting the same code both read the old
+    watermark and both concluded the code was fresh. The UPDATE only matches
+    a strictly newer step, so one of them loses.
+    """
+    await _make_totp(session, existing_user)
+
+    outcomes = await _run_concurrently(
+        test_engine,
+        lambda s: TOTPSecretRepository(s).mark_step_consumed(existing_user.id, 12345),
+    )
+
+    assert sorted(outcomes) == [False, True], f"expected exactly one winner, got {outcomes}"
+
+
+async def test_an_older_totp_step_never_rewinds_the_watermark(
+    session: AsyncSession, existing_user: User
+) -> None:
+    # Monotonic, not merely different: accepting an older step would reopen
+    # every code between it and the current watermark.
+    await _make_totp(session, existing_user)
+    repo = TOTPSecretRepository(session)
+
+    assert await repo.mark_step_consumed(existing_user.id, 500) is True
+    assert await repo.mark_step_consumed(existing_user.id, 499) is False
+    assert await repo.mark_step_consumed(existing_user.id, 500) is False
+    assert await repo.mark_step_consumed(existing_user.id, 501) is True
+
+
+async def test_two_requests_spending_backup_codes_do_not_clobber_each_other(
+    test_engine: AsyncEngine, session: AsyncSession, existing_user: User
+) -> None:
+    """The list is one JSON column, so spending a code rewrites all of it.
+
+    Last-writer-wins here does not merely double-spend one code: the loser's
+    removal is undone, so a code somebody already used is back in the list.
+    The swap is conditional on the exact list that was read.
+    """
+    await _make_totp(session, existing_user, codes='["a", "b"]')
+
+    outcomes = await _run_concurrently(
+        test_engine,
+        lambda s: TOTPSecretRepository(s).swap_backup_codes(
+            existing_user.id, expected='["a", "b"]', replacement='["b"]'
+        ),
+    )
+
+    assert sorted(outcomes) == [False, True], f"expected exactly one winner, got {outcomes}"
+
+
+async def test_a_backup_code_swap_from_a_stale_list_is_refused(
+    session: AsyncSession, existing_user: User
+) -> None:
+    await _make_totp(session, existing_user, codes='["a", "b"]')
+    repo = TOTPSecretRepository(session)
+
+    assert await repo.swap_backup_codes(
+        existing_user.id, expected='["a", "b"]', replacement='["b"]'
+    )
+    # A second caller still holding the two-entry list must not write it back.
+    assert not await repo.swap_backup_codes(
+        existing_user.id, expected='["a", "b"]', replacement='["a"]'
+    )
