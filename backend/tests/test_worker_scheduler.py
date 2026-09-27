@@ -546,6 +546,10 @@ async def test_create_scheduler_registers_all_jobs_in_utc(redis_client: Redis) -
         # org's subscription from Stripe, which is the system of record for
         # what somebody is actually being charged.
         "reconcile_subscriptions",
+        # The reconciliation half of StorageService.delete_file: the deferred
+        # hard-delete is one Redis entry seven days out, and anything that
+        # loses it loses the deletion silently.
+        "sweep_orphaned_objects",
         "refresh_active_sessions_gauge",
     }
     assert "hour='*/6'" in repr(jobs_by_id["cleanup_expired_sessions"].trigger)
@@ -564,6 +568,11 @@ async def test_create_scheduler_registers_all_jobs_in_utc(redis_client: Redis) -
     # An hour after the notification prune, so the two biggest delete sweeps
     # never contend for the same window.
     assert "hour='3'" in repr(jobs_by_id["prune_webhook_deliveries"].trigger)
+    # Daily, and an hour of its own: every row it finds is already past its
+    # grace period, so nothing is urgent -- but it shares the pool with the
+    # rest of these, and stacking them on one hour is how a slow one starves
+    # the next.
+    assert "hour='4'" in repr(jobs_by_id["sweep_orphaned_objects"].trigger)
     # Every five minutes, not hourly: it only re-enqueues deliveries that are
     # already due, and the case it exists for (a Redis restart that lost the
     # deferred jobs) otherwise strands every pending delivery until the next
