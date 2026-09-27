@@ -35,7 +35,11 @@ from loguru import logger
 
 from app.core import cache_keys
 from app.core.exceptions import ExternalServiceUnavailableError, UnprocessableEntityError
-from app.core.url_guard import UnsafeOutboundURLError, validate_outbound_url
+from app.core.url_guard import (
+    UnsafeOutboundURLError,
+    pinned_transport,
+    validate_outbound_url,
+)
 
 from .models import DISCOVERY_CACHE_TTL_SECONDS
 
@@ -56,7 +60,7 @@ class DiscoveryError(UnprocessableEntityError):
     """The discovery document is absent, unreadable, or not an OIDC one."""
 
 
-def new_client() -> httpx.AsyncClient:
+def new_client(transport: httpx.AsyncBaseTransport | None = None) -> httpx.AsyncClient:
     """The one place this module builds an HTTP client.
 
     A named function rather than an inline constructor purely so a test can
@@ -70,7 +74,7 @@ def new_client() -> httpx.AsyncClient:
     outbound guard never judged -- the same reason T-321's delivery job
     refuses them.
     """
-    return httpx.AsyncClient(timeout=_TIMEOUT_SECONDS, follow_redirects=False)
+    return httpx.AsyncClient(timeout=_TIMEOUT_SECONDS, follow_redirects=False, transport=transport)
 
 
 async def fetch_discovery(
@@ -143,7 +147,7 @@ async def _store(redis: Redis, key: str, document: dict[str, Any]) -> None:
 
 async def _get_json(url: str, *, what: str) -> dict[str, Any]:
     try:
-        safe_url = validate_outbound_url(url)
+        destination = await validate_outbound_url(url)
     except UnsafeOutboundURLError as exc:
         raise DiscoveryError(
             "errors.sso_unsafe_url",
@@ -152,8 +156,11 @@ async def _get_json(url: str, *, what: str) -> dict[str, Any]:
         ) from exc
 
     try:
-        async with new_client() as client:
-            response = await client.get(safe_url, headers={"accept": "application/json"})
+        # Pinned to the address the check approved. Without this the client
+        # resolves the hostname again and an attacker-controlled answer can
+        # differ from the one that was judged safe moments earlier.
+        async with new_client(pinned_transport(destination)) as client:
+            response = await client.get(destination.url, headers={"accept": "application/json"})
             response.raise_for_status()
             document: dict[str, Any] = response.json()
     except (httpx.HTTPError, json.JSONDecodeError, ValueError) as exc:

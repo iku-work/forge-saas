@@ -19,7 +19,6 @@ import json
 import socket
 from collections.abc import AsyncGenerator, Callable
 from datetime import timedelta
-from types import SimpleNamespace
 from typing import Any
 from uuid import UUID, uuid4
 
@@ -573,11 +572,10 @@ async def test_a_hostname_that_rebinds_to_a_private_ip_is_never_requested(
             raise socket.gaierror(socket.EAI_NONAME, "fake DNS: no such host")
         return [(socket.AF_INET, socket.SOCK_STREAM, 6, "", ("10.0.0.5", 0))]
 
-    monkeypatch.setattr(
-        url_guard,
-        "socket",
-        SimpleNamespace(getaddrinfo=_rebinding_getaddrinfo, gaierror=socket.gaierror),
-    )
+    async def _rebinding(host: str) -> list[object]:
+        return _rebinding_getaddrinfo(host)
+
+    monkeypatch.setattr(url_guard, "_getaddrinfo", _rebinding)
 
     await deliver_webhook(ctx, delivery_id=str(delivery.id))
 

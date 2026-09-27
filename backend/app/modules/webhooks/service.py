@@ -150,7 +150,7 @@ class WebhookEndpointService:
                 fallback=f"This organization is limited to {MAX_ENDPOINTS_PER_ORG} endpoints",
                 params={"limit": str(MAX_ENDPOINTS_PER_ORG)},
             )
-        url = self._validated_url(payload.url)
+        url = await self._validated_url(payload.url)
         event_types = self._parse_event_types(payload.event_types)
         secret = generate_secret()
         endpoint = await self._repo.create(
@@ -185,7 +185,7 @@ class WebhookEndpointService:
                 "errors.no_fields_to_update", fallback="No fields to update"
             )
         if "url" in changes and changes["url"] is not None:
-            changes["url"] = self._validated_url(changes["url"])
+            changes["url"] = await self._validated_url(changes["url"])
         if "event_types" in changes and changes["event_types"] is not None:
             changes["event_types"] = [
                 event.value for event in self._parse_event_types(changes["event_types"])
@@ -236,9 +236,9 @@ class WebhookEndpointService:
         await self._repo.soft_delete(endpoint_id)
         await self._log("webhook_endpoint.deleted", user_id, endpoint_id)
 
-    def _validated_url(self, url: str) -> str:
+    async def _validated_url(self, url: str) -> str:
         try:
-            return validate_outbound_url(url)
+            return (await validate_outbound_url(url)).url
         except UnsafeOutboundURLError as exc:
             raise UnprocessableEntityError(
                 "errors.unsafe_webhook_url",

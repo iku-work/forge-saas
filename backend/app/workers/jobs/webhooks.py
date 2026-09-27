@@ -55,7 +55,11 @@ from app.core.metrics import (
 )
 from app.core.module_loader import is_enabled
 from app.core.tracing import trace_job
-from app.core.url_guard import UnsafeOutboundURLError, validate_outbound_url
+from app.core.url_guard import (
+    UnsafeOutboundURLError,
+    pinned_transport,
+    validate_outbound_url,
+)
 from app.models._mixins import utcnow
 from app.modules.webhooks.models import (
     MAX_RESPONSE_BODY_CHARS,
@@ -123,7 +127,7 @@ async def deliver_webhook(ctx: dict[str, Any], *, delivery_id: str) -> None:
             return
 
         try:
-            url = validate_outbound_url(endpoint.url)
+            destination = await validate_outbound_url(endpoint.url)
         except UnsafeOutboundURLError as exc:
             # Dead immediately rather than retried: a URL that resolves
             # somewhere private will still resolve there in twelve hours, and
@@ -149,8 +153,15 @@ async def deliver_webhook(ctx: dict[str, Any], *, delivery_id: str) -> None:
             # default: a redirect is a *second* destination, and the guard
             # above only judged the first. Following one would be an SSRF hole
             # with an extra hop in it.
-            async with httpx.AsyncClient(timeout=_timeout(), follow_redirects=False) as client:
-                response = await client.post(url, content=body, headers=headers)
+            # Pinned to the address the guard approved a few statements ago:
+            # without it httpx resolves the hostname again, and the answer it
+            # gets is the attacker's to change between the two lookups.
+            async with httpx.AsyncClient(
+                timeout=_timeout(),
+                follow_redirects=False,
+                transport=pinned_transport(destination),
+            ) as client:
+                response = await client.post(destination.url, content=body, headers=headers)
         except httpx.HTTPError as exc:
             updated = await service.record_failure(
                 delivery, status_code=None, body=None, error=f"{type(exc).__name__}: {exc}"

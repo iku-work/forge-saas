@@ -48,6 +48,11 @@ from joserfc.errors import JoseError
 from joserfc.jwk import KeySet
 
 from app.core.exceptions import AuthenticationError
+from app.core.url_guard import (
+    UnsafeOutboundURLError,
+    pinned_transport,
+    validate_outbound_url,
+)
 
 from . import discovery as discovery_module
 
@@ -137,20 +142,42 @@ async def exchange_code(
     `transport` is the test seam the OAuth module already uses (see
     `_AuthlibOAuthClient`): a real caller never passes it, so production
     always talks to the real IdP over the network.
+
+    **The token endpoint gets the outbound guard, like every other URL this
+    module fetches.** It did not, and it is the worst one to miss: it comes
+    out of the discovery document, which comes from a URL an organisation
+    administrator supplies, and this request carries the client secret in its
+    body. An admin who pointed discovery at a document naming an internal
+    `token_endpoint` had the server POST that secret to it -- before the ID
+    token it gets back is validated at all.
+
+    `require_https=True` for the same reason: plaintext here hands the
+    client secret to anything on the path.
     """
+    try:
+        destination = await validate_outbound_url(
+            str(discovery["token_endpoint"]), require_https=True
+        )
+    except UnsafeOutboundURLError as exc:
+        raise AuthenticationError(
+            "errors.sso_unsafe_url",
+            fallback="This identity provider's token endpoint cannot be used",
+            params={"reason": str(exc)},
+        ) from exc
+
     kwargs: dict[str, Any] = {
         "scope": "openid email profile",
         "redirect_uri": redirect_uri,
         "timeout": _TOKEN_TIMEOUT_SECONDS,
+        # Pinned to the approved address unless a test supplies its own.
+        "transport": transport if transport is not None else pinned_transport(destination),
     }
-    if transport is not None:
-        kwargs["transport"] = transport
     async with AsyncOAuth2Client(
         connection.client_id, connection.client_secret, **kwargs
     ) as client:
         try:
             token = await client.fetch_token(
-                str(discovery["token_endpoint"]), code=code, grant_type="authorization_code"
+                destination.url, code=code, grant_type="authorization_code"
             )
         # Three trees, not one. `OAuth2Error` is authlib's *protocol* error and
         # `OAuthError` is its *client-integration* error -- they share no base

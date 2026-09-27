@@ -21,7 +21,6 @@ import json
 import socket
 from collections.abc import AsyncIterator, Callable
 from datetime import UTC, datetime, timedelta
-from types import SimpleNamespace
 from typing import Any
 from uuid import uuid4
 
@@ -67,7 +66,7 @@ _URL = "https://consumer.example.com/hook"
 # never reach getaddrinfo (see url_guard.py), so the SSRF cases below are
 # unaffected by the patch.
 #
-# It replaces the `socket` name *inside app.core.url_guard* rather than
+# It replaces `_getaddrinfo` *inside app.core.url_guard* rather than
 # `socket.getaddrinfo` globally, which test_url_guard.py can afford to do and
 # this file cannot: these tests hold a real Postgres connection, and a global
 # patch answers asyncpg's own lookup with a fabricated `(ip, 0)` sockaddr --
@@ -87,11 +86,10 @@ def _fake_getaddrinfo(host: str, *_args: object, **_kwargs: object) -> list[tupl
 
 @pytest.fixture(autouse=True)
 def _fake_dns(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(
-        url_guard,
-        "socket",
-        SimpleNamespace(getaddrinfo=_fake_getaddrinfo, gaierror=socket.gaierror),
-    )
+    async def _fake(host: str) -> list[object]:
+        return _fake_getaddrinfo(host)
+
+    monkeypatch.setattr(url_guard, "_getaddrinfo", _fake)
 
 
 @pytest.fixture(autouse=True)
