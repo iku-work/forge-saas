@@ -1,6 +1,6 @@
 import { http, HttpResponse } from "msw";
 import { screen } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { getApiBaseUrl } from "@forge/api-client";
 import { t } from "@forge/i18n";
@@ -10,6 +10,29 @@ import { renderApp } from "../../test/render";
 import { server } from "../../test/server";
 
 const API = getApiBaseUrl();
+
+/**
+ * Replace `window.location` with something that records `assign` calls.
+ *
+ * `defineProperty` rather than spreading the real `Location` onto a literal:
+ * it is a class instance, so a spread drops its prototype, and eslint stops
+ * that on sight. Restored in `afterEach` -- a leaked stub would make every
+ * later test in this file navigate into a mock.
+ */
+let originalLocation: PropertyDescriptor | undefined;
+
+function stubNavigation(): ReturnType<typeof vi.fn> {
+  originalLocation ??= Object.getOwnPropertyDescriptor(window, "location");
+  const assign = vi.fn();
+  Object.defineProperty(window, "location", { configurable: true, value: { assign } });
+  return assign;
+}
+
+afterEach(() => {
+  if (originalLocation) {
+    Object.defineProperty(window, "location", originalLocation);
+  }
+});
 
 /**
  * Consuming a magic link, including the case the backend only started
@@ -33,11 +56,7 @@ describe("MagicLinkPage consume", () => {
     );
     // The success path is a document navigation, so a test that reached it
     // by mistake would otherwise look like a pass.
-    const assign = vi.fn();
-    vi.spyOn(window, "location", "get").mockReturnValue({
-      ...window.location,
-      assign,
-    } as unknown as Location);
+    const assign = stubNavigation();
 
     renderApp({ initialPath: "/magic-link?token=abc" });
 
@@ -62,11 +81,7 @@ describe("MagicLinkPage consume", () => {
         ),
       ),
     );
-    const assign = vi.fn();
-    vi.spyOn(window, "location", "get").mockReturnValue({
-      ...window.location,
-      assign,
-    } as unknown as Location);
+    const assign = stubNavigation();
 
     renderApp({ initialPath: "/magic-link?token=abc" });
 
