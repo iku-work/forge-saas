@@ -23,7 +23,9 @@ verifiable locally, against the Docker compose stack, without a green pipeline.
 | 2.2 `sid` claim | **Done.** Access tokens name their session. |
 | 2.2 `amr` claim | **Deferred deliberately — see below.** |
 | 2.3 Immediate revocation | **Done.** Every revocation path kills issued access tokens now, not in 15 minutes. |
-| 3 onwards | Not started. |
+| 3.1 Atomic consumption | **Done.** Tokens, refresh rotation, TOTP replay watermark and backup codes, with two-connection race tests. |
+| 3.2 Rate-limit identity | **Done.** Per-user budgets exist; the per-org budget is still outstanding. |
+| 4 onwards | Not started. |
 
 **Why `amr` is deferred rather than done.** Its purpose is letting
 `require_superadmin` check that the current session *completed* a second
