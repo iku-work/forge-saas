@@ -38,7 +38,6 @@ import pytest
 from alembic import command
 from alembic.config import Config
 from sqlmodel import SQLModel
-from testcontainers.postgres import PostgresContainer
 
 from app.core import migrations as migration_runner
 from app.core import module_loader
@@ -52,6 +51,7 @@ from app.core.modules import EnabledModules, ModuleConfig
 # app.modules.* imports the scaffold too.
 from app.modules._template.models import Item as TemplateItem
 from product import config as product_config
+from tests._database import DatabaseHandle
 
 _REAL_ALEMBIC_DIR = Path(__file__).parent.parent / "alembic"
 
@@ -70,13 +70,17 @@ def _clear_modules_cache() -> Generator[None]:
 
 
 @pytest.fixture
-def postgres_container() -> Generator[PostgresContainer]:
-    with PostgresContainer("postgres:16-alpine") as container:
-        yield container
+def postgres_container(fresh_database: object) -> object:
+    """A per-test database on the shared server (see tests/conftest.py).
+
+    These tests migrate an empty schema, so they need a clean database
+    each -- which is what this is. It used to be a whole container each.
+    """
+    return fresh_database
 
 
 @pytest.fixture
-def real_config(postgres_container: PostgresContainer, monkeypatch: pytest.MonkeyPatch) -> Config:
+def real_config(postgres_container: DatabaseHandle, monkeypatch: pytest.MonkeyPatch) -> Config:
     url = postgres_container.get_connection_url().replace("psycopg2", "asyncpg")
     monkeypatch.setenv("DATABASE_URL", url)
     get_settings.cache_clear()
@@ -382,7 +386,7 @@ def test_enabling_billing_later_creates_tables_from_scratch(
 
 @pytest.fixture
 def blank_alembic_config(
-    tmp_path: Path, postgres_container: PostgresContainer, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path, postgres_container: DatabaseHandle, monkeypatch: pytest.MonkeyPatch
 ) -> Config:
     alembic_dir = tmp_path / "alembic"
     (alembic_dir / "versions").mkdir(parents=True)

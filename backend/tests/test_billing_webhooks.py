@@ -37,7 +37,6 @@ from sqlalchemy.ext.asyncio import (
     create_async_engine,
 )
 from sqlmodel import SQLModel
-from testcontainers.postgres import PostgresContainer
 
 from app.core.config import get_settings
 from app.core.db import get_session
@@ -45,6 +44,7 @@ from app.main import app
 from app.modules.billing.models import Plan, Subscription, WebhookEvent
 from app.modules.billing.repository import WebhookEventRepository
 from app.modules.billing.service import BillingService
+from tests._database import DatabaseHandle
 
 # T-291: this file needs billing enabled -- its routes, its tables, or
 # both. CI's module-matrix job deselects it in the combination that turns
@@ -54,16 +54,10 @@ pytestmark = pytest.mark.module_dependent
 _TABLES = [Plan.__table__, Subscription.__table__, WebhookEvent.__table__]
 
 
-@pytest.fixture(scope="module")
-def postgres_container() -> "PostgresContainer":
-    with PostgresContainer("postgres:16-alpine") as container:
-        yield container
-
-
 # Function-scoped (not module-scoped): see test_auth_repository.py -- an
 # asyncpg-backed engine can't be reused across pytest-asyncio's per-test loop.
 @pytest.fixture
-async def test_engine(postgres_container: "PostgresContainer") -> AsyncGenerator[AsyncEngine, None]:
+async def test_engine(postgres_container: DatabaseHandle) -> AsyncGenerator[AsyncEngine, None]:
     url = postgres_container.get_connection_url().replace("psycopg2", "asyncpg")
     engine = create_async_engine(url)
     async with engine.begin() as conn:

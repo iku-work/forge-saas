@@ -40,7 +40,6 @@ from sqlalchemy.ext.asyncio import (
     create_async_engine,
 )
 from sqlmodel import SQLModel
-from testcontainers.postgres import PostgresContainer
 from testcontainers.redis import RedisContainer
 
 from app.modules.audit.models import AuditEvent
@@ -53,6 +52,7 @@ from app.modules.notifications.service import NotificationService
 from app.modules.tenancy.models import Organization
 from app.workers.jobs import notifications as notifications_job_module
 from app.workers.jobs.notifications import send_push
+from tests._database import DatabaseHandle
 
 _TABLES = [
     User.__table__,
@@ -73,12 +73,6 @@ _FI_TITLE = "Maksu epäonnistui"
 
 
 @pytest.fixture(scope="module")
-def postgres_container() -> "PostgresContainer":
-    with PostgresContainer("postgres:16-alpine") as container:
-        yield container
-
-
-@pytest.fixture(scope="module")
 def redis_container() -> "RedisContainer":
     with RedisContainer("redis:7-alpine") as container:
         yield container
@@ -87,7 +81,7 @@ def redis_container() -> "RedisContainer":
 # Function-scoped (not module-scoped): see test_auth_repository.py -- an
 # asyncpg-backed engine can't be reused across pytest-asyncio's per-test loop.
 @pytest.fixture
-async def test_engine(postgres_container: "PostgresContainer") -> AsyncGenerator[AsyncEngine, None]:
+async def test_engine(postgres_container: DatabaseHandle) -> AsyncGenerator[AsyncEngine, None]:
     url = postgres_container.get_connection_url().replace("psycopg2", "asyncpg")
     engine = create_async_engine(url)
     async with engine.begin() as conn:

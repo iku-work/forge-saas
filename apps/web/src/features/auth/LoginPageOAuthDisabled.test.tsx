@@ -22,6 +22,10 @@ describe("LoginPage (oauth module disabled)", () => {
           envelope({
             ...fixtureConfig,
             modules: { ...fixtureConfig.modules, oauth: false },
+            // The server empties this whenever the module is off, so the
+            // fixture does too -- leaving providers listed here would
+            // describe a response the backend cannot produce.
+            oauth_providers: [],
           }),
         ),
       ),

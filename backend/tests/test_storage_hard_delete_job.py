@@ -3,10 +3,13 @@ app.workers.jobs.storage: the physical deletion that StorageService.delete_file
 has been enqueueing, by name, since T-112 -- against a worker that had no
 function by that name. Every deleted file's object stayed in the bucket.
 
-Two entry points, both idempotent and both re-checking `deleted_at` before
-they touch anything: `hard_delete_stored_file` (the deferred job, seven days
-after the soft delete) and `sweep_orphaned_objects` (the daily
-reconciliation pass for the ones whose deferred job was lost).
+Three entry points. Two are idempotent and both re-check `deleted_at`
+before they touch anything: `hard_delete_stored_file` (the deferred job,
+seven days after the soft delete) and `sweep_orphaned_objects` (the daily
+reconciliation pass for the ones whose deferred job was lost). The third,
+`expire_abandoned_uploads`, is the other half of counting pending uploads
+toward the storage quota -- without it a client that starts an upload and
+closes the tab holds its org's allowance down forever.
 
 Same real-Postgres testcontainers shape as test_virus_scan_job.py: the job
 module's own `async_session_factory` is monkeypatched onto a dedicated test
@@ -30,20 +33,22 @@ from sqlalchemy.ext.asyncio import (
     create_async_engine,
 )
 from sqlmodel import SQLModel
-from testcontainers.postgres import PostgresContainer
 
 from app.models._mixins import utcnow
 from app.modules.auth.models import User
 from app.modules.billing.models import Plan
 from app.modules.storage.models import StoredFile
+from app.modules.storage.quota import UPLOAD_RESERVATION_WINDOW
 from app.modules.storage.service import HARD_DELETE_GRACE_PERIOD
 from app.modules.tenancy.models import Organization
 from app.workers.jobs import storage as storage_job_module
 from app.workers.jobs.storage import (
+    expire_abandoned_uploads,
     hard_delete_stored_file,
     rescan_unscanned_files,
     sweep_orphaned_objects,
 )
+from tests._database import DatabaseHandle
 
 pytestmark = pytest.mark.module_dependent  # stored_file
 
@@ -55,14 +60,8 @@ _TABLES = [
 ]
 
 
-@pytest.fixture(scope="module")
-def postgres_container() -> "PostgresContainer":
-    with PostgresContainer("postgres:16-alpine") as container:
-        yield container
-
-
 @pytest.fixture
-async def test_engine(postgres_container: "PostgresContainer") -> AsyncGenerator[AsyncEngine, None]:
+async def test_engine(postgres_container: DatabaseHandle) -> AsyncGenerator[AsyncEngine, None]:
     url = postgres_container.get_connection_url().replace("psycopg2", "asyncpg")
     engine = create_async_engine(url)
     async with engine.begin() as conn:
@@ -454,3 +453,123 @@ async def test_the_cursor_is_stable_when_rows_share_a_timestamp(
         pytest.fail("cursor never reached the end of the table -- it is not advancing")
 
     assert len(seen) == len(set(seen))
+
+
+# --- expire_abandoned_uploads ----------------------------------------------------------------
+#
+# Counting a pending row toward the quota (app.modules.storage.quota) is
+# what stops concurrent presigns spending the same free space twice. This
+# job is what stops that fix becoming a leak: a reservation nobody confirms
+# has to be given back.
+
+
+async def _make_pending_upload(session: AsyncSession, *, age: timedelta) -> StoredFile:
+    stored = await _make_file(session)
+    stored.status = "pending"
+    stored.virus_scan_result = None
+    stored.created_at = utcnow() - age
+    session.add(stored)
+    await session.commit()
+    return stored
+
+
+async def test_an_abandoned_presign_is_retired(
+    session: AsyncSession,
+    session_factory: async_sessionmaker[AsyncSession],
+    ctx: dict[str, Any],
+    enqueued_jobs: list[tuple[str, dict[str, Any]]],
+) -> None:
+    stored = await _make_pending_upload(
+        session, age=UPLOAD_RESERVATION_WINDOW + timedelta(minutes=5)
+    )
+
+    await expire_abandoned_uploads(ctx)
+
+    async with session_factory() as verify:
+        refreshed = await verify.get(StoredFile, stored.id)
+        assert refreshed is not None
+        assert refreshed.deleted_at is not None
+    # Soft-deleted, then handed to the same physical-deletion path every
+    # other deletion uses -- and without the seven-day defer, because there
+    # is no user decision here to undo.
+    assert ("hard_delete_stored_file", {"file_id": stored.id}) in enqueued_jobs
+
+
+async def test_an_upload_still_inside_its_window_is_left_alone(
+    session: AsyncSession,
+    session_factory: async_sessionmaker[AsyncSession],
+    ctx: dict[str, Any],
+    enqueued_jobs: list[tuple[str, dict[str, Any]]],
+) -> None:
+    """A presigned URL bounds when an upload may *start*, not when it must
+    finish. A PUT begun a minute before expiry can still be streaming, and
+    S3 will accept it -- so expiring early would uncount bytes that are
+    actively arriving."""
+    stored = await _make_pending_upload(
+        session, age=UPLOAD_RESERVATION_WINDOW - timedelta(minutes=5)
+    )
+
+    await expire_abandoned_uploads(ctx)
+
+    async with session_factory() as verify:
+        refreshed = await verify.get(StoredFile, stored.id)
+        assert refreshed is not None
+        assert refreshed.deleted_at is None
+    assert enqueued_jobs == []
+
+
+async def test_a_confirmed_file_is_never_expired(
+    session: AsyncSession,
+    session_factory: async_sessionmaker[AsyncSession],
+    ctx: dict[str, Any],
+) -> None:
+    """Only `pending` rows are reservations. An old `ready` file is just an
+    old file, and deleting one here would be data loss rather than cleanup
+    -- which is why the age check is paired with the status check and not
+    used alone."""
+    stored = await _make_file(session)
+    stored.created_at = utcnow() - UPLOAD_RESERVATION_WINDOW * 100
+    session.add(stored)
+    await session.commit()
+
+    await expire_abandoned_uploads(ctx)
+
+    async with session_factory() as verify:
+        refreshed = await verify.get(StoredFile, stored.id)
+        assert refreshed is not None
+        assert refreshed.deleted_at is None
+
+
+async def test_it_is_idempotent(
+    session: AsyncSession,
+    ctx: dict[str, Any],
+    enqueued_jobs: list[tuple[str, dict[str, Any]]],
+) -> None:
+    """The second tick must find nothing: the first one soft-deleted the
+    row, and the query excludes soft-deleted rows. Without that clause the
+    job would re-enqueue a hard delete every hour until the row was gone."""
+    await _make_pending_upload(session, age=UPLOAD_RESERVATION_WINDOW + timedelta(minutes=5))
+
+    await expire_abandoned_uploads(ctx)
+    first = len(enqueued_jobs)
+    await expire_abandoned_uploads(ctx)
+
+    assert len(enqueued_jobs) == first == 1
+
+
+async def test_it_drains_a_backlog_in_batches(
+    session: AsyncSession,
+    ctx: dict[str, Any],
+    monkeypatch: pytest.MonkeyPatch,
+    enqueued_jobs: list[tuple[str, dict[str, Any]]],
+) -> None:
+    """Bounded per tick, like the orphan sweep: a backlog is drained over
+    several runs rather than in one transaction holding a connection from a
+    pool of twenty."""
+    monkeypatch.setattr(storage_job_module, "_SWEEP_BATCH_SIZE", 2)
+    for _ in range(5):
+        await _make_pending_upload(session, age=UPLOAD_RESERVATION_WINDOW + timedelta(minutes=5))
+
+    await expire_abandoned_uploads(ctx)
+
+    assert len(enqueued_jobs) == 2

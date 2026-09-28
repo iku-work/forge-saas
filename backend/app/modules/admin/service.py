@@ -223,9 +223,7 @@ class AdminDirectoryService:
 
         file_count: int | None = None
         if is_enabled("file_storage"):
-            file_count = await StoredFileRepository(
-                self._session, org.id, self._redis
-            ).count_files_for_org()
+            file_count = await StoredFileRepository(self._session, org.id).count_files_for_org()
 
         recent_events, _ = await self._audit.list_cursor(org.id, limit=1)
         last_activity_at = recent_events[0].ts if recent_events else None

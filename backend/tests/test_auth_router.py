@@ -35,7 +35,6 @@ from sqlalchemy.ext.asyncio import (
     create_async_engine,
 )
 from sqlmodel import SQLModel
-from testcontainers.postgres import PostgresContainer
 from testcontainers.redis import RedisContainer
 
 from app.core.db import get_session
@@ -60,6 +59,7 @@ from app.modules.auth.repository import (
 )
 from app.modules.auth.utils import create_access_token, hash_password, hash_token
 from app.modules.product_settings.models import ProductSettings
+from tests._database import DatabaseHandle
 from tests._module_tables import with_module_hot_path_tables
 
 # Wrapped rather than listed: an enabled optional module reaches for tables
@@ -80,12 +80,6 @@ _PLATFORM_HEADER = "X-Client-Platform"
 
 
 @pytest.fixture(scope="module")
-def postgres_container() -> "PostgresContainer":
-    with PostgresContainer("postgres:16-alpine") as container:
-        yield container
-
-
-@pytest.fixture(scope="module")
 def redis_container() -> "RedisContainer":
     with RedisContainer("redis:7-alpine") as container:
         yield container
@@ -94,7 +88,7 @@ def redis_container() -> "RedisContainer":
 # Function-scoped (not module-scoped): see test_auth_repository.py — an
 # asyncpg-backed engine can't be reused across pytest-asyncio's per-test loop.
 @pytest.fixture
-async def test_engine(postgres_container: "PostgresContainer") -> AsyncGenerator[AsyncEngine, None]:
+async def test_engine(postgres_container: DatabaseHandle) -> AsyncGenerator[AsyncEngine, None]:
     url = postgres_container.get_connection_url().replace("psycopg2", "asyncpg")
     engine = create_async_engine(url)
     async with engine.begin() as conn:

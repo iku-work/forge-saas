@@ -24,3 +24,9 @@ scrape_configs:
   - job_name: forge-postgres
     static_configs:
       - targets: ["postgres-exporter:9187"]
+  # PROD-04: host disk and memory, so DiskSpaceLow in alerts.yml has
+  # something to read. Nothing else in this stack can see the host's
+  # filesystems -- a container's own view stops at its layer.
+  - job_name: forge-host
+    static_configs:
+      - targets: ["node-exporter:9100"]

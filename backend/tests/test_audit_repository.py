@@ -18,24 +18,19 @@ from sqlalchemy.ext.asyncio import (
     create_async_engine,
 )
 from sqlmodel import SQLModel
-from testcontainers.postgres import PostgresContainer
 
+from app.core.exceptions import InvalidCursorError
 from app.modules.audit.models import AuditEvent
 from app.modules.audit.repository import AuditRepository
+from tests._database import DatabaseHandle
 
 _TABLES = [AuditEvent.__table__]
-
-
-@pytest.fixture(scope="module")
-def postgres_container() -> "PostgresContainer":
-    with PostgresContainer("postgres:16-alpine") as container:
-        yield container
 
 
 # Function-scoped (not module-scoped): see test_tenancy_repository.py — an
 # asyncpg-backed engine can't be reused across pytest-asyncio's per-test loop.
 @pytest.fixture
-async def test_engine(postgres_container: "PostgresContainer") -> AsyncGenerator[AsyncEngine, None]:
+async def test_engine(postgres_container: DatabaseHandle) -> AsyncGenerator[AsyncEngine, None]:
     url = postgres_container.get_connection_url().replace("psycopg2", "asyncpg")
     engine = create_async_engine(url)
     async with engine.begin() as conn:
@@ -153,13 +148,13 @@ async def test_list_cursor_paginates_without_duplicates_in_order(repo: AuditRepo
     assert len(seen_ids) == 5
 
 
-async def test_list_cursor_with_cursor_from_other_org_returns_first_page(
-    repo: AuditRepository,
-) -> None:
+async def test_a_cursor_from_another_org_is_refused(repo: AuditRepository) -> None:
+    """Repo finding 13. Still unresolvable across tenants -- it just says so
+    instead of answering with org A's first page, which a client reading an
+    infinite feed appends as duplicates."""
     org_a, org_b = uuid4(), uuid4()
     other_org_event = await repo.create(action="theirs", resource_type="x", org_id=org_b)
-    mine = await repo.create(action="mine", resource_type="x", org_id=org_a)
+    await repo.create(action="mine", resource_type="x", org_id=org_a)
 
-    page, _ = await repo.list_cursor(org_a, after=other_org_event.id)
-
-    assert [e.id for e in page] == [mine.id]
+    with pytest.raises(InvalidCursorError):
+        await repo.list_cursor(org_a, after=other_org_event.id)

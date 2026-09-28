@@ -44,7 +44,6 @@ from sqlalchemy.ext.asyncio import (
     create_async_engine,
 )
 from sqlmodel import SQLModel
-from testcontainers.postgres import PostgresContainer
 from testcontainers.redis import RedisContainer
 
 from app.core.resilience import BREAKERS
@@ -57,6 +56,7 @@ from app.modules.storage.scanner import ScannerError, ScanResult
 from app.modules.tenancy.models import Organization
 from app.workers.jobs import virus_scan as virus_scan_module
 from app.workers.jobs.virus_scan import virus_scan
+from tests._database import DatabaseHandle
 
 # Bound at import, before the autouse `fake_download` fixture replaces the
 # module attribute -- the fetch tests at the bottom of this file drive the
@@ -75,19 +75,13 @@ _TABLES = [
 
 
 @pytest.fixture(scope="module")
-def postgres_container() -> "PostgresContainer":
-    with PostgresContainer("postgres:16-alpine") as container:
-        yield container
-
-
-@pytest.fixture(scope="module")
 def redis_container() -> "RedisContainer":
     with RedisContainer("redis:7-alpine") as container:
         yield container
 
 
 @pytest.fixture
-async def test_engine(postgres_container: "PostgresContainer") -> AsyncGenerator[AsyncEngine, None]:
+async def test_engine(postgres_container: DatabaseHandle) -> AsyncGenerator[AsyncEngine, None]:
     url = postgres_container.get_connection_url().replace("psycopg2", "asyncpg")
     engine = create_async_engine(url)
     async with engine.begin() as conn:

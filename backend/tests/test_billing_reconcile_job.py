@@ -30,7 +30,6 @@ from sqlalchemy.ext.asyncio import (
     create_async_engine,
 )
 from sqlmodel import SQLModel
-from testcontainers.postgres import PostgresContainer
 
 from app.models._mixins import utcnow
 from app.modules.audit.models import AuditEvent
@@ -39,6 +38,7 @@ from app.modules.billing.repository import SubscriptionRepository
 from app.modules.tenancy.models import Organization, OrgFeatureFlag
 from app.workers.jobs import billing as billing_job_module
 from app.workers.jobs.billing import reconcile_subscriptions
+from tests._database import DatabaseHandle
 
 _TABLES = [
     Organization.__table__,
@@ -55,14 +55,8 @@ _PERIOD_START = 1_700_000_000
 _PERIOD_END = 1_702_592_000
 
 
-@pytest.fixture(scope="module")
-def postgres_container() -> "PostgresContainer":
-    with PostgresContainer("postgres:16-alpine") as container:
-        yield container
-
-
 @pytest.fixture
-async def test_engine(postgres_container: "PostgresContainer") -> AsyncGenerator[AsyncEngine, None]:
+async def test_engine(postgres_container: DatabaseHandle) -> AsyncGenerator[AsyncEngine, None]:
     url = postgres_container.get_connection_url().replace("psycopg2", "asyncpg")
     engine = create_async_engine(url)
     async with engine.begin() as conn:

@@ -30,7 +30,6 @@ from sqlalchemy.ext.asyncio import (
     create_async_engine,
 )
 from sqlmodel import SQLModel
-from testcontainers.postgres import PostgresContainer
 from testcontainers.redis import RedisContainer
 
 from app.core.db import get_session
@@ -43,6 +42,7 @@ from app.modules.auth.utils import create_access_token
 from app.modules.billing.models import Plan
 from app.modules.notifications.models import Notification
 from app.modules.tenancy.models import Invitation, Membership, Organization
+from tests._database import DatabaseHandle
 from tests._module_tables import with_module_hot_path_tables
 
 # Wrapped rather than listed: an enabled optional module reaches for tables
@@ -58,12 +58,6 @@ _TABLES = with_module_hot_path_tables(
 
 
 @pytest.fixture(scope="module")
-def postgres_container() -> "PostgresContainer":
-    with PostgresContainer("postgres:16-alpine") as container:
-        yield container
-
-
-@pytest.fixture(scope="module")
 def redis_container() -> "RedisContainer":
     with RedisContainer("redis:7-alpine") as container:
         yield container
@@ -72,7 +66,7 @@ def redis_container() -> "RedisContainer":
 # Function-scoped (not module-scoped): see test_auth_repository.py -- an
 # asyncpg-backed engine can't be reused across pytest-asyncio's per-test loop.
 @pytest.fixture
-async def test_engine(postgres_container: "PostgresContainer") -> AsyncGenerator[AsyncEngine, None]:
+async def test_engine(postgres_container: DatabaseHandle) -> AsyncGenerator[AsyncEngine, None]:
     url = postgres_container.get_connection_url().replace("psycopg2", "asyncpg")
     engine = create_async_engine(url)
     async with engine.begin() as conn:
@@ -649,7 +643,7 @@ async def test_list_invitations_paginates_by_cursor(
     assert {i["id"] for i in first_page["data"]}.isdisjoint({i["id"] for i in second_page["data"]})
 
 
-async def test_list_invitations_ignores_a_cursor_from_another_org(  # noqa: PLR0913 — needs both orgs' users
+async def test_list_invitations_refuses_a_cursor_from_another_org(  # noqa: PLR0913 — needs both orgs' users
     client: httpx.AsyncClient,
     session: AsyncSession,
     user_a: User,
@@ -657,8 +651,13 @@ async def test_list_invitations_ignores_a_cursor_from_another_org(  # noqa: PLR0
     org_a: Organization,
     org_b: Organization,
 ) -> None:
-    """A cursor naming another org's invitation reads as 'no cursor' rather
-    than leaking where that row sits in the ordering."""
+    """A cursor naming another org's invitation is still unresolvable -- it
+    never leaks where that row sits in the ordering.
+
+    Repo finding 13 changed what unresolvable *does*: it used to read as
+    'no cursor', which is page one, and a client that asked to continue got
+    the rows it already had with a 200 on top. 422 is the honest answer.
+    """
     await _add_invitation(session, org_a, user_a, email="ours@example.com")
     theirs = await _add_invitation(session, org_b, user_b)
 
@@ -666,8 +665,10 @@ async def test_list_invitations_ignores_a_cursor_from_another_org(  # noqa: PLR0
         f"/api/v1/orgs/{org_a.id}/invitations?after={theirs.id}", headers=_auth_header(user_a)
     )
 
-    assert response.status_code == 200
-    assert [i["email"] for i in response.json()["data"]] == ["ours@example.com"]
+    assert response.status_code == 422
+    assert response.json()["error"]["code"] == "invalid_cursor"
+    # Nothing about the other org's row, not even its position.
+    assert response.json()["data"] is None
 
 
 # --- GET /invitations/{token} -------------------------------------------------------

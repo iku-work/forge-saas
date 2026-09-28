@@ -84,3 +84,81 @@ groups:
             Check that the ARQ worker is running and that `outbound_webhooks`
             is enabled in *its* configuration -- the delivery job no-ops when
             it is not. docs/runbooks/outbound-webhooks.md.
+
+      # PROD-06. The webhook alert above watches one module's queue; this
+      # watches the queue everything else shares -- email, virus scanning,
+      # GDPR export and deletion, push, key rotation. None of those fail
+      # loudly when the worker stops: the request that enqueued them already
+      # returned 200, so the only symptom is that nothing ever happens.
+      #
+      # Depth rather than age because ARQ does not expose a per-job age, and
+      # depth answers the question that matters: work is arriving and
+      # nothing is consuming it. A healthy worker drains a spike in seconds,
+      # so 50 sustained for ten minutes is not a busy period.
+      - alert: JobQueueNotDraining
+        expr: forge_arq_queue_depth > 50
+        for: 10m
+        labels:
+          severity: critical
+        annotations:
+          summary: "{{ $value }} background jobs queued and not draining"
+          description: >-
+            The ARQ queue has stayed above 50 for ten minutes. Email,
+            virus scanning and GDPR deletion all run here and all fail
+            silently -- the requests that enqueued them already succeeded.
+            Check `docker compose ps worker` and its healthcheck
+            (`arq --check`), then the worker log.
+
+      # The other half, and the one a depth alert cannot see: a worker that
+      # died with an empty queue. Depth stays at zero, every dashboard looks
+      # calm, and the first symptom is a customer asking where their email
+      # went. `up` is Prometheus's own per-target liveness sample.
+      - alert: WorkerDown
+        expr: up{job="forge-worker"} == 0
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "The background worker is not responding to scrapes"
+          description: >-
+            forge-worker has failed its metrics scrape for five minutes.
+            The queue may well be empty and every other dashboard calm --
+            that is what makes this the alert that matters. See
+            docs/runbooks/degraded-mode.md.
+
+      # PROD-04. The audit found 68% of 38 GB used with 13 GB of reclaimable
+      # Docker build cache and nothing watching it. A full disk on a
+      # single-box deployment is not a degraded mode: Postgres cannot write
+      # a WAL segment, so the database stops, and the recovery is manual.
+      #
+      # 20% warns, 10% pages. The gap exists because reclaiming space is
+      # usually `docker system prune` and takes a minute -- but only if
+      # someone is told before the disk is full rather than after.
+      - alert: DiskSpaceLow
+        expr: >-
+          node_filesystem_avail_bytes{fstype!~"tmpfs|overlay"}
+          / node_filesystem_size_bytes{fstype!~"tmpfs|overlay"} < 0.20
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: "{{ $labels.mountpoint }} is below 20% free"
+          description: >-
+            Reclaim space before this becomes an outage. `docker system
+            prune -af --volumes` is usually the answer on this box -- the
+            build cache was 13 GB when this was last measured. Check
+            /var/backups/forge too: BACKUP_RETENTION_DAYS may be longer than
+            the disk can carry.
+
+      - alert: DiskSpaceCritical
+        expr: >-
+          node_filesystem_avail_bytes{fstype!~"tmpfs|overlay"}
+          / node_filesystem_size_bytes{fstype!~"tmpfs|overlay"} < 0.10
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "{{ $labels.mountpoint }} is below 10% free"
+          description: >-
+            Postgres fails to write a WAL segment on a full disk and the
+            product stops. Reclaim space now.

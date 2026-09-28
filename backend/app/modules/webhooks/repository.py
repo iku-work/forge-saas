@@ -105,9 +105,11 @@ class WebhookDeliveryRepository(BaseRepository[WebhookDelivery]):
         if status is not None:
             stmt = stmt.where(m.status == status)
         if after is not None:
-            anchor = await self.get(after)
-            if anchor is not None:
-                stmt = stmt.where(tuple_(m.created_at, m.id) < (anchor.created_at, anchor.id))
+            # get_cursor_anchor, not get(): a soft-deleted delivery is still a
+            # valid position to page past, and an unresolvable cursor is an
+            # error rather than a silent reset to page one.
+            anchor = await self.get_cursor_anchor(after)
+            stmt = stmt.where(tuple_(m.created_at, m.id) < (anchor.created_at, anchor.id))
         rows = list((await self.session.execute(stmt)).scalars().all())
         page = rows[:capped]
         next_cursor = page[-1].id if page and len(rows) > capped else None

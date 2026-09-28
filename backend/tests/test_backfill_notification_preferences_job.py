@@ -27,26 +27,20 @@ from sqlalchemy.ext.asyncio import (
     create_async_engine,
 )
 from sqlmodel import SQLModel
-from testcontainers.postgres import PostgresContainer
 
 from app.modules.auth.models import User
 from app.modules.notifications.preferences import DEFAULT_PREFERENCES
 from app.workers.jobs import notifications as notifications_job_module
 from app.workers.jobs.notifications import backfill_notification_preferences
+from tests._database import DatabaseHandle
 
 _TABLES = [User.__table__]
 
 _CUSTOM_PREFERENCES = {"payment_failed": {"email": False, "in_app": True, "push": True}}
 
 
-@pytest.fixture(scope="module")
-def postgres_container() -> "PostgresContainer":
-    with PostgresContainer("postgres:16-alpine") as container:
-        yield container
-
-
 @pytest.fixture
-async def test_engine(postgres_container: "PostgresContainer") -> AsyncGenerator[AsyncEngine, None]:
+async def test_engine(postgres_container: DatabaseHandle) -> AsyncGenerator[AsyncEngine, None]:
     url = postgres_container.get_connection_url().replace("psycopg2", "asyncpg")
     engine = create_async_engine(url)
     async with engine.begin() as conn:

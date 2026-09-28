@@ -4,7 +4,10 @@
     "empty": "Aún no hay archivos. Sube uno para comenzar.",
     "error_load": "No se pudieron cargar los archivos.",
     "empty_title": "Aún no hay archivos",
-    "empty_body": "Los archivos que subas aquí son privados para tu organización y se analizan en busca de virus antes de que alguien pueda descargarlos. Usa el cargador de arriba para añadir el primero."
+    "empty_body": "Los archivos que subas aquí son privados para tu organización y se analizan en busca de virus antes de que alguien pueda descargarlos. Usa el cargador de arriba para añadir el primero.",
+    "error_download": "No se ha podido iniciar la descarga.",
+    "error_delete": "No se ha podido eliminar el archivo.",
+    "empty_body_read_only": "Nadie de tu organización ha subido un archivo todavía. Pide a un administrador que añada uno si lo necesitas."
   },
   "uploader": {
     "drop_here": "Suelta los archivos aquí",
@@ -31,14 +34,19 @@
     "pending": "Pendiente",
     "ready": "Listo",
     "infected": "Infectado",
-    "failed": "Fallido"
+    "failed": "Fallido",
+    "scanning": "Analizando"
   },
   "action": {
     "download": "Descargar",
     "delete": "Eliminar",
     "delete_confirm": "¿Eliminar este archivo?",
     "delete_confirm_title": "¿Eliminar este archivo?",
-    "delete_confirm_body": "{filename} se eliminará para todos los miembros de tu organización. Esta acción no se puede deshacer."
+    "delete_confirm_body": "{filename} se eliminará para todos los miembros de tu organización. Esta acción no se puede deshacer.",
+    "download_blocked_scanning": "Este archivo todavía se está analizando en busca de virus.",
+    "download_blocked_pending": "Esta subida aún no ha terminado.",
+    "download_blocked_infected": "Se ha detectado malware en este archivo, por lo que no se puede descargar.",
+    "download_blocked_failed": "No se ha podido analizar este archivo, por lo que no se puede descargar."
   },
   "picker": {
     "upload_button": "Subir",

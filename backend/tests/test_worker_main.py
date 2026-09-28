@@ -128,6 +128,7 @@ async def test_worker_startup_wires_redis_and_starts_scheduler() -> None:
             "sweep_due_webhook_deliveries",
             "reconcile_subscriptions",
             "sweep_orphaned_objects",
+            "expire_abandoned_uploads",
             "refresh_active_sessions_gauge",
         }
     finally:

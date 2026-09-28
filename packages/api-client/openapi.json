@@ -308,8 +308,19 @@
           "maintenance": {
             "$ref": "#/components/schemas/MaintenanceResponse"
           },
+          "marketing_url": {
+            "title": "Marketing Url",
+            "type": "string"
+          },
           "modules": {
             "$ref": "#/components/schemas/ModulesResponse"
+          },
+          "oauth_providers": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Oauth Providers",
+            "type": "array"
           },
           "primary_color": {
             "title": "Primary Color",
@@ -358,6 +369,8 @@
           "default_locale",
           "support_tool",
           "support_url",
+          "oauth_providers",
+          "marketing_url",
           "maintenance"
         ],
         "title": "ConfigResponse",
@@ -3820,6 +3833,13 @@
             "type": "integer"
           },
           "status": {
+            "enum": [
+              "pending",
+              "ready",
+              "infected",
+              "failed",
+              "deleted"
+            ],
             "title": "Status",
             "type": "string"
           },

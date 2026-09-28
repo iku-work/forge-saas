@@ -28,7 +28,6 @@ from sqlalchemy.ext.asyncio import (
     create_async_engine,
 )
 from sqlmodel import SQLModel
-from testcontainers.postgres import PostgresContainer
 from testcontainers.redis import RedisContainer
 
 from app.core.db import get_session
@@ -46,6 +45,7 @@ from app.modules.storage import service as storage_service_module
 from app.modules.storage.backend import PresignedUpload
 from app.modules.storage.models import StoredFile
 from app.modules.tenancy.models import Membership, Organization, OrgFeatureFlag
+from tests._database import DatabaseHandle
 
 # T-291: this file needs file_storage enabled -- its routes, its tables, or
 # both. CI's module-matrix job deselects it in the combination that turns
@@ -118,19 +118,13 @@ def fake_backend(monkeypatch: pytest.MonkeyPatch) -> _FakeStorageBackend:
 
 
 @pytest.fixture(scope="module")
-def postgres_container() -> "PostgresContainer":
-    with PostgresContainer("postgres:16-alpine") as container:
-        yield container
-
-
-@pytest.fixture(scope="module")
 def redis_container() -> "RedisContainer":
     with RedisContainer("redis:7-alpine") as container:
         yield container
 
 
 @pytest.fixture
-async def test_engine(postgres_container: "PostgresContainer") -> AsyncGenerator[AsyncEngine, None]:
+async def test_engine(postgres_container: DatabaseHandle) -> AsyncGenerator[AsyncEngine, None]:
     url = postgres_container.get_connection_url().replace("psycopg2", "asyncpg")
     engine = create_async_engine(url)
     async with engine.begin() as conn:

@@ -1,9 +1,11 @@
 # Backup/restore runbook (T-225)
 
-> **Status**: written, not yet executed against a live instance — see
-> "Verification status" at the bottom. Whoever first deploys this template to
-> a real Render account should run the restore drill once and update that
-> section, rather than trusting this document blind.
+> **Status**: the procedures are written and the self-hosted path now ships
+> working scripts (`scripts/backup-postgres.sh`, `scripts/restore-postgres.sh`),
+> but **no restore has been executed against a live instance** — see
+> "Verification status" at the bottom. Until that box is ticked this
+> document describes an intention, not a capability. Run the drill once,
+> record the timing, and tick it.
 
 Covers the two deployment paths this repo supports: Render (managed
 Postgres/Redis, `docs/runbooks/deploy-render.md`) and self-hosted
@@ -84,16 +86,94 @@ e.g. `docker run --rm -v postgres_data:/data -v $(pwd):/backup alpine tar
 czf /backup/postgres_data.tar.gz /data` while the container is stopped (or
 use `pg_basebackup`/`pg_dump` against a running instance for a consistent
 online backup, which is the better option for anything beyond a one-off).
-There's no automatic scheduling of this in the compose file — an operator
-choosing the self-hosted path is expected to wire up their own backup
-schedule (cron + off-host upload) against their actual retention
-requirements, which will vary a lot more than Render's fixed offering.
+That paragraph used to end "an operator choosing the self-hosted path is
+expected to wire up their own backup schedule". That is a fair thing to say
+about *retention policy* and a bad thing to say about whether backups happen
+at all: the 2026-09-24 audit found one dump, four days old, mode 0664, on
+the same disk as the database, and no restore ever executed. Two scripts now
+ship instead.
 
-**Restore procedure**: stop the `postgres`/`redis`/`backend`/`worker`
-services, restore the volume contents from the backup archive, then bring
-the stack back up (`docker compose -f docker-compose.prod.yml up -d`).
-Verify with the same `psql`/`alembic current` spot-check as the Render path
+### `scripts/backup-postgres.sh`
+
+`pg_dump -Fc` from inside the container, encrypted to an age public key,
+written 0600, pruned on a retention window, optionally copied off-host with
+rclone. It refuses to run rather than writing plaintext if the recipient or
+`age` is missing.
+
+**Set up the key first, and not on this box.** The point of public-key
+encryption here is that the host can write backups and cannot read them, so
+a compromise of the box does not hand over a copy of every row in the
+product:
+
+```sh
+# on your laptop, NOT the server
+age-keygen -o forge-backup-key.txt      # prints the public key
+# store forge-backup-key.txt wherever you keep ENCRYPTION_KEY's recovery
+# copy -- the two are needed together, see "Ciphertext needs its key" above
+```
+
+Then on the server, as a systemd timer (preferred — cron swallows output):
+
+```ini
+# /etc/systemd/system/forge-backup.service
+[Service]
+Type=oneshot
+WorkingDirectory=/srv/forge
+Environment=BACKUP_AGE_RECIPIENT=age1...        # the public key
+Environment=BACKUP_DIR=/var/backups/forge
+Environment=BACKUP_RETENTION_DAYS=14
+Environment=BACKUP_REMOTE=b2:forge-backups      # omit for local-only
+ExecStart=/srv/forge/scripts/backup-postgres.sh
+```
+
+```ini
+# /etc/systemd/system/forge-backup.timer
+[Timer]
+OnCalendar=*-*-* 03:30:00 UTC
+Persistent=true
+[Install]
+WantedBy=timers.target
+```
+
+```sh
+systemctl enable --now forge-backup.timer
+systemctl list-timers forge-backup.timer      # confirm the next run
+journalctl -u forge-backup.service            # confirm the last one
+```
+
+`Persistent=true` matters on a single box: it runs a missed backup after a
+reboot rather than skipping the day silently.
+
+### `scripts/restore-postgres.sh` — and the drill
+
+```sh
+# the drill: restores into a scratch database, times it, spot-checks it
+AGE_IDENTITY=forge-backup-key.txt   ./scripts/restore-postgres.sh /var/backups/forge/forge-<stamp>.dump.age
+```
+
+It defaults to the scratch database `forge_restore_check` precisely so the
+drill is the easy thing to run. Restoring over the live database needs an
+explicit `--into forge`, and warns for ten seconds before it starts.
+
+**Run the drill on a schedule and record the elapsed time below.** An
+untested backup is a belief. The three things a drill catches that nothing
+else does: an archive that decrypts but restores empty, a retention window
+that quietly deleted everything usable, and an `ENCRYPTION_KEY` that rotated
+without `ENCRYPTION_KEY_OLD` being kept — which restores every encrypted
+column as unreadable ciphertext while every row count looks correct.
+
+**Emergency restore**: stop `backend` and `worker` first (`docker compose -f
+docker-compose.prod.yml stop backend worker`) so nothing writes underneath
+the restore, then `--into` the live database name, then bring them back and
+verify with the same `psql`/`alembic current` spot-check as the Render path
 above before resuming traffic.
+
+### Redis
+
+Not backed up, deliberately, and this is unchanged: Redis holds caches,
+rate-limit counters and the ARQ queue — no system of record. Losing it costs
+queued jobs, which is a real cost and a different problem (see
+`degraded-mode.md`), not a data-loss one.
 
 ## Verification
 
@@ -256,8 +336,13 @@ in at start, so a restarted container reuses its stale copy.
 - [ ] Render restore drill executed against a real (non-template) Render
       account, confirming the dashboard flow above matches Render's current
       UI/API and that a restored instance actually boots the app correctly.
-- [ ] Self-hosted volume backup/restore exercised against a real
-      `docker-compose.prod.yml` deployment.
+- [ ] Self-hosted backup/restore exercised against a real
+      `docker-compose.prod.yml` deployment: `scripts/backup-postgres.sh` on
+      its timer, then `scripts/restore-postgres.sh` into the scratch
+      database. **Record the elapsed restore time and the archive size**
+      when this is ticked -- a restore that works but takes four hours is a
+      different answer to "are we covered?" than one that takes four
+      minutes, and only the drill distinguishes them.
 - [x] **Docker-network TLS exercised end-to-end on the self-hosted path
       (2026-09-03).** `make prod-compose-tls-check` against the real
       `docker-compose.prod.yml` with `ENVIRONMENT=prod`: certificate

@@ -4,7 +4,10 @@
     "empty": "Ei tiedostoja vielä. Lataa yksi aloittaaksesi.",
     "error_load": "Tiedostojen lataaminen epäonnistui.",
     "empty_title": "Ei vielä tiedostoja",
-    "empty_body": "Tänne lataamasi tiedostot näkyvät vain organisaatiollesi, ja ne tarkistetaan virusten varalta ennen lataamista. Lisää ensimmäinen tiedosto yllä olevalla latauskentällä."
+    "empty_body": "Tänne lataamasi tiedostot näkyvät vain organisaatiollesi, ja ne tarkistetaan virusten varalta ennen lataamista. Lisää ensimmäinen tiedosto yllä olevalla latauskentällä.",
+    "error_download": "Latausta ei voitu aloittaa.",
+    "error_delete": "Tiedostoa ei voitu poistaa.",
+    "empty_body_read_only": "Kukaan organisaatiossasi ei ole vielä ladannut tiedostoa. Pyydä ylläpitäjää lisäämään sellainen, jos tarvitset."
   },
   "uploader": {
     "drop_here": "Pudota tiedostot tähän",
@@ -31,14 +34,19 @@
     "pending": "Odottaa",
     "ready": "Valmis",
     "infected": "Saastunut",
-    "failed": "Epäonnistunut"
+    "failed": "Epäonnistunut",
+    "scanning": "Tarkistetaan"
   },
   "action": {
     "download": "Lataa",
     "delete": "Poista",
     "delete_confirm": "Poistaanko tämä tiedosto?",
     "delete_confirm_title": "Poistetaanko tämä tiedosto?",
-    "delete_confirm_body": "{filename} poistetaan kaikilta organisaatiosi jäseniltä. Tätä ei voi kumota."
+    "delete_confirm_body": "{filename} poistetaan kaikilta organisaatiosi jäseniltä. Tätä ei voi kumota.",
+    "download_blocked_scanning": "Tätä tiedostoa tarkistetaan vielä haittaohjelmien varalta.",
+    "download_blocked_pending": "Tämä lataus ei ole vielä valmis.",
+    "download_blocked_infected": "Tiedostosta löytyi haittaohjelma, joten sitä ei voi ladata.",
+    "download_blocked_failed": "Tiedostoa ei voitu tarkistaa, joten sitä ei voi ladata."
   },
   "picker": {
     "upload_button": "Lataa",

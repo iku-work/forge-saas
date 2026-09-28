@@ -26,15 +26,15 @@ from sqlalchemy.ext.asyncio import (
     create_async_engine,
 )
 from sqlmodel import SQLModel
-from testcontainers.postgres import PostgresContainer
 from testcontainers.redis import RedisContainer
 
-from app.core.exceptions import NotFoundError
+from app.core.exceptions import InvalidCursorError, NotFoundError
 from app.modules.auth.models import User
 from app.modules.billing.models import Plan
 from app.modules.notifications.models import Notification, PushToken
 from app.modules.notifications.repository import NotificationRepository, PushTokenRepository
 from app.modules.tenancy.models import Organization
+from tests._database import DatabaseHandle
 
 _TABLES = [
     User.__table__,
@@ -46,12 +46,6 @@ _TABLES = [
 
 
 @pytest.fixture(scope="module")
-def postgres_container() -> "PostgresContainer":
-    with PostgresContainer("postgres:16-alpine") as container:
-        yield container
-
-
-@pytest.fixture(scope="module")
 def redis_container() -> "RedisContainer":
     with RedisContainer("redis:7-alpine") as container:
         yield container
@@ -60,7 +54,7 @@ def redis_container() -> "RedisContainer":
 # Function-scoped (not module-scoped): see test_auth_repository.py -- an
 # asyncpg-backed engine can't be reused across pytest-asyncio's per-test loop.
 @pytest.fixture
-async def test_engine(postgres_container: "PostgresContainer") -> AsyncGenerator[AsyncEngine, None]:
+async def test_engine(postgres_container: DatabaseHandle) -> AsyncGenerator[AsyncEngine, None]:
     url = postgres_container.get_connection_url().replace("psycopg2", "asyncpg")
     engine = create_async_engine(url)
     async with engine.begin() as conn:
@@ -256,15 +250,20 @@ async def test_list_for_user_unread_only_filters_read(
     assert [n.id for n in items] == [unread_notification.id]
 
 
-async def test_list_for_user_cursor_from_another_user_is_treated_as_no_cursor(
+async def test_list_for_user_refuses_a_cursor_from_another_user(
     repo: NotificationRepository, user: User, other_user: User
 ) -> None:
+    """Repo finding 13. Another user's notification id is still
+    unresolvable, so its position never leaks -- it just says so now.
+
+    Treating it as "no cursor" returned this user's *first* page, which a
+    feed asking to continue appends: the same rows twice, with a 200.
+    """
     other_notification = await _send(repo, other_user.id)
-    mine = await _send(repo, user.id)
+    await _send(repo, user.id)
 
-    items, _ = await repo.list_for_user(user.id, after=other_notification.id)
-
-    assert [n.id for n in items] == [mine.id]
+    with pytest.raises(InvalidCursorError):
+        await repo.list_for_user(user.id, after=other_notification.id)
 
 
 # --- find_recent_by_idempotency_key -------------------------------------------

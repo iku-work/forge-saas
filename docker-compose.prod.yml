@@ -1,3 +1,25 @@
+# PROD-04: Docker's json-file log driver keeps every byte a container has
+# ever written, forever. On a single-box deployment that is a disk-full
+# incident with a date on it -- and the first service to notice is Postgres,
+# which cannot write a WAL segment. Every service below anchors this.
+# PROD-04, the other half: a container with no memory limit can take the
+# whole box down, and on a single-host deployment that means Postgres too.
+#
+# These are runaway guards, not reservations -- Docker does not reserve the
+# memory, it only refuses to let a service exceed its cap. The sum is
+# therefore allowed to exceed physical RAM, and does: with clamav's profile
+# enabled (2g, which clamd's signature database genuinely needs) the caps
+# total about 5 GB. On the 3.8 GB box this template was audited against,
+# clamav is the dominant consumer by a wide margin and the caps below are
+# well above every other service's steady state -- so a cap firing here is
+# a bug report, not a capacity signal. Capacity is the disk/memory alert's
+# job, not this file's.
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
 networks:
   forge-net:
     driver: bridge
@@ -38,6 +60,8 @@ services:
       interval: 5s
       timeout: 5s
       retries: 10
+    logging: *default-logging
+    mem_limit: 768m
     networks:
       - forge-net
 
@@ -76,6 +100,8 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+    logging: *default-logging
+    mem_limit: 64m
     networks:
       - forge-net
 
@@ -89,6 +115,8 @@ services:
       interval: 5s
       timeout: 5s
       retries: 10
+    logging: *default-logging
+    mem_limit: 256m
     networks:
       - forge-net
 
@@ -122,6 +150,8 @@ services:
       timeout: 5s
       retries: 5
       start_period: 10s
+    logging: *default-logging
+    mem_limit: 768m
     networks:
       - forge-net
 
@@ -139,6 +169,23 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+    # PROD-06: the worker had no healthcheck at all, so a wedged one looked
+    # exactly like a working one -- and everything slow in this product
+    # (email, virus scanning, GDPR deletion, webhook delivery) runs here.
+    #
+    # `arq --check` reads the heartbeat the worker writes from its main
+    # loop, which is a stronger claim than "the process is up": a job that
+    # blocks that loop stops the heartbeat, and the key's TTL is
+    # health_check_interval + 1s (30s, set in WorkerSettings -- arq's own
+    # default of an hour would make this probe meaningless).
+    healthcheck:
+      test: ["CMD", "arq", "--check", "app.workers.main.WorkerSettings"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    logging: *default-logging
+    mem_limit: 768m
     networks:
       - forge-net
 
@@ -163,16 +210,48 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+    logging: *default-logging
+    mem_limit: 64m
     networks:
       - forge-net
 
   # T-113: only started when explicitly requested (`docker compose --profile
   # clamav up`) -- settings.VIRUS_SCANNER must also be set to "clamav" (and
   # CLAMAV_HOST=clamav) in backend/.env for the worker to actually use it.
+  # PROD-04: the audit found the box at 68% of 38 GB with 13 GB of
+  # reclaimable build cache, and nothing that would have said so. Postgres
+  # is the service that notices a full disk first, by failing to write a WAL
+  # segment -- at which point the product is down and the fix is slow.
+  #
+  # node-exporter is here purely so docs/grafana/alerts.yml's DiskSpaceLow
+  # has a metric to read. Scraped inside forge-net exactly like
+  # postgres-exporter; it publishes no ports of its own.
+  #
+  # The mounts are read-only and the pid namespace is shared with the host
+  # because that is what the exporter needs to see the host's filesystems
+  # rather than its own container's. `--path.rootfs=/host` tells it where
+  # they were mounted.
+  node-exporter:
+    image: prom/node-exporter:v1.8.2
+    restart: unless-stopped
+    command:
+      - "--path.rootfs=/host"
+      - "--collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($$|/)"
+    pid: host
+    volumes:
+      - /:/host:ro,rslave
+    logging: *default-logging
+    mem_limit: 64m
+    networks:
+      - forge-net
+
   clamav:
     image: clamav/clamav:stable
     restart: unless-stopped
     profiles: ["clamav"]
+    # freshclam logs every signature update; unbounded, that is the largest
+    # log producer in the stack.
+    logging: *default-logging
     volumes:
       - clamav_data:/var/lib/clamav
     healthcheck:
@@ -228,6 +307,8 @@ services:
       interval: 5s
       timeout: 5s
       retries: 20
+    logging: *default-logging
+    mem_limit: 256m
     networks:
       - forge-net
 
@@ -236,6 +317,7 @@ services:
   minio-init:
     image: minio/minio
     restart: "no"
+    logging: *default-logging
     env_file:
       - ./.env.minio
     entrypoint:
@@ -292,6 +374,8 @@ services:
       MARKETING_DOMAIN: ${MARKETING_DOMAIN:-marketing.localhost}
       STORAGE_DOMAIN: ${STORAGE_DOMAIN:-storage.localhost}
       CADDY_TRUSTED_PROXIES: ${CADDY_TRUSTED_PROXIES:-10.0.0.0/8 172.16.0.0/12 192.168.0.0/16}
+    logging: *default-logging
+    mem_limit: 256m
     volumes:
       - caddy_data:/data
     ports:

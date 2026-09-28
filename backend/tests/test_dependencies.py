@@ -23,7 +23,6 @@ from sqlalchemy.ext.asyncio import (
     create_async_engine,
 )
 from starlette.requests import Request
-from testcontainers.postgres import PostgresContainer
 from testcontainers.redis import RedisContainer
 
 from app.core import cache, cache_keys
@@ -50,12 +49,7 @@ from app.modules.auth.models import User
 from app.modules.auth.permissions import MemberRole, Permission
 from app.modules.auth.utils import create_access_token
 from app.modules.tenancy.models import Membership, Organization
-
-
-@pytest.fixture(scope="module")
-def postgres_container() -> "PostgresContainer":
-    with PostgresContainer("postgres:16-alpine") as container:
-        yield container
+from tests._database import DatabaseHandle
 
 
 @pytest.fixture(scope="module")
@@ -65,7 +59,7 @@ def redis_container() -> "RedisContainer":
 
 
 @pytest.fixture(scope="module")
-def database_url(postgres_container: "PostgresContainer") -> str:
+def database_url(postgres_container: DatabaseHandle) -> str:
     # Migrated once per module via MonkeyPatch.context() (not the function-
     # scoped `monkeypatch` fixture, since this fixture is module-scoped) so
     # alembic/env.py's get_settings().DATABASE_URL points at the container

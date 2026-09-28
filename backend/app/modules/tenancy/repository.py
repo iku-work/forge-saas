@@ -19,7 +19,7 @@ from uuid import UUID
 from sqlalchemy import func, select, tuple_
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.exceptions import NotFoundError
+from app.core.exceptions import InvalidCursorError, NotFoundError
 from app.core.repository import DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE
 from app.models._mixins import utcnow
 from app.modules.auth.permissions import MemberRole
@@ -153,9 +153,17 @@ class MembershipRepository:
             .limit(capped_limit + 1)
         )
         if after is not None:
-            anchor = await self.get_by_id(after)
-            if anchor is not None:
-                stmt = stmt.where(tuple_(m.created_at, m.id) < (anchor.created_at, anchor.id))
+            # Scoped to this org so another org's membership id stays
+            # unresolvable -- but unresolvable now says so, instead of
+            # dropping the clause and quietly returning page one again.
+            anchor_stmt = select(Membership).where(m.id == after, m.org_id == org_id)
+            anchor = (await self.session.execute(anchor_stmt)).scalar_one_or_none()
+            if anchor is None:
+                raise InvalidCursorError(
+                    "errors.invalid_cursor",
+                    fallback=("This page cursor is no longer valid -- start from the first page"),
+                )
+            stmt = stmt.where(tuple_(m.created_at, m.id) < (anchor.created_at, anchor.id))
         result = await self.session.execute(stmt)
         items = list(result.scalars().all())
         page = items[:capped_limit]
@@ -264,12 +272,16 @@ class InvitationRepository:
         )
         if after is not None:
             # Scoped to this org, so a cursor naming another org's invitation
-            # is treated as "no cursor" rather than leaking its position
-            # (mirrors NotificationRepository.list_for_user's anchor lookup).
+            # stays unresolvable rather than leaking its position -- and an
+            # unresolvable cursor is an error, not a silent reset to page one.
             anchor_stmt = select(Invitation).where(m.id == after, m.org_id == org_id)
             anchor = (await self.session.execute(anchor_stmt)).scalar_one_or_none()
-            if anchor is not None:
-                stmt = stmt.where(tuple_(m.created_at, m.id) < (anchor.created_at, anchor.id))
+            if anchor is None:
+                raise InvalidCursorError(
+                    "errors.invalid_cursor",
+                    fallback=("This page cursor is no longer valid -- start from the first page"),
+                )
+            stmt = stmt.where(tuple_(m.created_at, m.id) < (anchor.created_at, anchor.id))
         result = await self.session.execute(stmt)
         items = list(result.scalars().all())
         page = items[:capped_limit]

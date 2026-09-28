@@ -11,26 +11,29 @@ something a plain container can assert.
 """
 
 import asyncio
-from collections.abc import Generator
 
 import asyncpg
 import pytest
 from alembic import command
 from alembic.config import Config
-from testcontainers.postgres import PostgresContainer
 
 from app.core import migrations as migration_runner
 from app.core.config import get_settings
+from tests._database import DatabaseHandle
 
 
 @pytest.fixture
-def postgres_container() -> Generator[PostgresContainer]:
-    with PostgresContainer("postgres:16-alpine") as container:
-        yield container
+def postgres_container(fresh_database: object) -> object:
+    """A per-test database on the shared server (see tests/conftest.py).
+
+    These tests migrate an empty schema, so they need a clean database
+    each -- which is what this is. It used to be a whole container each.
+    """
+    return fresh_database
 
 
 @pytest.fixture
-def real_config(postgres_container: PostgresContainer, monkeypatch: pytest.MonkeyPatch) -> Config:
+def real_config(postgres_container: DatabaseHandle, monkeypatch: pytest.MonkeyPatch) -> Config:
     url = postgres_container.get_connection_url().replace("psycopg2", "asyncpg")
     monkeypatch.setenv("DATABASE_URL", url)
     get_settings.cache_clear()

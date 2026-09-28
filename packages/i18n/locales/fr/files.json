@@ -4,7 +4,10 @@
     "empty": "Aucun fichier pour le moment. Importez-en un pour commencer.",
     "error_load": "Impossible de charger les fichiers.",
     "empty_title": "Aucun fichier pour le moment",
-    "empty_body": "Les fichiers que vous importez ici sont privés à votre organisation et analysés contre les virus avant tout téléchargement. Utilisez l'outil d'import ci-dessus pour ajouter le premier."
+    "empty_body": "Les fichiers que vous importez ici sont privés à votre organisation et analysés contre les virus avant tout téléchargement. Utilisez l'outil d'import ci-dessus pour ajouter le premier.",
+    "error_download": "Le téléchargement n'a pas pu démarrer.",
+    "error_delete": "Le fichier n'a pas pu être supprimé.",
+    "empty_body_read_only": "Personne dans votre organisation n'a encore importé de fichier. Demandez à un administrateur d'en ajouter un si vous en avez besoin."
   },
   "uploader": {
     "drop_here": "Déposez vos fichiers ici",
@@ -31,14 +34,19 @@
     "pending": "En attente",
     "ready": "Prêt",
     "infected": "Infecté",
-    "failed": "Échoué"
+    "failed": "Échoué",
+    "scanning": "Analyse en cours"
   },
   "action": {
     "download": "Télécharger",
     "delete": "Supprimer",
     "delete_confirm": "Supprimer ce fichier ?",
     "delete_confirm_title": "Supprimer ce fichier ?",
-    "delete_confirm_body": "{filename} sera supprimé pour tous les membres de votre organisation. Cette action est irréversible."
+    "delete_confirm_body": "{filename} sera supprimé pour tous les membres de votre organisation. Cette action est irréversible.",
+    "download_blocked_scanning": "Ce fichier est encore en cours d'analyse antivirus.",
+    "download_blocked_pending": "Cet import n'est pas encore terminé.",
+    "download_blocked_infected": "Un logiciel malveillant a été détecté dans ce fichier ; il ne peut pas être téléchargé.",
+    "download_blocked_failed": "Ce fichier n'a pas pu être analysé ; il ne peut pas être téléchargé."
   },
   "picker": {
     "upload_button": "Importer",

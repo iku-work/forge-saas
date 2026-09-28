@@ -27,6 +27,11 @@ Both are idempotent. Both re-check `deleted_at` before touching anything, so
 a file whose deletion was cancelled during the grace window survives even if
 its job still fires.
 
+`expire_abandoned_uploads` is the other half of counting pending uploads
+toward the quota (app.modules.storage.quota). A reservation that never
+expires is a slow leak of an org's storage allowance, paid for by every
+client that started an upload and walked away.
+
 `rescan_unscanned_files` is the migration path for the download gate that
 now requires a clean verdict (app.modules.storage.scan_gate). Every file
 uploaded before that gate existed has `virus_scan_result` NULL -- they were
@@ -54,6 +59,7 @@ from app.core.tracing import trace_job
 from app.models._mixins import utcnow
 from app.modules.storage.backend import StorageBackend, get_storage_backend
 from app.modules.storage.models import StoredFile
+from app.modules.storage.quota import reservation_cutoff
 
 # Imported, never redeclared: the sweep and the deferred job have to agree on
 # the grace window, or the sweep deletes objects whose window is still open
@@ -127,6 +133,59 @@ async def sweep_orphaned_objects(
         await session.commit()
 
     logger.info("sweep_orphaned_objects: hard-deleted %d file(s) past the grace period", len(rows))
+
+
+async def expire_abandoned_uploads(
+    ctx: dict[str, Any],  # noqa: ARG001 -- scheduler calling convention
+) -> None:
+    """Retire presigns nobody ever confirmed.
+
+    A `pending` row holds quota space (app.modules.storage.quota) so that
+    concurrent presigns cannot all spend the same free bytes. That
+    reservation has to end, or a client that closed the tab mid-upload
+    would hold an org's quota down forever -- which is the other half of
+    counting reservations, and the half that turns a correctness fix into a
+    denial-of-service if it is left out.
+
+    Soft-delete rather than hard: identical to StorageService._expire, so
+    the object and row are removed by the same two paths that clean up
+    every other deletion. `hard_delete_stored_file` is enqueued per row
+    with no defer -- nothing here is undoable.
+
+    Runs hourly, against a window of an hour, so a reservation lives
+    between one and two hours. Erring long is the right direction: the
+    failure of expiring too early is refusing an upload that is still
+    arriving.
+    """
+    if not is_enabled("file_storage"):
+        return
+    model = cast("Any", StoredFile)
+
+    async with async_session_factory() as session:
+        stmt = (
+            select(StoredFile)
+            .where(
+                model.status == "pending",
+                model.deleted_at.is_(None),
+                model.created_at <= reservation_cutoff(),
+            )
+            .order_by(model.created_at)
+            .limit(_SWEEP_BATCH_SIZE)
+        )
+        rows = list((await session.execute(stmt)).scalars().all())
+        if not rows:
+            return
+
+        now = utcnow()
+        for stored_file in rows:
+            stored_file.deleted_at = now
+            session.add(stored_file)
+        await session.commit()
+
+    for stored_file in rows:
+        await jobs.enqueue_job("hard_delete_stored_file", file_id=stored_file.id)
+
+    logger.info("expire_abandoned_uploads: expired %d unconfirmed upload(s)", len(rows))
 
 
 async def _purge(session: AsyncSession, backend: StorageBackend, stored_file: StoredFile) -> None:

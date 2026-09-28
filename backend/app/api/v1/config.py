@@ -12,6 +12,7 @@ from fastapi import APIRouter, Depends, Request, Response
 from pydantic import BaseModel
 from redis.asyncio import Redis
 
+from app.core.config import get_settings
 from app.core.dependencies import get_redis
 from app.core.envelope import Envelope, Meta
 from app.core.i18n import get_default_locale, get_supported_locales
@@ -82,6 +83,28 @@ class ConfigResponse(BaseModel):
     # that endpoint is authenticated for a reason, this one is public.
     support_tool: SupportTool
     support_url: str
+    # UX-01: which social providers actually have credentials, not merely
+    # whether the oauth module is on. The login page rendered "Continue with
+    # Google" and "Continue with GitHub" from the module flag alone, and both
+    # buttons led to a 404 on a deployment that had configured neither --
+    # which is every deployment of this template until someone registers an
+    # OAuth app. Listing the configured ones instead makes that class of
+    # mismatch structurally impossible rather than a thing each product has
+    # to remember.
+    #
+    # Empty when the module is off, so a client can render from this list
+    # alone without also checking `modules.oauth`.
+    oauth_providers: list[str]
+    # UX-02: where the terms and privacy pages live, so the app can link to
+    # them. They are served by apps/marketing on its own host (T-307), so a
+    # relative path is not an option and the app cannot guess the name.
+    #
+    # Empty when the marketing module is off, because then those pages do
+    # not exist anywhere -- a link would 404, which is worse than no link.
+    # A product in that state that still asserts "creating an account means
+    # you accept the terms" has a problem this field cannot fix; see the
+    # content stage of docs/production-readiness-plan-2026-09-25.md.
+    marketing_url: str
     # T-263: the runtime half of this response. Everything above is
     # deploy-time and changes only with a redeploy; these three change when an
     # operator flips a switch in the admin UI, which is why the Cache-Control
@@ -102,9 +125,16 @@ async def get_config(
     response: Response,
     redis: Annotated[Redis, Depends(get_redis)],
 ) -> Envelope[ConfigResponse]:
+    # Imported here rather than at module scope, the same way build_router()
+    # reaches into optional modules: this endpoint is always registered, and
+    # an always-on module should not pull an optional one's import graph
+    # (authlib, its clients) into every process that serves /config.
+    from app.modules.auth.oauth import get_oauth_clients  # noqa: PLC0415
+
     m = get_modules()
     b = get_branding()
     s = get_support_config()
+    settings = get_settings()
     # Read through the same 60s Redis cache the maintenance middleware uses,
     # so this endpoint costs one GET rather than a DB round trip on what is
     # the single most-requested unauthenticated route in the product.
@@ -136,6 +166,14 @@ async def get_config(
         default_locale=get_default_locale(),
         support_tool=s.tool,
         support_url=s.url,
+        # Sorted for a stable response: the registry is a dict built from
+        # settings, and an unstable key order would churn the HTTP cache
+        # this endpoint is deliberately cacheable for.
+        oauth_providers=sorted(get_oauth_clients()) if m.oauth.enabled else [],
+        # https, always: Caddy terminates TLS for this host in every
+        # environment including dev, where it issues its own cert
+        # (`tls internal`). An http:// link would be redirected at best.
+        marketing_url=f"https://{settings.MARKETING_DOMAIN}" if m.marketing.enabled else "",
         banner=GlobalBannerResponse(**banner) if banner is not None else None,
         maintenance=MaintenanceResponse(
             enabled=product_settings.is_maintenance_mode(runtime),

@@ -8,7 +8,12 @@ import {
   ssoHintApiV1AuthSsoHintPost,
   type UserPublic,
 } from "@forge/api-client";
-import { TwoFactorRequiredError, useAuth, useModules } from "@forge/hooks";
+import {
+  TwoFactorRequiredError,
+  useAuth,
+  useModules,
+  useOAuthProviders,
+} from "@forge/hooks";
 import {
   Alert,
   AlertDescription,
@@ -29,7 +34,7 @@ import { useRouteLocale } from "../../lib/useRouteLocale";
 
 import { AuthCard } from "./AuthCard";
 import { getErrorMessage } from "./getErrorMessage";
-import { getOAuthStartUrl } from "./oauth";
+import { getOAuthStartUrl, OAUTH_PROVIDER_LABEL_KEYS } from "./oauth";
 import { getSsoStartUrl } from "./sso";
 import { TwoFactorChallenge } from "./TwoFactorChallenge";
 
@@ -43,6 +48,13 @@ export function LoginPage() {
   const locale = useRouteLocale();
   const { login, completeTwoFactorLogin } = useAuth();
   const modules = useModules();
+  // UX-01: rendered from the providers /config says are actually
+  // configured, not from `modules.oauth` -- see useOAuthProviders. The
+  // filter drops any provider this build has no label for, so adding one
+  // server-side cannot render a blank button before its string lands.
+  const oauthProviders = useOAuthProviders().filter(
+    (provider: string) => provider in OAUTH_PROVIDER_LABEL_KEYS,
+  );
   const navigate = useNavigate();
   const [formError, setFormError] = useState<string | null>(null);
   const [tempToken, setTempToken] = useState<string | null>(null);
@@ -312,7 +324,7 @@ export function LoginPage() {
         </form>
       </Form>
 
-      {modules.oauth && !showSso ? (
+      {oauthProviders.length > 0 && !showSso ? (
         <>
           <div className="flex items-center gap-2">
             <Separator className="flex-1" />
@@ -323,26 +335,19 @@ export function LoginPage() {
           </div>
 
           <div className="space-y-2">
-            <Button
-              type="button"
-              variant="outline"
-              className="w-full"
-              onClick={() => {
-                window.location.href = getOAuthStartUrl("google");
-              }}
-            >
-              {t("auth.login.continue_google")}
-            </Button>
-            <Button
-              type="button"
-              variant="outline"
-              className="w-full"
-              onClick={() => {
-                window.location.href = getOAuthStartUrl("github");
-              }}
-            >
-              {t("auth.login.continue_github")}
-            </Button>
+            {oauthProviders.map((provider: string) => (
+              <Button
+                key={provider}
+                type="button"
+                variant="outline"
+                className="w-full"
+                onClick={() => {
+                  window.location.href = getOAuthStartUrl(provider);
+                }}
+              >
+                {t(OAUTH_PROVIDER_LABEL_KEYS[provider] ?? "")}
+              </Button>
+            ))}
           </div>
         </>
       ) : null}

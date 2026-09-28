@@ -9,3 +9,13 @@
 # lets the hash be a committed constant that a test can check rather than
 # something regenerated per build.
 apps/web/index.html text eol=lf
+
+# Shell scripts run on Linux -- the deploy box, the containers -- and a CRLF
+# shebang there fails with `bad interpreter: /usr/bin/env bash^M`, which is
+# an error message that tells you almost nothing about its cause.
+#
+# core.autocrlf already stores these as LF today, so this changes nothing in
+# the repository. It says so explicitly instead, because the alternative is
+# a setting on one developer's machine being load-bearing for whether
+# scripts/backup-postgres.sh runs at all.
+*.sh text eol=lf

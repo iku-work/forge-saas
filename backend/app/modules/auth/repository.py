@@ -15,7 +15,7 @@ from uuid import UUID
 from sqlalchemy import CursorResult, delete, func, or_, select, tuple_, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.exceptions import NotFoundError
+from app.core.exceptions import InvalidCursorError, NotFoundError
 from app.core.repository import DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE
 from app.models._mixins import utcnow
 from app.modules.auth.models import (
@@ -111,9 +111,18 @@ class UserRepository:
             stmt = stmt.where(m.is_active.is_(active))
         stmt = stmt.order_by(m.created_at.desc(), m.id.desc()).limit(capped_limit + 1)
         if after is not None:
-            anchor = await self.get_by_id(after)
-            if anchor is not None:
-                stmt = stmt.where(tuple_(m.created_at, m.id) < (anchor.created_at, anchor.id))
+            # get_by_id excludes soft-deleted users, which is right for a
+            # lookup and wrong for a cursor: the anchor is read only for its
+            # (created_at, id), and a user deleted while an admin was paging
+            # past them still marks a valid position. Skipping the clause
+            # restarts the list at page one instead of continuing it.
+            anchor = await self.session.get(User, after)
+            if anchor is None:
+                raise InvalidCursorError(
+                    "errors.invalid_cursor",
+                    fallback=("This page cursor is no longer valid -- start from the first page"),
+                )
+            stmt = stmt.where(tuple_(m.created_at, m.id) < (anchor.created_at, anchor.id))
         result = await self.session.execute(stmt)
         items = list(result.scalars().all())
         page = items[:capped_limit]

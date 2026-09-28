@@ -58,4 +58,26 @@ describe("RegisterPage", () => {
       password: "CorrectHorse123",
     });
   });
+
+  // UX-02: the terms document asserts that creating an account constitutes
+  // acceptance of it, and this screen linked to neither it nor the privacy
+  // policy. An agreement nobody was shown is not one.
+
+  it("links to the terms and the privacy policy before you agree to them", async () => {
+    renderApp({ initialPath: "/register" });
+    await screen.findByRole("heading", { name: "Create your account" });
+
+    const terms = screen.getByRole("link", { name: "Terms of Service" });
+    const privacy = screen.getByRole("link", { name: "Privacy Policy" });
+
+    // The marketing site is a different origin (T-307), so these are
+    // absolute and locale-prefixed exactly as that site routes them.
+    expect(terms).toHaveAttribute("href", "https://marketing.localhost/en/terms");
+    expect(privacy).toHaveAttribute(
+      "href",
+      "https://marketing.localhost/en/privacy",
+    );
+    expect(terms).toHaveAttribute("target", "_blank");
+    expect(terms).toHaveAttribute("rel", "noreferrer");
+  });
 });

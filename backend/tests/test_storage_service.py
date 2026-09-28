@@ -28,17 +28,20 @@ import pytest
 from redis.asyncio import Redis
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import get_settings
 from app.core.exceptions import (
     ConflictError,
     NotFoundError,
     PlanLimitError,
     UnprocessableEntityError,
 )
+from app.models._mixins import utcnow
 from app.modules.auth.repository import UserRepository
 from app.modules.billing.dependencies import OrgSubscription
 from app.modules.billing.models import Plan
 from app.modules.storage import service as service_module
 from app.modules.storage.backend import PresignedUpload
+from app.modules.storage.quota import UPLOAD_RESERVATION_WINDOW
 from app.modules.storage.repository import StoredFileRepository
 from app.modules.storage.service import StorageService
 from app.modules.tenancy.repository import OrganizationRepository
@@ -134,6 +137,252 @@ def _org_sub(org, **features: int) -> OrgSubscription:
 
 def _service(session: AsyncSession, redis: Redis, org) -> StorageService:
     return StorageService(session, org.id, redis)
+
+
+def _set_max_upload_bytes(monkeypatch: pytest.MonkeyPatch, value: int) -> None:
+    """Override the absolute ceiling for one test.
+
+    Patched on the cached Settings instance rather than through the
+    environment, because `check_absolute_ceiling` reads it at call time --
+    which is itself deliberate, so that the value comes from the
+    environment the process was started with rather than whichever .env was
+    on disk when the module first imported.
+    """
+    monkeypatch.setattr(get_settings(), "MAX_UPLOAD_BYTES", value)
+
+
+async def _age_out_reservation(session: AsyncSession, org, file_id) -> None:
+    """Push a pending row past its reservation window.
+
+    Rewriting `created_at` rather than freezing the clock: the window is
+    compared against the row, and this leaves the rest of the request --
+    audit timestamps, job defers -- on real time.
+    """
+    stale = await StoredFileRepository(session, org.id).get_or_raise(file_id)
+    stale.created_at = utcnow() - UPLOAD_RESERVATION_WINDOW - timedelta(minutes=1)
+    session.add(stale)
+    await session.flush()
+
+
+# --- presign_upload: quota reservation ---------------------------------------------------
+#
+# The finding this section exists to keep closed: the quota counted only
+# `ready` bytes, so a presign was checked against a total that excluded
+# every upload the same org had been authorised for seconds earlier. Ten
+# presigns for a gigabyte each against a gigabyte of free space all passed,
+# and then all ten confirmed. This was not a theoretical race -- the web
+# dropzone uploads three files at a time by default.
+
+
+@pytest.mark.usefixtures("fake_backend")
+async def test_a_second_presign_sees_the_first_ones_reservation(
+    session: AsyncSession,
+    redis: Redis,
+    org,
+    user_id,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # The plan quota is what this asserts, so the absolute ceiling is
+    # lifted clear of it -- MAX_UPLOAD_BYTES has its own tests above.
+    _set_max_upload_bytes(monkeypatch, 10 * 1024 * 1024 * 1024)
+    """Two sequential presigns, together over quota. The second must fail.
+
+    Before reservations both succeeded: neither had confirmed, so neither
+    counted, so both were measured against an empty org.
+    """
+    service = _service(session, redis, org)
+    org_sub = _org_sub(org, storage_gb=1, max_upload_mb=1000)
+
+    await service.presign_upload(
+        user_id,
+        filename="first.pdf",
+        content_type="application/pdf",
+        size_bytes=600_000_000,
+        org_sub=org_sub,
+    )
+
+    with pytest.raises(PlanLimitError):
+        await service.presign_upload(
+            user_id,
+            filename="second.pdf",
+            content_type="application/pdf",
+            size_bytes=600_000_000,
+            org_sub=org_sub,
+        )
+
+
+@pytest.mark.usefixtures("fake_backend")
+async def test_ten_presigns_against_room_for_one(
+    session: AsyncSession,
+    redis: Redis,
+    org,
+    user_id,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # The plan quota is what this asserts, so the absolute ceiling is
+    # lifted clear of it -- MAX_UPLOAD_BYTES has its own tests above.
+    _set_max_upload_bytes(monkeypatch, 10 * 1024 * 1024 * 1024)
+    """The audit's own scenario, at its own numbers."""
+    service = _service(session, redis, org)
+    org_sub = _org_sub(org, storage_gb=1, max_upload_mb=1000)
+
+    accepted = 0
+    for i in range(10):
+        try:
+            await service.presign_upload(
+                user_id,
+                filename=f"{i}.pdf",
+                content_type="application/pdf",
+                size_bytes=900_000_000,
+                org_sub=org_sub,
+            )
+        except PlanLimitError:
+            continue
+        accepted += 1
+
+    assert accepted == 1
+
+
+@pytest.mark.usefixtures("fake_backend")
+async def test_a_lapsed_reservation_stops_blocking_new_uploads(
+    session: AsyncSession,
+    redis: Redis,
+    org,
+    user_id,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # The plan quota is what this asserts, so the absolute ceiling is
+    # lifted clear of it -- MAX_UPLOAD_BYTES has its own tests above.
+    _set_max_upload_bytes(monkeypatch, 10 * 1024 * 1024 * 1024)
+    """Reservations have to expire, or abandoning an upload would cost the
+    org that space permanently -- a fix that traded a quota bypass for a
+    quota leak would not be a fix."""
+    service = _service(session, redis, org)
+    org_sub = _org_sub(org, storage_gb=1, max_upload_mb=1000)
+    first = await service.presign_upload(
+        user_id,
+        filename="abandoned.pdf",
+        content_type="application/pdf",
+        size_bytes=900_000_000,
+        org_sub=org_sub,
+    )
+
+    await _age_out_reservation(session, org, first["file_id"])
+
+    second = await service.presign_upload(
+        user_id,
+        filename="later.pdf",
+        content_type="application/pdf",
+        size_bytes=900_000_000,
+        org_sub=org_sub,
+    )
+
+    assert second["file_id"] is not None
+
+
+@pytest.mark.usefixtures("fake_backend")
+async def test_confirming_a_lapsed_reservation_is_refused(
+    session: AsyncSession, redis: Redis, org, user_id, enqueued_jobs
+) -> None:
+    """The window between a reservation lapsing and the scheduler noticing.
+
+    Those bytes have stopped counting, so confirming would add them back
+    with nothing having checked there was room -- the original finding,
+    reached by a slower route.
+    """
+    service = _service(session, redis, org)
+    presigned = await service.presign_upload(
+        user_id, filename="slow.pdf", content_type="application/pdf", size_bytes=1024, org_sub=None
+    )
+    await _age_out_reservation(session, org, presigned["file_id"])
+
+    with pytest.raises(UnprocessableEntityError):
+        await service.confirm_upload(user_id, presigned["file_id"])
+
+    # Retired the same way the scheduler would have retired it, rather than
+    # left pending for something else to trip over later.
+    hard_deletes = [
+        kwargs["file_id"] for fn, kwargs in enqueued_jobs if fn == "hard_delete_stored_file"
+    ]
+    assert hard_deletes == [presigned["file_id"]]
+
+
+@pytest.mark.usefixtures("fake_backend")
+async def test_confirming_within_the_window_does_not_double_count(
+    session: AsyncSession, redis: Redis, org, user_id, fake_backend
+) -> None:
+    """pending -> ready must leave the total where it was.
+
+    The bytes were already counted as a reservation. A confirm that added
+    them again would halve every org's effective quota.
+    """
+    service = _service(session, redis, org)
+    presigned = await service.presign_upload(
+        user_id, filename="f.pdf", content_type="application/pdf", size_bytes=1024, org_sub=None
+    )
+    repo = StoredFileRepository(session, org.id)
+    assert await repo.total_bytes_for_org() == 1024
+
+    fake_backend.uploaded[presigned["key"]] = {"ContentLength": 1024, "ETag": '"abc"'}
+    await service.confirm_upload(user_id, presigned["file_id"])
+
+    assert await repo.total_bytes_for_org() == 1024
+
+
+# --- presign_upload: the ceiling that survives billing being off -------------------------
+
+
+@pytest.mark.usefixtures("fake_backend")
+async def test_max_upload_bytes_applies_without_a_plan(
+    session: AsyncSession, redis: Redis, org, user_id, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """`org_sub` is None wherever billing is disabled, and that used to skip
+    every size check there was -- so a product with billing off had no
+    upload limit at all."""
+    _set_max_upload_bytes(monkeypatch, 1024)
+    service = _service(session, redis, org)
+
+    with pytest.raises(UnprocessableEntityError):
+        await service.presign_upload(
+            user_id,
+            filename="huge.pdf",
+            content_type="application/pdf",
+            size_bytes=1025,
+            org_sub=None,
+        )
+
+
+@pytest.mark.usefixtures("fake_backend")
+async def test_max_upload_bytes_caps_a_plan_that_allows_more(
+    session: AsyncSession, redis: Redis, org, user_id, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The ceiling is absolute: a generous plan cannot raise it, because it
+    is about this deployment's disk rather than the customer's tier."""
+    _set_max_upload_bytes(monkeypatch, 1024)
+    service = _service(session, redis, org)
+
+    with pytest.raises(UnprocessableEntityError):
+        await service.presign_upload(
+            user_id,
+            filename="huge.pdf",
+            content_type="application/pdf",
+            size_bytes=1025,
+            org_sub=_org_sub(org, max_upload_mb=10_000, storage_gb=1000),
+        )
+
+
+@pytest.mark.usefixtures("fake_backend")
+async def test_a_file_at_the_ceiling_is_allowed(
+    session: AsyncSession, redis: Redis, org, user_id, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _set_max_upload_bytes(monkeypatch, 1024)
+    service = _service(session, redis, org)
+
+    result = await service.presign_upload(
+        user_id, filename="exact.pdf", content_type="application/pdf", size_bytes=1024, org_sub=None
+    )
+
+    assert result["file_id"] is not None
 
 
 # --- presign_upload: content-type allowlist ---------------------------------------------
@@ -239,16 +488,24 @@ async def test_presign_upload_two_users_same_filename_get_different_keys(
 
 
 @pytest.mark.usefixtures("fake_backend")
-async def test_presign_upload_no_quota_check_when_org_sub_is_none(
+async def test_presign_upload_skips_the_plan_quota_when_there_is_no_plan(
     session: AsyncSession, redis: Redis, org, user_id
 ) -> None:
+    """No subscription means no per-plan numbers to enforce -- storage_gb,
+    max_upload_mb and max_files all come from the plan.
+
+    This used to assert a 1.5 GB upload succeeding, which was the finding
+    rather than the behaviour: with billing off the plan checks are the
+    *only* checks, so skipping them meant no limit at all.
+    MAX_UPLOAD_BYTES still applies, and has its own tests above.
+    """
     service = _service(session, redis, org)
 
     result = await service.presign_upload(
         user_id,
         filename="big.pdf",
         content_type="application/pdf",
-        size_bytes=1_500_000_000,
+        size_bytes=50 * 1024 * 1024,
         org_sub=None,
     )
 
@@ -295,7 +552,7 @@ async def test_presign_upload_rejects_when_file_count_quota_would_be_exceeded(
     session: AsyncSession, redis: Redis, org, user_id
 ) -> None:
     service = _service(session, redis, org)
-    repo = StoredFileRepository(session, org.id, redis)
+    repo = StoredFileRepository(session, org.id)
     await repo.create(
         uploaded_by=user_id,
         key="existing",
@@ -333,10 +590,17 @@ async def test_presign_upload_allows_file_within_file_count_quota(
 
 @pytest.mark.usefixtures("fake_backend")
 async def test_presign_upload_rejects_when_org_quota_would_be_exceeded(
-    session: AsyncSession, redis: Redis, org, user_id
+    session: AsyncSession,
+    redis: Redis,
+    org,
+    user_id,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    # The plan quota is what this asserts, so the absolute ceiling is
+    # lifted clear of it -- MAX_UPLOAD_BYTES has its own tests above.
+    _set_max_upload_bytes(monkeypatch, 10 * 1024 * 1024 * 1024)
     service = _service(session, redis, org)
-    repo = StoredFileRepository(session, org.id, redis)
+    repo = StoredFileRepository(session, org.id)
     await repo.create(
         uploaded_by=user_id,
         key="existing",
@@ -374,7 +638,7 @@ async def test_confirm_upload_rejects_when_nothing_was_uploaded(
     with pytest.raises(UnprocessableEntityError):
         await service.confirm_upload(user_id, presigned["file_id"])
 
-    repo = StoredFileRepository(session, org.id, redis)
+    repo = StoredFileRepository(session, org.id)
     stored = await repo.get_or_raise(presigned["file_id"])
     assert stored.status == "pending"
 
@@ -532,7 +796,7 @@ async def test_delete_file_soft_deletes_and_enqueues_deferred_hard_delete(  # no
 
     await service.delete_file(user_id, presigned["file_id"])
 
-    repo = StoredFileRepository(session, org.id, redis)
+    repo = StoredFileRepository(session, org.id)
     with pytest.raises(NotFoundError):
         await repo.get_or_raise(presigned["file_id"])
     matching = [kwargs for fn, kwargs in enqueued_jobs if fn == "hard_delete_stored_file"]
@@ -541,7 +805,7 @@ async def test_delete_file_soft_deletes_and_enqueues_deferred_hard_delete(  # no
     assert matching[0]["_defer_by"] == timedelta(days=7)
 
 
-async def test_delete_file_invalidates_total_bytes_cache(
+async def test_delete_file_releases_the_bytes_it_was_holding(
     session: AsyncSession, redis: Redis, org, user_id, fake_backend
 ) -> None:
     service = _service(session, redis, org)
@@ -551,7 +815,7 @@ async def test_delete_file_invalidates_total_bytes_cache(
     await session.commit()
     fake_backend.uploaded[presigned["key"]] = {"ContentLength": 1024, "ETag": '"abc"'}
     await service.confirm_upload(user_id, presigned["file_id"])
-    repo = StoredFileRepository(session, org.id, redis)
+    repo = StoredFileRepository(session, org.id)
     assert await repo.total_bytes_for_org() == 1024
 
     await service.delete_file(user_id, presigned["file_id"])

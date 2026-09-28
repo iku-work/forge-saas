@@ -18,7 +18,6 @@ from sqlalchemy.ext.asyncio import (
     create_async_engine,
 )
 from sqlmodel import SQLModel
-from testcontainers.postgres import PostgresContainer
 
 from app.core.config import get_settings
 from app.core.exceptions import AuthenticationError
@@ -28,21 +27,16 @@ from app.modules.auth.repository import EmailVerificationTokenRepository, UserRe
 from app.modules.auth.schemas import RegisterRequest
 from app.modules.auth.service import AuthService
 from app.modules.auth.utils import hash_token
+from tests._database import DatabaseHandle
 
 _TABLES = [User.__table__, EmailVerificationToken.__table__, AuditEvent.__table__]
 _VALID_PASSWORD = "Correct-Horse9"
 
 
-@pytest.fixture(scope="module")
-def postgres_container() -> "PostgresContainer":
-    with PostgresContainer("postgres:16-alpine") as container:
-        yield container
-
-
 # Function-scoped (not module-scoped): see test_auth_repository.py — an
 # asyncpg-backed engine can't be reused across pytest-asyncio's per-test loop.
 @pytest.fixture
-async def test_engine(postgres_container: "PostgresContainer") -> AsyncGenerator[AsyncEngine, None]:
+async def test_engine(postgres_container: DatabaseHandle) -> AsyncGenerator[AsyncEngine, None]:
     url = postgres_container.get_connection_url().replace("psycopg2", "asyncpg")
     engine = create_async_engine(url)
     async with engine.begin() as conn:

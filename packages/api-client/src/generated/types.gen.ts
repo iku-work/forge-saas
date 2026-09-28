@@ -192,7 +192,15 @@ export type ConfigResponse = {
      */
     logo_url: string;
     maintenance: MaintenanceResponse;
+    /**
+     * Marketing Url
+     */
+    marketing_url: string;
     modules: ModulesResponse;
+    /**
+     * Oauth Providers
+     */
+    oauth_providers: Array<string>;
     /**
      * Primary Color
      */
@@ -1842,7 +1850,7 @@ export type StoredFilePublic = {
     /**
      * Status
      */
-    status: string;
+    status: 'pending' | 'ready' | 'infected' | 'failed' | 'deleted';
     /**
      * Uploaded By
      */

@@ -33,7 +33,6 @@ from sqlalchemy.ext.asyncio import (
     create_async_engine,
 )
 from sqlmodel import SQLModel
-from testcontainers.postgres import PostgresContainer
 from testcontainers.redis import RedisContainer
 
 from app.core import jobs as jobs_module
@@ -59,6 +58,7 @@ from app.workers.jobs.webhooks import (
     prune_webhook_deliveries,
     sweep_due_webhook_deliveries,
 )
+from tests._database import DatabaseHandle
 
 # Membership and Notification are here for one path only: auto-disabling an
 # endpoint notifies the org's owners, which reads memberships and (when
@@ -81,19 +81,13 @@ _URL = "https://93.184.216.34/hook"  # a literal public IP: no DNS in the guard
 
 
 @pytest.fixture(scope="module")
-def postgres_container() -> PostgresContainer:
-    with PostgresContainer("postgres:16-alpine") as container:
-        yield container
-
-
-@pytest.fixture(scope="module")
 def redis_container() -> RedisContainer:
     with RedisContainer("redis:7-alpine") as container:
         yield container
 
 
 @pytest.fixture
-async def test_engine(postgres_container: PostgresContainer) -> AsyncGenerator[AsyncEngine, None]:
+async def test_engine(postgres_container: DatabaseHandle) -> AsyncGenerator[AsyncEngine, None]:
     url = postgres_container.get_connection_url().replace("psycopg2", "asyncpg")
     engine = create_async_engine(url)
     async with engine.begin() as conn:

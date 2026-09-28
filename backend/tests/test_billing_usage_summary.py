@@ -19,7 +19,6 @@ from sqlalchemy.ext.asyncio import (
     create_async_engine,
 )
 from sqlmodel import SQLModel
-from testcontainers.postgres import PostgresContainer
 
 from app.modules.billing.models import Plan, Subscription
 from app.modules.billing.service import BillingService
@@ -27,18 +26,13 @@ from app.modules.billing.usage_models import UsageRecord
 from app.modules.billing.usage_service import UsageService
 from app.modules.tenancy.models import Organization
 from app.modules.tenancy.repository import OrganizationRepository
+from tests._database import DatabaseHandle
 
 _TABLES = [Plan.__table__, Organization.__table__, Subscription.__table__, UsageRecord.__table__]
 
 
-@pytest.fixture(scope="module")
-def postgres_container() -> "PostgresContainer":
-    with PostgresContainer("postgres:16-alpine") as container:
-        yield container
-
-
 @pytest.fixture
-async def test_engine(postgres_container: "PostgresContainer") -> AsyncGenerator[AsyncEngine, None]:
+async def test_engine(postgres_container: DatabaseHandle) -> AsyncGenerator[AsyncEngine, None]:
     url = postgres_container.get_connection_url().replace("psycopg2", "asyncpg")
     engine = create_async_engine(url)
     async with engine.begin() as conn:

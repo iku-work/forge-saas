@@ -42,7 +42,6 @@ from sqlalchemy.ext.asyncio import (
     create_async_engine,
 )
 from sqlmodel import SQLModel
-from testcontainers.postgres import PostgresContainer
 from testcontainers.redis import RedisContainer
 
 from app.core.metrics import ACTIVE_SESSIONS_REDIS_KEY
@@ -76,6 +75,7 @@ from app.workers.scheduler import (
     sync_expiring_trials,
     with_distributed_lock,
 )
+from tests._database import DatabaseHandle
 
 _TABLES = [
     User.__table__,
@@ -99,16 +99,10 @@ def _future(hours: int = 1) -> datetime:
     return datetime.now(UTC) + timedelta(hours=hours)
 
 
-@pytest.fixture(scope="module")
-def postgres_container() -> "PostgresContainer":
-    with PostgresContainer("postgres:16-alpine") as container:
-        yield container
-
-
 # Function-scoped (not module-scoped): see test_db.py -- an asyncpg-backed
 # engine can't be reused across pytest-asyncio's per-test loop.
 @pytest.fixture
-async def test_engine(postgres_container: "PostgresContainer") -> AsyncGenerator[AsyncEngine, None]:
+async def test_engine(postgres_container: DatabaseHandle) -> AsyncGenerator[AsyncEngine, None]:
     url = postgres_container.get_connection_url().replace("psycopg2", "asyncpg")
     engine = create_async_engine(url)
     async with engine.begin() as conn:
@@ -550,6 +544,9 @@ async def test_create_scheduler_registers_all_jobs_in_utc(redis_client: Redis) -
         # hard-delete is one Redis entry seven days out, and anything that
         # loses it loses the deletion silently.
         "sweep_orphaned_objects",
+        # The other half of counting live presigns toward the storage quota:
+        # without it an abandoned upload holds its org's allowance forever.
+        "expire_abandoned_uploads",
         "refresh_active_sessions_gauge",
     }
     assert "hour='*/6'" in repr(jobs_by_id["cleanup_expired_sessions"].trigger)
@@ -578,6 +575,11 @@ async def test_create_scheduler_registers_all_jobs_in_utc(redis_client: Redis) -
     # deferred jobs) otherwise strands every pending delivery until the next
     # tick.
     assert "minute='*/5'" in repr(jobs_by_id["sweep_due_webhook_deliveries"].trigger)
+    # Hourly, against an hour-long reservation window, so an abandoned
+    # presign clears in one to two hours. Minute 40 because
+    # reconcile_subscriptions holds 20 -- see its comment above.
+    assert "minute='40'" in repr(jobs_by_id["expire_abandoned_uploads"].trigger)
+    assert "hour=" not in repr(jobs_by_id["expire_abandoned_uploads"].trigger)
     assert "seconds=60" in repr(jobs_by_id["refresh_active_sessions_gauge"].trigger)
     for job in jobs_by_id.values():
         assert "timezone='UTC'" in repr(job.trigger)

@@ -103,6 +103,11 @@ ORG_NAMESPACE = "org"
 FEATURE_FLAGS_NAMESPACE = "feature_flags"
 INVOICES_NAMESPACE = "invoices"
 NOTIFICATIONS_NAMESPACE = "notif"
+# Reserved rather than used: the storage module's one cached value was
+# `total_bytes`, the org's quota total, and caching a security gate for
+# sixty seconds was the hole rather than the optimisation (see
+# app.modules.storage.repository). The prefix stays claimed so nothing
+# else takes it, and so the sweep below keeps recognising it.
 STORAGE_NAMESPACE = "storage"
 PRODUCT_SETTINGS_NAMESPACE = "product_settings"
 API_KEY_NAMESPACE = "api_key"
@@ -155,10 +160,6 @@ def invoices_pattern(org_id: UUID) -> str:
 
 def notification_unread_count_key(user_id: UUID) -> str:
     return f"{NOTIFICATIONS_NAMESPACE}:unread:{user_id}"
-
-
-def storage_total_bytes_key(org_id: UUID) -> str:
-    return f"{STORAGE_NAMESPACE}:total_bytes:{org_id}"
 
 
 def product_settings_key() -> str:

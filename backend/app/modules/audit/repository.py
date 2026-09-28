@@ -12,6 +12,7 @@ from uuid import UUID
 from sqlalchemy import exists, func, select, tuple_
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.exceptions import InvalidCursorError
 from app.core.repository import DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE, ReplicaReadMixin
 from app.modules.audit.models import AuditEvent
 
@@ -61,17 +62,21 @@ class AuditRepository(ReplicaReadMixin):
             .limit(capped_limit + 1)
         )
         if after is not None:
-            # Scoped to org_id, not a bare session.get(): an anchor id that
-            # belongs to a different org must be treated as "no cursor" (same
-            # as BaseRepository.list_cursor, whose org-scoped get() gives it
-            # this for free) rather than leaking that org's (ts, id) into the
-            # WHERE clause below.
+            # Scoped to org_id, not a bare session.get(): an anchor id
+            # belonging to a different org must not leak that org's (ts, id)
+            # into the WHERE clause below. It is refused rather than ignored
+            # -- ignoring it returned page one, which an infinite list
+            # appends as duplicates.
             anchor_stmt = select(AuditEvent).where(m.id == after, m.org_id == org_id)
             anchor: AuditEvent | None = await self._fetch_one(
                 anchor_stmt, use_read_replica=use_read_replica
             )
-            if anchor is not None:
-                stmt = stmt.where(tuple_(m.ts, m.id) < (anchor.ts, anchor.id))
+            if anchor is None:
+                raise InvalidCursorError(
+                    "errors.invalid_cursor",
+                    fallback=("This page cursor is no longer valid -- start from the first page"),
+                )
+            stmt = stmt.where(tuple_(m.ts, m.id) < (anchor.ts, anchor.id))
         items: list[AuditEvent] = await self._fetch_all(stmt, use_read_replica=use_read_replica)
         page = items[:capped_limit]
         next_cursor = page[-1].id if len(items) > capped_limit else None
@@ -146,9 +151,16 @@ class AuditRepository(ReplicaReadMixin):
             stmt = stmt.where(m.ts <= until)
         stmt = stmt.order_by(m.ts.desc(), m.id.desc()).limit(capped_limit + 1)
         if after is not None:
+            # The admin feed is cross-org by design (it is the global audit
+            # view), so no org filter here -- but the cursor still has to
+            # resolve to something.
             anchor = await self.session.get(AuditEvent, after)
-            if anchor is not None:
-                stmt = stmt.where(tuple_(m.ts, m.id) < (anchor.ts, anchor.id))
+            if anchor is None:
+                raise InvalidCursorError(
+                    "errors.invalid_cursor",
+                    fallback=("This page cursor is no longer valid -- start from the first page"),
+                )
+            stmt = stmt.where(tuple_(m.ts, m.id) < (anchor.ts, anchor.id))
         result = await self.session.execute(stmt)
         items = list(result.scalars().all())
         page = items[:capped_limit]

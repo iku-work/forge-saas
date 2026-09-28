@@ -27,7 +27,6 @@ from sqlalchemy.ext.asyncio import (
     create_async_engine,
 )
 from sqlmodel import SQLModel
-from testcontainers.postgres import PostgresContainer
 from testcontainers.redis import RedisContainer
 
 from app.core.db import get_session
@@ -38,6 +37,7 @@ from app.modules.audit.models import AuditEvent
 from app.modules.auth.models import User
 from app.modules.auth.utils import create_access_token
 from app.modules.gdpr.models import ConsentRecord, DataExportJob
+from tests._database import DatabaseHandle
 
 # T-291: this file needs gdpr enabled -- its routes, its tables, or
 # both. CI's module-matrix job deselects it in the combination that turns
@@ -45,12 +45,6 @@ from app.modules.gdpr.models import ConsentRecord, DataExportJob
 pytestmark = pytest.mark.module_dependent
 
 _TABLES = [User.__table__, ConsentRecord.__table__, DataExportJob.__table__, AuditEvent.__table__]
-
-
-@pytest.fixture(scope="module")
-def postgres_container() -> "PostgresContainer":
-    with PostgresContainer("postgres:16-alpine") as container:
-        yield container
 
 
 @pytest.fixture(scope="module")
@@ -62,7 +56,7 @@ def redis_container() -> "RedisContainer":
 # Function-scoped (not module-scoped): see test_auth_repository.py — an
 # asyncpg-backed engine can't be reused across pytest-asyncio's per-test loop.
 @pytest.fixture
-async def test_engine(postgres_container: "PostgresContainer") -> AsyncGenerator[AsyncEngine, None]:
+async def test_engine(postgres_container: DatabaseHandle) -> AsyncGenerator[AsyncEngine, None]:
     url = postgres_container.get_connection_url().replace("psycopg2", "asyncpg")
     engine = create_async_engine(url)
     async with engine.begin() as conn:

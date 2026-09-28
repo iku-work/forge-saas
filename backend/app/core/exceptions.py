@@ -65,6 +65,28 @@ class UnprocessableEntityError(DomainError):
     default_message_key = "errors.unprocessable_entity"
 
 
+class InvalidCursorError(DomainError):
+    """The `after` cursor on a list endpoint names a row this caller cannot
+    page from.
+
+    Raised instead of silently returning page one, which is what every
+    cursor implementation here used to do when it could not resolve the
+    anchor. An infinite list appends that page rather than replacing it, so
+    the user sees the first twenty rows a second time and reads it as
+    corruption -- and the bug only appears once the list is long enough to
+    paginate, which is exactly when nobody is looking.
+
+    A soft-deleted anchor is *not* this error: its (created_at, id) is still
+    a perfectly good position to page from, and the repositories now resolve
+    it ignoring `deleted_at`. This is for a cursor that genuinely cannot be
+    placed -- a hard-deleted row, another tenant's id, or a forged one.
+    """
+
+    status_code = 422
+    code = "invalid_cursor"
+    default_message_key = "errors.invalid_cursor"
+
+
 class StepUpAuthRequiredError(DomainError):
     """T-218: the caller has a valid session but it wasn't established (or
     refreshed via a full re-authentication) recently enough for the

@@ -4,7 +4,10 @@
     "empty": "No files yet. Upload one to get started.",
     "error_load": "Could not load files.",
     "empty_title": "No files yet",
-    "empty_body": "Files you upload here are private to your organization and scanned for viruses before anyone can download them. Use the uploader above to add your first one."
+    "empty_body": "Files you upload here are private to your organization and scanned for viruses before anyone can download them. Use the uploader above to add your first one.",
+    "error_download": "Could not start the download.",
+    "error_delete": "Could not delete the file.",
+    "empty_body_read_only": "No one in your organization has uploaded a file yet. Ask an admin if you need to add one."
   },
   "uploader": {
     "drop_here": "Drop files here",
@@ -31,14 +34,19 @@
     "pending": "Pending",
     "ready": "Ready",
     "infected": "Infected",
-    "failed": "Failed"
+    "failed": "Failed",
+    "scanning": "Scanning"
   },
   "action": {
     "download": "Download",
     "delete": "Delete",
     "delete_confirm": "Delete this file?",
     "delete_confirm_title": "Delete this file?",
-    "delete_confirm_body": "{filename} will be removed for everyone in your organization. This can't be undone."
+    "delete_confirm_body": "{filename} will be removed for everyone in your organization. This can't be undone.",
+    "download_blocked_scanning": "This file is still being scanned for viruses.",
+    "download_blocked_pending": "This upload has not finished yet.",
+    "download_blocked_infected": "Malware was found in this file, so it cannot be downloaded.",
+    "download_blocked_failed": "This file could not be scanned, so it cannot be downloaded."
   },
   "picker": {
     "upload_button": "Upload",

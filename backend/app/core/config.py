@@ -303,6 +303,16 @@ class Settings(BaseSettings):
     AWS_ACCESS_KEY_ID: str = ""
     AWS_SECRET_ACCESS_KEY: str = ""
     AWS_ENDPOINT_URL: str | None = None
+    # The absolute per-file ceiling, enforced for every upload whether or
+    # not the billing module is on. The plan's own `max_upload_mb` feature
+    # is a *product* limit and only exists where there is a plan to read it
+    # from; switching billing off used to remove the only cap in the
+    # system, which made "no billing" mean "unbounded upload". A template
+    # that lets anyone fill its disk the moment billing is disabled is a
+    # template bug, not a product decision -- so this one is not negotiable
+    # by module config. A product that wants larger uploads raises it here
+    # deliberately, having thought about its disk.
+    MAX_UPLOAD_BYTES: int = 100 * 1024 * 1024
 
     # Encryption (column-level Fernet, see EncryptedString in T-009.5)
     ENCRYPTION_KEY: str

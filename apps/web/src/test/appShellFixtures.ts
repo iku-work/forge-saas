@@ -185,6 +185,14 @@ export const fixtureConfig: ConfigResponse = {
   // app.core.support).
   support_tool: "none",
   support_url: "mailto:support@example.com",
+  // UX-01: both providers configured, so a test that doesn't care about
+  // OAuth still sees the login page it used to see. Override with [] to
+  // assert the buttons disappear on a deployment with no credentials.
+  oauth_providers: ["github", "google"],
+  // UX-02: where the terms and privacy pages live. Empty in a product
+  // with the marketing module off, which is the case the register
+  // page's legal-notice tests override this for.
+  marketing_url: "https://marketing.localhost",
   // T-263 defaults: no operator has flipped anything. `banner` and
   // `signup_disabled` are optional on the wire (the server omits/defaults
   // them), but they are spelled out here so a test that cares reads the
@@ -226,7 +234,12 @@ export function makeStoredFile(
     content_type: "text/plain",
     size_bytes: 1024 * suffix,
     status: "ready",
-    virus_scan_result: null,
+    // Scanned and clean, because that is what a file sitting in a list
+    // normally is. It used to default to null, which is the *pending* scan
+    // state -- and since the download gate began requiring a verdict, a
+    // fixture in that state is a file nobody can download. Tests that care
+    // about the pending or infected cases override it.
+    virus_scan_result: "clean",
     uploaded_by: fixtureUser.id,
     created_at: "2026-01-01T00:00:00Z",
     ...overrides,

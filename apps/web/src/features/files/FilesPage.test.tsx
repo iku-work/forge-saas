@@ -17,6 +17,9 @@ import { server } from "../../test/server";
 
 const hooks = vi.hoisted(() => ({
   useOrg: vi.fn(),
+  // Defaults to "yes" so every pre-existing test here keeps exercising the
+  // owner's view of the page; the read-only cases below set it to false.
+  usePermission: vi.fn(() => true),
   useModules: vi.fn(() => ({
     fileStorage: true,
     billing: false,
@@ -71,6 +74,7 @@ function renderPage() {
 describe("FilesPage", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    hooks.usePermission.mockReturnValue(true);
     hooks.useOrg.mockReturnValue({
       org: fixtureOrg,
       orgs: [fixtureOrg],
@@ -213,5 +217,139 @@ describe("FilesPage", () => {
     expect(
       await screen.findByRole("button", { name: /drop files here/i }),
     ).toBeInTheDocument();
+  });
+
+  // --- what the page tells the truth about -------------------------------
+  //
+  // Repo finding 12: a MEMBER saw an uploader and a delete button that the
+  // API answers with 403, a download button that 409s on an unscanned file,
+  // and nothing at all when either failed -- both handlers discarded their
+  // errors.
+
+  it("hides the uploader and delete from someone who cannot manage files", async () => {
+    hooks.usePermission.mockReturnValue(false);
+    const file = makeStoredFile(1);
+    server.use(
+      http.get(`${API}/api/v1/files`, () =>
+        HttpResponse.json(envelope([file])),
+      ),
+    );
+
+    renderPage();
+
+    expect(await screen.findByText(file.filename)).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Delete" }),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByText("Drop files here")).not.toBeInTheDocument();
+    // Read access is real access: download stays.
+    expect(screen.getByRole("button", { name: "Download" })).toBeEnabled();
+  });
+
+  it("points a read-only member somewhere useful when there is nothing here", async () => {
+    hooks.usePermission.mockReturnValue(false);
+    server.use(
+      http.get(`${API}/api/v1/files`, () => HttpResponse.json(envelope([]))),
+    );
+
+    renderPage();
+
+    const empty = await screen.findByTestId("empty-state");
+    // Not "use the uploader above" -- there is no uploader above for them.
+    expect(empty).toHaveTextContent(/ask an admin/i);
+  });
+
+  it("says a file is being scanned rather than calling it ready", async () => {
+    const file = makeStoredFile(1, { virus_scan_result: null });
+    server.use(
+      http.get(`${API}/api/v1/files`, () =>
+        HttpResponse.json(envelope([file])),
+      ),
+    );
+
+    renderPage();
+
+    // `status` is already "ready" at this point -- the scan runs after the
+    // upload is confirmed -- so showing it verbatim promised a download
+    // that scan_gate refuses.
+    expect(await screen.findByText("Scanning")).toBeInTheDocument();
+    expect(screen.queryByText("Ready")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Download" })).toBeDisabled();
+  });
+
+  it("does not offer to download an infected file", async () => {
+    const file = makeStoredFile(1, {
+      status: "infected",
+      virus_scan_result: "Eicar-Test-Signature",
+    });
+    server.use(
+      http.get(`${API}/api/v1/files`, () =>
+        HttpResponse.json(envelope([file])),
+      ),
+    );
+
+    renderPage();
+
+    expect(await screen.findByText("Infected")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Download" })).toBeDisabled();
+  });
+
+  it("surfaces a failed download instead of swallowing it", async () => {
+    const file = makeStoredFile(1);
+    server.use(
+      http.get(`${API}/api/v1/files`, () =>
+        HttpResponse.json(envelope([file])),
+      ),
+      http.get(`${API}/api/v1/files/${file.id}/download`, () =>
+        // Spelled out rather than via errorEnvelope(): the point of the
+        // test is that the *specific* reason reaches the user, and that
+        // travels in `message_key`. errorEnvelope() carries only `code`,
+        // which every 409 in the product shares.
+        HttpResponse.json(
+          {
+            data: null,
+            error: {
+              code: "conflict",
+              message_key: "errors.file_scan_pending",
+              message: "This file is still being scanned for malware.",
+            },
+            meta: { request_id: "req-1" },
+          },
+          { status: 409 },
+        ),
+      ),
+    );
+    const user = userEvent.setup();
+
+    renderPage();
+    await user.click(await screen.findByRole("button", { name: "Download" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      t("errors.file_scan_pending"),
+    );
+  });
+
+  it("surfaces a failed delete instead of swallowing it", async () => {
+    const file = makeStoredFile(1);
+    server.use(
+      http.get(`${API}/api/v1/files`, () =>
+        HttpResponse.json(envelope([file])),
+      ),
+      http.delete(`${API}/api/v1/files/${file.id}`, () =>
+        HttpResponse.json(
+          errorEnvelope("You do not have permission.", "permission_denied"),
+          { status: 403 },
+        ),
+      ),
+    );
+    const user = userEvent.setup();
+
+    renderPage();
+    await user.click(await screen.findByRole("button", { name: "Delete" }));
+    await user.click(
+      await screen.findByRole("button", { name: t("files.action.delete") }),
+    );
+
+    expect(await screen.findByRole("alert")).toBeInTheDocument();
   });
 });

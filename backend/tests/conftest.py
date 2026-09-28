@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any
 from uuid import uuid4
 
+import asyncpg
 import httpx
 import pytest
 from dotenv import dotenv_values
@@ -36,6 +37,7 @@ from app.modules.auth.repository import UserRepository
 from app.modules.auth.utils import create_access_token, hash_password
 from app.modules.product_settings import service as product_settings_service
 from app.modules.tenancy.repository import MembershipRepository, OrganizationRepository
+from tests._database import DatabaseHandle
 
 _ENV_TEST_FILE = Path(__file__).parent.parent / ".env.test"
 _AUTHED_PASSWORD = "Correct-Horse9"
@@ -117,9 +119,81 @@ def enqueued_jobs(monkeypatch: pytest.MonkeyPatch) -> list[tuple[str, dict[str, 
 
 
 @pytest.fixture(scope="session")
-def postgres_container() -> Generator[PostgresContainer, None, None]:
+def _shared_postgres() -> Generator[PostgresContainer, None, None]:
+    """The single Postgres server for the whole run.
+
+    Every test file that needs its own schema used to start its own
+    container: 64 of them, at fifteen to twenty seconds each, which was most
+    of a fifty-two minute suite. They are not wrong to want isolation --
+    each creates and drops its own subset of tables, and doing that against
+    the migrated schema `engine` builds below would break every test that
+    came after. But isolation is what a *database* is for, and creating one
+    costs about a tenth of a second.
+    """
     with PostgresContainer("postgres:16-alpine") as container:
         yield container
+
+
+@pytest.fixture(scope="module")
+def postgres_container(
+    _shared_postgres: PostgresContainer, request: pytest.FixtureRequest
+) -> DatabaseHandle:
+    """A fresh, empty database for this module, on the shared server.
+
+    Named `postgres_container` deliberately: these files already override a
+    fixture of that name, so keeping it means deleting their override and
+    changing nothing else.
+
+    Not dropped afterwards. The server is thrown away at the end of the run,
+    and `DROP DATABASE` fails outright if any connection is still open --
+    turning a tidy-up into a flake that fires on whichever module happens to
+    leave a socket behind.
+    """
+    return _make_database(_shared_postgres, request.module.__name__)
+
+
+@pytest.fixture
+def fresh_database(
+    _shared_postgres: PostgresContainer, request: pytest.FixtureRequest
+) -> DatabaseHandle:
+    """A new database for *this test*, for the files that need one.
+
+    The migration and model tests run `alembic upgrade` against an empty
+    schema, so one database per module would leave the second test in a file
+    looking at the first one's tables. They used to buy that isolation with a
+    container per test, which is the most expensive way to get it.
+    """
+    return _make_database(_shared_postgres, request.node.name)
+
+
+def _make_database(container: PostgresContainer, label: str) -> DatabaseHandle:
+    base = container.get_connection_url()
+    # Postgres truncates identifiers at 63 bytes *silently*, so a long label
+    # could collide with another after truncation. The uuid goes first, and
+    # the label is only there to make the database list readable when
+    # something has gone wrong.
+    safe = "".join(c if c.isalnum() else "_" for c in label.rsplit(".", 1)[-1])
+    name = f"t{uuid4().hex[:12]}_{safe}"[:63]
+
+    # asyncpg, not a sync engine: psycopg2 is not installed here at all --
+    # which is why every test file in this suite does
+    # `.replace("psycopg2", "asyncpg")` on the URL testcontainers hands it.
+    # `asyncio.run` from a sync fixture is the same shape the `engine`
+    # fixture already uses for its teardown.
+    asyncio.run(_create_database(base.replace("+psycopg2", ""), name))
+
+    return DatabaseHandle(base.rsplit("/", 1)[0] + f"/{name}")
+
+
+async def _create_database(dsn: str, name: str) -> None:
+    conn = await asyncpg.connect(dsn)
+    try:
+        # No parameter binding: CREATE DATABASE takes an identifier, not a
+        # value. `name` is built above from a uuid and an alphanumeric-only
+        # label, so there is nothing here that came from outside this file.
+        await conn.execute(f'CREATE DATABASE "{name}"')
+    finally:
+        await conn.close()
 
 
 @pytest.fixture(scope="session")
@@ -146,8 +220,8 @@ def _reset_metrics_scrape_backoff() -> Generator[None, None, None]:
 
 
 @pytest.fixture(scope="session")
-def engine(postgres_container: PostgresContainer) -> Generator[AsyncEngine, None, None]:
-    url = postgres_container.get_connection_url().replace("psycopg2", "asyncpg")
+def engine(_shared_postgres: PostgresContainer) -> Generator[AsyncEngine, None, None]:
+    url = _shared_postgres.get_connection_url().replace("psycopg2", "asyncpg")
     # alembic/env.py sources the DB URL from get_settings(), never from an
     # ini file (§0.4 law) -- monkeypatch isn't usable at session scope, so
     # the env var is set directly; nothing downstream depends on it once the

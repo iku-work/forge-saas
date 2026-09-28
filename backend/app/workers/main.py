@@ -82,5 +82,12 @@ class WorkerSettings:
     redis_settings = build_redis_settings()
     max_jobs = 20
     job_timeout = 300
+    # PROD-06. arq's default is 3600s, which makes `arq --check` -- the
+    # worker's Docker healthcheck -- useless: a wedged worker would look
+    # healthy for the better part of an hour. The heartbeat is written from
+    # the main loop, so a job that blocks that loop stops it, which is
+    # exactly the failure a liveness probe is for. The key's TTL is this
+    # plus one second, so a stuck worker fails its check within ~31s.
+    health_check_interval = 30
     on_startup = worker_startup
     on_shutdown = worker_shutdown

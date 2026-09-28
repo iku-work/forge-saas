@@ -20,7 +20,7 @@ from sqlalchemy import CursorResult, delete, func, select, tuple_, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core import cache_keys
-from app.core.exceptions import NotFoundError
+from app.core.exceptions import InvalidCursorError, NotFoundError
 from app.core.repository import DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE
 from app.models._mixins import utcnow
 from app.modules.notifications.models import Notification, PushToken
@@ -92,16 +92,21 @@ class NotificationRepository:
             stmt = stmt.where(m.read_at.is_(None))
         stmt = stmt.order_by(m.created_at.desc(), m.id.desc()).limit(capped_limit + 1)
         if after is not None:
-            # Scoped to org_id + user_id, not get_or_raise(): an anchor that
-            # belongs to another org or another user in this org is treated
-            # as "no cursor" (mirrors app.modules.audit.repository's
-            # list_cursor) rather than raising or leaking its position.
+            # Scoped to org_id + user_id, not get_or_raise(): an anchor
+            # belonging to another org, or to another user in this org, must
+            # not leak its position. It is refused rather than ignored --
+            # ignoring it returned page one, which the notification feed
+            # appends as duplicates.
             anchor_stmt = select(Notification).where(
                 m.id == after, m.org_id == self.org_id, m.user_id == user_id
             )
             anchor = (await self.session.execute(anchor_stmt)).scalar_one_or_none()
-            if anchor is not None:
-                stmt = stmt.where(tuple_(m.created_at, m.id) < (anchor.created_at, anchor.id))
+            if anchor is None:
+                raise InvalidCursorError(
+                    "errors.invalid_cursor",
+                    fallback=("This page cursor is no longer valid -- start from the first page"),
+                )
+            stmt = stmt.where(tuple_(m.created_at, m.id) < (anchor.created_at, anchor.id))
         result = await self.session.execute(stmt)
         items = list(result.scalars().all())
         page = items[:capped_limit]

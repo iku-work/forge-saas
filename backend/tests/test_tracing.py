@@ -39,13 +39,13 @@ from opentelemetry.sdk.trace.sampling import ALWAYS_ON
 from opentelemetry.trace import SpanKind
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncEngine
-from testcontainers.postgres import PostgresContainer
 
 from app.core import tracing as tracing_module
 from app.core.config import Settings
 from app.core.db import write_engine as app_engine
 from app.core.tracing import _build_tracer_provider, trace_job
 from app.main import app as real_app
+from tests._database import DatabaseHandle
 
 FIXTURE_ENV_FILE = Path(__file__).parent.parent / ".env.test"
 
@@ -108,12 +108,6 @@ def test_wrong_method_on_real_route_returns_405_not_a_500() -> None:
 # --- HTTP -> DB span tree ----------------------------------------------------------
 
 
-@pytest.fixture(scope="module")
-def postgres_container() -> Generator[PostgresContainer, None, None]:
-    with PostgresContainer("postgres:16-alpine") as container:
-        yield container
-
-
 @pytest.fixture
 def _isolated_sqlalchemy_instrumentor() -> Generator[None, None, None]:
     # SQLAlchemyInstrumentor is a singleton (BaseInstrumentor's
@@ -133,7 +127,7 @@ def _isolated_sqlalchemy_instrumentor() -> Generator[None, None, None]:
 
 @pytest.fixture
 def instrumented_engine(
-    postgres_container: PostgresContainer,
+    postgres_container: DatabaseHandle,
     _isolated_sqlalchemy_instrumentor: None,
 ) -> Generator[AsyncEngine, None, None]:
     # A plain (non-async) fixture on purpose: the test itself is sync and

@@ -36,6 +36,7 @@ from app.modules.billing.dependencies import OrgSubscription
 from app.modules.notifications.service import NotificationService
 from app.modules.storage.backend import get_storage_backend
 from app.modules.storage.models import StoredFile
+from app.modules.storage.quota import check_absolute_ceiling, reservation_cutoff
 from app.modules.storage.repository import StoredFileRepository
 from app.modules.storage.scan_gate import require_clean_scan
 from app.modules.webhooks import service as webhooks
@@ -96,7 +97,7 @@ class StorageService:
     def __init__(self, session: AsyncSession, org_id: UUID, redis: Redis) -> None:
         self._session = session
         self._org_id = org_id
-        self._repo = StoredFileRepository(session, org_id, redis)
+        self._repo = StoredFileRepository(session, org_id)
         self._audit = AuditService(session)
         self._notifications = NotificationService(session, redis)
         self._backend = get_storage_backend()
@@ -117,6 +118,16 @@ class StorageService:
                 fallback=f"Content type '{content_type}' is not allowed for bucket '{bucket}'",
                 params={"content_type": content_type, "bucket": bucket},
             )
+
+        # Before the plan check and outside it: `org_sub` is None wherever
+        # billing is off, and that used to mean no size limit whatsoever.
+        check_absolute_ceiling(size_bytes)
+
+        # Held until this request commits. Everything from here to the
+        # INSERT below is the read-then-write the quota depends on, so two
+        # concurrent presigns for one org have to take turns through it --
+        # otherwise both read a total that neither has written to yet.
+        await self._repo.lock_for_quota_check()
 
         if org_sub is not None:
             await self._check_quota(size_bytes, org_sub)
@@ -187,6 +198,20 @@ class StorageService:
             # success rather than an error (T-112 Build section).
             return stored_file
 
+        if stored_file.created_at <= reservation_cutoff():
+            # The reservation lapsed, so these bytes have already stopped
+            # counting toward the quota -- confirming now would add them
+            # back without anything having checked there was room. Cheaper
+            # to refuse than to re-run the quota check: the client has to
+            # presign again anyway, and this is the same verdict
+            # `expire_abandoned_uploads` would reach on its next tick, just
+            # arrived at sooner.
+            await self._expire(stored_file)
+            raise UnprocessableEntityError(
+                "errors.upload_reservation_expired",
+                fallback="This upload was not confirmed in time -- start it again",
+            )
+
         metadata = await self._backend.head(stored_file.key)
         if metadata is None:
             raise UnprocessableEntityError(
@@ -211,8 +236,10 @@ class StorageService:
         # hash lookup could never match. app.workers.jobs.virus_scan sets it
         # from the bytes it actually reads, which also binds the digest to
         # the object version the verdict was reached on.
+        # No cache to invalidate: the row already counted toward the quota
+        # as a live reservation, and pending -> ready leaves the total
+        # unchanged. That is the point of counting reservations.
         updated = await self._repo.update(file_id, status="ready")
-        await self._repo.invalidate_total_bytes_cache()
 
         await jobs.enqueue_job("virus_scan", file_id=updated.id)
 
@@ -277,10 +304,33 @@ class StorageService:
         expires_at = utcnow() + timedelta(seconds=_DOWNLOAD_EXPIRES_IN_SECONDS)
         return url, expires_at
 
+    async def _expire(self, stored_file: StoredFile) -> None:
+        """Retire a presign whose reservation lapsed before it was confirmed.
+
+        Soft-deleted rather than hard-deleted so the two existing cleanup
+        paths apply unchanged: `hard_delete_stored_file` removes the object
+        and the row, and `sweep_orphaned_objects` catches it anyway if that
+        job is lost. Enqueued without the seven-day defer `delete_file`
+        uses -- that window exists so a *user* can undo a deletion, and
+        nobody is going to undo an upload that was never confirmed.
+
+        The object may or may not exist: the client might have uploaded and
+        then gone quiet, or never started. `_purge` treats an absent object
+        as a success, so both are the same case here.
+        """
+        await self._repo.soft_delete(stored_file.id)
+        await jobs.enqueue_job("hard_delete_stored_file", file_id=stored_file.id)
+        await self._audit.log(
+            action="file.expired",
+            resource_type="file",
+            resource_id=str(stored_file.id),
+            org_id=self._org_id,
+            actor_id=None,
+        )
+
     async def delete_file(self, user_id: UUID, file_id: UUID) -> None:
         stored_file = await self._repo.get_or_raise(file_id)
         await self._repo.soft_delete(file_id)
-        await self._repo.invalidate_total_bytes_cache()
 
         await jobs.enqueue_job(
             "hard_delete_stored_file",

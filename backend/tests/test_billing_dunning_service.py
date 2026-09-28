@@ -21,7 +21,6 @@ from sqlalchemy.ext.asyncio import (
     create_async_engine,
 )
 from sqlmodel import SQLModel
-from testcontainers.postgres import PostgresContainer
 from testcontainers.redis import RedisContainer
 
 from app.core import jobs
@@ -29,18 +28,13 @@ from app.core.config import get_settings
 from app.modules.billing.dunning import DunningService
 from app.modules.billing.models import DunningCampaign, Plan, Subscription
 from app.modules.billing.repository import DunningCampaignRepository
+from tests._database import DatabaseHandle
 
 _TABLES = [Plan.__table__, Subscription.__table__, DunningCampaign.__table__]
 
 
-@pytest.fixture(scope="module")
-def postgres_container() -> "PostgresContainer":
-    with PostgresContainer("postgres:16-alpine") as container:
-        yield container
-
-
 @pytest.fixture
-async def test_engine(postgres_container: "PostgresContainer") -> AsyncGenerator[AsyncEngine, None]:
+async def test_engine(postgres_container: DatabaseHandle) -> AsyncGenerator[AsyncEngine, None]:
     url = postgres_container.get_connection_url().replace("psycopg2", "asyncpg")
     engine = create_async_engine(url)
     async with engine.begin() as conn:
