@@ -1,11 +1,11 @@
 # Backup/restore runbook (T-225)
 
-> **Status**: the procedures are written and the self-hosted path now ships
-> working scripts (`scripts/backup-postgres.sh`, `scripts/restore-postgres.sh`),
-> but **no restore has been executed against a live instance** — see
-> "Verification status" at the bottom. Until that box is ticked this
-> document describes an intention, not a capability. Run the drill once,
-> record the timing, and tick it.
+> **Status**: the self-hosted path is **exercised** — backup, restore and
+> decryption were run end to end against the live deployment on 2026-09-29,
+> and the schedule is installed (see "Verification status" at the bottom for
+> the numbers and for the two gaps that remain, the larger being that
+> archives are not yet copied off-host). The Render path is still written
+> but unexecuted.
 
 Covers the two deployment paths this repo supports: Render (managed
 Postgres/Redis, `docs/runbooks/deploy-render.md`) and self-hosted
@@ -344,13 +344,36 @@ in at start, so a restarted container reuses its stale copy.
 - [ ] Render restore drill executed against a real (non-template) Render
       account, confirming the dashboard flow above matches Render's current
       UI/API and that a restored instance actually boots the app correctly.
-- [ ] Self-hosted backup/restore exercised against a real
-      `docker-compose.prod.yml` deployment: `scripts/backup-postgres.sh` on
-      its timer, then `scripts/restore-postgres.sh` into the scratch
-      database. **Record the elapsed restore time and the archive size**
-      when this is ticked -- a restore that works but takes four hours is a
-      different answer to "are we covered?" than one that takes four
-      minutes, and only the drill distinguishes them.
+- [x] **Self-hosted backup/restore exercised end to end (2026-09-29.)**
+      Against the live single-box deployment, stack assembled from
+      `prod + tls + host-build`.
+
+      `scripts/backup-postgres.sh` produced a **102,458-byte** archive,
+      mode **0600** (the audit found 0664 on the hand-made dumps beside it;
+      those were tightened in the same pass).
+      `scripts/restore-postgres.sh` restored it into the scratch database
+      in **2 seconds**, reporting 8 users and all five migration heads --
+      one per enabled module branch.
+
+      The step that matters more than the timing: an `EncryptedString`
+      column came back Fernet-prefixed as expected, and then **decrypted
+      with the live `ENCRYPTION_KEY`**. A restore can report every row
+      present and still be unreadable, and nothing before that check
+      distinguishes the two.
+
+      Installed as `forge-backup.timer` (daily 03:30 UTC, `Persistent=true`
+      so a missed day runs after a reboot rather than being skipped); the
+      service was fired once by hand and exited 0.
+
+      **Still not off-host.** `BACKUP_REMOTE` is unset, so every archive
+      lives on the same disk as the database it came from -- which survives
+      a bad migration and not a dead disk. The script says so on every run.
+      Setting it needs an rclone remote and credentials the operator holds.
+
+      Two things this drill did not cover: a restore over the *live*
+      database (only the scratch path was exercised), and the timing at any
+      meaningful data volume -- 102 KB restores in 2s and tells you nothing
+      about 10 GB.
 - [x] **Docker-network TLS exercised end-to-end on the self-hosted path
       (2026-09-03).** `make prod-compose-tls-check` against the real
       `docker-compose.prod.yml` with `ENVIRONMENT=prod`: certificate
