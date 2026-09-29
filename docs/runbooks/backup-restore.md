@@ -123,6 +123,14 @@ Environment=BACKUP_AGE_RECIPIENT=age1...        # the public key
 Environment=BACKUP_DIR=/var/backups/forge
 Environment=BACKUP_RETENTION_DAYS=14
 Environment=BACKUP_REMOTE=b2:forge-backups      # omit for local-only
+# docker compose's own variable, colon-separated. Name every overlay the
+# stack was brought up with -- the base file alone is not the deployment,
+# and the script does not guess. `docker inspect <container> --format
+# '{{index .Config.Labels "com.docker.compose.project.config_files"}}'`
+# prints the set that is actually running.
+Environment=COMPOSE_FILE=docker-compose.prod.yml:docker-compose.tls.yml:docker-compose.host-build.yml
+Environment=POSTGRES_USER=postgres
+Environment=POSTGRES_DB=forge
 ExecStart=/srv/forge/scripts/backup-postgres.sh
 ```
 

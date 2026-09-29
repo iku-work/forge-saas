@@ -23,11 +23,18 @@
 # Env:
 #   AGE_IDENTITY   (required) path to the age private key. Kept off the box
 #                  in normal operation -- bring it, use it, take it away.
-#   COMPOSE_FILE   default docker-compose.prod.yml
+#   COMPOSE_FILE   docker compose's own colon-separated variable -- see
+#                  backup-postgres.sh for why it is not a -f flag.
 
 set -euo pipefail
 
-COMPOSE_FILE="${COMPOSE_FILE:-docker-compose.prod.yml}"
+# Exported, not passed as -f: COMPOSE_FILE is docker compose's own
+# variable and takes a colon-separated list, so a stack assembled from
+# overlays (prod + tls + host-build, which is what the reference
+# deployment runs) works without this script knowing how many files
+# there are. A single -f would silently use the base file alone --
+# which on that deployment is an edge with no site in it.
+export COMPOSE_FILE="${COMPOSE_FILE:-docker-compose.prod.yml}"
 TARGET_DB="forge_restore_check"
 
 die() {
@@ -58,7 +65,7 @@ started="$(date -u +%s)"
 echo "restore-postgres: restoring $archive into '$TARGET_DB'"
 
 psql_run() {
-    docker compose -f "$COMPOSE_FILE" exec -T postgres \
+    docker compose exec -T postgres \
         psql -U "${POSTGRES_USER:-postgres}" -v ON_ERROR_STOP=1 "$@"
 }
 
@@ -70,7 +77,7 @@ psql_run -d postgres -c "DROP DATABASE IF EXISTS \"$TARGET_DB\";"
 psql_run -d postgres -c "CREATE DATABASE \"$TARGET_DB\";"
 
 age -d -i "$AGE_IDENTITY" "$archive" |
-    docker compose -f "$COMPOSE_FILE" exec -T postgres \
+    docker compose exec -T postgres \
         pg_restore -U "${POSTGRES_USER:-postgres}" -d "$TARGET_DB" --no-owner --no-privileges
 
 elapsed="$(($(date -u +%s) - started))"

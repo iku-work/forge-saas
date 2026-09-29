@@ -37,13 +37,20 @@
 #   BACKUP_DIR             default /var/backups/forge
 #   BACKUP_RETENTION_DAYS  default 14
 #   BACKUP_REMOTE          optional rclone target, e.g. "b2:forge-backups"
-#   COMPOSE_FILE           default docker-compose.prod.yml
+#   COMPOSE_FILE           docker compose's own variable: colon-separated,
+#                          e.g. "docker-compose.prod.yml:docker-compose.tls.yml"
 
 set -euo pipefail
 
 BACKUP_DIR="${BACKUP_DIR:-/var/backups/forge}"
 BACKUP_RETENTION_DAYS="${BACKUP_RETENTION_DAYS:-14}"
-COMPOSE_FILE="${COMPOSE_FILE:-docker-compose.prod.yml}"
+# Exported, not passed as -f: COMPOSE_FILE is docker compose's own
+# variable and takes a colon-separated list, so a stack assembled from
+# overlays (prod + tls + host-build, which is what the reference
+# deployment runs) works without this script knowing how many files
+# there are. A single -f would silently use the base file alone --
+# which on that deployment is an edge with no site in it.
+export COMPOSE_FILE="${COMPOSE_FILE:-docker-compose.prod.yml}"
 
 die() {
     echo "backup-postgres: $*" >&2
@@ -80,7 +87,7 @@ echo "backup-postgres: dumping to $target"
 # host needs no postgres client, and connects over the container's own
 # socket so it bypasses pgbouncer -- transaction pooling and a long-running
 # dump do not mix (docs/adr/0002-pgbouncer.md).
-docker compose -f "$COMPOSE_FILE" exec -T postgres \
+docker compose exec -T postgres \
     pg_dump -Fc -U "${POSTGRES_USER:-postgres}" "${POSTGRES_DB:-forge}" |
     age -r "$BACKUP_AGE_RECIPIENT" -o "$partial"
 
