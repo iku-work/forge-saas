@@ -26,7 +26,7 @@ it), or a UI-only feature with no new tables (start at step 8).
 - A clean-ish working tree. Generation touches only new paths, but you will be
   editing six shared files in the steps below, and a `git diff` you can read is
   worth more than it costs.
-- `pip install -e ".[dev]"` done in `backend/` — the generator shells out to
+- `pip install --require-hashes -r requirements-dev.lock && pip install --no-deps -e .` done in `backend/` — the generator shells out to
   `ruff format`, and every verification step below needs the dev extras.
 
 ## Steps

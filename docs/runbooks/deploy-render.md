@@ -7,7 +7,7 @@ build and push the image but the deploy fails on its first step.
 
 Since 2026-09-14 it is one of three sibling workflows -- Render, Hetzner and
 AWS -- selected by the `DEPLOY_TARGET` repository variable and sharing one
-built, scanned image and one preflight (env, guards, migrations). See
+built, scanned image and one preflight (env and guards). See
 `docs/runbooks/deploy-pipeline.md` for the shared half; this file covers only
 what is specific to Render. An unset `DEPLOY_TARGET` still means Render, so
 nothing here changed for an existing deployment.
@@ -49,19 +49,29 @@ image.
   see below).
 - A **Background Worker**, same image, start command
   `arq app.workers.main.WorkerSettings`.
+- A second **Background Worker** for virus scans, same image, start command
+  `arq app.workers.main.ScanWorkerSettings`. Scans run on their own queue
+  (review R4). **Without this service no upload is ever scanned**, so every
+  file stays "scanning" and can't be downloaded. That fails closed, but it
+  fails.
 - A **PostgreSQL** instance and a **Key Value (Redis)** instance.
 
 On the Web Service:
 - **Health Check Path**: `/health/ready`
-- **Pre-Deploy Command** (optional, defense in depth alongside CI's own
-  migration step): `python -m app.core.migrations`
+- **Pre-Deploy Command** (**required**): `python -m app.core.migrations`
+
+  This is the only thing that migrates on Render. CI used to migrate from
+  the GitHub runner, which meant the production database had to accept
+  connections from GitHub's network; since 2026-09-29 (review C4) it does
+  not, and the deploy workflow reads this setting through the API and
+  refuses to deploy when it is anything else.
 
   **Not `alembic upgrade head`.** Every optional module's first migration
   branches off the core trunk with its own `branch_labels`, so there is no
   single head to upgrade to and that command cannot succeed against this
   schema. `app.core.migrations` asks Alembic for `<branch>@head` once per
   *enabled* module, which is also what keeps a disabled module's tables out
-  of the database entirely. CI's `deploy` job already runs this one.
+  of the database entirely.
 
 ### 2. Registry credential (only if the GHCR package is private)
 
@@ -75,7 +85,8 @@ Dashboard → Account Settings → Registry Credentials → add a GitHub PAT wit
 | `RENDER_API_KEY` | Dashboard → Account Settings → API Keys |
 | `RENDER_BACKEND_SERVICE_ID` | Web service page URL: `srv-xxxxxxxxxxxx` |
 | `RENDER_WORKER_SERVICE_ID` | Worker service page URL: `srv-xxxxxxxxxxxx` |
-| `PROD_ENV_FILE` | Full contents of a production `backend/.env` (see `backend/.env.example` for the field list) — written to disk and passed to the migration container via `--env-file` |
+| `RENDER_SCANNER_WORKER_SERVICE_ID` | The scan worker's page URL (review R4). The deploy refuses to run without it: a scan worker left on an old image would stop consuming the scan queue after a queue change |
+| `PROD_ENV_FILE` | Full contents of a production `backend/.env` (see `backend/.env.example` for the field list) — checked by the preflight guards; the services themselves take their env from Render |
 | `PROD_DOMAIN` | The domain Caddy/Render terminates TLS for, e.g. `app.example.com` — used for the post-deploy smoke test |
 
 ### 4. Environment values Render specifically needs
@@ -91,19 +102,37 @@ running in the wrong shape:
 | `METRICS_TOKEN` | a generated token | On Render the app is the edge. Without this (or `METRICS_BLOCKED_AT_EDGE`, which would be a lie here) startup refuses, because `/metrics` would otherwise answer 200 to anyone. |
 | `TRUSTED_PROXY_IPS` | `10.0.0.0/8,172.16.0.0/12,192.168.0.0/16` | Render's router reaches the container over the private network. Without this the app believes the socket, so every anonymous caller shares one rate-limit bucket and every audit event records the router. **Not `*`:** Render appends to `X-Forwarded-For` without resetting a client-supplied value, and `*` makes uvicorn take the leftmost (caller-supplied) entry — so anyone could pick their own rate-limit bucket and forge the IP on their audit events. Add Cloudflare's published ranges if you put it in front. |
 
-`PROD_ENV_FILE`'s `DATABASE_URL` must be the Postgres instance's **External**
-connection string — the GitHub-hosted runner isn't on Render's private
-network, only Render's own services are.
+The Postgres instance does **not** need its External connection string
+opened to GitHub: nothing on the runner connects to it any more (C4). Keep
+external access off, or allowlisted to your own addresses for `psql`.
+
+### 5. Object-store lifecycle rule (S3 or R2 only)
+
+Uploads land under `incoming/` and are copied out when confirmed (review R1,
+`backend/app/modules/storage/keys.py`). A re-posted upload form can leave a
+copy behind that no database row points at. On MinIO, `minio-init` installs
+the rule that clears these. On S3 or R2, add it to the bucket once:
+**expire objects with prefix `incoming/` after 1 day**. Use the provider's
+lifecycle settings, or on S3 run
+`aws s3api put-bucket-lifecycle-configuration` with the same rule
+`minio-init` imports (see `docker-compose.prod.yml`).
+
+Without the rule nothing breaks. The leftover copies just accumulate outside
+anyone's quota.
 
 ## What CI does on a push to `main`
 
-1. `alembic upgrade head` runs inside the freshly-built, freshly-scanned
-   image against the production DB. Failure aborts — nothing below runs.
-2. Triggers a Render deploy for both services via the
+1. Checks through the API that the backend service's Pre-Deploy Command is
+   `python -m app.core.migrations`, and stops if it is not.
+2. Triggers a backend deploy via the
    [Deploys API](https://api-docs.render.com/reference/create-deploy),
-   pointing at the new image.
+   pointing at the new image. Render runs the pre-deploy migration in that
+   image, on its own network, and fails the deploy (`pre_deploy_failed`)
+   without moving traffic if it exits non-zero.
 3. Polls the backend deploy until Render reports `live` (or a failed/canceled
-   status, which fails the job).
+   status, which fails the job), then deploys the worker and the scan
+   worker. After, not beside: the workers have no pre-deploy step, so
+   starting them first would run new job code against an unmigrated schema.
 4. Smoke-tests `https://$PROD_DOMAIN/health/ready`.
 5. On smoke-test failure, calls the
    [rollback endpoint](https://api-docs.render.com/reference/rollback-deploy)
@@ -213,10 +242,9 @@ Manually: Render dashboard → the service → **Deploys** → *Rollback* on the
 last known-good deploy. Both services need it, and they are independent — a
 rolled-back backend against a still-new worker is a real state to end up in.
 
-**The migration is the part that does not roll back.** Its step 1 runs
-`alembic upgrade head` against the production database *before* either
-service is redeployed, so a rollback restores the old image against the new
-schema. That is fine for additive migrations and is not fine for a destructive
+**The migration is the part that does not roll back.** The pre-deploy
+command migrates the production database *before* the new backend takes
+traffic, so a rollback restores the old image against the new schema. That is fine for additive migrations and is not fine for a destructive
 one; a migration that drops or renames anything needs the expand/contract
 split across two deploys, not a rollback plan. Data-level recovery is
 `backup-restore.md`.
@@ -225,8 +253,9 @@ split across two deploys, not a rollback plan. Data-level recovery is
 
 - **The `deploy` job fails on its first step**: the secrets are missing or
   misnamed. That is the dormant state described at the top, not an incident.
-- **Migration step fails**: nothing has deployed yet — the old image is still
-  serving. Fix forward on the migration; do not re-run the job hoping for a
+- **Migration fails** (deploy status `pre_deploy_failed`): nothing has
+  deployed yet — the old image is still serving. Its output is in the
+  deploy's logs on the Render dashboard, not in the GitHub run. Fix forward on the migration; do not re-run the job hoping for a
   different result against a half-applied schema. Check `alembic current`
   against production before the second attempt.
 - **Deploy reports live but the smoke test fails**: usually DNS/TLS

@@ -30,6 +30,11 @@ Not this runbook: application faults after a successful deploy (that is
   target reads it. `Settings()` validates every required field at import, so
   a partial file fails the migration step rather than the app's first
   request.
+- **The runner never reaches the production database** (review C4,
+  2026-09-29). Each target migrates on its own infrastructure; see step 3.
+- **Deploys wait for the whole gate**: `build` (and through it `test` and
+  `security`), `e2e-web` and `zap-baseline`. A red browser suite blocks a
+  deploy (C2).
 - **Actions minutes.** Image builds are the most minute-hungry thing in this
   repo. This pipeline was written while the account's quota was exhausted, so
   none of it has run end to end — see Escalation.
@@ -61,20 +66,31 @@ frontend baked in.
 
 **Expected:** both tags visible under the repository's Packages.
 
-### 3. Watch the preflight
+### 3. Watch the preflight and the migration
 
-Whichever target runs, `.github/actions/deploy-preflight` does the same four
-things first, on the runner, before anything switches:
+Whichever target runs, `.github/actions/deploy-preflight` does the same three
+things first, on the runner, before anything is touched:
 
 1. logs in to GHCR
-2. writes `prod.env` from `PROD_ENV_FILE`, failing if it is empty
+2. writes `prod.env` from `PROD_ENV_FILE`, failing if it is empty. The
+   secret reaches the script through `env:`, never `${{ }}` pasted into its
+   source, so a `'` or `$(` in a password is data rather than shell (C4;
+   `test_preflight_writes_a_hostile_env_file_verbatim` runs the real step)
 3. refuses to continue if it contains `VIRUS_SCANNER=noop`
-4. **runs the migrations from the image that is about to serve traffic**
 
-**Expected:** `alembic` output ending without error. This is the step to read
+Then each target **migrates on its own infrastructure, from the image that
+is about to serve traffic**, before it switches:
+
+| Target | Where the migration runs | Where its output is |
+|---|---|---|
+| Hetzner | `docker compose run --rm --no-deps backend …` over SSH, step *Migrate on the box* | the GitHub run |
+| AWS | a one-off Fargate task in the backend service's network, step *Run migrations as a one-off task* | the backend's log group; the run shows the exit code |
+| Render | the backend service's Pre-Deploy Command, which the workflow checks is set | the deploy's logs on the Render dashboard |
+
+**Expected:** the migration ends without error. This is the step to read
 first when a deploy fails — it tells you whether the schema moved.
 
-Note it runs `python -m app.core.migrations`, never `alembic upgrade head`.
+It is always `python -m app.core.migrations`, never `alembic upgrade head`.
 This schema has branched module heads; `head` (singular) could never have
 succeeded against it.
 
@@ -84,7 +100,9 @@ Each target then swaps traffic its own way and finishes with
 `curl -sf https://$PROD_DOMAIN/health/ready`.
 
 **Expected:** a green run. On Hetzner the swap is
-`docker compose up -d --no-deps backend worker caddy` — **`--no-deps` is
+`docker compose up -d --no-deps backend worker scanner-worker caddy` — it is
+idempotent, since the images were pulled and the env swapped during the
+migration step, so a re-run converges instead of failing. **`--no-deps` is
 load-bearing**: without it compose stops caddy and then waits for its
 dependency chain, and the backend refuses to start while caddy is down
 because caddy carries the network alias for `STORAGE_DOMAIN` and the storage
@@ -132,10 +150,17 @@ curl -s https://<domain>/ | grep -o 'assets/index-[^"]*\.js'
 ## Rollback
 
 **Automatic.** Each workflow records what was running before it changed
-anything and restores it if the smoke test fails: Render rolls back to the
-captured deploy id, Hetzner re-runs `up -d` with the previous tag, AWS
+anything and restores it on failure: Render rolls back to the captured
+deploy id when the smoke test fails; Hetzner restores the previous
+`backend/.env` and checkout and re-runs `up -d` with the previous tag; AWS
 re-points the service at the previous task definition and waits for
 stability.
+
+On Hetzner and AWS the rollback runs whenever the switch *started*,
+including one that failed halfway (C5) — some containers on the new image,
+some on the old is exactly the state that most needs undoing. On Hetzner it
+also runs after a failed migration, because by then the env file and
+checkout on the box have already moved.
 
 **Manual**, for anything the smoke test did not catch:
 
@@ -154,7 +179,7 @@ deploy, then remove the old — not be undone afterwards.
 
 Stop and escalate when:
 
-- **The preflight migration failed.** Nothing was deployed, which is the
+- **The migration failed.** Nothing was deployed, which is the
   design, but the schema may be partially migrated depending on where it
   stopped. Read the alembic output before re-running; a second attempt
   against a half-applied revision is how a bad situation gets worse.

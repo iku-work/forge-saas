@@ -119,7 +119,7 @@ that would have silently broken the flow above for the next person who ran
 Also added: `app/core/jobs.py` test coverage, a defensive-branch test for
 `TenancyService.invite` (org soft-deleted between creation and lookup), and
 an `EMAIL_BACKEND=smtp` test for the email job — see `tests/test_core_jobs.py`,
-`tests/test_tenancy_service.py`, `tests/test_email_job.py`.
+`tests/committed/test_tenancy_service.py`, `tests/test_email_job.py`.
 
 ## Automated gates (run 2026-06-26)
 

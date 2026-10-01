@@ -16,6 +16,14 @@ Read the plan's status table first if you only want state. Read this if you
 are about to change one of these things and want to know what it cost to get
 here.
 
+> **Correction, 2026-09-29.** A follow-up review
+> ([`production-readiness-review-2026-09-29.md`](production-readiness-review-2026-09-29.md))
+> found that this report overstates three closures: file safety (§2),
+> refresh-token theft containment (§4), and privileged-session MFA (§3). §5
+> is only partially resolved. Each section now carries a note saying what is
+> still open. The fixes are tracked in
+> [`production-readiness-plan-2026-09-29.md`](production-readiness-plan-2026-09-29.md).
+
 ---
 
 ## Contents
@@ -108,6 +116,12 @@ for a multipart upload not even that. Production held exactly such a value.
 Computing it in the scan worker binds the digest to the object version the
 verdict was reached on.
 
+> **Correction (review R1).** The digest binds the *verdict* to the scanned
+> bytes. It does not bind *downloads* to them. The upload form stays valid
+> for 600 s and targets the same key that downloads read, so a clean file
+> can be overwritten after its scan and the replacement is served. The fix
+> is promotion to a server-only key at confirm time (plan R1).
+
 **Sizing clamd was measured, not estimated.** The runbook's "~1.5 GB RSS, ~1 GB
 disk" was wrong in both directions: real numbers are 955 MiB resident, 167 MB
 of signatures, 149 MB image. But steady state is the wrong thing to size for
@@ -172,6 +186,13 @@ inference into a proof — real defence in depth, not an open hole — and it
 cannot be done without a migration, because it has to survive refresh
 rotation. Pick it up with the next migration that ships for another reason.
 
+> **Correction (review R3).** "Enrolled implies challenged" holds only for
+> sessions created *after* enrollment. A password-only session opened before
+> the user enrolls a second factor stays valid, and it passes
+> `require_superadmin`, because that check reads the account's enrollment,
+> not the session's factors. So `amr` is not optional defence in depth. It is
+> the fix (plan R3).
+
 ---
 
 ## 4. Single-use that means single-use
@@ -204,6 +225,14 @@ ambiguous event.
 Each of the four has a two-connection race test, because a single-connection
 test cannot fail here.
 
+> **Correction (review R2).** The atomic rotation prevents two successors
+> from one token. It does not make the theft *response* stick. The
+> revoke-all runs, then `AuthenticationError` is raised, and `get_session`
+> rolls the revocation back. The HTTP test harness overrides `get_session`
+> with a function that never rolls back, which is why no test caught this.
+> The login lockout counter and WebAuthn clone detection fail the same way
+> (plan R2).
+
 ---
 
 ## 5. Rate limiting that knows who you are
@@ -226,6 +255,12 @@ an anonymous request does — authentication is still `get_current_user`'s job,
 done again afterwards with the blocklist and session checks this has no
 business repeating. An API key is not a JWT, so it lands on the fallback here
 and is metered by its own per-key limiter, which knows which key it is.
+
+> **Correction (review R5): partially resolved.** The identity is fixed, but
+> `api_limit` is still one budget *per endpoint*. That means no shared
+> per-user ceiling and no per-org ceiling, and the limiter still uses a
+> fixed window. Plan R5 adds shared user and org budgets (org: 5000/hour,
+> then measured).
 
 ---
 
@@ -617,6 +652,14 @@ way it was not before.
 Two smaller ones, written down so they are not rediscovered: the signed opaque
 cursor (§9) would additionally survive a hard-deleted anchor; and `amr` (§3)
 turns an inference into a proof and should ride along with the next migration.
+
+**5. Found by the follow-up review** (see the correction note at the top):
+downloads not bound to scanned bytes (R1), theft-response revocations rolled
+back (R2), admin gate trusting enrollment (R3, which makes the `amr` item
+above a P1 rather than an optional extra), scan memory unbounded by
+concurrency (R4), no shared rate budgets (R5), unbounded webhook responses
+(R6), and the file page stuck on "Scanning" (R7). All are tracked in
+[`production-readiness-plan-2026-09-29.md`](production-readiness-plan-2026-09-29.md).
 
 ---
 
