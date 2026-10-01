@@ -46,6 +46,10 @@ class StoredFilePublic(AppBaseModel):
     bucket: str
     uploaded_by: UUID
     created_at: datetime
+    # When the row last changed; for a file still awaiting a verdict that is
+    # its confirmation, which is when the scan starts. `created_at` is the
+    # presign, which can be most of the upload window earlier (review OCT-06).
+    updated_at: datetime
 
 
 class DownloadUrlResponse(AppBaseModel):

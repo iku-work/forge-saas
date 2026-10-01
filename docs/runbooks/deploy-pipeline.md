@@ -23,9 +23,8 @@ Not this runbook: application faults after a successful deploy (that is
 
 - **Know which target is live.** `DEPLOY_TARGET` is a repository *variable*
   (Settings → Secrets and variables → Actions → Variables), not a secret.
-  Unset means `render`, which is what CI did before the split. `none` stops
-  CI deploying at all, which is the right setting while a host is still
-  deployed by hand.
+  Unset deploys nothing; set `render`, `hetzner` or `aws` to deploy from
+  CI. (Before 2026-10-01 unset meant `render`.)
 - **`PROD_ENV_FILE` is the whole `backend/.env`**, as one secret. Every
   target reads it. `Settings()` validates every required field at import, so
   a partial file fails the migration step rather than the app's first
@@ -187,8 +186,8 @@ Stop and escalate when:
   and CI cannot fix it. Go to the host: on Hetzner,
   `docker compose … up -d --no-deps caddy` first, then the backend — caddy
   must be up for the backend's storage guard to pass.
-- **A deploy target you did not configure ran.** `DEPLOY_TARGET` is unset and
-  therefore defaulting to `render`. Set it explicitly, including to `none`.
+- **A deploy target you did not configure ran.** Check the repository
+  variable: only an explicit `DEPLOY_TARGET` deploys.
 
 **None of these workflows has run end to end.** They were written on
 2026-09-14 while the account's Actions minutes were exhausted; the pieces

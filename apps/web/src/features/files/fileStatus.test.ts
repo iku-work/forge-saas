@@ -8,7 +8,7 @@ const NOW = Date.parse("2026-09-30T12:00:00Z");
 function pendingFor(ms: number) {
   return makeStoredFile(1, {
     virus_scan_result: null,
-    created_at: new Date(NOW - ms).toISOString(),
+    updated_at: new Date(NOW - ms).toISOString(),
   });
 }
 
@@ -36,6 +36,15 @@ describe("scanPollInterval (review R7)", () => {
       pendingFor(1_000),
     ];
     expect(scanPollInterval(files, NOW)).toBe(2_000);
+  });
+
+  it("times a scan from confirmation, so a slow upload still polls (OCT-06)", () => {
+    const slowUpload = makeStoredFile(1, {
+      virus_scan_result: null,
+      created_at: new Date(NOW - 8 * 60_000).toISOString(),
+      updated_at: new Date(NOW - 5_000).toISOString(),
+    });
+    expect(scanPollInterval([slowUpload], NOW)).toBe(2_000);
   });
 
   it("does not count an infected or failed file as pending", () => {

@@ -1664,15 +1664,12 @@ jobs:
   # pick its target without editing this file and so each can be run by hand
   # (workflow_dispatch) to redeploy or roll forward without pushing a commit.
   #
-  # DEPLOY_TARGET is a repository *variable*, not a secret. Unset means
-  # render, which is what this job did inline before it was split -- existing
-  # deployments keep their behaviour. Set it to `none` to stop deploying from
-  # CI entirely, which is the right setting while a box is still being
-  # deployed by hand.
+  # DEPLOY_TARGET is a repository *variable*, not a secret, and it must be
+  # set explicitly: unset deploys nothing (review 2026-10-01). It used to mean
+  # render, so a repository with no variables at all was one push to main
+  # away from a deploy nobody had chosen.
   deploy-render:
-    if: >-
-      github.ref == 'refs/heads/main'
-      && (vars.DEPLOY_TARGET == 'render' || vars.DEPLOY_TARGET == '')
+    if: github.ref == 'refs/heads/main' && vars.DEPLOY_TARGET == 'render'
     # C2: E2E and the ZAP baseline gate the deploy, not only the image build
     # (test and security arrive through build). A red e2e-web blocks it.
     needs: [build, e2e-web, zap-baseline]

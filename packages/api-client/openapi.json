@@ -3843,6 +3843,11 @@
             "title": "Status",
             "type": "string"
           },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          },
           "uploaded_by": {
             "format": "uuid",
             "title": "Uploaded By",
@@ -3869,7 +3874,8 @@
           "virus_scan_result",
           "bucket",
           "uploaded_by",
-          "created_at"
+          "created_at",
+          "updated_at"
         ],
         "title": "StoredFilePublic",
         "type": "object"
@@ -6002,7 +6008,7 @@
     },
     "/api/v1/auth/me/avatar": {
       "get": {
-        "description": "A short-lived presigned URL for the caller's own uploaded avatar.\n\nThe avatars bucket is private like every other, so there is no public URL\nto put in a UserPublic -- and a presigned one does not belong there\neither, because it expires and that object is cached and re-serialised\neverywhere. Hence a separate endpoint the page calls when it renders.\n\n404 when the user has no uploaded avatar: an OAuth `picture` is already on\nUserPublic.avatar_url and needs nothing from here.",
+        "description": "A short-lived presigned URL for the caller's own uploaded avatar.\n\nThe avatars bucket is private like every other, so there is no public URL\nto put in a UserPublic -- and a presigned one does not belong there\neither, because it expires and that object is cached and re-serialised\neverywhere. Hence a separate endpoint the page calls when it renders.\n\n404 when the user has no uploaded avatar: an OAuth `picture` is already on\nUserPublic.avatar_url and needs nothing from here. 409 while the avatar's\nmalware scan has not come back clean.",
         "operationId": "get_my_avatar_api_v1_auth_me_avatar_get",
         "responses": {
           "200": {

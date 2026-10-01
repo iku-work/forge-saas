@@ -30,6 +30,10 @@ export function displayStatus(file: StoredFilePublic): DisplayStatus {
 // `at` is when the data was fetched, not "now": the interval and the
 // "taking longer" note are both derived from the query's own
 // `dataUpdatedAt`, which keeps render pure and keeps the two in agreement.
+//
+// Ages count from `updated_at` -- the confirmation, when the scan starts --
+// not `created_at`, the presign: a slow upload would otherwise arrive
+// already "too old" to poll (review OCT-06).
 export const SCAN_POLL_GIVE_UP_MS = 5 * 60_000;
 
 export function scanPollInterval(
@@ -38,7 +42,7 @@ export function scanPollInterval(
 ): number | false {
   const pendingAges = files
     .filter((file) => displayStatus(file) === "scanning")
-    .map((file) => at - Date.parse(file.created_at));
+    .map((file) => at - Date.parse(file.updated_at));
   if (pendingAges.length === 0) return false;
   const newest = Math.min(...pendingAges);
   if (newest > SCAN_POLL_GIVE_UP_MS) return false;

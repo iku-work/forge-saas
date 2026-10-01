@@ -283,7 +283,7 @@ describe("FilesPage", () => {
     let requests = 0;
     const pending = makeStoredFile(1, {
       virus_scan_result: null,
-      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
     });
     server.use(
       http.get(`${API}/api/v1/files`, () => {
@@ -313,7 +313,7 @@ describe("FilesPage", () => {
     let requests = 0;
     const stuck = makeStoredFile(1, {
       virus_scan_result: null,
-      created_at: new Date(Date.now() - 10 * 60_000).toISOString(),
+      updated_at: new Date(Date.now() - 10 * 60_000).toISOString(),
     });
     server.use(
       http.get(`${API}/api/v1/files`, () => {

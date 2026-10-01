@@ -1852,6 +1852,10 @@ export type StoredFilePublic = {
      */
     status: 'pending' | 'ready' | 'infected' | 'failed' | 'deleted';
     /**
+     * Updated At
+     */
+    updated_at: string;
+    /**
      * Uploaded By
      */
     uploaded_by: string;

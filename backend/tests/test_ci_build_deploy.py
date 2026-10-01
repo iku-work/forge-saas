@@ -350,3 +350,22 @@ def test_every_backend_image_service_gets_the_internal_ca_under_tls() -> None:
     assert users >= {"backend", "worker", "scanner-worker"}
     for name in users:
         assert "./certs:/certs:ro" in tls["services"].get(name, {}).get("volumes", []), name
+
+
+@pytest.mark.parametrize("target", DEPLOY_TARGETS)
+def test_a_deploy_needs_an_explicit_target(target: str) -> None:
+    # Review 2026-10-01: unset used to mean render, so a repository with no
+    # variables was one push away from a deploy nobody chose.
+    condition = _ci_workflow()["jobs"][f"deploy-{target}"]["if"]
+    assert f"vars.DEPLOY_TARGET == '{target}'" in condition
+    assert "== ''" not in condition
+
+
+def test_hetzner_verifies_every_service_before_declaring_success() -> None:
+    # Review OCT-05: /health/ready alone passed while a worker crash-looped.
+    steps = _deploy_workflow("hetzner")["jobs"]["deploy"]["steps"]
+    names = [s.get("name", "") for s in steps]
+    verify = next(i for i, n in enumerate(names) if n.startswith("Verify every service"))
+    assert names.index("Pull and switch") < verify < names.index("Smoke test")
+    for service in ("backend", "worker", "scanner-worker", "caddy"):
+        assert f"check {service} " in steps[verify]["run"], service

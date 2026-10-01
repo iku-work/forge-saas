@@ -184,6 +184,37 @@ jobs:
             docker compose $COMPOSE up -d --no-deps backend worker scanner-worker caddy
           EOF
 
+      # Review OCT-05: `up -d` returns before healthchecks pass, and the
+      # HTTP smoke test below only proves the backend. A scan worker or
+      # worker that starts and then crash-loops (as scanner-worker did on its
+      # first production boot) would leave the deploy green. Wait until each
+      # service runs this release's image and is healthy; a failure here
+      # rolls back like any other.
+      - name: Verify every service runs the release and is healthy
+        id: verify
+        run: |
+          ssh -i ~/.ssh/id_deploy "$SSH_USER@$SSH_HOST" bash -euo pipefail <<EOF
+            cd ~/forge
+            check() {
+              local svc=\$1 want=\$2 id image state
+              id=\$(docker compose $COMPOSE ps -q \$svc)
+              [ -n "\$id" ] || { echo "\$svc: not running"; return 1; }
+              image=\$(docker inspect --format '{{.Config.Image}}' \$id)
+              state=\$(docker inspect --format '{{if .State.Health}}{{.State.Health.Status}}{{else}}{{.State.Status}}{{end}}' \$id)
+              [ "\$image" = "\$want" ] || { echo "\$svc: runs \$image"; return 1; }
+              case "\$state" in healthy|running) return 0 ;; esac
+              echo "\$svc: \$state"; return 1
+            }
+            for _ in \$(seq 1 30); do
+              if check backend '$BACKEND_IMAGE' && check worker '$BACKEND_IMAGE' \\
+                 && check scanner-worker '$BACKEND_IMAGE' && check caddy '$CADDY_IMAGE'; then
+                echo "every service healthy on the release"; exit 0
+              fi
+              sleep 5
+            done
+            exit 1
+          EOF
+
       - name: Smoke test
         id: smoke_test
         run: |

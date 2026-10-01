@@ -23,6 +23,7 @@ from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import Any
+from unittest.mock import Mock
 from uuid import UUID, uuid4
 
 import httpx
@@ -81,6 +82,11 @@ def _jobs_use_the_test_session(monkeypatch: pytest.MonkeyPatch, session: AsyncSe
 
     monkeypatch.setattr(billing_job_module, "async_session_factory", _factory)
     monkeypatch.setattr(gdpr_job_module, "async_session_factory", _factory)
+    # Purge also clears the user's export archives from the bucket; this
+    # matrix is about the cache, not storage.
+    s3 = Mock()
+    s3.list_objects_v2.return_value = {}
+    monkeypatch.setattr(gdpr_job_module, "_s3_client", lambda: s3)
 
 
 # --- world ------------------------------------------------------------------

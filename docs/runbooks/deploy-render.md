@@ -106,19 +106,20 @@ The Postgres instance does **not** need its External connection string
 opened to GitHub: nothing on the runner connects to it any more (C4). Keep
 external access off, or allowlisted to your own addresses for `psql`.
 
-### 5. Object-store lifecycle rule (S3 or R2 only)
+### 5. Object-store lifecycle rules (S3 or R2 only)
 
-Uploads land under `incoming/` and are copied out when confirmed (review R1,
-`backend/app/modules/storage/keys.py`). A re-posted upload form can leave a
-copy behind that no database row points at. On MinIO, `minio-init` installs
-the rule that clears these. On S3 or R2, add it to the bucket once:
-**expire objects with prefix `incoming/` after 1 day**. Use the provider's
-lifecycle settings, or on S3 run
-`aws s3api put-bucket-lifecycle-configuration` with the same rule
-`minio-init` imports (see `docker-compose.prod.yml`).
+On MinIO, `minio-init` installs both rules. On S3 or R2, add them to the
+bucket once, with the provider's lifecycle settings or
+`aws s3api put-bucket-lifecycle-configuration` (the JSON `minio-init` imports
+is in `docker-compose.prod.yml`):
 
-Without the rule nothing breaks. The leftover copies just accumulate outside
-anyone's quota.
+- **Expire prefix `incoming/` after 1 day.** Uploads land there and are
+  copied out on confirm (review R1); a re-posted form can leave a copy no row
+  points at. Without the rule they just accumulate outside anyone's quota.
+- **Expire prefix `data-exports/` after 1 day.** GDPR export archives; the
+  download link lasts 24 hours (review OCT-03). Without the rule every
+  export is kept indefinitely -- a copy of that user's data the purge only
+  catches if the account is later erased.
 
 ## What CI does on a push to `main`
 
