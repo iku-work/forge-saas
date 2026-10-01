@@ -335,3 +335,20 @@ def test_semgrep_is_not_a_project_dependency() -> None:
     for lock in ("requirements.lock", "requirements-dev.lock"):
         text = (REPO_ROOT / "backend" / lock).read_text(encoding="utf-8")
         assert "\nsemgrep==" not in text, lock
+
+
+def test_every_backend_image_service_gets_the_internal_ca_under_tls() -> None:
+    # The DSNs name /certs/ca.crt, so a service running the backend image
+    # without the mount cannot reach Redis or Postgres at all. scanner-worker
+    # shipped without it and crash-looped on its first production boot.
+    prod = yaml.safe_load((REPO_ROOT / "docker-compose.prod.yml").read_text(encoding="utf-8"))
+    tls = yaml.safe_load((REPO_ROOT / "docker-compose.tls.yml").read_text(encoding="utf-8"))
+    backend_image = prod["services"]["backend"]["image"]
+    users = {
+        name
+        for name, service in prod["services"].items()
+        if service.get("image") == backend_image
+    }
+    assert users >= {"backend", "worker", "scanner-worker"}
+    for name in users:
+        assert "./certs:/certs:ro" in tls["services"].get(name, {}).get("volumes", []), name

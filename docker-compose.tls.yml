@@ -97,11 +97,16 @@ services:
   # The application reads the CA from the DSN itself
   # (`rediss://redis:6379/0?ssl_ca_certs=/certs/ca.crt`), which redis-py,
   # the slowapi rate-limit storage and arq all honour -- so the backend and
-  # worker need the material on disk too, at the same path.
+  # workers need the material on disk too, at the same path. Every service
+  # that runs the backend image is listed (tests/test_ci_build_deploy.py).
   backend:
     volumes:
       - ./certs:/certs:ro
 
   worker:
+    volumes:
+      - ./certs:/certs:ro
+
+  scanner-worker:
     volumes:
       - ./certs:/certs:ro
