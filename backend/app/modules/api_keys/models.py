@@ -118,15 +118,15 @@ class ApiKey(RedactedReprMixin, UUIDPKMixin, TimestampMixin, SoftDeleteMixin, SQ
     created_by: UUID | None = Field(default=None, foreign_key="user.id", index=True)
     # Written at most once per key per minute -- see ApiKeyService.touch_used.
     # A write per request on a hot key is an N+1 wearing a different hat.
-    last_used_at: datetime | None = Field(default=None, sa_type=_TZ_DATETIME)  # type: ignore[call-overload]
+    last_used_at: datetime | None = Field(default=None, sa_type=_TZ_DATETIME)
     # None means "never expires", which is a deliberate choice a caller makes
     # rather than the only behaviour available.
-    expires_at: datetime | None = Field(default=None, sa_type=_TZ_DATETIME)  # type: ignore[call-overload]
+    expires_at: datetime | None = Field(default=None, sa_type=_TZ_DATETIME)
     # Distinct from SoftDeleteMixin's deleted_at on purpose: `deleted_at`
     # means the row is gone from every list, `revoked_at` means the key is
     # dead but still shown, because "this key was revoked on the 3rd" is the
     # answer somebody needs during an incident.
-    revoked_at: datetime | None = Field(default=None, sa_type=_TZ_DATETIME)  # type: ignore[call-overload]
+    revoked_at: datetime | None = Field(default=None, sa_type=_TZ_DATETIME)
     # T-312: the per-key override for API_KEY_RATE_LIMIT_PER_MINUTE, so one
     # integration can be raised without raising everyone. None means "use the
     # setting", which is what every key gets until somebody decides otherwise.

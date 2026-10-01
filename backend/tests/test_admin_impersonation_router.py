@@ -22,6 +22,7 @@ from app.modules.audit.models import AuditEvent
 from app.modules.auth.models import User
 from app.modules.auth.repository import UserRepository
 from app.modules.auth.utils import create_access_token, hash_password, verify_access_token
+from tests._auth import session_token
 
 # T-291: this file needs admin enabled -- its routes, its tables, or
 # both. CI's module-matrix job deselects it in the combination that turns
@@ -29,11 +30,6 @@ from app.modules.auth.utils import create_access_token, hash_password, verify_ac
 pytestmark = pytest.mark.module_dependent
 
 _PASSWORD = "Correct-Horse9"
-
-
-@pytest.fixture
-def redis(_redis_client: Redis) -> Redis:
-    return _redis_client
 
 
 async def _make_user(
@@ -56,7 +52,7 @@ async def _as_superadmin(
     # T-218: require_superadmin now also gates on 2FA being enrolled -- see
     # test_dependencies.py's dedicated tests for that check itself.
     admin = await _make_user(session, is_superadmin=True, totp_enabled=True)
-    token = create_access_token(admin.id, None, ())
+    token = await session_token(session, admin)
     client.headers["Authorization"] = f"Bearer {token}"
     return client, admin
 

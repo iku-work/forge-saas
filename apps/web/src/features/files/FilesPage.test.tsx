@@ -277,6 +277,60 @@ describe("FilesPage", () => {
     expect(screen.getByRole("button", { name: "Download" })).toBeDisabled();
   });
 
+  it("notices a pending scan finish while the page stays open, then stops asking (R7)", async () => {
+    // Nothing used to tell the page a scan had finished: one invalidation
+    // on confirm, then "Scanning" for as long as the tab stayed open.
+    let requests = 0;
+    const pending = makeStoredFile(1, {
+      virus_scan_result: null,
+      created_at: new Date().toISOString(),
+    });
+    server.use(
+      http.get(`${API}/api/v1/files`, () => {
+        requests += 1;
+        const file =
+          requests === 1 ? pending : { ...pending, virus_scan_result: "clean" };
+        return HttpResponse.json(envelope([file]));
+      }),
+    );
+
+    renderPage();
+
+    expect(await screen.findByText("Scanning")).toBeInTheDocument();
+    await waitFor(
+      () => {
+        expect(screen.getByRole("button", { name: "Download" })).toBeEnabled();
+      },
+      { timeout: 6_000 },
+    );
+    const settled = requests;
+    // Past the next poll interval: with nothing pending, nothing polls.
+    await new Promise((resolve) => setTimeout(resolve, 2_500));
+    expect(requests).toBe(settled);
+  }, 15_000);
+
+  it("says when a scan is taking longer than usual instead of polling forever", async () => {
+    let requests = 0;
+    const stuck = makeStoredFile(1, {
+      virus_scan_result: null,
+      created_at: new Date(Date.now() - 10 * 60_000).toISOString(),
+    });
+    server.use(
+      http.get(`${API}/api/v1/files`, () => {
+        requests += 1;
+        return HttpResponse.json(envelope([stuck]));
+      }),
+    );
+
+    renderPage();
+
+    expect(await screen.findByTestId("scan-taking-long")).toHaveTextContent(
+      t("files.page.scan_taking_long"),
+    );
+    await new Promise((resolve) => setTimeout(resolve, 2_500));
+    expect(requests).toBe(1);
+  });
+
   it("does not offer to download an infected file", async () => {
     const file = makeStoredFile(1, {
       status: "infected",

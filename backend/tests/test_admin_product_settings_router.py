@@ -2,7 +2,7 @@
 T-263, the HTTP surface: `/api/v1/admin/settings/product`.
 
 Same shape as test_admin_feature_flags_router.py -- superadmin-only, audited,
-and using conftest's shared client/session/_redis_client fixtures against real
+and using conftest's shared client/session/redis_client fixtures against real
 migrations. What is specific to this endpoint is that it is the surface an
 operator reaches for *during an incident*, so the two things asserted hardest
 are that a stale cache can never be what they are shown, and that a malformed
@@ -22,10 +22,11 @@ from app.core import cache, cache_keys
 from app.modules.audit.models import AuditEvent
 from app.modules.auth.permissions import MemberRole
 from app.modules.auth.repository import UserRepository
-from app.modules.auth.utils import create_access_token, hash_password
+from app.modules.auth.utils import hash_password
 from app.modules.product_settings import keys
 from app.modules.product_settings.service import AUDIT_ACTION
 from app.modules.tenancy.repository import MembershipRepository, OrganizationRepository
+from tests._auth import session_token
 
 # T-291: this file needs admin enabled -- its routes, its tables, or
 # both. CI's module-matrix job deselects it in the combination that turns
@@ -34,14 +35,6 @@ pytestmark = pytest.mark.module_dependent
 
 _PASSWORD = "Correct-Horse9"
 _URL = "/api/v1/admin/settings/product"
-
-
-@pytest.fixture
-def redis(_redis_client: Redis) -> Redis:
-    """Same aliasing as test_admin_impersonation_router.py: the shared
-    fixture's leading underscore marks it as setup-only, and this file needs
-    to read it."""
-    return _redis_client
 
 
 async def _authenticate(
@@ -60,7 +53,7 @@ async def _authenticate(
         user_id=user.id, org_id=org.id, role=MemberRole.OWNER
     )
     await session.commit()
-    client.headers["Authorization"] = f"Bearer {create_access_token(user.id, None, ())}"
+    client.headers["Authorization"] = f"Bearer {await session_token(session, user)}"
     client.headers["X-Org-ID"] = str(org.id)
     return client
 

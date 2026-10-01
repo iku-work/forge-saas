@@ -94,10 +94,21 @@ services:
   minio-init:
     image: minio/minio
     entrypoint: ["/bin/sh", "-c"]
-    command: >
-      "mc alias set local http://minio:9000 minioadmin minioadmin &&
-       mc mb --ignore-existing local/forge-local &&
-       mc mb --ignore-existing local/forge-test"
+    # Review R1: uploads land under incoming/ and confirm copies them out, so
+    # anything still there after a day is either an upload nobody confirmed
+    # or a form re-posted after its confirm. Neither is read by anything.
+    # The purge jobs delete both copies of a file; this rule is the backstop
+    # for the second case, which has no row of its own. `ilm import`
+    # replaces the whole configuration, so a restart is a no-op rather than
+    # a duplicate rule (`ilm rule add` appends one every time).
+    command:
+      - |
+        mc alias set local http://minio:9000 minioadmin minioadmin &&
+        mc mb --ignore-existing local/forge-local &&
+        mc mb --ignore-existing local/forge-test &&
+        for bucket in forge-local forge-test; do
+          echo '{"Rules":[{"ID":"expire-incoming","Status":"Enabled","Filter":{"Prefix":"incoming/"},"Expiration":{"Days":1}}]}' | mc ilm import "local/$$bucket" || exit 1
+        done
     depends_on:
       minio:
         condition: service_healthy
@@ -176,6 +187,29 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+      minio-init:
+        condition: service_completed_successfully
+    networks:
+      - forge-net
+
+  # Review R4: virus scans run on their own queue in their own process, so a
+  # burst of uploads cannot occupy the slots email and deletion need. Same
+  # image and env as `worker`; only the entrypoint class differs.
+  scanner-worker:
+    image: forge-saas-backend-dev
+    env_file:
+      - ./backend/.env
+    environment:
+      DATABASE_URL: postgresql+asyncpg://postgres:postgres@postgres:5432/forge
+      REDIS_URL: redis://redis:6379/0
+      AWS_ENDPOINT_URL: http://minio:9000
+    volumes:
+      - ./backend:/app
+      - ./packages/i18n/locales:/app/locales:ro
+    command: arq app.workers.main.ScanWorkerSettings
+    depends_on:
+      worker:
+        condition: service_started
       minio-init:
         condition: service_completed_successfully
     networks:

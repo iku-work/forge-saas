@@ -20,15 +20,22 @@ import httpx
 import pytest
 from botocore.exceptions import ClientError, EndpointConnectionError
 from freezegun import freeze_time
+from redis.asyncio import Redis
+from sqlalchemy.ext.asyncio import AsyncSession
 from testcontainers.minio import MinioContainer
 
 from app.core.config import get_settings
 from app.core.exceptions import ExternalServiceUnavailableError
 from app.core.resilience import BREAKERS, resilient
-from app.modules.storage.backend import PresignedUpload, get_storage_backend
+from app.modules.auth.repository import UserRepository
+from app.modules.storage import avatars as avatars_module
+from app.modules.storage import service as storage_service_module
+from app.modules.storage.backend import ObjectChangedError, PresignedUpload, get_storage_backend
 from app.modules.storage.backends.minio import MinioBackend
 from app.modules.storage.backends.r2 import R2Backend
 from app.modules.storage.backends.s3 import S3Backend, S3ClientOptions
+from app.modules.storage.service import StorageService
+from app.modules.tenancy.repository import OrganizationRepository
 
 _BUCKET = "storage-backend-tests"
 
@@ -371,3 +378,101 @@ def test_get_storage_backend_is_cached(monkeypatch: pytest.MonkeyPatch) -> None:
     get_settings.cache_clear()
 
     assert get_storage_backend() is get_storage_backend()
+
+
+# --- review R1: conditional copy, and serving the bytes that were checked ---
+
+
+async def test_copy_if_match_copies_the_object_it_was_told_about(backend: S3Backend) -> None:
+    source = f"incoming/copy/{uuid4()}.jpg"
+    destination = source.removeprefix("incoming/")
+    presigned = await backend.presign_upload(source, "image/jpeg", max_bytes=1024)
+    assert _post_upload(presigned, b"original", content_type="image/jpeg").status_code == 204
+    head = await backend.head(source)
+    assert head is not None
+
+    await backend.copy_if_match(source, destination, head["ETag"])
+
+    copied = await backend.head(destination)
+    assert copied is not None
+    assert copied["ContentType"] == "image/jpeg"
+    assert _get(await backend.presign_download(destination)).content == b"original"
+
+
+async def test_copy_if_match_refuses_a_source_that_changed(backend: S3Backend) -> None:
+    source = f"incoming/copy/{uuid4()}.jpg"
+    presigned = await backend.presign_upload(source, "image/jpeg", max_bytes=1024)
+    _post_upload(presigned, b"checked", content_type="image/jpeg")
+    head = await backend.head(source)
+    assert head is not None
+    # The same form, used again between the check and the copy.
+    _post_upload(presigned, b"swapped", content_type="image/jpeg")
+
+    with pytest.raises(ObjectChangedError):
+        await backend.copy_if_match(source, source.removeprefix("incoming/"), head["ETag"])
+    assert await backend.head(source.removeprefix("incoming/")) is None
+
+
+async def test_copy_if_match_refuses_a_missing_source(backend: S3Backend) -> None:
+    with pytest.raises(ObjectChangedError):
+        await backend.copy_if_match(f"incoming/absent/{uuid4()}", f"absent/{uuid4()}", '"x"')
+
+
+@pytest.mark.module_dependent
+async def test_reusing_an_upload_form_after_confirm_cannot_change_what_is_served(
+    minio_container: MinioContainer,
+    session: AsyncSession,
+    redis: Redis,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Review R1, end to end on a real object store.
+
+    Upload A, confirm it, then post the *same* form again with B -- the
+    form stays valid for ten minutes and nothing stops a second use. Before
+    promotion, B replaced the object downloads read while the database went
+    on describing A. Now the form can only reach `incoming/`, and the served
+    object is the copy confirm made.
+    """
+    backend = MinioBackend(bucket=_BUCKET, region="us-east-1", options=_options(minio_container))
+    monkeypatch.setattr(storage_service_module, "get_storage_backend", lambda: backend)
+    monkeypatch.setattr(avatars_module, "get_storage_backend", lambda: backend)
+    user = await UserRepository(session).create(email=f"uploader-{uuid4()}@example.com")
+    org = await OrganizationRepository(session).create(name="Acme", slug=f"acme-{uuid4().hex[:8]}")
+    service = StorageService(session, org.id, redis)
+    original = b"%PDF-1.4\n" + b"A" * 200
+    replacement = b"%PDF-1.4\n" + b"B" * 200
+
+    presigned = await service.presign_upload(
+        user.id,
+        filename="report.pdf",
+        content_type="application/pdf",
+        size_bytes=len(original),
+        org_sub=None,
+    )
+    form = PresignedUpload(
+        url=presigned["upload_url"],
+        fields=presigned["fields"],
+        key=presigned["key"],
+        expires_at=presigned["expires_at"],
+    )
+    assert _post_upload(form, original, content_type="application/pdf").status_code == 204
+    stored = await service.confirm_upload(user.id, presigned["file_id"])
+
+    # The second use of the form. It still works -- it just cannot reach
+    # anything that is read.
+    assert _post_upload(form, replacement, content_type="application/pdf").status_code == 204
+
+    served = await backend.presign_download(stored.key)
+    assert _get(served).content == original
+    assert _get(await avatars_module.presign_avatar(stored.key)).content == original
+
+
+async def test_a_form_cannot_write_the_served_key_directly(backend: S3Backend) -> None:
+    """The form is signed for `incoming/<key>` and nothing else."""
+    key = f"org/default/{uuid4()}/report.pdf"
+    presigned = await backend.presign_upload(f"incoming/{key}", "application/pdf", max_bytes=1024)
+
+    response = _post_upload(presigned, b"%PDF-1.4\n", content_type="application/pdf", key=key)
+
+    assert response.status_code == 403
+    assert await backend.head(key) is None

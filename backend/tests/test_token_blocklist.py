@@ -3,15 +3,9 @@ impersonation flow that consumes it."""
 
 from uuid import uuid4
 
-import pytest
 from redis.asyncio import Redis
 
 from app.core.token_blocklist import block_jti, is_jti_blocked
-
-
-@pytest.fixture
-def redis(_redis_client: Redis) -> Redis:
-    return _redis_client
 
 
 async def test_is_jti_blocked_false_for_unknown_jti(redis: Redis) -> None:

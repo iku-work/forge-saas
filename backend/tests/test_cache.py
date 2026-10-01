@@ -23,11 +23,6 @@ from app.modules.auth.models import User
 from app.modules.tenancy.models import Organization
 
 
-@pytest.fixture
-def redis(_redis_client: Redis) -> Redis:
-    return _redis_client
-
-
 async def _loader_returning(payload: cache.JsonDict | None) -> cache.JsonDict | None:
     return payload
 

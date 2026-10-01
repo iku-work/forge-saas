@@ -3,9 +3,10 @@ Two client styles here, deliberately, split on whether the request has to
 reach a *route handler*:
 
 `TestClient(app)` where the assertion is about middleware alone -- /health,
-an unmatched path, a CORS preflight, and the 415 rejection (which the
-content-type middleware answers before routing). None of those need
-Postgres, Redis, or the rate limiter.
+a CORS preflight, and the 415 rejection (which the content-type middleware
+answers before routing). None of those need Postgres, Redis, or the rate
+limiter. An unmatched path does: the maintenance check reads product
+settings for it, so that test uses `client`.
 
 conftest's `client` fixture wherever the request must actually be handled by
 a route under /api/v1. Those carry `@api_limit`/`@auth_limit`, and slowapi's
@@ -14,7 +15,7 @@ app/middleware/rate_limit.py's own comment about the same import-time trap
 for limit values, which was fixed there but not for the storage URI. A bare
 TestClient therefore sends them at whatever Redis `backend/.env` names
 (`localhost:6379`, which only exists on a machine running the compose stack)
-rather than the throwaway container conftest's `_rate_limit_storage` points
+rather than the throwaway container conftest's `rate_limit_storage` points
 the limiter at. That is what made these tests fail on any checkout whose
 `.env` wasn't a copy of `.env.test`, while passing in CI, which copies it.
 """
@@ -48,12 +49,13 @@ def test_cache_control_defaults_to_no_store() -> None:
     assert response.headers["Cache-Control"] == "no-store"
 
 
-def test_cache_control_no_store_applied_to_404s_too() -> None:
+async def test_cache_control_no_store_applied_to_404s_too(client: httpx.AsyncClient) -> None:
     # T-210: ZAP's baseline scan flagged unmatched routes (its spider probes
     # "/", "/robots.txt", "/sitemap.xml") as storable/cacheable -- the
     # middleware must set the default on every response, not just 2xx ones.
-    with TestClient(app) as client:
-        response = client.get("/this-route-does-not-exist")
+    # conftest's client, not a bare TestClient: an unmatched path is not
+    # exempt from the maintenance check, which reads product settings.
+    response = await client.get("/this-route-does-not-exist")
 
     assert response.status_code == 404
     assert response.headers["Cache-Control"] == "no-store"

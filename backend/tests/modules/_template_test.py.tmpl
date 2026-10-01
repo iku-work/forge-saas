@@ -85,11 +85,11 @@ ClientFactory = Callable[[tuple[Organization, Membership]], httpx.AsyncClient]
 @pytest.fixture
 async def api_client(
     session: AsyncSession,
-    _redis_client: Redis,
-    _rate_limit_storage: RedisStorage,
+    redis_client: Redis,
+    rate_limit_storage: RedisStorage,
 ) -> AsyncIterator[ClientFactory]:
     """Builds a client that calls this module's routes as a given org+member."""
-    _rate_limit_storage.reset()
+    rate_limit_storage.reset()
     clients: list[httpx.AsyncClient] = []
 
     def _make(caller: tuple[Organization, Membership]) -> httpx.AsyncClient:
@@ -98,7 +98,7 @@ async def api_client(
         register_rate_limiting(api)  # @api_limit needs app.state.limiter
         api.include_router(router, prefix="/api/v1")
         api.dependency_overrides[get_session] = lambda: session
-        api.dependency_overrides[get_redis] = lambda: _redis_client
+        api.dependency_overrides[get_redis] = lambda: redis_client
         api.dependency_overrides[get_current_org] = lambda: caller
         client = httpx.AsyncClient(transport=ASGITransport(app=api), base_url="https://testserver")
         clients.append(client)

@@ -34,6 +34,7 @@ from app.core.dependencies import (
 from app.core.envelope import Envelope, Meta
 from app.core.exceptions import NotFoundError, PermissionDeniedError
 from app.core.principal import CurrentPrincipal, require_scope
+from app.middleware.budgets import charge_org
 from app.middleware.rate_limit import api_limit
 from app.modules.api_keys.scopes import Scope
 from app.modules.auth.models import User
@@ -59,11 +60,16 @@ def _request_id(request: Request) -> str:
 
 
 async def get_org_membership(
+    request: Request,
     org_id: UUID,
     user: Annotated[User, Depends(get_current_user)],
     session: Annotated[AsyncSession, Depends(get_session)],
 ) -> tuple[Organization, Membership]:
-    return await TenancyService(session).get_membership_or_raise(org_id, user.id)
+    org_and_membership = await TenancyService(session).get_membership_or_raise(org_id, user.id)
+    # Review R5: the same org budget as get_current_org, for the routes that
+    # name the org in the path -- charged only once membership is proven.
+    charge_org(request, org_id)
+    return org_and_membership
 
 
 def require_org_permission(permission: Permission) -> Callable[..., Awaitable[Membership]]:

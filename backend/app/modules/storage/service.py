@@ -29,12 +29,14 @@ from redis.asyncio import Redis
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core import jobs
-from app.core.exceptions import PlanLimitError, UnprocessableEntityError
+from app.core.db import persist_then_reject
+from app.core.exceptions import ConflictError, PlanLimitError, UnprocessableEntityError
 from app.models._mixins import utcnow
 from app.modules.audit.service import AuditService
 from app.modules.billing.dependencies import OrgSubscription
 from app.modules.notifications.service import NotificationService
-from app.modules.storage.backend import get_storage_backend
+from app.modules.storage.backend import ObjectChangedError, get_storage_backend
+from app.modules.storage.keys import delete_every_copy, upload_key
 from app.modules.storage.models import StoredFile
 from app.modules.storage.quota import check_absolute_ceiling, reservation_cutoff
 from app.modules.storage.repository import StoredFileRepository
@@ -48,6 +50,7 @@ _DOWNLOAD_EXPIRES_IN_SECONDS = 3600
 # same window, and a sweep that disagreed with this would delete objects
 # whose grace period is still open.
 HARD_DELETE_GRACE_PERIOD = timedelta(days=7)
+_EXPIRED_PURGE_DEFER = timedelta(minutes=1)
 # T-225/ASVS V12.2.1: content-sniffing only needs enough bytes for libmagic's
 # signature tables, never the whole object.
 _SNIFF_PREFIX_BYTES = 2048
@@ -142,8 +145,11 @@ class StorageService:
             bucket=bucket,
             status="pending",
         )
+        # The form may write only the upload copy, never `key` itself -- see
+        # app.modules.storage.keys for why (review R1). confirm_upload
+        # promotes it to `key`.
         presigned = await self._backend.presign_upload(
-            key, content_type, max_bytes=size_bytes + _SIZE_TOLERANCE_BYTES
+            upload_key(key), content_type, max_bytes=size_bytes + _SIZE_TOLERANCE_BYTES
         )
 
         await self._audit.log(
@@ -205,26 +211,20 @@ class StorageService:
             # to refuse than to re-run the quota check: the client has to
             # presign again anyway, and this is the same verdict
             # `expire_abandoned_uploads` would reach on its next tick, just
-            # arrived at sooner.
-            await self._expire(stored_file)
-            raise UnprocessableEntityError(
-                "errors.upload_reservation_expired",
-                fallback="This upload was not confirmed in time -- start it again",
+            # arrived at sooner. Persisted through the rejection -- raised
+            # plainly, the rollback undid the expiry and its audit row, and
+            # the purge job then found a live row and did nothing.
+            file_id_value = stored_file.id
+            await persist_then_reject(
+                self._session,
+                lambda: self._expire(file_id_value),
+                UnprocessableEntityError(
+                    "errors.upload_reservation_expired",
+                    fallback="This upload was not confirmed in time -- start it again",
+                ),
             )
 
-        metadata = await self._backend.head(stored_file.key)
-        if metadata is None:
-            raise UnprocessableEntityError(
-                "errors.file_not_uploaded", fallback="No upload found at the presigned location"
-            )
-
-        actual_size = int(metadata["ContentLength"])
-        if actual_size > stored_file.size_bytes + _SIZE_TOLERANCE_BYTES:
-            await self._backend.delete(stored_file.key)
-            raise UnprocessableEntityError(
-                "errors.file_size_mismatch",
-                fallback="Uploaded file size does not match the claimed size",
-            )
+        await self._promote(stored_file)
 
         if stored_file.content_type not in _SNIFF_EXEMPT_CONTENT_TYPES:
             await self._verify_content_sniff(stored_file)
@@ -272,6 +272,53 @@ class StorageService:
         )
         return updated
 
+    async def _promote(self, stored_file: StoredFile) -> None:
+        """Copy the upload out of `incoming/` to the key only the server writes.
+
+        Review R1. The upload form can be used again until it expires, so
+        nothing about the object at the upload key stays true after it has
+        been checked. Everything is therefore checked *after* this copy, on
+        the copy: the size here, then the content sniff, then the virus scan.
+        Whatever was copied is what gets judged and what gets served.
+
+        The copy is conditioned on the ETag just read, so the size check and
+        the copy describe the same object; an overwrite in between fails the
+        copy rather than slipping through it. That is a retry for the client,
+        not a verdict on the file, so the row stays pending.
+
+        Idempotent, so a confirm that failed after this point can be retried:
+        the upload copy is deleted on promotion, and without the check below
+        the retry reported "no upload found" for a file sitting at its served
+        key. Only this method writes that key, and keys are unique per row, so
+        finding it there means an earlier attempt of this confirm put it there
+        -- after the size check, which therefore need not run again.
+        """
+        source = upload_key(stored_file.key)
+        metadata = await self._backend.head(source)
+        if metadata is None:
+            if await self._backend.head(stored_file.key) is not None:
+                return
+            raise UnprocessableEntityError(
+                "errors.file_not_uploaded", fallback="No upload found at the presigned location"
+            )
+
+        actual_size = int(metadata["ContentLength"])
+        if actual_size > stored_file.size_bytes + _SIZE_TOLERANCE_BYTES:
+            await self._backend.delete(source)
+            raise UnprocessableEntityError(
+                "errors.file_size_mismatch",
+                fallback="Uploaded file size does not match the claimed size",
+            )
+
+        try:
+            await self._backend.copy_if_match(source, stored_file.key, str(metadata["ETag"]))
+        except ObjectChangedError as exc:
+            raise ConflictError(
+                "errors.upload_changed",
+                fallback="The upload changed while it was being confirmed -- confirm it again",
+            ) from exc
+        await self._backend.delete(source)
+
     async def _verify_content_sniff(self, stored_file: StoredFile) -> None:
         # T-225/ASVS V12.2.1: the declared Content-Type (checked at presign
         # time in presign_upload) is entirely client-supplied -- this
@@ -280,7 +327,7 @@ class StorageService:
         prefix = await self._backend.read_prefix(stored_file.key, _SNIFF_PREFIX_BYTES)
         sniffed_type = magic.from_buffer(prefix, mime=True)
         if sniffed_type != stored_file.content_type:
-            await self._backend.delete(stored_file.key)
+            await delete_every_copy(self._backend, stored_file.key)
             raise UnprocessableEntityError(
                 "errors.content_type_mismatch",
                 fallback=(
@@ -304,7 +351,7 @@ class StorageService:
         expires_at = utcnow() + timedelta(seconds=_DOWNLOAD_EXPIRES_IN_SECONDS)
         return url, expires_at
 
-    async def _expire(self, stored_file: StoredFile) -> None:
+    async def _expire(self, file_id: UUID) -> None:
         """Retire a presign whose reservation lapsed before it was confirmed.
 
         Soft-deleted rather than hard-deleted so the two existing cleanup
@@ -318,12 +365,17 @@ class StorageService:
         then gone quiet, or never started. `_purge` treats an absent object
         as a success, so both are the same case here.
         """
-        await self._repo.soft_delete(stored_file.id)
-        await jobs.enqueue_job("hard_delete_stored_file", file_id=stored_file.id)
+        await self._repo.soft_delete(file_id)
+        # Deferred a minute rather than immediate: this runs inside
+        # persist_then_reject, before its commit, and a job that ran first
+        # would find the row not yet deleted and skip it.
+        await jobs.enqueue_job(
+            "hard_delete_stored_file", file_id=file_id, _defer_by=_EXPIRED_PURGE_DEFER
+        )
         await self._audit.log(
             action="file.expired",
             resource_type="file",
-            resource_id=str(stored_file.id),
+            resource_id=str(file_id),
             org_id=self._org_id,
             actor_id=None,
         )

@@ -61,6 +61,7 @@ from app.modules.tenancy.repository import (
 )
 from app.modules.webhooks.events import ALL_EVENT_TYPES
 from app.modules.webhooks.models import WebhookDelivery, WebhookEndpoint
+from tests._auth import session_token
 from tests.fixtures.query_counter import QueryLog, count_queries
 
 # T-291: this file needs every module that owns a list endpoint -- the shared
@@ -127,12 +128,16 @@ BUDGETS: dict[str, int] = {
     # SELECT, nothing else.
     "list_plans": 2,
     # Superadmin-gated (T-141/T-143), and exempt from the maintenance check
-    # above. require_superadmin adds no query of its own; the audit feed's two
-    # extra reads are T-243's batched actor/org lookups, which used to be one
-    # query per distinct actor and org.
-    "list_orgs": 2,
-    "list_users": 2,
-    "list_admin_audit_feed": 4,
+    # above. One read is the session row: since review R3 the admin gate
+    # needs a token bound to a session that passed a second factor, and the
+    # revocation check every session-bound token pays (resolve_user_from_token)
+    # loads that row -- require_superadmin reads its `amr` from there rather
+    # than adding a query. The audit feed's two extra reads are T-243's
+    # batched actor/org lookups, which used to be one query per distinct actor
+    # and org.
+    "list_orgs": 3,
+    "list_users": 3,
+    "list_admin_audit_feed": 5,
 }
 
 # T-310. `public_api` ships off, so at the committed configuration
@@ -186,11 +191,6 @@ class World:
     # T-133 invoices live in Stripe, not in a table -- this is that endpoint's
     # "rows", grown by _seed_stripe_invoices and served by the stub below.
     stripe_invoices: list[SimpleNamespace] = field(default_factory=list)
-
-
-@pytest.fixture
-def redis(_redis_client: Redis) -> Redis:
-    return _redis_client
 
 
 async def _make_user(session: AsyncSession, **overrides: Any) -> User:  # noqa: ANN401 -- forwarded to UserRepository.create
@@ -650,7 +650,12 @@ if is_enabled("outbound_webhooks"):
 async def _measure_get(
     world: World, url: str, *, as_superadmin: bool = False
 ) -> tuple[QueryLog, Any]:
-    token = create_access_token((world.superadmin if as_superadmin else world.owner).id, None, ())
+    # A superadmin needs a session that passed a second factor (review R3).
+    token = (
+        await session_token(world.session, world.superadmin)
+        if as_superadmin
+        else create_access_token(world.owner.id, None, ())
+    )
     world.client.headers["Authorization"] = f"Bearer {token}"
     # Cold cache on both measurements: T-240 caches the user, the org row, the
     # org's entitlements, the feature-flag map and the invoice page, so a warm

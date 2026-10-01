@@ -31,6 +31,7 @@ from app.core.config import Settings, get_settings
 from app.core.db import build_connect_args
 from app.core.migrations import build_config
 from app.core.migrations import upgrade as upgrade_migrations
+from tests._prod_settings import PROD_SAFE_OVERRIDES
 
 REPO_ROOT = Path(__file__).parent.parent.parent
 PGBOUNCER_ENV_EXAMPLE = REPO_ROOT / ".env.pgbouncer.example"
@@ -318,18 +319,11 @@ async def test_migrations_run_while_traffic_flows_through_pgbouncer(
 
 FIXTURE_ENV_FILE = REPO_ROOT / "backend" / ".env.test"
 
-# Same shape as test_config.py's _PROD_SAFE_OVERRIDES: everything a non-dev
-# ENVIRONMENT demands, so a test can assert on one invariant without tripping
-# the four unrelated ones first.
+# The shared production shape, pointed at the compose service names.
 _PROD_SAFE_OVERRIDES: dict[str, object] = {
-    "ENVIRONMENT": "prod",
-    "FORCE_HTTPS": True,
-    "VIRUS_SCANNER": "clamav",
-    "PASSWORD_PEPPER": "a-real-pepper",
-    "ALLOWED_ORIGINS": ["https://app.example.com"],
+    **PROD_SAFE_OVERRIDES,
     "DATABASE_URL": "postgresql+asyncpg://u:p@pgbouncer:6432/forge?sslmode=require",
     "REDIS_URL": "rediss://redis:6379/0",
-    "METRICS_BLOCKED_AT_EDGE": True,
 }
 
 

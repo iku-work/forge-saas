@@ -26,6 +26,17 @@ if TYPE_CHECKING:
     from datetime import datetime
 
 
+class ObjectChangedError(Exception):
+    """A conditional copy's source was not the object the caller checked.
+
+    Raised by `copy_if_match` when the source's ETag no longer matches (it
+    was overwritten in between) or the source is gone. Not transient: trying
+    again copies whatever is there *now*, which is exactly what the
+    condition exists to prevent. So app.core.resilience neither retries it
+    nor counts it against the "s3" breaker.
+    """
+
+
 @dataclass(frozen=True)
 class PresignedUpload:
     url: str
@@ -46,6 +57,11 @@ class StorageBackend(Protocol):
     async def head(self, key: str) -> dict[str, Any] | None: ...  # None if not found
 
     async def read_prefix(self, key: str, num_bytes: int) -> bytes: ...
+
+    async def copy_if_match(self, source_key: str, destination_key: str, etag: str) -> None:
+        """Server-side copy of `source_key` to `destination_key`, only if the
+        source's ETag is still `etag`. Raises ObjectChangedError otherwise."""
+        ...
 
     async def delete(self, key: str) -> None: ...
 

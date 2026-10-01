@@ -13,6 +13,7 @@ from redis.asyncio import Redis
 
 from app.core.config import get_settings
 from app.core.db import dispose_engine
+from app.core.jobs import SCAN_QUEUE_NAME
 from app.core.jobs import redis_settings as build_redis_settings
 from app.core.metrics import start_worker_metrics_server
 from app.core.storage_endpoint import enforce_storage_endpoint_is_reachable_internally
@@ -29,8 +30,8 @@ from app.workers.scheduler import create_scheduler
 
 async def worker_startup(ctx: dict[str, Any]) -> None:
     settings = get_settings()
-    # This process makes S3 calls of its own (virus_scan fetches the object),
-    # so it needs the same route the API needs -- and it is the process most
+    # This process makes S3 calls of its own (object deletion, exports), so
+    # it needs the same route the API needs -- and it is the process most
     # likely to be restarted alone, without anyone watching the API's boot.
     enforce_storage_endpoint_is_reachable_internally(settings)
     # T-350: this process has its own Prometheus registry, so anything it
@@ -62,7 +63,6 @@ class WorkerSettings:
         export_user_data,
         backfill_notification_preferences,
         send_push,
-        virus_scan,
         send_dunning_email,
         # T-321. Registered unconditionally, like every other job here: the
         # function itself checks `is_enabled("outbound_webhooks")`, so a
@@ -90,4 +90,38 @@ class WorkerSettings:
     # plus one second, so a stuck worker fails its check within ~31s.
     health_check_interval = 30
     on_startup = worker_startup
+    on_shutdown = worker_shutdown
+
+
+async def scan_worker_startup(ctx: dict[str, Any]) -> None:
+    settings = get_settings()
+    # Streams every object it scans from the object store.
+    enforce_storage_endpoint_is_reachable_internally(settings)
+    # Its own container, so its own metrics endpoint on the same port.
+    start_worker_metrics_server(settings.WORKER_METRICS_PORT)
+    ctx["redis"] = Redis.from_url(str(settings.REDIS_URL))
+    # Deliberately no scheduler: scheduled jobs belong to WorkerSettings, and
+    # two schedulers would fire every cron job twice.
+
+
+class ScanWorkerSettings:
+    """`arq app.workers.main.ScanWorkerSettings` -- the scanner-worker service.
+
+    Review R4. Virus scans used to share WorkerSettings' twenty slots and
+    its memory cap with email, deletion and webhook delivery, so a burst of
+    maximum-size uploads could hold every slot, or run the process out of
+    memory, and stall everything else. They now run here, on their own
+    queue (app.core.jobs routes `virus_scan` to it), in their own container
+    with its own memory limit.
+    """
+
+    functions: ClassVar[list[WorkerCoroutine]] = [virus_scan]
+    queue_name = SCAN_QUEUE_NAME
+    redis_settings = build_redis_settings()
+    max_jobs = get_settings().SCAN_MAX_CONCURRENCY
+    job_timeout = 300
+    # Same reasoning as WorkerSettings: arq's hour-long default makes
+    # `arq --check` meaningless as a liveness probe.
+    health_check_interval = 30
+    on_startup = scan_worker_startup
     on_shutdown = worker_shutdown

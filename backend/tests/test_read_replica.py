@@ -350,14 +350,14 @@ _AUTH_MODELS = [
 
 @pytest.mark.parametrize("model", [*_AUTH_MODELS, Membership, Invitation])
 async def test_auth_statements_are_never_eligible_for_the_replica(
-    replica_configured: None,  # noqa: ARG001 -- a replica exists; these still must not use it
+    replica_configured: None,  # noqa: ARG001 -- ordering only
     model: type[SQLModel],
 ) -> None:
     assert db.should_route_to_replica(select(model)) is False
 
 
 async def test_a_join_that_reaches_a_pinned_table_is_pinned_too(
-    replica_configured: None,  # noqa: ARG001
+    replica_configured: None,  # noqa: ARG001 -- ordering only
 ) -> None:
     # The pin is per statement, not per model: an otherwise-eligible read that
     # joins (or sub-selects) its way to auth state is pinned as well.

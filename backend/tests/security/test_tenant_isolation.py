@@ -96,7 +96,7 @@ async def _api_key_table(engine: AsyncEngine) -> None:
 async def org_a_api_key(
     isolation_ctx: TenantIsolationContext,
     session: AsyncSession,
-    _redis_client: Redis,
+    redis_client: Redis,
     monkeypatch: pytest.MonkeyPatch,
 ) -> str:
     """A live key belonging to org_a, for the sweep below.
@@ -113,7 +113,7 @@ async def org_a_api_key(
     module_loader.get_modules.cache_clear()
 
     owner_id = isolation_ctx.org_a_owner_id
-    _, presented = await ApiKeyService(session, isolation_ctx.org_a.id, _redis_client).create_key(
+    _, presented = await ApiKeyService(session, isolation_ctx.org_a.id, redis_client).create_key(
         owner_id,
         ApiKeyCreateRequest(name="org a", scopes=["orgs:read", "members:read"]),
     )

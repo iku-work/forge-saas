@@ -5,7 +5,7 @@ test_tenancy_router.py's convention, not the X-Org-ID header), a non-member
 gets 403, and a member sees the FeatureFlagService-resolved map for their
 org's real Plan.
 
-Uses conftest's shared client/session/_redis_client fixtures (full
+Uses conftest's shared client/session/redis_client fixtures (full
 migrations) rather than a throwaway engine.
 """
 

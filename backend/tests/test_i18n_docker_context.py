@@ -10,6 +10,7 @@ import os
 from pathlib import Path
 
 import pytest
+import yaml
 
 from app.core.i18n import _locales_dir
 from app.workers.jobs.email import _email_renderer_cli_path
@@ -23,10 +24,22 @@ def test_dockerfile_copies_locales_into_backend_image() -> None:
     assert "COPY packages/i18n/locales ./locales" in content
 
 
-def test_compose_mounts_locales_for_backend_and_worker_dev_services() -> None:
-    content = (REPO_ROOT / "docker-compose.yml").read_text()
+def test_compose_mounts_locales_for_every_dev_service_running_the_backend() -> None:
+    """Every Python service translates something -- the worker sends email,
+    the scanner-worker (review R4) sends the file-infected notification -- so
+    each one that runs the backend image needs the locales mounted. Keyed on
+    the image rather than a count, so a new worker service is covered the day
+    it is added."""
+    compose = yaml.safe_load((REPO_ROOT / "docker-compose.yml").read_text())
+    backend_services = {
+        name: service
+        for name, service in compose["services"].items()
+        if service.get("image") == "forge-saas-backend-dev"
+    }
 
-    assert content.count("./packages/i18n/locales:/app/locales:ro") == 2
+    assert {"backend", "worker", "scanner-worker"} <= backend_services.keys()
+    for name, service in backend_services.items():
+        assert "./packages/i18n/locales:/app/locales:ro" in service.get("volumes", []), name
 
 
 def test_ci_builds_image_with_repo_root_context_and_explicit_dockerfile() -> None:

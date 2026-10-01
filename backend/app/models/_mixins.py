@@ -2,41 +2,42 @@ from datetime import UTC, datetime
 from uuid import UUID, uuid4
 
 from sqlalchemy import DateTime
-from sqlmodel import Field
+from sqlmodel import Field, SQLModel
 
 
 def utcnow() -> datetime:
     return datetime.now(UTC)
 
 
-class UUIDPKMixin:
+# The mixins subclass SQLModel rather than being plain classes so the type
+# checker sees their fields in every model's constructor; as plain classes,
+# `Notification(org_id=...)` was an unexpected keyword under sqlmodel 0.0.47.
+class UUIDPKMixin(SQLModel):
     id: UUID = Field(default_factory=uuid4, primary_key=True)
 
 
-class TimestampMixin:
+class TimestampMixin(SQLModel):
     # sa_type=DateTime(timezone=True): columns must be TIMESTAMPTZ, not the
     # SQLAlchemy-default TIMESTAMP WITHOUT TIME ZONE — every value here is
     # tz-aware UTC (utcnow()), and asyncpg rejects binding aware datetimes
-    # against a naive column. SQLModel's Field() stub types sa_type as
-    # `type[Any]` only, but sqlmodel passes it straight through to
-    # `Column(sa_type, ...)`, which accepts a configured instance too.
+    # against a naive column.
     created_at: datetime = Field(
         default_factory=utcnow,
-        sa_type=DateTime(timezone=True),  # type: ignore[call-overload]
+        sa_type=DateTime(timezone=True),
     )
     updated_at: datetime = Field(
         default_factory=utcnow,
-        sa_type=DateTime(timezone=True),  # type: ignore[call-overload]
+        sa_type=DateTime(timezone=True),
         sa_column_kwargs={"onupdate": utcnow},
     )
 
 
-class SoftDeleteMixin:
+class SoftDeleteMixin(SQLModel):
     deleted_at: datetime | None = Field(
         default=None,
-        sa_type=DateTime(timezone=True),  # type: ignore[call-overload]
+        sa_type=DateTime(timezone=True),
     )
 
 
-class OrgScopedMixin:
+class OrgScopedMixin(SQLModel):
     org_id: UUID = Field(foreign_key="organization.id", index=True)

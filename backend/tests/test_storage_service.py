@@ -40,7 +40,9 @@ from app.modules.auth.repository import UserRepository
 from app.modules.billing.dependencies import OrgSubscription
 from app.modules.billing.models import Plan
 from app.modules.storage import service as service_module
-from app.modules.storage.backend import PresignedUpload
+from app.modules.storage.backend import ObjectChangedError, PresignedUpload
+from app.modules.storage.keys import INCOMING_PREFIX, upload_key
+from app.modules.storage.models import StoredFile
 from app.modules.storage.quota import UPLOAD_RESERVATION_WINDOW
 from app.modules.storage.repository import StoredFileRepository
 from app.modules.storage.service import StorageService
@@ -91,6 +93,15 @@ class _FakeStorageBackend:
     async def read_prefix(self, key: str, num_bytes: int) -> bytes:  # noqa: ARG002 -- fake ignores the byte cap
         return self.content.get(key, b"%PDF-1.4\n%\xe2\xe3\xcf\xd3\n")
 
+    async def copy_if_match(self, source_key: str, destination_key: str, etag: str) -> None:
+        # Review R1's promotion out of `incoming/`, conditioned like S3's.
+        source = self.uploaded.get(source_key)
+        if source is None or source.get("ETag") != etag:
+            raise ObjectChangedError(source_key)
+        self.uploaded[destination_key] = dict(source)
+        if source_key in self.content:
+            self.content[destination_key] = self.content[source_key]
+
     async def delete(self, key: str) -> None:
         self.deleted.append(key)
         self.uploaded.pop(key, None)
@@ -104,11 +115,6 @@ def fake_backend(monkeypatch: pytest.MonkeyPatch) -> _FakeStorageBackend:
     backend = _FakeStorageBackend()
     monkeypatch.setattr(service_module, "get_storage_backend", lambda: backend)
     return backend
-
-
-@pytest.fixture
-def redis(_redis_client: Redis) -> Redis:
-    return _redis_client
 
 
 @pytest.fixture
@@ -161,7 +167,10 @@ async def _age_out_reservation(session: AsyncSession, org, file_id) -> None:
     stale = await StoredFileRepository(session, org.id).get_or_raise(file_id)
     stale.created_at = utcnow() - UPLOAD_RESERVATION_WINDOW - timedelta(minutes=1)
     session.add(stale)
-    await session.flush()
+    # Committed: in production the presign was an earlier request's commit,
+    # and a refused confirm rolls back to that point before recording the
+    # expiry (persist_then_reject).
+    await session.commit()
 
 
 # --- presign_upload: quota reservation ---------------------------------------------------
@@ -295,16 +304,22 @@ async def test_confirming_a_lapsed_reservation_is_refused(
         user_id, filename="slow.pdf", content_type="application/pdf", size_bytes=1024, org_sub=None
     )
     await _age_out_reservation(session, org, presigned["file_id"])
+    org_id = org.id  # read now: the refusal's rollback expires `org`
 
     with pytest.raises(UnprocessableEntityError):
         await service.confirm_upload(user_id, presigned["file_id"])
 
     # Retired the same way the scheduler would have retired it, rather than
-    # left pending for something else to trip over later.
+    # left pending for something else to trip over later -- and kept retired:
+    # the refusal used to roll the soft-delete back along with itself.
     hard_deletes = [
         kwargs["file_id"] for fn, kwargs in enqueued_jobs if fn == "hard_delete_stored_file"
     ]
     assert hard_deletes == [presigned["file_id"]]
+    retired = await session.get(StoredFile, presigned["file_id"], populate_existing=True)
+    assert retired is not None
+    assert retired.org_id == org_id
+    assert retired.deleted_at is not None
 
 
 @pytest.mark.usefixtures("fake_backend")
@@ -327,6 +342,107 @@ async def test_confirming_within_the_window_does_not_double_count(
     await service.confirm_upload(user_id, presigned["file_id"])
 
     assert await repo.total_bytes_for_org() == 1024
+
+
+@pytest.mark.usefixtures("fake_backend")
+async def test_confirm_promotes_the_upload_out_of_incoming(
+    session: AsyncSession, redis: Redis, org, user_id, fake_backend
+) -> None:
+    """Review R1: the served key is written by the copy, never by the form."""
+    service = _service(session, redis, org)
+    presigned = await service.presign_upload(
+        user_id, filename="f.pdf", content_type="application/pdf", size_bytes=1024, org_sub=None
+    )
+    fake_backend.uploaded[presigned["key"]] = {"ContentLength": 1024, "ETag": '"abc"'}
+
+    stored = await service.confirm_upload(user_id, presigned["file_id"])
+
+    assert presigned["key"] == upload_key(stored.key)
+    assert stored.key in fake_backend.uploaded
+    # The upload copy is gone: nothing reads it, and nothing counts it.
+    assert presigned["key"] not in fake_backend.uploaded
+
+
+async def test_a_confirm_that_failed_after_promotion_can_be_retried(
+    session: AsyncSession, redis: Redis, org, user_id, fake_backend
+) -> None:
+    """The first attempt promotes the upload, then fails on something
+    transient. The retry must find the promoted copy, not report the upload
+    missing because the incoming copy is gone."""
+    service = _service(session, redis, org)
+    presigned = await service.presign_upload(
+        user_id, filename="f.pdf", content_type="application/pdf", size_bytes=1024, org_sub=None
+    )
+    fake_backend.uploaded[presigned["key"]] = {"ContentLength": 1024, "ETag": '"abc"'}
+    real_read_prefix = fake_backend.read_prefix
+    calls = 0
+
+    async def _flaky_read_prefix(key: str, num_bytes: int) -> bytes:
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            raise OSError("object store hiccup")
+        return await real_read_prefix(key, num_bytes)
+
+    fake_backend.read_prefix = _flaky_read_prefix  # type: ignore[method-assign]
+
+    with pytest.raises(OSError, match="hiccup"):
+        await service.confirm_upload(user_id, presigned["file_id"])
+    assert presigned["key"] not in fake_backend.uploaded  # promoted, then failed
+
+    stored = await service.confirm_upload(user_id, presigned["file_id"])
+
+    assert stored.status == "ready"
+    assert stored.key in fake_backend.uploaded
+
+
+async def test_a_confirm_with_nothing_uploaded_anywhere_still_reports_it(
+    session: AsyncSession, redis: Redis, org, user_id, fake_backend
+) -> None:
+    service = _service(session, redis, org)
+    presigned = await service.presign_upload(
+        user_id, filename="f.pdf", content_type="application/pdf", size_bytes=1024, org_sub=None
+    )
+
+    with pytest.raises(UnprocessableEntityError) as caught:
+        await service.confirm_upload(user_id, presigned["file_id"])
+
+    assert caught.value.message_key == "errors.file_not_uploaded"
+    assert fake_backend.uploaded == {}
+
+
+@pytest.mark.usefixtures("fake_backend")
+async def test_an_upload_that_changes_mid_confirm_is_a_conflict_not_a_verdict(
+    session: AsyncSession, redis: Redis, org, user_id, fake_backend
+) -> None:
+    """The form was re-posted between the size check and the copy.
+
+    The copy's ETag condition fails, so nothing reaches the served key. The
+    client is told to confirm again -- the file is not judged either way,
+    and the row stays pending.
+    """
+    service = _service(session, redis, org)
+    presigned = await service.presign_upload(
+        user_id, filename="f.pdf", content_type="application/pdf", size_bytes=1024, org_sub=None
+    )
+    fake_backend.uploaded[presigned["key"]] = {"ContentLength": 1024, "ETag": '"checked"'}
+    original_head = fake_backend.head
+
+    async def _head_then_overwrite(key: str) -> dict[str, Any] | None:
+        seen = await original_head(key)
+        fake_backend.uploaded[key] = {"ContentLength": 1024, "ETag": '"swapped"'}
+        return seen
+
+    fake_backend.head = _head_then_overwrite  # type: ignore[method-assign]
+
+    with pytest.raises(ConflictError) as caught:
+        await service.confirm_upload(user_id, presigned["file_id"])
+
+    assert caught.value.message_key == "errors.upload_changed"
+    served = presigned["key"].removeprefix(INCOMING_PREFIX)
+    assert served not in fake_backend.uploaded
+    row = await StoredFileRepository(session, org.id).get_or_raise(presigned["file_id"])
+    assert row.status == "pending"
 
 
 # --- presign_upload: the ceiling that survives billing being off -------------------------
@@ -436,7 +552,7 @@ async def test_presign_upload_allows_image_in_avatars_bucket(
         org_sub=None,
     )
 
-    assert result["key"].startswith(f"{org.id}/avatars/")
+    assert result["key"].startswith(f"{INCOMING_PREFIX}{org.id}/avatars/")
 
 
 # --- presign_upload: server-generated keys / filename is display-only -------------------
@@ -456,7 +572,10 @@ async def test_presign_upload_key_is_server_generated_with_uuid_and_org_prefix(
         org_sub=None,
     )
 
-    parts = result["key"].split("/")
+    # The client is handed the upload location, never the served key
+    # (review R1); beneath the prefix it is the same server-built key.
+    assert result["key"].startswith(INCOMING_PREFIX)
+    parts = result["key"].removeprefix(INCOMING_PREFIX).split("/")
     assert parts[0] == str(org.id)
     assert parts[1] == "default"
     assert len(parts[2]) == 36  # uuid4 hex-with-dashes length

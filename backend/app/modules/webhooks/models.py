@@ -103,7 +103,7 @@ class WebhookEndpoint(
     # than hashing is the *requirement* -- see the module docstring.
     secret: str = Field(sa_column=Column(EncryptedString, nullable=False))
     secret_previous: str | None = Field(default=None, sa_column=Column(EncryptedString))
-    secret_previous_expires_at: datetime | None = Field(default=None, sa_type=_TZ_DATETIME)  # type: ignore[call-overload]
+    secret_previous_expires_at: datetime | None = Field(default=None, sa_type=_TZ_DATETIME)
     # JSONB rather than a join table, for the same reason ApiKey.scopes is:
     # a closed vocabulary defined in code (app.modules.webhooks.events), only
     # ever read whole, alongside the row it belongs to.
@@ -114,7 +114,7 @@ class WebhookEndpoint(
     # because "an operator turned this off" and "we turned this off for you"
     # are different facts and the UI says so.
     consecutive_failures: int = Field(default=0)
-    disabled_at: datetime | None = Field(default=None, sa_type=_TZ_DATETIME)  # type: ignore[call-overload]
+    disabled_at: datetime | None = Field(default=None, sa_type=_TZ_DATETIME)
     created_by: UUID | None = Field(default=None, foreign_key="user.id", index=True)
 
 
@@ -165,8 +165,8 @@ class WebhookDelivery(UUIDPKMixin, TimestampMixin, SoftDeleteMixin, SQLModel, ta
     response_code: int | None = Field(default=None)
     response_body: str | None = Field(default=None, max_length=MAX_RESPONSE_BODY_CHARS)
     error: str | None = Field(default=None, max_length=500)
-    next_attempt_at: datetime | None = Field(default=None, sa_type=_TZ_DATETIME)  # type: ignore[call-overload]
-    delivered_at: datetime | None = Field(default=None, sa_type=_TZ_DATETIME)  # type: ignore[call-overload]
+    next_attempt_at: datetime | None = Field(default=None, sa_type=_TZ_DATETIME)
+    delivered_at: datetime | None = Field(default=None, sa_type=_TZ_DATETIME)
     # The value of the `X-Forge-Delivery` header. Retries of the *same*
     # delivery reuse it so a consumer can dedupe; a replay (T-322) is a new
     # row and therefore a new id, because it is a new thing to have happened.

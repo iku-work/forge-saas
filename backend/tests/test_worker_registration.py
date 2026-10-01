@@ -23,8 +23,10 @@ import ast
 from pathlib import Path
 
 import pytest
+from arq.constants import default_queue_name
 
-from app.workers.main import WorkerSettings
+from app.core.jobs import queue_for
+from app.workers.main import ScanWorkerSettings, WorkerSettings
 
 APP_ROOT = Path(__file__).resolve().parent.parent / "app"
 
@@ -55,12 +57,26 @@ def _enqueued_job_names() -> set[str]:
     return names
 
 
+# Every worker class a deployment runs, and so every queue something consumes.
+_WORKERS = (WorkerSettings, ScanWorkerSettings)
+
+
+def _consumed() -> dict[str, set[str]]:
+    """queue name -> the job names registered by the worker on that queue.
+
+    arq looks a job up by the registered coroutine's __name__ (the attribute
+    @trace_job preserves via functools.wraps), which is what makes the
+    string on the enqueue side and the function on the worker side the same
+    name.
+    """
+    return {
+        getattr(worker, "queue_name", default_queue_name): {f.__name__ for f in worker.functions}
+        for worker in _WORKERS
+    }
+
+
 def _registered_job_names() -> set[str]:
-    # arq looks a job up by the registered coroutine's __name__ (the
-    # attribute @trace_job preserves via functools.wraps), which is what
-    # makes the string on the enqueue side and the function on the worker
-    # side the same name.
-    return {func.__name__ for func in WorkerSettings.functions}
+    return {name for names in _consumed().values() for name in names}
 
 
 def test_every_enqueued_job_name_is_registered() -> None:
@@ -72,7 +88,7 @@ def test_every_enqueued_job_name_is_registered() -> None:
 
     unregistered = enqueued - _registered_job_names()
     assert not unregistered, (
-        f"enqueued but not in WorkerSettings.functions: {sorted(unregistered)}. "
+        f"enqueued but registered on no worker: {sorted(unregistered)}. "
         f"arq resolves these names at run time, so this does not fail at import "
         f"or in CI -- it fails as a job that is queued and never runs."
     )
@@ -80,9 +96,15 @@ def test_every_enqueued_job_name_is_registered() -> None:
 
 @pytest.mark.parametrize("name", sorted(_enqueued_job_names()))
 def test_enqueued_name_resolves(name: str) -> None:
-    # The parametrised form of the assertion above, so a failure names the
-    # offending job in the test id rather than in a list.
-    assert name in _registered_job_names()
+    """Registered on *the queue it is sent to* (review R4).
+
+    A name registered on one worker but routed to another queue is the same
+    failure as an unregistered one: accepted, and never run.
+    """
+    queue = queue_for(name)
+    assert name in _consumed().get(queue, set()), (
+        f"{name} is routed to {queue!r}, whose worker does not register it"
+    )
 
 
 def test_no_job_is_enqueued_under_a_computed_name() -> None:

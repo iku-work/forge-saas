@@ -75,8 +75,26 @@ async def _get_pool() -> ArqRedis:
     return _pool
 
 
+# Review R4: virus scans run on their own queue, consumed by their own worker
+# (app.workers.main.ScanWorkerSettings, a separate container). A burst of
+# uploads then fills scan slots, not the slots email, deletion and webhook
+# delivery need -- and a scan that exhausts memory takes down only scanning.
+SCAN_QUEUE_NAME = "forge:queue:scan"
+
+# Every job not listed here runs on arq's default queue. Routing lives here,
+# not at call sites, so no caller can forget it -- a job enqueued onto a
+# queue whose worker does not register it is accepted and never runs, which
+# tests/test_worker_registration.py checks per (queue, name) pair.
+JOB_QUEUES: dict[str, str] = {"virus_scan": SCAN_QUEUE_NAME}
+
+
+def queue_for(function: str) -> str:
+    return JOB_QUEUES.get(function, default_queue_name)
+
+
 async def enqueue_job(function: str, **kwargs: Any) -> str | None:  # noqa: ANN401 -- forwarded to arq's own **kwargs job
     pool = await _get_pool()
+    kwargs.setdefault("_queue_name", queue_for(function))
     job = await pool.enqueue_job(function, **kwargs)
     return job.job_id if job is not None else None
 

@@ -74,7 +74,7 @@ def test_domain_error_with_missing_key_logs_warning_and_uses_fallback() -> None:
     # already existed, "app.core.handlers" included, for the rest of the
     # session -- caplog's capture relies on that logger's propagation/
     # disabled state and silently sees nothing once that's happened. Same
-    # workaround as tests/test_worker_scheduler.py's scheduler_log_messages
+    # workaround as tests/committed/test_worker_scheduler.py's scheduler_log_messages
     # fixture: attach a handler directly and force disabled=False.
     target = logging.getLogger("app.core.handlers")
     handler = _ListHandler()

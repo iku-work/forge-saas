@@ -40,13 +40,29 @@ jobs:
       contents: read
       packages: read
 
+    # C4: secrets reach scripts through `env:`, never `${{ }}` in the source.
     env:
       IMAGE: ghcr.io/${{ github.repository }}:${{ inputs.image-tag }}
+      TAG: ${{ inputs.image-tag }}
+      RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
+      BACKEND_SERVICE: ${{ secrets.RENDER_BACKEND_SERVICE_ID }}
+      WORKER_SERVICE: ${{ secrets.RENDER_WORKER_SERVICE_ID }}
+      SCANNER_WORKER_SERVICE: ${{ secrets.RENDER_SCANNER_WORKER_SERVICE_ID }}
+      PROD_DOMAIN: ${{ secrets.PROD_DOMAIN }}
+      MIGRATE: python -m app.core.migrations
 
     steps:
+      - name: Validate the image tag
+        run: |
+          [[ "$TAG" =~ ^[0-9a-f]{7,40}$ ]] || { echo "image-tag must be a commit SHA, got: $TAG" >&2; exit 1; }
+          [ -n "$SCANNER_WORKER_SERVICE" ] || {
+            echo "RENDER_SCANNER_WORKER_SERVICE_ID is not set. Uploads are scanned by their own worker (R4); deploying without it would leave the scanner on an old image. See docs/runbooks/deploy-render.md." >&2
+            exit 1
+          }
+
       - uses: actions/checkout@v4
 
-      - name: Preflight — env, guards, migrations
+      - name: Preflight — env and guards
         uses: ./.github/actions/deploy-preflight
         with:
           image: ${{ env.IMAGE }}
@@ -54,11 +70,29 @@ jobs:
           registry-username: ${{ github.actor }}
           registry-password: ${{ secrets.GITHUB_TOKEN }}
 
+      # C4: Render migrates on its own infrastructure, as the backend
+      # service's Pre-Deploy Command, which runs the new image before Render
+      # moves traffic and fails the deploy (status pre_deploy_failed) when it
+      # exits non-zero. It used to be optional "defense in depth" beside a
+      # migration on the runner; with the runner no longer reaching the
+      # production database it is the only migration, so a service without
+      # it must stop the deploy here rather than ship code against an old
+      # schema.
+      - name: Confirm Render migrates in pre-deploy
+        run: |
+          COMMAND=$(curl -sf -H "Authorization: Bearer $RENDER_API_KEY" \
+            "https://api.render.com/v1/services/$BACKEND_SERVICE" \
+            | jq -r '.serviceDetails.preDeployCommand // ""')
+          if [ "$COMMAND" != "$MIGRATE" ]; then
+            echo "The backend service's Pre-Deploy Command is '$COMMAND', not '$MIGRATE'. Set it (docs/runbooks/deploy-render.md) -- it is the only thing that migrates on Render." >&2
+            exit 1
+          fi
+
       - name: Capture currently-live deploy (rollback target if the new one fails)
         id: previous
         run: |
-          DEPLOY_ID=$(curl -sf -H "Authorization: Bearer ${{ secrets.RENDER_API_KEY }}" \
-            "https://api.render.com/v1/services/${{ secrets.RENDER_BACKEND_SERVICE_ID }}/deploys?status=live&limit=1" \
+          DEPLOY_ID=$(curl -sf -H "Authorization: Bearer $RENDER_API_KEY" \
+            "https://api.render.com/v1/services/$BACKEND_SERVICE/deploys?status=live&limit=1" \
             | jq -r '.[0] | (.deploy // .) | .id')
           echo "deploy_id=$DEPLOY_ID" >> "$GITHUB_OUTPUT"
 
@@ -66,28 +100,22 @@ jobs:
         id: deploy_backend
         run: |
           DEPLOY_ID=$(curl -sf -X POST \
-            "https://api.render.com/v1/services/${{ secrets.RENDER_BACKEND_SERVICE_ID }}/deploys" \
-            -H "Authorization: Bearer ${{ secrets.RENDER_API_KEY }}" \
+            "https://api.render.com/v1/services/$BACKEND_SERVICE/deploys" \
+            -H "Authorization: Bearer $RENDER_API_KEY" \
             -H "Content-Type: application/json" \
-            -d "{\"imageUrl\": \"$IMAGE\"}" | jq -r '.id')
+            -d "$(jq -n --arg image "$IMAGE" '{imageUrl: $image}')" | jq -r '.id')
           echo "deploy_id=$DEPLOY_ID" >> "$GITHUB_OUTPUT"
 
-      - name: Trigger Render deploy — worker
-        run: |
-          curl -sf -X POST \
-            "https://api.render.com/v1/services/${{ secrets.RENDER_WORKER_SERVICE_ID }}/deploys" \
-            -H "Authorization: Bearer ${{ secrets.RENDER_API_KEY }}" \
-            -H "Content-Type: application/json" \
-            -d "{\"imageUrl\": \"$IMAGE\"}"
-
       # Render keeps the previous deploy serving traffic until the new one
-      # reports "live" -- this makes that health gate visible in CI rather
-      # than trusting it silently.
+      # reports "live" -- this makes that health gate, and the pre-deploy
+      # migration in front of it, visible in CI rather than trusted silently.
       - name: Wait for backend health gate
+        env:
+          DEPLOY_ID: ${{ steps.deploy_backend.outputs.deploy_id }}
         run: |
           for _ in $(seq 1 60); do
-            STATUS=$(curl -sf -H "Authorization: Bearer ${{ secrets.RENDER_API_KEY }}" \
-              "https://api.render.com/v1/services/${{ secrets.RENDER_BACKEND_SERVICE_ID }}/deploys/${{ steps.deploy_backend.outputs.deploy_id }}" \
+            STATUS=$(curl -sf -H "Authorization: Bearer $RENDER_API_KEY" \
+              "https://api.render.com/v1/services/$BACKEND_SERVICE/deploys/$DEPLOY_ID" \
               | jq -r '.status')
             echo "deploy status: $STATUS"
             [ "$STATUS" = "live" ] && exit 0
@@ -97,14 +125,30 @@ jobs:
           echo "timed out waiting for deploy to go live" >&2
           exit 1
 
+      # After the backend is live, not beside it: the workers have no
+      # pre-deploy step of their own, so starting them first would run new
+      # job code against a schema the backend's pre-deploy has not migrated
+      # yet.
+      - name: Trigger Render deploy — workers
+        run: |
+          for SERVICE in "$WORKER_SERVICE" "$SCANNER_WORKER_SERVICE"; do
+            curl -sf -X POST \
+              "https://api.render.com/v1/services/$SERVICE/deploys" \
+              -H "Authorization: Bearer $RENDER_API_KEY" \
+              -H "Content-Type: application/json" \
+              -d "$(jq -n --arg image "$IMAGE" '{imageUrl: $image}')"
+          done
+
       - name: Smoke test
         id: smoke_test
-        run: curl -sf "https://${{ secrets.PROD_DOMAIN }}/health/ready"
+        run: curl -sf "https://$PROD_DOMAIN/health/ready"
 
       - name: Roll back to previous deploy
         if: failure() && steps.smoke_test.outcome == 'failure'
+        env:
+          PREVIOUS_DEPLOY: ${{ steps.previous.outputs.deploy_id }}
         run: |
-          curl -sf -X POST "https://api.render.com/v1/services/${{ secrets.RENDER_BACKEND_SERVICE_ID }}/rollback" \
-            -H "Authorization: Bearer ${{ secrets.RENDER_API_KEY }}" \
+          curl -sf -X POST "https://api.render.com/v1/services/$BACKEND_SERVICE/rollback" \
+            -H "Authorization: Bearer $RENDER_API_KEY" \
             -H "Content-Type: application/json" \
-            -d "{\"deployId\": \"${{ steps.previous.outputs.deploy_id }}\"}"
+            -d "$(jq -n --arg id "$PREVIOUS_DEPLOY" '{deployId: $id}')"

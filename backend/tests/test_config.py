@@ -8,6 +8,7 @@ from app.core import module_loader
 from app.core.config import Settings, get_settings, validate_stripe_keys
 from app.core.modules import EnabledModules, ModuleConfig
 from product import config as product_config
+from tests._prod_settings import PROD_SAFE_OVERRIDES
 
 FIXTURE_ENV_FILE = Path(__file__).parent.parent / ".env.test"
 
@@ -53,25 +54,10 @@ def test_force_https_required_outside_dev(monkeypatch: pytest.MonkeyPatch) -> No
         Settings(_env_file=FIXTURE_ENV_FILE, ENVIRONMENT="prod", FORCE_HTTPS=False)
 
 
-_PROD_SAFE_OVERRIDES: dict[str, object] = {
-    "ENVIRONMENT": "prod",
-    "FORCE_HTTPS": True,
-    "VIRUS_SCANNER": "clamav",
-    "PASSWORD_PEPPER": "a-real-pepper",
-    "DATABASE_URL": "postgresql+asyncpg://u:p@localhost:5432/db?sslmode=require",
-    "REDIS_URL": "rediss://localhost:6379/0",
-    # The compose posture: Caddy answers /metrics with a 404 before the app
-    # ever sees the request (verified for both Caddyfiles by
-    # test_caddy_config.py). A deployment with no such edge -- Render, Fly,
-    # Cloud Run -- sets METRICS_TOKEN instead; one of the two is mandatory.
-    "METRICS_BLOCKED_AT_EDGE": True,
-}
-
-
 def test_force_https_true_in_prod_does_not_raise(monkeypatch: pytest.MonkeyPatch) -> None:
     _clear_settings_env(monkeypatch)
 
-    settings = Settings(_env_file=FIXTURE_ENV_FILE, **_PROD_SAFE_OVERRIDES)
+    settings = Settings(_env_file=FIXTURE_ENV_FILE, **PROD_SAFE_OVERRIDES)
 
     assert settings.ENVIRONMENT == "prod"
 
@@ -92,7 +78,7 @@ def test_a_non_scanning_scanner_outside_dev_raises(
     _clear_settings_env(monkeypatch)
 
     with pytest.raises(RuntimeError, match="VIRUS_SCANNER"):
-        Settings(_env_file=FIXTURE_ENV_FILE, **{**_PROD_SAFE_OVERRIDES, "VIRUS_SCANNER": scanner})
+        Settings(_env_file=FIXTURE_ENV_FILE, **{**PROD_SAFE_OVERRIDES, "VIRUS_SCANNER": scanner})
 
 
 def test_clamav_outside_dev_is_accepted(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -101,7 +87,7 @@ def test_clamav_outside_dev_is_accepted(monkeypatch: pytest.MonkeyPatch) -> None
     _clear_settings_env(monkeypatch)
 
     settings = Settings(
-        _env_file=FIXTURE_ENV_FILE, **{**_PROD_SAFE_OVERRIDES, "VIRUS_SCANNER": "clamav"}
+        _env_file=FIXTURE_ENV_FILE, **{**PROD_SAFE_OVERRIDES, "VIRUS_SCANNER": "clamav"}
     )
 
     assert settings.VIRUS_SCANNER == "clamav"
@@ -111,7 +97,34 @@ def test_password_pepper_required_outside_dev(monkeypatch: pytest.MonkeyPatch) -
     _clear_settings_env(monkeypatch)
 
     with pytest.raises(RuntimeError, match="PASSWORD_PEPPER"):
-        Settings(_env_file=FIXTURE_ENV_FILE, **{**_PROD_SAFE_OVERRIDES, "PASSWORD_PEPPER": ""})
+        Settings(_env_file=FIXTURE_ENV_FILE, **{**PROD_SAFE_OVERRIDES, "PASSWORD_PEPPER": ""})
+
+
+@pytest.mark.parametrize(
+    ("setting", "value"),
+    [("ARGON2_TIME_COST", 1), ("ARGON2_MEMORY_KIB", 8), ("ARGON2_PARALLELISM", 1)],
+)
+def test_argon2_below_the_default_cost_outside_dev_raises(
+    monkeypatch: pytest.MonkeyPatch, setting: str, value: int
+) -> None:
+    """.env.test lowers these so the suite does not pay ~50 ms per hash; a
+    production env file must never be able to."""
+    _clear_settings_env(monkeypatch)
+
+    with pytest.raises(RuntimeError, match=setting):
+        Settings(_env_file=FIXTURE_ENV_FILE, **{**PROD_SAFE_OVERRIDES, setting: value})
+
+
+def test_argon2_above_the_default_cost_outside_dev_is_accepted(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _clear_settings_env(monkeypatch)
+
+    settings = Settings(
+        _env_file=FIXTURE_ENV_FILE, **{**PROD_SAFE_OVERRIDES, "ARGON2_TIME_COST": 4}
+    )
+
+    assert settings.ARGON2_TIME_COST == 4
 
 
 @pytest.mark.owasp("A02")
@@ -122,7 +135,7 @@ def test_database_url_missing_sslmode_outside_dev_raises(monkeypatch: pytest.Mon
         Settings(
             _env_file=FIXTURE_ENV_FILE,
             **{
-                **_PROD_SAFE_OVERRIDES,
+                **PROD_SAFE_OVERRIDES,
                 "DATABASE_URL": "postgresql+asyncpg://u:p@localhost:5432/db",
             },
         )
@@ -141,7 +154,7 @@ def test_read_replica_url_missing_sslmode_outside_dev_raises(
         Settings(
             _env_file=FIXTURE_ENV_FILE,
             **{
-                **_PROD_SAFE_OVERRIDES,
+                **PROD_SAFE_OVERRIDES,
                 "READ_REPLICA_URL": "postgresql+asyncpg://u:p@replica:5432/db",
             },
         )
@@ -163,7 +176,7 @@ def test_read_replica_url_with_tls_is_accepted_in_prod(monkeypatch: pytest.Monke
     settings = Settings(
         _env_file=FIXTURE_ENV_FILE,
         **{
-            **_PROD_SAFE_OVERRIDES,
+            **PROD_SAFE_OVERRIDES,
             "READ_REPLICA_URL": "postgresql+asyncpg://u:p@replica:5432/db?sslmode=require",
         },
     )
@@ -178,7 +191,7 @@ def test_redis_url_wrong_scheme_outside_dev_raises(monkeypatch: pytest.MonkeyPat
     with pytest.raises(RuntimeError, match="REDIS_URL"):
         Settings(
             _env_file=FIXTURE_ENV_FILE,
-            **{**_PROD_SAFE_OVERRIDES, "REDIS_URL": "redis://localhost:6379/0"},
+            **{**PROD_SAFE_OVERRIDES, "REDIS_URL": "redis://localhost:6379/0"},
         )
 
 
@@ -283,7 +296,7 @@ def test_metrics_unprotected_outside_dev_raises(monkeypatch: pytest.MonkeyPatch)
     with pytest.raises(RuntimeError, match="/metrics would be publicly readable"):
         Settings(
             _env_file=FIXTURE_ENV_FILE,
-            **{**_PROD_SAFE_OVERRIDES, "METRICS_BLOCKED_AT_EDGE": False},
+            **{**PROD_SAFE_OVERRIDES, "METRICS_BLOCKED_AT_EDGE": False},
         )
 
 
@@ -295,7 +308,7 @@ def test_metrics_token_satisfies_the_requirement_without_an_edge(
     settings = Settings(
         _env_file=FIXTURE_ENV_FILE,
         **{
-            **_PROD_SAFE_OVERRIDES,
+            **PROD_SAFE_OVERRIDES,
             "METRICS_BLOCKED_AT_EDGE": False,
             "METRICS_TOKEN": "a-scrape-token",
         },
@@ -332,7 +345,7 @@ def test_redis_private_network_opt_in_permits_plain_scheme(
     settings = Settings(
         _env_file=FIXTURE_ENV_FILE,
         **{
-            **_PROD_SAFE_OVERRIDES,
+            **PROD_SAFE_OVERRIDES,
             "REDIS_URL": "redis://red-abc123:6379/0",
             "REDIS_ON_PRIVATE_NETWORK": True,
         },
@@ -356,7 +369,7 @@ def test_redis_private_network_opt_in_does_not_relax_postgres(
         Settings(
             _env_file=FIXTURE_ENV_FILE,
             **{
-                **_PROD_SAFE_OVERRIDES,
+                **PROD_SAFE_OVERRIDES,
                 "REDIS_ON_PRIVATE_NETWORK": True,
                 "DATABASE_URL": "postgresql+asyncpg://u:p@localhost:5432/db",
             },

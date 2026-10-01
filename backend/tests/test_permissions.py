@@ -1,7 +1,7 @@
 """
 Verifies T-021's role -> permission map. The matrix (every MemberRole x every
 Permission) is the contract that app.core.dependencies.require_permission
-enforces — see tests/test_dependencies.py for the dependency itself.
+enforces — see tests/committed/test_dependencies.py for the dependency itself.
 """
 
 import pytest

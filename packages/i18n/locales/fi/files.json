@@ -7,7 +7,8 @@
     "empty_body": "Tänne lataamasi tiedostot näkyvät vain organisaatiollesi, ja ne tarkistetaan virusten varalta ennen lataamista. Lisää ensimmäinen tiedosto yllä olevalla latauskentällä.",
     "error_download": "Latausta ei voitu aloittaa.",
     "error_delete": "Tiedostoa ei voitu poistaa.",
-    "empty_body_read_only": "Kukaan organisaatiossasi ei ole vielä ladannut tiedostoa. Pyydä ylläpitäjää lisäämään sellainen, jos tarvitset."
+    "empty_body_read_only": "Kukaan organisaatiossasi ei ole vielä ladannut tiedostoa. Pyydä ylläpitäjää lisäämään sellainen, jos tarvitset.",
+    "scan_taking_long": "Joidenkin tiedostojen tarkistus kestää tavallista kauemmin. Päivitä sivu tarkistaaksesi uudelleen."
   },
   "uploader": {
     "drop_here": "Pudota tiedostot tähän",

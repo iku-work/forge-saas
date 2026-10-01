@@ -1,15 +1,22 @@
+import socket
+import threading
 from collections.abc import Iterator
+from time import monotonic
 from uuid import UUID, uuid4
 
 import pytest
 from fastapi import FastAPI, Request
 from fastapi.testclient import TestClient
+from limits import parse
 from limits.storage import RedisStorage, storage_from_string
-from limits.strategies import FixedWindowRateLimiter
-from testcontainers.redis import RedisContainer
 
 from app.middleware import rate_limit as rate_limit_module
-from app.middleware.rate_limit import _key_func, auth_limit, register_rate_limiting
+from app.middleware.rate_limit import (
+    FailOpenSlidingWindow,
+    _key_func,
+    auth_limit,
+    register_rate_limiting,
+)
 from app.modules.auth.utils import create_access_token
 
 
@@ -103,28 +110,9 @@ async def _limited_endpoint(request: Request) -> dict[str, str]:  # noqa: ARG001
     return {"status": "ok"}
 
 
-@pytest.fixture(scope="module")
-def _redis_backed_storage() -> Iterator[RedisStorage]:
-    # The module-level `limiter` is built once at import time against whatever
-    # REDIS_URL is in the environment. Point it at a real, disposable Redis
-    # for this test module, then restore the original storage on teardown so
-    # other test modules sharing the same `limiter` singleton are unaffected.
-    original_storage = rate_limit_module.limiter._storage
-    original_limiter = rate_limit_module.limiter._limiter
-    with RedisContainer("redis:7-alpine") as container:
-        host = container.get_container_host_ip()
-        port = container.get_exposed_port(6379)
-        storage = storage_from_string(f"redis://{host}:{port}/0")
-        rate_limit_module.limiter._storage = storage
-        rate_limit_module.limiter._limiter = FixedWindowRateLimiter(storage)
-        yield storage
-    rate_limit_module.limiter._storage = original_storage
-    rate_limit_module.limiter._limiter = original_limiter
-
-
 @pytest.fixture
-def client(_redis_backed_storage: RedisStorage) -> TestClient:
-    _redis_backed_storage.reset()
+def client(rate_limit_storage: RedisStorage) -> TestClient:
+    rate_limit_storage.reset()
     return TestClient(_test_app)
 
 
@@ -188,3 +176,69 @@ def test_an_anonymous_caller_is_still_limited(client: TestClient) -> None:
     responses = [client.get("/limited").status_code for _ in range(6)]
 
     assert responses[5] == 429
+
+
+# --- FailOpenSlidingWindow: a broken or silent Redis costs one timeout per stand-down
+
+
+@pytest.fixture
+def silent_redis() -> Iterator[tuple[str, list[socket.socket]]]:
+    """A TCP server that accepts connections and never says anything --
+    the failure a timeout-less synchronous client used to hang on forever."""
+    server = socket.create_server(("127.0.0.1", 0))
+    accepted: list[socket.socket] = []
+
+    def _accept() -> None:
+        while True:
+            try:
+                connection, _ = server.accept()
+            except OSError:
+                return
+            accepted.append(connection)
+
+    threading.Thread(target=_accept, daemon=True).start()
+    port = server.getsockname()[1]
+    try:
+        yield f"redis://127.0.0.1:{port}/0", accepted
+    finally:
+        server.close()
+        for connection in accepted:
+            connection.close()
+
+
+def test_a_silent_redis_is_waited_on_once_then_skipped(
+    silent_redis: tuple[str, list[socket.socket]],
+) -> None:
+    url, accepted = silent_redis
+    strategy = rate_limit_module.strategy_for(
+        storage_from_string(rate_limit_module._with_timeouts(url))
+    )
+    item = parse("1/minute")
+
+    started = monotonic()
+    assert strategy.hit(item, "caller") is True  # failed open, after the timeout
+    first = monotonic() - started
+    started = monotonic()
+    for _ in range(50):
+        assert strategy.hit(item, "caller") is True  # stood down: no Redis at all
+    rest = monotonic() - started
+
+    assert first < 2.0, f"the first call waited {first:.2f}s"
+    assert rest < 0.1, f"fifty stood-down calls took {rest:.2f}s"
+    assert len(accepted) <= 1
+
+
+def test_the_stand_down_ends_and_limits_apply_again(
+    rate_limit_storage: RedisStorage,
+) -> None:
+    strategy = rate_limit_module.strategy_for(rate_limit_storage)
+    item = parse("1/minute")
+    FailOpenSlidingWindow._down_until = monotonic() + 60  # as if Redis had just failed
+
+    assert strategy.hit(item, "caller") is True
+    assert strategy.hit(item, "caller") is True  # standing down, so not counted
+
+    FailOpenSlidingWindow.reset_stand_down()
+
+    assert strategy.hit(item, "caller") is True
+    assert strategy.hit(item, "caller") is False

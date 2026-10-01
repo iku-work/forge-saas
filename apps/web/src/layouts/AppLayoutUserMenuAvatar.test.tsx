@@ -69,4 +69,53 @@ describe("AppLayout user menu avatar", () => {
       expect(asked).toBe(true);
     });
   });
+
+  it("keeps asking while the avatar's scan is pending, instead of giving up (R7)", async () => {
+    // An avatar can be chosen before its malware scan finishes; until then
+    // the server answers 409 file_scan_pending. That is "not yet": the
+    // shell shows initials and asks again rather than treating the avatar
+    // as broken.
+    const user = makeUser(1, { has_uploaded_avatar: true });
+    let asked = 0;
+    server.use(
+      http.get(`${API}/api/v1/auth/me`, () =>
+        HttpResponse.json(envelope(user)),
+      ),
+      http.get(`${API}/api/v1/orgs/:orgId/members`, () =>
+        HttpResponse.json(envelope([makeMembership(user, "owner")])),
+      ),
+      http.get(`${API}/api/v1/auth/me/avatar`, () => {
+        asked += 1;
+        if (asked === 1) {
+          return HttpResponse.json(
+            {
+              data: null,
+              error: {
+                code: "conflict",
+                message: "This file is still being scanned for malware.",
+                message_key: "errors.file_scan_pending",
+              },
+              meta: { request_id: "req-1" },
+            },
+            { status: 409 },
+          );
+        }
+        return HttpResponse.json(
+          envelope({
+            url: "https://storage.example.test/forge/a.jpg?X-Amz-Signature=abc",
+            expires_at: "2026-12-31T00:00:00Z",
+          }),
+        );
+      }),
+    );
+
+    renderApp({ initialPath: "/", user });
+
+    await waitFor(
+      () => {
+        expect(asked).toBe(2);
+      },
+      { timeout: 8_000 },
+    );
+  }, 15_000);
 });

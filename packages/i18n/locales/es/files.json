@@ -7,7 +7,8 @@
     "empty_body": "Los archivos que subas aquí son privados para tu organización y se analizan en busca de virus antes de que alguien pueda descargarlos. Usa el cargador de arriba para añadir el primero.",
     "error_download": "No se ha podido iniciar la descarga.",
     "error_delete": "No se ha podido eliminar el archivo.",
-    "empty_body_read_only": "Nadie de tu organización ha subido un archivo todavía. Pide a un administrador que añada uno si lo necesitas."
+    "empty_body_read_only": "Nadie de tu organización ha subido un archivo todavía. Pide a un administrador que añada uno si lo necesitas.",
+    "scan_taking_long": "El análisis de algunos archivos está tardando más de lo habitual. Actualiza la página para volver a comprobarlo."
   },
   "uploader": {
     "drop_here": "Suelta los archivos aquí",

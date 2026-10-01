@@ -8,7 +8,7 @@ transport: schemathesis (v4) drives ASGI calls through
 new `TestClient(app)` context -- meaning a fresh background thread, a fresh
 anyio event loop, and a full app lifespan start/stop -- for *every single*
 generated case. That is incompatible with this app's `get_session`/
-`get_redis` overrides: the root conftest's `session`/`_redis_client`
+`get_redis` overrides: the root conftest's `session`/`redis_client`
 fixtures hold an asyncpg connection and a redis-asyncio client bound to
 pytest-asyncio's one loop, and asyncpg connections raise if awaited from a
 different loop than the one that created them.
@@ -269,9 +269,9 @@ async def test_api_contract(
     case: schemathesis.Case,
     authed_client: httpx.AsyncClient,
     session: AsyncSession,
-    _rate_limit_storage: RedisStorage,  # noqa: PT019 -- conftest names it this; its return value is used below
+    rate_limit_storage: RedisStorage,
 ) -> None:
-    await _send_and_validate(case, authed_client, session, _rate_limit_storage)
+    await _send_and_validate(case, authed_client, session, rate_limit_storage)
 
 
 @public_schema.parametrize()
@@ -279,7 +279,7 @@ async def test_published_public_contract(
     case: schemathesis.Case,
     authed_client: httpx.AsyncClient,
     session: AsyncSession,
-    _rate_limit_storage: RedisStorage,  # noqa: PT019 -- conftest names it this
+    rate_limit_storage: RedisStorage,
 ) -> None:
     """T-350: what an integrator reading `openapi-public.json` would get.
 
@@ -291,4 +291,4 @@ async def test_published_public_contract(
     tests/modules/test_api_keys.py's question, and the cross-tenant half is
     tests/security/test_tenant_isolation.py's.
     """
-    await _send_and_validate(case, authed_client, session, _rate_limit_storage)
+    await _send_and_validate(case, authed_client, session, rate_limit_storage)

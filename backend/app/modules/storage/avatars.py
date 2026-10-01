@@ -21,11 +21,12 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any, cast
 
-from sqlalchemy import select
+from sqlalchemy import or_, select
 
+from app.core.exceptions import NotFoundError
 from app.modules.storage.backend import get_storage_backend
 from app.modules.storage.models import StoredFile
-from app.modules.storage.scan_gate import downloadable_where
+from app.modules.storage.scan_gate import CLEAN, require_clean_scan
 
 if TYPE_CHECKING:
     from uuid import UUID
@@ -44,30 +45,52 @@ AVATAR_URL_EXPIRES_IN_SECONDS = 300
 async def resolve_own_avatar_key(
     session: AsyncSession, *, user_id: UUID, file_id: UUID
 ) -> str | None:
-    """The object key of `file_id`, if it really is this user's avatar.
+    """The object key of `file_id`, if it may become this user's avatar.
 
-    None -- never an exception -- when the file does not exist, has no clean
-    malware verdict, is not in the avatars bucket, or was uploaded by somebody
-    else. The caller turns that into a 422; there is nothing here worth
-    distinguishing for the client, and saying which of the four failed would
-    confirm the existence of another user's file.
+    None -- never an exception -- when the file does not exist, was uploaded
+    by somebody else, is not in the avatars bucket, or has been judged and
+    failed (infected, or unscannable). The caller turns that into a 422;
+    there is nothing here worth distinguishing for the client, and saying
+    which one failed would confirm the existence of another user's file.
 
-    The scan gate matters as much here as on the documents path, and is
-    easier to miss: this function is the *only* thing between a stored object
-    and `presign_avatar`, because an avatar has no org and so never passes
-    through StorageService. An unscanned avatar is still an attacker-supplied
-    file being handed to a browser with an image content type.
+    A file whose scan has **not finished yet** is accepted (plan D4, review
+    R7). Choosing it as your avatar is a statement of intent that is valid
+    before the verdict; *serving* it is not, and that gate lives in
+    `presign_own_avatar`, which every read goes through. Requiring the
+    verdict here meant the profile page -- which sets the avatar the moment
+    the upload is confirmed, before any scanner could have finished -- failed
+    nearly every first upload with a generic error.
     """
     model = cast("Any", StoredFile)
     stmt = select(StoredFile).where(
         model.id == file_id,
         model.uploaded_by == user_id,
         model.bucket == AVATAR_BUCKET,
-        *downloadable_where(),
+        model.status == "ready",
+        or_(model.virus_scan_result.is_(None), model.virus_scan_result == CLEAN),
         model.deleted_at.is_(None),
     )
     stored_file = (await session.execute(stmt)).scalar_one_or_none()
     return stored_file.key if stored_file is not None else None
+
+
+async def presign_own_avatar(session: AsyncSession, key: str) -> str:
+    """A short-lived URL for the avatar stored at `key` -- once it is clean.
+
+    The scan gate for avatars, applied where the bytes are handed out rather
+    than where the choice is made (see `resolve_own_avatar_key`). An avatar
+    has no org, so it never passes through StorageService, and this is the
+    only thing between the stored object and a browser. 409 with the scan
+    gate's own message while the scan is pending or after it failed; 404 if
+    the file is gone.
+    """
+    model = cast("Any", StoredFile)
+    stmt = select(StoredFile).where(model.key == key, model.deleted_at.is_(None))
+    stored_file = (await session.execute(stmt)).scalar_one_or_none()
+    if stored_file is None:
+        raise NotFoundError("errors.avatar_not_found", fallback="No uploaded avatar.")
+    require_clean_scan(stored_file)
+    return await presign_avatar(key)
 
 
 async def presign_avatar(key: str) -> str:

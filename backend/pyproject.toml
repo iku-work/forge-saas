@@ -15,15 +15,15 @@ dependencies = [
     "email-validator>=2.2",
     "argon2-cffi>=23.1",
     "cryptography>=42.0",
-    "python-jose[cryptography]>=3.3",
     "pyotp>=2.9",
     "webauthn>=3.0", # T-217 — FIDO2/WebAuthn second factor
     "authlib>=1.3",
-    # Declared explicitly even though authlib pulls it in: T-331 verifies ID
-    # tokens with it directly (app.modules.sso.oidc), and depending on a
-    # transitive package for a *signature check* is how a minor bump in
-    # somebody else's dependency tree becomes an authentication outage.
-    # authlib.jose is the alternative and is deprecated in favour of this.
+    # The one JOSE library: session access tokens (app.modules.auth.utils)
+    # and third-party ID tokens (app.modules.sso.oidc). Declared explicitly
+    # even though authlib pulls it in -- depending on a transitive package
+    # for a *signature check* is how a minor bump in somebody else's
+    # dependency tree becomes an authentication outage. It replaced
+    # python-jose (unmaintained, with an ecdsa advisory that had no fix).
     "joserfc>=1.0",
     "python-multipart>=0.0.12",
     "arq>=0.26",
@@ -40,22 +40,14 @@ dependencies = [
     "loguru>=0.7",
     "sentry-sdk[fastapi]>=2.15",
     "opentelemetry-distro>=0.48b0",
-    # Pinned exactly, not >=: semgrep (a dev dependency below) pins
-    # opentelemetry-api/sdk/exporter-otlp-proto-http to ~=1.37.0 and
-    # opentelemetry-instrumentation-requests/threading to ~=0.58b0, and (since
-    # every contrib package here shares one opentelemetry-instrumentation
-    # core) that transitively caps opentelemetry-api at 1.37.x -- there is no
-    # published opentelemetry-instrumentation-fastapi release that both fixes
-    # the _get_route_details() bug worked around in tracing.py's
-    # _patch_fastapi_partial_match_bug() (needs >=0.64b0, i.e. api>=1.43.0)
-    # and satisfies semgrep's cap. Letting these three float to a newer
-    # contrib release drags opentelemetry-api/sdk/instrumentation along with
-    # them and `pip check` starts reporting conflicting requirements against
-    # semgrep's own pins.
-    "opentelemetry-instrumentation-fastapi==0.58b0",
-    "opentelemetry-instrumentation-sqlalchemy==0.58b0",
-    "opentelemetry-instrumentation-redis==0.58b0",
-    "opentelemetry-exporter-otlp-proto-http==1.37.0",
+    # >=0.64b0: earlier releases crash on a wrong-method request to a real
+    # route (_get_route_details() reads `.path` off FastAPI's lazy
+    # _IncludedRouter), turning a 405 into a 500 -- see
+    # tests/test_tracing.py::test_wrong_method_on_real_route_returns_405_not_a_500.
+    "opentelemetry-instrumentation-fastapi>=0.64b0",
+    "opentelemetry-instrumentation-sqlalchemy>=0.64b0",
+    "opentelemetry-instrumentation-redis>=0.64b0",
+    "opentelemetry-exporter-otlp-proto-http>=1.43.0",
     # >=8.0.2, not just >=7.0: 8.0.0/8.0.1's routing._get_route_name assumes
     # include_router() eagerly flattens child routes into APIRoute objects
     # with a .path attribute. This FastAPI's (0.137.2) include_router() wraps
@@ -143,15 +135,21 @@ dev = [
     # virtualenv keeps whatever it resolved earlier, which is why this can be
     # green locally and red on a clean CI runner on the same commit.
     # Reproduced in a container built from Dockerfile.dev.
-    "anyio==4.14.0",
+    # 4.14.2 rather than 4.14.0: same series, and it carries security fixes
+    # pip-audit reports against 4.14.0 once CI audits the lock (C1).
+    "anyio==4.14.2",
     "freezegun>=1.5",
     "bandit>=1.7",
-    "semgrep>=1.168",
+    # semgrep is deliberately NOT here. It pins pyjwt<2.14 and
+    # opentelemetry-api~=1.37, and because the lock is resolved as one
+    # universe those caps reached requirements.lock -- the runtime image
+    # shipped a pyjwt with open CVEs because of a dev-only scanner. CI's
+    # security job installs a pinned semgrep in its own venv instead; run
+    # it locally with `pipx run semgrep==1.178.0 --config semgrep/ app/`.
     "pip-audit>=2.10",
     "import-linter>=2.1",
     "pre-commit>=4.0",
     "detect-secrets>=1.5",
-    "types-python-jose>=3.3",
     "pyyaml>=6.0",
 ]
 

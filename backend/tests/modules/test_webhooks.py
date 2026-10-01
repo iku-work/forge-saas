@@ -53,6 +53,7 @@ from app.modules.webhooks.models import WebhookDelivery, WebhookEndpoint
 from app.modules.webhooks.repository import WebhookEndpointRepository
 from app.modules.webhooks.router import router
 from app.modules.webhooks.service import MAX_ENDPOINTS_PER_ORG, generate_secret
+from tests._sessions import reloading, rolling_back
 
 _PREFIX = "/api/v1/webhooks"
 _EVENTS = ["member.invited"]
@@ -124,10 +125,10 @@ ClientFactory = Callable[[tuple[Organization, Membership]], httpx.AsyncClient]
 @pytest.fixture
 async def api_client(
     session: AsyncSession,
-    _redis_client: Redis,
-    _rate_limit_storage: RedisStorage,
+    redis_client: Redis,
+    rate_limit_storage: RedisStorage,
 ) -> AsyncIterator[ClientFactory]:
-    _rate_limit_storage.reset()
+    rate_limit_storage.reset()
     clients: list[httpx.AsyncClient] = []
 
     def _make(caller: tuple[Organization, Membership]) -> httpx.AsyncClient:
@@ -135,9 +136,9 @@ async def api_client(
         register_exception_handlers(api)
         register_rate_limiting(api)
         api.include_router(router, prefix="/api/v1")
-        api.dependency_overrides[get_session] = lambda: session
-        api.dependency_overrides[get_redis] = lambda: _redis_client
-        api.dependency_overrides[get_current_org] = lambda: caller
+        api.dependency_overrides[get_session] = rolling_back(session)
+        api.dependency_overrides[get_redis] = lambda: redis_client
+        api.dependency_overrides[get_current_org] = reloading(session, caller)
         client = httpx.AsyncClient(transport=ASGITransport(app=api), base_url="https://testserver")
         clients.append(client)
         return client

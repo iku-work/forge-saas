@@ -19,6 +19,14 @@ convention as `tests._module_tables`.
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+from uuid import uuid4
+
+import asyncpg
+
+if TYPE_CHECKING:
+    from testcontainers.postgres import PostgresContainer
+
 
 class DatabaseHandle:
     """One test module's (or one test's) own database, on the shared server."""
@@ -31,3 +39,27 @@ class DatabaseHandle:
         `PostgresContainer` returns -- callers immediately `.replace` that
         driver with asyncpg, which is the only one installed here."""
         return self._url
+
+
+async def clone_template(container: PostgresContainer, template: str) -> str:
+    """A fresh database cloned from `template`; returns its asyncpg URL."""
+    base = container.get_connection_url().replace("+psycopg2", "")
+    name = f"c{uuid4().hex}"
+    conn = await asyncpg.connect(base)
+    try:
+        # Identifiers, not values: both names are built in this file.
+        await conn.execute(f'CREATE DATABASE "{name}" TEMPLATE "{template}"')
+    finally:
+        await conn.close()
+    return base.rsplit("/", 1)[0].replace("postgresql://", "postgresql+asyncpg://") + f"/{name}"
+
+
+async def drop_database(container: PostgresContainer, url: str) -> None:
+    # WITH (FORCE) closes anything the test left open, which is what used to
+    # make dropping per-test databases a flake rather than a tidy-up.
+    base = container.get_connection_url().replace("+psycopg2", "")
+    conn = await asyncpg.connect(base)
+    try:
+        await conn.execute(f'DROP DATABASE "{url.rsplit("/", 1)[-1]}" WITH (FORCE)')
+    finally:
+        await conn.close()

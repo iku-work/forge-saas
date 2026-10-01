@@ -3,7 +3,7 @@ T-068: app.middleware.locale resolves a request's locale before any
 dependency or handler runs (see that module's docstring for the full
 3-step priority, only steps 2-3 of which live here -- step 1, the
 authenticated user's own User.locale, is covered by
-tests/test_dependencies.py::test_get_current_user_sets_request_state_locale_from_user).
+tests/committed/test_dependencies.py::test_get_current_user_sets_request_state_locale_from_user).
 """
 
 import pytest

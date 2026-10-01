@@ -39,6 +39,7 @@ why the in-process gauge is wrong here).
 
 from __future__ import annotations
 
+import asyncio
 import json
 from typing import TYPE_CHECKING, Any
 from uuid import UUID
@@ -56,6 +57,7 @@ from app.core.metrics import (
 from app.core.module_loader import is_enabled
 from app.core.tracing import trace_job
 from app.core.url_guard import (
+    SafeDestination,
     UnsafeOutboundURLError,
     pinned_transport,
     validate_outbound_url,
@@ -83,6 +85,12 @@ if TYPE_CHECKING:
 
 _HTTP_OK_FLOOR = 200
 _HTTP_OK_CEILING = 300
+
+
+def _deadline() -> float:
+    """The whole outbound attempt, end to end (review R6). Read at call time
+    for the same reason as `_timeout` below."""
+    return get_settings().WEBHOOK_DEADLINE_SECONDS
 
 
 def _timeout() -> httpx.Timeout:
@@ -126,19 +134,6 @@ async def deliver_webhook(ctx: dict[str, Any], *, delivery_id: str) -> None:
             _count("dead")
             return
 
-        try:
-            destination = await validate_outbound_url(endpoint.url)
-        except UnsafeOutboundURLError as exc:
-            # Dead immediately rather than retried: a URL that resolves
-            # somewhere private will still resolve there in twelve hours, and
-            # retrying is five more requests at an internal address.
-            await _abandon(session, delivery, f"unsafe destination: {exc}")
-            _count("dead")
-            logger.warning(
-                "webhooks.unsafe_destination: endpoint_id={} reason={}", endpoint.id, exc
-            )
-            return
-
         body = json.dumps(delivery.payload, separators=(",", ":"), sort_keys=True).encode()
         headers = {
             "Content-Type": "application/json",
@@ -146,25 +141,47 @@ async def deliver_webhook(ctx: dict[str, Any], *, delivery_id: str) -> None:
             DELIVERY_HEADER: str(delivery.delivery_id),
             SIGNATURE_HEADER: signature_headers(service.active_secrets(endpoint), body),
             "User-Agent": "ForgeSaaS-Webhooks/1.0",
+            # The response is kept only for the delivery log, and read raw up
+            # to a byte cap. A compressed one would arrive as bytes nobody can
+            # read -- and decompressing it first is how a small response
+            # becomes a large one in this worker's memory.
+            "Accept-Encoding": "identity",
         }
+        endpoint_url, endpoint_id = endpoint.url, endpoint.id
+
+        # Review R6: end the read-only transaction before anything leaves the
+        # process. Under pgbouncer transaction pooling an open transaction
+        # pins a server connection, and this one used to stay open for the
+        # whole outbound call. expire_on_commit is off, so `delivery` and
+        # `endpoint` stay usable.
+        await session.commit()
 
         try:
-            # follow_redirects=False, spelled out rather than left to httpx's
-            # default: a redirect is a *second* destination, and the guard
-            # above only judged the first. Following one would be an SSRF hole
-            # with an extra hop in it.
-            # Pinned to the address the guard approved a few statements ago:
-            # without it httpx resolves the hostname again, and the answer it
-            # gets is the attacker's to change between the two lookups.
-            async with httpx.AsyncClient(
-                timeout=_timeout(),
-                follow_redirects=False,
-                transport=pinned_transport(destination),
-            ) as client:
-                response = await client.post(destination.url, content=body, headers=headers)
-        except httpx.HTTPError as exc:
+            # One deadline for everything outbound: resolving the name,
+            # connecting, sending, and reading the answer. httpx's own timeout
+            # is per operation, so a receiver trickling one byte at a time
+            # could otherwise hold this worker slot until the job timeout.
+            async with asyncio.timeout(_deadline()):
+                destination = await validate_outbound_url(endpoint_url)
+                status_code, text = await _post(destination, body, headers)
+        except UnsafeOutboundURLError as exc:
+            # Dead immediately rather than retried: a URL that resolves
+            # somewhere private will still resolve there in twelve hours, and
+            # retrying is five more requests at an internal address.
+            await _abandon(session, delivery, f"unsafe destination: {exc}")
+            _count("dead")
+            logger.warning(
+                "webhooks.unsafe_destination: endpoint_id={} reason={}", endpoint_id, exc
+            )
+            return
+        except (httpx.HTTPError, TimeoutError) as exc:
+            error = (
+                f"no complete response within {_deadline():g}s"
+                if isinstance(exc, TimeoutError)
+                else f"{type(exc).__name__}: {exc}"
+            )
             updated = await service.record_failure(
-                delivery, status_code=None, body=None, error=f"{type(exc).__name__}: {exc}"
+                delivery, status_code=None, body=None, error=error
             )
             await session.commit()
             await _schedule_next(updated)
@@ -172,9 +189,8 @@ async def deliver_webhook(ctx: dict[str, Any], *, delivery_id: str) -> None:
             await _publish_queue_depth(session, redis)
             return
 
-        text = (response.text or "")[:MAX_RESPONSE_BODY_CHARS]
-        if _HTTP_OK_FLOOR <= response.status_code < _HTTP_OK_CEILING:
-            await service.record_success(delivery, response.status_code, text)
+        if _HTTP_OK_FLOOR <= status_code < _HTTP_OK_CEILING:
+            await service.record_success(delivery, status_code, text)
             await session.commit()
             _count("delivered")
             await _publish_queue_depth(session, redis)
@@ -182,14 +198,47 @@ async def deliver_webhook(ctx: dict[str, Any], *, delivery_id: str) -> None:
 
         updated = await service.record_failure(
             delivery,
-            status_code=response.status_code,
+            status_code=status_code,
             body=text,
-            error=f"HTTP {response.status_code}",
+            error=f"HTTP {status_code}",
         )
         await session.commit()
         await _schedule_next(updated)
         _count("failed" if updated.status == "pending" else "dead")
         await _publish_queue_depth(session, redis)
+
+
+async def _post(
+    destination: SafeDestination, body: bytes, headers: dict[str, str]
+) -> tuple[int, str]:
+    """POST the delivery and return (status, the start of the response body).
+
+    Streams the response and stops at MAX_RESPONSE_BODY_CHARS bytes (a byte
+    cap is also a character cap: a character is at least one byte). The old
+    `client.post()` read the whole body into memory before any of it was
+    sliced, so a receiver could answer with gigabytes (review R6).
+
+    follow_redirects=False, spelled out rather than left to httpx's default:
+    a redirect is a *second* destination, and the guard only judged the
+    first. Following one would be an SSRF hole with an extra hop in it. And
+    pinned to the address the guard approved: without that, httpx resolves
+    the hostname again, and the answer is the attacker's to change between
+    the two lookups.
+    """
+    async with (
+        httpx.AsyncClient(
+            timeout=_timeout(),
+            follow_redirects=False,
+            transport=pinned_transport(destination),
+        ) as client,
+        client.stream("POST", destination.url, content=body, headers=headers) as response,
+    ):
+        kept = bytearray()
+        async for chunk in response.aiter_raw():
+            kept += chunk[: MAX_RESPONSE_BODY_CHARS - len(kept)]
+            if len(kept) >= MAX_RESPONSE_BODY_CHARS:
+                break  # the rest of the body is never read
+        return response.status_code, kept.decode("utf-8", errors="replace")
 
 
 async def _abandon(session: AsyncSession, delivery: WebhookDelivery, reason: str) -> None:

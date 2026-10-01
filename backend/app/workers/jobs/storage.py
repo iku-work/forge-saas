@@ -58,6 +58,7 @@ from app.core.module_loader import is_enabled
 from app.core.tracing import trace_job
 from app.models._mixins import utcnow
 from app.modules.storage.backend import StorageBackend, get_storage_backend
+from app.modules.storage.keys import delete_every_copy
 from app.modules.storage.models import StoredFile
 from app.modules.storage.quota import reservation_cutoff
 
@@ -200,7 +201,7 @@ async def _purge(session: AsyncSession, backend: StorageBackend, stored_file: St
     deleted by the scan job at verdict time, and a retry of this job has
     normally already removed it.
     """
-    await backend.delete(stored_file.key)
+    await delete_every_copy(backend, stored_file.key)
     await session.delete(stored_file)
 
 

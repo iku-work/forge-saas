@@ -7,7 +7,8 @@
     "empty_body": "Files you upload here are private to your organization and scanned for viruses before anyone can download them. Use the uploader above to add your first one.",
     "error_download": "Could not start the download.",
     "error_delete": "Could not delete the file.",
-    "empty_body_read_only": "No one in your organization has uploaded a file yet. Ask an admin if you need to add one."
+    "empty_body_read_only": "No one in your organization has uploaded a file yet. Ask an admin if you need to add one.",
+    "scan_taking_long": "Some files are taking longer than usual to scan. Refresh the page to check again."
   },
   "uploader": {
     "drop_here": "Drop files here",

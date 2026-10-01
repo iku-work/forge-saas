@@ -63,6 +63,7 @@ from app.modules.sso import service as sso_service
 from app.modules.sso.models import SsoConnection
 from app.modules.sso.repository import SsoConnectionRepository
 from app.modules.sso.router import router
+from tests._sessions import reloading, rolling_back
 
 _PREFIX = "/api/v1/auth/sso"
 _ISSUER = "https://idp.example.test"
@@ -245,10 +246,10 @@ ClientFactory = Callable[..., httpx.AsyncClient]
 @pytest.fixture
 async def api_client(
     session: AsyncSession,
-    _redis_client: Redis,
-    _rate_limit_storage: RedisStorage,
+    redis_client: Redis,
+    rate_limit_storage: RedisStorage,
 ) -> AsyncIterator[ClientFactory]:
-    _rate_limit_storage.reset()
+    rate_limit_storage.reset()
     clients: list[httpx.AsyncClient] = []
 
     def _make(caller: tuple[Organization, Membership] | None = None) -> httpx.AsyncClient:
@@ -256,10 +257,10 @@ async def api_client(
         register_exception_handlers(api)
         register_rate_limiting(api)
         api.include_router(router, prefix="/api/v1")
-        api.dependency_overrides[get_session] = lambda: session
-        api.dependency_overrides[get_redis] = lambda: _redis_client
+        api.dependency_overrides[get_session] = rolling_back(session)
+        api.dependency_overrides[get_redis] = lambda: redis_client
         if caller is not None:
-            api.dependency_overrides[get_current_org] = lambda: caller
+            api.dependency_overrides[get_current_org] = reloading(session, caller)
         client = httpx.AsyncClient(
             transport=ASGITransport(app=api),
             base_url="https://testserver",
@@ -800,7 +801,7 @@ async def test_a_group_claim_is_read_in_every_shape_an_idp_sends_it(
 async def test_reconfiguring_a_connection_updates_it_and_drops_the_cached_document(
     session: AsyncSession,
     api_client: ClientFactory,
-    _redis_client: Redis,  # noqa: PT019 -- conftest names it this; its value is used below
+    redis_client: Redis,
 ) -> None:
     """A second PUT edits the row rather than creating a second one, and
     throws away the cached discovery document.
@@ -814,8 +815,8 @@ async def test_reconfiguring_a_connection_updates_it_and_drops_the_cached_docume
     org, _ = caller
     existing = await _connect(session, org, provider_label="Old IdP")
     # Warm the cache the way a login would, so there is something to lose.
-    await discovery_module.fetch_discovery(_redis_client, _DISCOVERY_URL)
-    assert await _redis_client.get(cache_keys.sso_discovery_key(_DISCOVERY_URL)) is not None
+    await discovery_module.fetch_discovery(redis_client, _DISCOVERY_URL)
+    assert await redis_client.get(cache_keys.sso_discovery_key(_DISCOVERY_URL)) is not None
 
     client = api_client(caller)
     response = await client.put(
@@ -838,7 +839,7 @@ async def test_reconfiguring_a_connection_updates_it_and_drops_the_cached_docume
     await session.refresh(existing)
     assert existing.client_id == "rotated-client"
 
-    assert await _redis_client.get(cache_keys.sso_discovery_key(_DISCOVERY_URL)) is None
+    assert await redis_client.get(cache_keys.sso_discovery_key(_DISCOVERY_URL)) is None
 
 
 async def test_a_callback_for_a_connection_disabled_mid_flight_is_refused(
@@ -1100,7 +1101,7 @@ async def test_saving_a_connection_whose_issuer_disagrees_is_refused(
 async def test_owner_is_refused_as_a_jit_default_role(
     session: AsyncSession,
     api_client: ClientFactory,
-    idp: _MockIdp,  # noqa: ARG001
+    idp: _MockIdp,  # noqa: ARG001 -- IdP serves discovery
 ) -> None:
     """An IdP says who somebody is, not what they may do here."""
     caller = await _make_org(session)

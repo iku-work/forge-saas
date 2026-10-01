@@ -25,7 +25,7 @@ class AuditEvent(SQLModel, table=True):
     __tablename__ = "audit_event"
 
     id: UUID = Field(default_factory=uuid4, primary_key=True)
-    ts: datetime = Field(default_factory=utcnow, index=True, sa_type=_TZ_DATETIME)  # type: ignore[call-overload]
+    ts: datetime = Field(default_factory=utcnow, index=True, sa_type=_TZ_DATETIME)
     # Nullable: actions with no org context yet (registration, login) have no
     # org to attribute the event to. Org-scoped actions (role change, invite)
     # always set it.

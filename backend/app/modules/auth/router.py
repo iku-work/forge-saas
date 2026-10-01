@@ -360,6 +360,7 @@ async def update_me(
 async def get_my_avatar(
     request: Request,
     user: Annotated[User, Depends(get_current_user)],
+    session: Annotated[AsyncSession, Depends(get_session)],
 ) -> Envelope[AvatarUrlResponse]:
     """A short-lived presigned URL for the caller's own uploaded avatar.
 
@@ -369,7 +370,8 @@ async def get_my_avatar(
     everywhere. Hence a separate endpoint the page calls when it renders.
 
     404 when the user has no uploaded avatar: an OAuth `picture` is already on
-    UserPublic.avatar_url and needs nothing from here.
+    UserPublic.avatar_url and needs nothing from here. 409 while the avatar's
+    malware scan has not come back clean.
     """
     if user.avatar_object_key is None:
         raise NotFoundError("errors.avatar_not_found", fallback="No uploaded avatar.")
@@ -378,10 +380,12 @@ async def get_my_avatar(
     # module has to import with file_storage off.
     from app.modules.storage.avatars import (  # noqa: PLC0415
         AVATAR_URL_EXPIRES_IN_SECONDS,
-        presign_avatar,
+        presign_own_avatar,
     )
 
-    url = await presign_avatar(user.avatar_object_key)
+    # 409 until the avatar's scan comes back clean (review R7): it can be
+    # *chosen* before then, but not served.
+    url = await presign_own_avatar(session, user.avatar_object_key)
     return Envelope(
         data=AvatarUrlResponse(
             url=url,

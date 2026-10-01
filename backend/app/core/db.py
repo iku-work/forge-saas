@@ -1,7 +1,7 @@
 import ssl
-from collections.abc import AsyncGenerator, AsyncIterator
+from collections.abc import AsyncGenerator, AsyncIterator, Awaitable, Callable
 from contextlib import asynccontextmanager
-from typing import Annotated, Any
+from typing import Annotated, Any, NoReturn
 from uuid import uuid4
 
 from fastapi import Depends
@@ -17,6 +17,7 @@ from sqlalchemy.sql import ClauseElement
 from sqlalchemy.sql.util import find_tables
 
 from app.core.config import Settings, get_settings
+from app.core.exceptions import DomainError
 
 _settings = get_settings()
 
@@ -257,6 +258,40 @@ async def get_session(
         raise
     finally:
         await session.close()
+
+
+async def persist_then_reject(
+    session: AsyncSession,
+    consequence: Callable[[], Awaitable[None]],
+    error: DomainError,
+) -> NoReturn:
+    """Reject a request whose rejection *is* a security response, keeping
+    only that response.
+
+    get_session rolls back on any exception, which is right for almost every
+    failure and wrong for this handful: a replayed refresh token has to
+    revoke every session the user holds, a wrong password has to count
+    toward the lockout, a cloned security key has to sign its owner out
+    everywhere. Written and then raised, all of those were rolled back by
+    the rejection they caused -- the request got its 401 and the stolen
+    session kept working (review R2, 2026-09-29).
+
+    So: roll back first, discarding anything else this request wrote; run
+    `consequence`, which writes only the security state change and its audit
+    row; commit that; then raise. Committing the request as it stood would
+    also persist whatever unrelated writes happened to be pending, which is
+    the failure mode a bare commit-before-raise invites.
+
+    `consequence` runs after a rollback, so every ORM instance it could
+    reach has been expired. Capture plain ids before calling this and close
+    over those, never over a loaded row.
+
+    The only sanctioned way for code below a router to commit.
+    """
+    await session.rollback()
+    await consequence()
+    await session.commit()
+    raise error
 
 
 @asynccontextmanager

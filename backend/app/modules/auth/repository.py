@@ -76,10 +76,28 @@ class UserRepository:
         await self.session.flush()
         return user
 
-    async def increment_failed_login(self, user_id: UUID) -> None:
-        user = await self._get_or_raise(user_id)
-        user.failed_login_count += 1
-        await self.session.flush()
+    async def increment_failed_login(self, user_id: UUID) -> int:
+        """Count one failed attempt, returning the new total.
+
+        A single `UPDATE ... SET n = n + 1 RETURNING n`, not load-add-flush:
+        the read-modify-write version let parallel wrong guesses -- the one
+        shape of attack the lockout exists for -- each read the same count
+        and each write back count + 1, so N guesses could cost one.
+        """
+        m = cast("Any", User)
+        stmt = (
+            update(User)
+            .where(m.id == user_id)
+            .values(failed_login_count=m.failed_login_count + 1)
+            .returning(m.failed_login_count)
+            # Refreshes the identity-map copy too, so a caller holding the
+            # User row reads the count this statement produced.
+            .execution_options(synchronize_session="fetch")
+        )
+        count = (await self.session.execute(stmt)).scalar_one_or_none()
+        if count is None:
+            raise NotFoundError("errors.user_not_found", fallback="User not found")
+        return int(count)
 
     async def reset_failed_login(self, user_id: UUID) -> None:
         user = await self._get_or_raise(user_id)
@@ -145,6 +163,15 @@ class UserRepository:
         return user
 
 
+# Session.revoked_reason. Only ROTATED marks a token that a legitimate client
+# should never present again, so only ROTATED turns a presentation into a
+# theft signal (AuthService.refresh). Everything else is an ordinary end.
+REVOKED_ROTATED = "rotated"
+REVOKED_SIGNED_OUT = "signed_out"  # logout, device revocation, password change, 2FA enrollment
+REVOKED_EXPIRED = "expired"
+REVOKED_THEFT = "theft"  # swept up by a theft response
+
+
 class SessionRepository:
     def __init__(self, session: AsyncSession) -> None:
         self.session = session
@@ -159,6 +186,7 @@ class SessionRepository:
         user_agent: str,
         expires_at: datetime,
         auth_time: datetime | None = None,
+        amr: Collection[str] = (),
     ) -> SessionModel:
         now = utcnow()
         session_obj = SessionModel(
@@ -174,10 +202,28 @@ class SessionRepository:
             # *original* session's auth_time through explicitly, since a
             # silent refresh doesn't re-verify credentials.
             auth_time=auth_time or now,
+            amr=list(amr),
         )
         self.session.add(session_obj)
         await self.session.flush()
         return session_obj
+
+    async def add_amr(self, session_id: UUID, method: str) -> None:
+        """Record that this session has now also passed `method`.
+
+        Review R3. Only ever adds: a session's assurance can rise within its
+        life (the user proves a factor while enrolling it) and never falls.
+        A single UPDATE so a concurrent refresh copying `amr` into its
+        successor sees either the old list or the new one, never a torn one.
+        """
+        m = cast("Any", SessionModel)
+        stmt = (
+            update(SessionModel)
+            .where(m.id == session_id, ~m.amr.contains([method]))
+            .values(amr=m.amr.op("||")(func.jsonb_build_array(method)))
+            .execution_options(synchronize_session="fetch")
+        )
+        await self.session.execute(stmt)
 
     async def get_by_token_hash(self, token_hash: str) -> SessionModel | None:
         m = cast("Any", SessionModel)
@@ -205,9 +251,10 @@ class SessionRepository:
         result = await self.session.execute(stmt)
         return result.scalar_one_or_none()
 
-    async def revoke(self, session_id: UUID) -> None:
+    async def revoke(self, session_id: UUID, *, reason: str = REVOKED_SIGNED_OUT) -> None:
         session_obj = await self._get_or_raise(session_id)
         session_obj.revoked_at = utcnow()
+        session_obj.revoked_reason = reason
         await self.session.flush()
 
     async def revoke_if_active(self, session_id: UUID) -> bool:
@@ -228,14 +275,20 @@ class SessionRepository:
         stmt = (
             update(SessionModel)
             .where(m.id == session_id, m.revoked_at.is_(None))
-            .values(revoked_at=utcnow())
+            .values(revoked_at=utcnow(), revoked_reason=REVOKED_ROTATED)
             .execution_options(synchronize_session=False)
         )
         result = await self.session.execute(stmt)
         await self.session.flush()
         return cast("CursorResult[Any]", result).rowcount == 1
 
-    async def revoke_all_for_user(self, user_id: UUID, *, except_id: UUID | None = None) -> None:
+    async def revoke_all_for_user(
+        self,
+        user_id: UUID,
+        *,
+        except_id: UUID | None = None,
+        reason: str = REVOKED_SIGNED_OUT,
+    ) -> None:
         # T-216: except_id lets change_password() keep the session the
         # request itself is authenticated with alive while revoking every
         # other one (ASVS V3.3.4's "all *other* active sessions" -- unlike
@@ -249,6 +302,7 @@ class SessionRepository:
         now = utcnow()
         for session_obj in result.scalars().all():
             session_obj.revoked_at = now
+            session_obj.revoked_reason = reason
         await self.session.flush()
 
     async def list_active_for_user(self, user_id: UUID) -> list[SessionModel]:

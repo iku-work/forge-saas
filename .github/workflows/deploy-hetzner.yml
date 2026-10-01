@@ -51,22 +51,37 @@ jobs:
       contents: read
       packages: read
 
+    # C4: every value reaches a script through `env:`, never through `${{ }}`
+    # pasted into its source. Templating runs before bash parses anything, so
+    # a `'` or `$(` in a secret -- or in the free-text `image-tag` input of a
+    # manual run -- became shell. Values that are interpolated into the
+    # remote script (the tag, the image refs, the actor) are validated first.
     env:
+      TAG: ${{ inputs.image-tag }}
       BACKEND_IMAGE: ghcr.io/${{ github.repository }}:${{ inputs.image-tag }}
       CADDY_IMAGE: ghcr.io/${{ github.repository }}-caddy:${{ inputs.image-tag }}
+      ACTOR: ${{ github.actor }}
+      SSH_USER: ${{ secrets.SSH_USER }}
+      SSH_HOST: ${{ secrets.SSH_HOST }}
+      PROD_DOMAIN: ${{ secrets.PROD_DOMAIN }}
       COMPOSE: >-
         -f docker-compose.prod.yml
         -f docker-compose.tls.yml
         -f docker-compose.registry.yml
 
     steps:
+      - name: Validate the values the remote script interpolates
+        run: |
+          [[ "$TAG" =~ ^[0-9a-f]{7,40}$ ]] || { echo "image-tag must be a commit SHA, got: $TAG" >&2; exit 1; }
+          [[ "$BACKEND_IMAGE" =~ ^[a-z0-9./_:-]+$ ]] || { echo "unexpected image ref: $BACKEND_IMAGE" >&2; exit 1; }
+          [[ "$ACTOR" =~ ^[A-Za-z0-9-]+(\[bot\])?$ ]] || { echo "unexpected actor: $ACTOR" >&2; exit 1; }
+
       - uses: actions/checkout@v4
 
-      # Runs the migration from the backend image, here on the runner,
-      # against the production database -- before anything on the box
-      # changes. A failed migration must abort the deploy rather than leave
-      # new code against an old schema.
-      - name: Preflight — env, guards, migrations
+      # Env, guards and the image pull -- nothing that touches production.
+      # Migrations run on the box below (C4): the production database is
+      # never reachable from GitHub's network.
+      - name: Preflight — env and guards
         uses: ./.github/actions/deploy-preflight
         with:
           image: ${{ env.BACKEND_IMAGE }}
@@ -75,11 +90,14 @@ jobs:
           registry-password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Configure SSH
+        env:
+          SSH_KEY: ${{ secrets.SSH_KEY }}
+          SSH_KNOWN_HOSTS: ${{ secrets.SSH_KNOWN_HOSTS }}
         run: |
           install -m 700 -d ~/.ssh
-          printf '%s\n' "${{ secrets.SSH_KEY }}" > ~/.ssh/id_deploy
+          printf '%s\n' "$SSH_KEY" > ~/.ssh/id_deploy
           chmod 600 ~/.ssh/id_deploy
-          printf '%s\n' "${{ secrets.SSH_KNOWN_HOSTS }}" > ~/.ssh/known_hosts
+          printf '%s\n' "$SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts
           chmod 644 ~/.ssh/known_hosts
 
       # The *tag*, not the full ref: backend and caddy live in two GHCR
@@ -90,11 +108,17 @@ jobs:
       - name: Record the currently-deployed tag (rollback target)
         id: previous
         run: |
-          PREVIOUS=$(ssh -i ~/.ssh/id_deploy "${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}" \
+          PREVIOUS=$(ssh -i ~/.ssh/id_deploy "$SSH_USER@$SSH_HOST" \
             'cd ~/forge && docker inspect --format "{{.Config.Image}}" \
                "$(docker compose -f docker-compose.prod.yml -f docker-compose.tls.yml -f docker-compose.registry.yml ps -q backend)" 2>/dev/null || true')
           echo "full ref currently running: ${PREVIOUS:-<nothing>}"
-          echo "tag=${PREVIOUS##*:}" >> "$GITHUB_OUTPUT"
+          PREVIOUS_TAG=${PREVIOUS##*:}
+          # Interpolated into the rollback script, so held to the same rule.
+          if [[ -n "$PREVIOUS_TAG" && ! "$PREVIOUS_TAG" =~ ^[0-9a-f]{7,40}$ ]]; then
+            echo "running image has an unexpected tag ($PREVIOUS_TAG); no automatic rollback" >&2
+            PREVIOUS_TAG=
+          fi
+          echo "tag=$PREVIOUS_TAG" >> "$GITHUB_OUTPUT"
 
       # The env file goes over the wire rather than being edited in place.
       # Hand-editing it on the box is how CADDY_TRUSTED_PROXIES came to be
@@ -102,40 +126,69 @@ jobs:
       # nothing else.
       - name: Ship the production env
         run: |
-          scp -i ~/.ssh/id_deploy prod.env \
-            "${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}:~/forge/backend/.env.next"
+          scp -i ~/.ssh/id_deploy prod.env "$SSH_USER@$SSH_HOST:~/forge/backend/.env.next"
 
+      # C4: on the box, from the image about to serve traffic, before anything
+      # user-facing changes. Running containers read their env when they
+      # start, so swapping the file here does not touch them; the previous
+      # file is kept as .env.prev for the rollback. Guarded on .env.next so a
+      # re-run never overwrites .env.prev with the new file.
+      #
+      # The registry token goes over stdin, first line, ahead of nothing else:
+      # never in the script text and never in an argv the box's `ps` can see.
+      #
+      # `python -m app.core.migrations`, never `alembic upgrade head`: this
+      # schema has branched module heads and `head` (singular) cannot run.
+      - name: Migrate on the box
+        id: migrate
+        env:
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          printf '%s\n' "$GHCR_TOKEN" | ssh -i ~/.ssh/id_deploy "$SSH_USER@$SSH_HOST" \
+            "cd ~/forge && head -n1 | docker login ghcr.io -u $ACTOR --password-stdin"
+          ssh -i ~/.ssh/id_deploy "$SSH_USER@$SSH_HOST" bash -euo pipefail <<EOF
+            cd ~/forge
+            git fetch --quiet origin
+            git checkout --quiet $TAG
+            if [ -f backend/.env.next ]; then
+              cp backend/.env backend/.env.prev
+              mv backend/.env.next backend/.env
+            fi
+
+            export BACKEND_IMAGE='$BACKEND_IMAGE'
+            export CADDY_IMAGE='$CADDY_IMAGE'
+            trap 'docker logout ghcr.io >/dev/null' EXIT
+            docker compose $COMPOSE pull --quiet backend worker scanner-worker caddy
+            docker logout ghcr.io >/dev/null
+            trap - EXIT
+
+            docker compose $COMPOSE run --rm --no-deps backend python -m app.core.migrations
+          EOF
+
+      # Idempotent: the images are already pulled and the env is already in
+      # place, so this is one `up -d`, which converges however many times it
+      # runs -- including after a half-finished first attempt.
       - name: Pull and switch
         id: switch
         run: |
-          ssh -i ~/.ssh/id_deploy "${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}" bash -euo pipefail <<EOF
+          ssh -i ~/.ssh/id_deploy "$SSH_USER@$SSH_HOST" bash -euo pipefail <<EOF
             cd ~/forge
-            git fetch --quiet origin
-            git checkout --quiet ${{ inputs.image-tag }}
-            mv backend/.env.next backend/.env
-
-            echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
-
-            export BACKEND_IMAGE='${{ env.BACKEND_IMAGE }}'
-            export CADDY_IMAGE='${{ env.CADDY_IMAGE }}'
-            docker compose ${{ env.COMPOSE }} pull --quiet backend worker caddy
-
+            export BACKEND_IMAGE='$BACKEND_IMAGE'
+            export CADDY_IMAGE='$CADDY_IMAGE'
             # --no-deps, deliberately. Without it, compose stops caddy and
             # then waits for its dependency chain -- and the backend refuses
             # to start while caddy is down, because caddy carries the network
             # alias for STORAGE_DOMAIN and the storage guard (correctly)
             # refuses to reach object storage over the public internet. That
             # deadlock took production down on 2026-09-14.
-            docker compose ${{ env.COMPOSE }} up -d --no-deps backend worker caddy
-
-            docker logout ghcr.io
+            docker compose $COMPOSE up -d --no-deps backend worker scanner-worker caddy
           EOF
 
       - name: Smoke test
         id: smoke_test
         run: |
           for _ in $(seq 1 30); do
-            if curl -sf "https://${{ secrets.PROD_DOMAIN }}/health/ready" >/dev/null; then
+            if curl -sf "https://$PROD_DOMAIN/health/ready" >/dev/null; then
               echo "healthy"
               exit 0
             fi
@@ -144,16 +197,30 @@ jobs:
           echo "service did not become healthy" >&2
           exit 1
 
-      # Only the images move backwards. The database does not: a migration
-      # that has already applied stays applied, which is why they must be
-      # written to work against the previous release too.
+      # C5: runs whenever the box was touched at all -- a failed migration
+      # (env and checkout already swapped), a switch that failed halfway
+      # (some containers on the new image, some not), or a failed smoke
+      # test. The old `steps.switch.outcome == 'success'` missed the
+      # half-finished switch, which is the case that most needs undoing. When
+      # nothing reached the containers, the `up -d` below converges to what
+      # is already running.
+      #
+      # Only the images, env and checkout move backwards. The database does
+      # not: a migration that has already applied stays applied, which is why
+      # they must be written to work against the previous release too.
       - name: Roll back to the previous image
-        if: failure() && steps.switch.outcome == 'success' && steps.previous.outputs.tag != ''
+        if: failure() && steps.migrate.outcome != 'skipped' && steps.previous.outputs.tag != ''
+        env:
+          PREVIOUS_TAG: ${{ steps.previous.outputs.tag }}
+          REPO: ghcr.io/${{ github.repository }}
         run: |
-          ssh -i ~/.ssh/id_deploy "${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}" bash -euo pipefail <<EOF
+          ssh -i ~/.ssh/id_deploy "$SSH_USER@$SSH_HOST" bash -euo pipefail <<EOF
             cd ~/forge
-            export BACKEND_IMAGE='ghcr.io/${{ github.repository }}:${{ steps.previous.outputs.tag }}'
-            export CADDY_IMAGE='ghcr.io/${{ github.repository }}-caddy:${{ steps.previous.outputs.tag }}'
-            docker compose ${{ env.COMPOSE }} up -d --no-deps backend worker caddy
+            if [ -f backend/.env.prev ]; then mv backend/.env.prev backend/.env; fi
+            rm -f backend/.env.next
+            git checkout --quiet $PREVIOUS_TAG
+            export BACKEND_IMAGE='$REPO:$PREVIOUS_TAG'
+            export CADDY_IMAGE='$REPO-caddy:$PREVIOUS_TAG'
+            docker compose $COMPOSE up -d --no-deps backend worker scanner-worker caddy
           EOF
-          echo "rolled back to ${{ steps.previous.outputs.tag }}" >&2
+          echo "rolled back to $PREVIOUS_TAG" >&2

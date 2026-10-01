@@ -51,7 +51,7 @@ class UsageRecord(UUIDPKMixin, TimestampMixin, OrgScopedMixin, SQLModel, table=T
 
     metric: str = Field(index=True)  # e.g. "api_calls", "ai_tokens", "exports"
     quantity: int  # always non-negative; multiply up for fractional units
-    occurred_at: datetime = Field(index=True, sa_type=_TZ_DATETIME)  # type: ignore[call-overload]
-    reported_to_stripe_at: datetime | None = Field(default=None, sa_type=_TZ_DATETIME)  # type: ignore[call-overload]
+    occurred_at: datetime = Field(index=True, sa_type=_TZ_DATETIME)
+    reported_to_stripe_at: datetime | None = Field(default=None, sa_type=_TZ_DATETIME)
     stripe_usage_record_id: str | None = Field(default=None)
     idempotency_key: str | None = Field(default=None, unique=True, index=True)

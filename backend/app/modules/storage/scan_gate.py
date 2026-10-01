@@ -1,12 +1,13 @@
 """One definition of "this object is safe to hand out", used by every
 surface that can produce a download URL.
 
-There are two such surfaces and they ask the question differently:
-StorageService.get_download_url has the row in hand, and
-app.modules.storage.avatars asks the database. So this module exposes the
-same rule twice -- `require_clean_scan` for a loaded row,
-`downloadable_where` for a SELECT -- rather than letting each caller write
-its own predicate and drift.
+There are two such surfaces -- StorageService.get_download_url and
+app.modules.storage.avatars.presign_own_avatar -- and both load the row and
+call `require_clean_scan`, rather than each writing its own predicate and
+drifting. (Avatars used to filter on the verdict at the moment the avatar
+was *chosen*, through a SQL form of this rule; since review R7 they are
+chosen before the scan finishes and gated when *served*, which is the
+moment that matters.)
 
 The rule: an object is downloadable only once `status == "ready"` *and* a
 scan has actually returned "clean". Confirm-time status is not enough.
@@ -25,13 +26,12 @@ moment" and "this file is gone" are not the same instruction.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING
 
 from app.core.exceptions import ConflictError
-from app.modules.storage.models import StoredFile
 
 if TYPE_CHECKING:
-    from sqlalchemy.sql.elements import ColumnElement
+    from app.modules.storage.models import StoredFile
 
 CLEAN = "clean"
 
@@ -64,9 +64,3 @@ def require_clean_scan(stored_file: StoredFile) -> None:
             "errors.file_scan_pending",
             fallback="This file is still being scanned for malware. Try again shortly.",
         )
-
-
-def downloadable_where() -> list[ColumnElement[bool]]:
-    """`require_clean_scan` as SQL, for callers that filter rather than load."""
-    model = cast("Any", StoredFile)
-    return [model.status == "ready", model.virus_scan_result == CLEAN]

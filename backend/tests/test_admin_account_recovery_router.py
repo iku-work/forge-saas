@@ -25,6 +25,7 @@ from app.modules.auth.repository import TOTPSecretRepository, UserRepository
 from app.modules.auth.schemas import LoginRequest
 from app.modules.auth.service import AuthService
 from app.modules.auth.utils import create_access_token, hash_password
+from tests._auth import session_token
 
 # T-291: this file needs admin enabled -- its routes, its tables, or
 # both. CI's module-matrix job deselects it in the combination that turns
@@ -32,11 +33,6 @@ from app.modules.auth.utils import create_access_token, hash_password
 pytestmark = pytest.mark.module_dependent
 
 _PASSWORD = "Correct-Horse9"
-
-
-@pytest.fixture
-def redis(_redis_client: Redis) -> Redis:
-    return _redis_client
 
 
 async def _make_user(
@@ -69,7 +65,7 @@ async def _as_superadmin(
     client: httpx.AsyncClient, session: AsyncSession
 ) -> tuple[httpx.AsyncClient, User]:
     admin = await _make_user(session, is_superadmin=True, totp_enabled=True)
-    token = create_access_token(admin.id, None, ())
+    token = await session_token(session, admin)
     client.headers["Authorization"] = f"Bearer {token}"
     return client, admin
 

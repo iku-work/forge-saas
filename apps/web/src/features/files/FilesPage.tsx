@@ -36,26 +36,13 @@ import {
 } from "@forge/ui";
 import { formatBytes } from "@forge/utils";
 
+import {
+  displayStatus,
+  scanPollInterval,
+  type DisplayStatus,
+} from "./fileStatus";
+
 import { getErrorMessage } from "../auth/getErrorMessage";
-
-type StoredFileStatus = StoredFilePublic["status"];
-
-// What the user is shown, which is not the same thing as `status`.
-//
-// `status` goes to "ready" when the upload is confirmed, and the virus scan
-// runs *after* that -- so "ready" spans two states the backend treats very
-// differently. Since the download gate began requiring a clean verdict
-// (app.modules.storage.scan_gate), a freshly-uploaded file reads "Ready"
-// and cannot be downloaded, which is exactly the mismatch this page exists
-// to stop showing.
-type DisplayStatus = StoredFileStatus | "scanning";
-
-function displayStatus(file: StoredFilePublic): DisplayStatus {
-  if (file.status === "ready" && file.virus_scan_result === null) {
-    return "scanning";
-  }
-  return file.status;
-}
 
 // The same condition the server applies in scan_gate.require_clean_scan.
 // Duplicated here knowingly: the server is still the authority and refuses
@@ -125,6 +112,11 @@ export function FilesPage() {
     initialPageParam: null as string | null,
     getNextPageParam: (lastPage) => lastPage.meta.next_cursor ?? null,
     enabled: Boolean(org),
+    refetchInterval: (query) =>
+      scanPollInterval(
+        query.state.data?.pages.flatMap((page) => page.data ?? []) ?? [],
+        query.state.dataUpdatedAt,
+      ),
   });
 
   const deleteMutation = useMutation({
@@ -160,6 +152,11 @@ export function FilesPage() {
   }
 
   const files = filesQuery.data?.pages.flatMap((page) => page.data ?? []) ?? [];
+  // Polling has given up on a scan that is still pending (see
+  // scanPollInterval) -- say so instead of leaving "Scanning" to look stuck.
+  const scanTakingLong =
+    files.some((file) => displayStatus(file) === "scanning") &&
+    scanPollInterval(files, filesQuery.dataUpdatedAt) === false;
 
   return (
     <div className="space-y-6 p-6">
@@ -180,6 +177,14 @@ export function FilesPage() {
       {actionError ? (
         <Alert variant="destructive">
           <AlertDescription>{actionError}</AlertDescription>
+        </Alert>
+      ) : null}
+
+      {scanTakingLong ? (
+        <Alert data-testid="scan-taking-long">
+          <AlertDescription>
+            {t("files.page.scan_taking_long")}
+          </AlertDescription>
         </Alert>
       ) : null}
 

@@ -189,6 +189,37 @@ services:
     networks:
       - forge-net
 
+  # Review R4: virus scans, on their own queue (app.core.jobs.SCAN_QUEUE_NAME)
+  # and in their own container, so a burst of uploads fills scan slots and
+  # this memory limit -- not the worker's, which email, deletion and webhook
+  # delivery depend on. Scans stream the object, so memory per scan is a few
+  # 64 KiB chunks; SCAN_MAX_CONCURRENCY (default 4) bounds how many run.
+  #
+  # The limit below is a starting point, not a measurement: set it from the
+  # burst test in docs/runbooks/malware-scanning.md (peak RSS with
+  # SCAN_MAX_CONCURRENCY maximum-size uploads in flight) before relying on it.
+  scanner-worker:
+    image: ${BACKEND_IMAGE:-forge-saas-backend}
+    restart: unless-stopped
+    env_file:
+      - ./backend/.env
+    command: arq app.workers.main.ScanWorkerSettings
+    depends_on:
+      pgbouncer:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "arq", "--check", "app.workers.main.ScanWorkerSettings"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    logging: *default-logging
+    mem_limit: 384m
+    networks:
+      - forge-net
+
   # T-205: exports pg_stat_statements so an external Prometheus (scraping
   # inside forge-net, same internal-only reachability model as backend's
   # /metrics -- see app/core/metrics.py) can page on sustained slow queries
@@ -283,6 +314,20 @@ services:
       # /init writes each one into /etc/clamav/clamd.conf before starting
       # clamd, so this needs no mounted config file to drift from the repo.
       CLAMD_CONF_ConcurrentDatabaseReload: "no"
+      # Review R4, both verified against this image with `clamconf`:
+      #
+      # AlertExceedsMax defaults to off, and with it off an archive that
+      # expands past MaxScanSize, MaxFiles or MaxRecursion is reported OK --
+      # a zip bomb scans clean. On, it comes back as
+      # Heuristics.Limits.Exceeded, which the scanner maps to "failed" (no
+      # verdict, never downloadable), not to "infected".
+      #
+      # StreamMaxLength defaults to 100M, exactly MAX_UPLOAD_BYTES -- and
+      # confirm_upload allows 1 KiB over the claimed size, so a file at the
+      # ceiling could be refused mid-stream. Keep this above the ceiling;
+      # tests/test_storage_scanner.py fails if the two drift apart.
+      CLAMD_CONF_AlertExceedsMax: "yes"
+      CLAMD_CONF_StreamMaxLength: "101M"
     networks:
       - forge-net
 
@@ -313,7 +358,9 @@ services:
       - forge-net
 
   # Creates the bucket once, then exits. `--ignore-existing` so a restart of
-  # the stack is a no-op rather than an error.
+  # the stack is a no-op rather than an error. Also sets the bucket's
+  # lifecycle: incoming/ objects expire after a day (review R1 -- see the
+  # same service in docker-compose.yml for why, and why `ilm import`).
   minio-init:
     image: minio/minio
     restart: "no"
@@ -324,7 +371,7 @@ services:
       [
         "sh",
         "-c",
-        "mc alias set local http://minio:9000 \"$$MINIO_ROOT_USER\" \"$$MINIO_ROOT_PASSWORD\" && mc mb --ignore-existing \"local/$$MINIO_BUCKET\"",
+        "mc alias set local http://minio:9000 \"$$MINIO_ROOT_USER\" \"$$MINIO_ROOT_PASSWORD\" && mc mb --ignore-existing \"local/$$MINIO_BUCKET\" && echo '{\"Rules\":[{\"ID\":\"expire-incoming\",\"Status\":\"Enabled\",\"Filter\":{\"Prefix\":\"incoming/\"},\"Expiration\":{\"Days\":1}}]}' | mc ilm import \"local/$$MINIO_BUCKET\"",
       ]
     depends_on:
       minio:

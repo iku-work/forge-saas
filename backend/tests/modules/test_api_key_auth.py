@@ -101,11 +101,6 @@ class KeyWorld:
     owner_token: str
 
 
-@pytest.fixture
-def redis(_redis_client: Redis) -> Redis:
-    return _redis_client
-
-
 async def _org_with_owner(session: AsyncSession) -> tuple[Organization, UUID]:
     user = await UserRepository(session).create(
         email=f"user-{uuid4()}@example.com",
@@ -124,13 +119,13 @@ async def world(
     client: httpx.AsyncClient,
     session: AsyncSession,
     redis: Redis,
-    _rate_limit_storage: RedisStorage,
+    rate_limit_storage: RedisStorage,
 ) -> KeyWorld:
     # T-312 keys a limiter on the key's id, and `.env.test` sets that budget
     # to 5. Without a reset, a fresh key inherits nothing -- but the *user*
     # limiter behind @api_limit is keyed on the client address, and a file
     # this size would exhaust it. Same reset the other api-key suites do.
-    _rate_limit_storage.reset()
+    rate_limit_storage.reset()
     org, owner_id = await _org_with_owner(session)
     other_org, _ = await _org_with_owner(session)
     await session.commit()

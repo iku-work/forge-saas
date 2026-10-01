@@ -1,3 +1,7 @@
+import os
+import re
+import shutil
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -102,53 +106,89 @@ def _preflight_action() -> dict:
 # ship instead of one, and only one of them was ever covered. So they are
 # parameterised over all three.
 @pytest.mark.parametrize("target", DEPLOY_TARGETS)
-def test_deploy_only_runs_on_main_and_needs_build(target: str) -> None:
+def test_deploy_only_runs_on_main_and_needs_the_full_gate(target: str) -> None:
     job = _ci_workflow()["jobs"][f"deploy-{target}"]
     assert "refs/heads/main" in job["if"]
-    assert job["needs"] == "build"
+    # C2: the browser suite and the ZAP baseline gate the deploy as well as
+    # the image build (test and security arrive transitively through build).
+    assert set(job["needs"]) == {"build", "e2e-web", "zap-baseline"}
     # Called as a reusable workflow, so the image it deploys is the one
     # `build` scanned and pushed rather than one rebuilt here.
     assert job["uses"] == f"./.github/workflows/deploy-{target}.yml"
 
 
+@pytest.mark.parametrize("target", DEPLOY_TARGETS)
+def test_caller_grants_every_permission_the_deploy_job_asks_for(target: str) -> None:
+    # C3: a reusable workflow can only narrow its caller's grant. A permission
+    # the called job declares but the caller does not grant is silently
+    # absent -- which is how deploy-aws's OIDC `id-token: write` never worked.
+    caller = _ci_workflow()["jobs"][f"deploy-{target}"].get("permissions", {})
+    wanted = _deploy_workflow(target)["jobs"]["deploy"].get("permissions", {})
+    for scope, level in wanted.items():
+        assert caller.get(scope) == level, f"caller must grant {scope}: {level}"
+
+
 # T-225/ASVS V12.4.2: a deploy must refuse a production env file that would
-# leave uploaded files unscanned, and must do so before any migration runs
-# against production. Now asserted once, in the shared preflight, which is
-# exactly why the preflight exists -- three copies would have drifted.
-def test_preflight_guards_against_virus_scanner_noop_before_migrating() -> None:
+# leave uploaded files unscanned, before any platform is touched. Asserted
+# once, in the shared preflight, which is exactly why the preflight exists --
+# three copies would have drifted.
+def test_preflight_guards_against_virus_scanner_noop() -> None:
     steps = _preflight_action()["runs"]["steps"]
+    guard = next(s for s in steps if "VIRUS_SCANNER" in s.get("name", ""))
+    assert "exit 1" in guard["run"]
+
+
+# C4: the runner never reaches the production database. The preflight used
+# to run the new image against it from GitHub's network.
+def test_preflight_does_not_migrate() -> None:
+    for step in _preflight_action()["runs"]["steps"]:
+        assert "app.core.migrations" not in step.get("run", ""), step.get("name")
+        assert "migrat" not in step.get("name", "").lower(), step.get("name")
+
+
+# The step that migrates *on the target*, and the first step that changes
+# anything a user can reach, per platform.
+MIGRATE_STEP = {
+    "render": "Confirm Render migrates in pre-deploy",
+    "hetzner": "Migrate on the box",
+    "aws": "Run migrations as a one-off task",
+}
+SWITCH_STEP = {
+    "render": "Trigger Render deploy",
+    "hetzner": "Pull and switch",
+    "aws": "Deploy the backend service",
+}
+
+
+def _step_text(step: dict) -> str:
+    """A step's script plus its env -- Render's migration command is in the
+    job env, checked against the service by the script."""
+    env = " ".join(str(v) for v in step.get("env", {}).values())
+    return f"{step.get('run', '')} {env}"
+
+
+@pytest.mark.parametrize("target", DEPLOY_TARGETS)
+def test_every_deploy_migrates_on_the_target_before_it_switches(target: str) -> None:
+    job = _deploy_workflow(target)["jobs"]["deploy"]
+    steps = job["steps"]
     names = [s.get("name", "") for s in steps]
-    guard = next(i for i, n in enumerate(names) if "VIRUS_SCANNER" in n)
-    migrate = next(i for i, n in enumerate(names) if "migrations" in n.lower())
-    assert guard < migrate
-    assert "exit 1" in steps[guard]["run"]
+    migrate = next(i for i, n in enumerate(names) if MIGRATE_STEP[target] in n)
+    switch = next(i for i, n in enumerate(names) if SWITCH_STEP[target] in n)
+    assert migrate < switch, "a failed migration must abort before traffic moves"
 
-
-def test_preflight_migrates_with_the_branch_aware_command() -> None:
-    steps = _preflight_action()["runs"]["steps"]
-    migrate = next(s for s in steps if "migrations" in s.get("name", "").lower())
+    text = _step_text(steps[migrate]) + " " + " ".join(str(v) for v in job["env"].values())
+    # AWS spells the command as a JSON array for the container override.
+    text = " ".join(re.sub(r"[\[\]\",]", " ", text).split())
     # `python -m app.core.migrations`, not `alembic upgrade head`: every
     # optional module keeps its migrations on its own branch (T-062), so this
     # tree always has several heads and a bare `head` is ambiguous -- alembic
     # refuses to run at all. Asserting the ambiguous command is *absent* is
     # what stops it coming back.
-    assert "python -m app.core.migrations" in migrate["run"]
-    assert "alembic upgrade head" not in migrate["run"]
-
-
-@pytest.mark.parametrize("target", DEPLOY_TARGETS)
-def test_every_deploy_migrates_before_it_switches_traffic(target: str) -> None:
-    steps = _deploy_workflow(target)["jobs"]["deploy"]["steps"]
-    names = [s.get("name", "") for s in steps]
-    preflight = next(i for i, n in enumerate(names) if "Preflight" in n)
-    # The first step that changes anything a user can reach, per platform.
-    switch_marker = {
-        "render": "Trigger Render deploy",
-        "hetzner": "Pull and switch",
-        "aws": "Deploy the backend service",
-    }[target]
-    switch = next(i for i, n in enumerate(names) if switch_marker in n)
-    assert preflight < switch, "a failed migration must abort before traffic moves"
+    assert "python -m app.core.migrations" in text
+    assert "alembic upgrade head" not in text
+    # On the target: over SSH, as an ECS task, or as Render's pre-deploy --
+    # never `docker run` on the runner.
+    assert "docker run" not in steps[migrate].get("run", "")
 
 
 @pytest.mark.parametrize("target", DEPLOY_TARGETS)
@@ -161,6 +201,61 @@ def test_every_deploy_can_roll_back_and_only_does_so_on_failure(target: str) -> 
     # And something must have captured what to roll back *to*, before the
     # switch -- a rollback with no recorded previous state is decoration.
     assert any("previous" in s.get("id", "") for s in steps)
+
+
+# C5: `outcome == 'success'` skipped the rollback for a switch that failed
+# halfway -- some containers on the new image, some on the old -- which is
+# the state that most needs undoing.
+@pytest.mark.parametrize("target", ["hetzner", "aws"])
+def test_rollback_also_covers_a_half_finished_switch(target: str) -> None:
+    steps = _deploy_workflow(target)["jobs"]["deploy"]["steps"]
+    rollback = next(s for s in steps if "Roll back" in s.get("name", ""))
+    assert "!= 'skipped'" in rollback["if"]
+    assert "== 'success'" not in rollback["if"]
+
+
+def _all_deploy_run_steps() -> list[tuple[str, str]]:
+    found = [
+        (f"deploy-{t}: {s.get('name', '')}", s["run"])
+        for t in DEPLOY_TARGETS
+        for s in _deploy_workflow(t)["jobs"]["deploy"]["steps"]
+        if "run" in s
+    ]
+    found += [
+        (f"preflight: {s.get('name', '')}", s["run"])
+        for s in _preflight_action()["runs"]["steps"]
+        if "run" in s
+    ]
+    return found
+
+
+# C4: `${{ }}` is substituted into a script's *source* before bash parses it,
+# so a `'` or `$(` in a secret -- or in a manual run's free-text image-tag --
+# became shell running with the deploy's credentials. Every value must reach
+# a script through `env:`, where it is data.
+def test_no_deploy_script_templates_a_value_into_its_source() -> None:
+    offenders = [name for name, run in _all_deploy_run_steps() if "${{" in run]
+    assert offenders == []
+
+
+def test_preflight_writes_a_hostile_env_file_verbatim(tmp_path: Path) -> None:
+    bash = shutil.which("bash")
+    if bash is None:
+        pytest.skip("needs bash")
+    step = next(s for s in _preflight_action()["runs"]["steps"] if s.get("id") == "write-env")
+    hostile = "DB_PASSWORD=it's $(id) `id` \"x\" ${HOME}\nSECRET='$(touch pwned)'\n"
+    output = tmp_path / "github_output"
+    result = subprocess.run(  # noqa: S603 -- fixed argv: the step under test
+        [bash, "-c", step["run"]],
+        cwd=tmp_path,
+        env={**os.environ, "PROD_ENV_FILE": hostile, "GITHUB_OUTPUT": str(output)},
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr
+    assert (tmp_path / "prod.env").read_bytes() == hostile.encode()
+    assert not (tmp_path / "pwned").exists()
 
 
 # OWASP A06 (vulnerable components): T-212's mapping asserts the dependency
@@ -203,3 +298,40 @@ def test_all_frontend_installs_use_frozen_lockfile() -> None:
     ]
     assert len(install_steps) > 0
     assert all("--frozen-lockfile" in step["run"] for step in install_steps)
+
+
+# C1 (production-readiness plan 2026-09-29), OWASP A08: every Python install
+# in CI goes through a hash-pinned lock, and the project itself is added with
+# --no-deps so it cannot pull a fresh resolution in behind the lock. A bare
+# `pip install -e .` resolved afresh per run, so CI audited a different
+# dependency set from the one the image ships.
+@pytest.mark.owasp("A08")
+def test_every_python_install_in_ci_uses_the_hashed_lock() -> None:
+    runs = [
+        line.strip()
+        for job in _ci_workflow()["jobs"].values()
+        for step in job.get("steps", [])
+        for line in step.get("run", "").splitlines()
+        if line.strip().startswith("pip install")
+    ]
+    assert runs, "no pip installs found -- has the workflow moved?"
+    for line in runs:
+        if "-r " in line:
+            assert "--require-hashes" in line, line
+            assert line.split("-r ", 1)[1].split()[0].endswith(".lock"), line
+        else:
+            assert "--no-deps" in line, f"{line!r} would resolve outside the lock"
+
+
+def test_pip_audit_reads_the_lock_not_the_environment() -> None:
+    steps = _ci_workflow()["jobs"]["security"]["steps"]
+    audit = next(s for s in steps if "pip-audit" in s.get("run", ""))
+    assert "-r requirements-dev.lock" in audit["run"]
+
+
+def test_semgrep_is_not_a_project_dependency() -> None:
+    # Its pins (pyjwt<2.14) leaked into the runtime lock through the
+    # universal resolution; see the note in pyproject.toml.
+    for lock in ("requirements.lock", "requirements-dev.lock"):
+        text = (REPO_ROOT / "backend" / lock).read_text(encoding="utf-8")
+        assert "\nsemgrep==" not in text, lock

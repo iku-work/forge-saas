@@ -46,26 +46,17 @@ from app.core.db import write_engine as app_engine
 from app.core.tracing import _build_tracer_provider, trace_job
 from app.main import app as real_app
 from tests._database import DatabaseHandle
+from tests._prod_settings import PROD_SAFE_OVERRIDES
 
 FIXTURE_ENV_FILE = Path(__file__).parent.parent / ".env.test"
 
 
 def _settings(**overrides: Any) -> Settings:  # noqa: ANN401 -- forwarded straight to Settings kwargs
-    # T-225: outside dev, Settings also requires VIRUS_SCANNER != "noop", a
-    # non-blank PASSWORD_PEPPER, and TLS on DATABASE_URL/REDIS_URL -- none of
-    # which this test cares about, so satisfy them minimally by default.
-    defaults: dict[str, Any] = {
-        "VIRUS_SCANNER": "clamav",
-        "PASSWORD_PEPPER": "a-real-pepper",
-        "DATABASE_URL": "postgresql+asyncpg://u:p@localhost:5432/db?sslmode=require",
-        "REDIS_URL": "rediss://localhost:6379/0",
-        "METRICS_BLOCKED_AT_EDGE": True,
-    }
+    # Every non-dev invariant satisfied (tests._prod_settings); this file
+    # only cares that the environment is not dev.
     return Settings(
         _env_file=FIXTURE_ENV_FILE,
-        ENVIRONMENT="staging",
-        FORCE_HTTPS=True,
-        **{**defaults, **overrides},
+        **{**PROD_SAFE_OVERRIDES, "ENVIRONMENT": "staging", **overrides},
     )
 
 
@@ -88,17 +79,15 @@ def test_span_processor_added_when_otlp_endpoint_set(monkeypatch: pytest.MonkeyP
     assert len(provider._active_span_processor._span_processors) == 1
 
 
-# --- _patch_fastapi_partial_match_bug -----------------------------------------------
+# --- wrong-method requests stay 405s -----------------------------------------------
 
 
 def test_wrong_method_on_real_route_returns_405_not_a_500() -> None:
-    # Regression test: opentelemetry-instrumentation-fastapi==0.58b0's
-    # _get_route_details() crashes with AttributeError on a partially-matched
-    # route (right path, wrong method) because this app's build_router()
-    # (T-061) wraps included sub-routers in a lazy _IncludedRouter with no
-    # `.path` attribute. app.main's configure_tracing() patches around it
-    # (see app.core.tracing._patch_fastapi_partial_match_bug) -- without that
-    # patch this request raises instead of returning a response at all.
+    # Regression test: opentelemetry-instrumentation-fastapi before 0.64b0
+    # crashed with AttributeError on a partially-matched route (right path,
+    # wrong method) because this app's build_router() (T-061) wraps included
+    # sub-routers in a lazy _IncludedRouter with no `.path` attribute. The
+    # pin in pyproject.toml is what keeps it fixed; this is what proves it.
     with TestClient(real_app, raise_server_exceptions=False) as client:
         response = client.post("/api/v1/config")
 

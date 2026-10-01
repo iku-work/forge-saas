@@ -9,6 +9,7 @@ from opentelemetry.sdk.trace.sampling import ALWAYS_ON
 
 from app.core.config import Settings
 from app.core.logging import _is_sensitive_key, _scrub, configure_logging
+from tests._prod_settings import PROD_SAFE_OVERRIDES
 
 FIXTURE_ENV_FILE = Path(__file__).parent.parent / ".env.test"
 
@@ -23,19 +24,11 @@ def _staging_settings(admin_audit_log_path: str | None = None) -> Settings:
     kwargs: dict[str, object] = {}
     if admin_audit_log_path is not None:
         kwargs["ADMIN_AUDIT_LOG_PATH"] = admin_audit_log_path
+    # Every non-dev invariant satisfied (tests._prod_settings); this file
+    # only cares that the environment is not dev.
     return Settings(
         _env_file=FIXTURE_ENV_FILE,
-        ENVIRONMENT="staging",
-        FORCE_HTTPS=True,
-        # T-225: outside dev, Settings also requires VIRUS_SCANNER != "noop",
-        # a non-blank PASSWORD_PEPPER, and TLS on DATABASE_URL/REDIS_URL --
-        # none of which this test cares about, so satisfy them minimally.
-        VIRUS_SCANNER="clamav",
-        PASSWORD_PEPPER="a-real-pepper",
-        DATABASE_URL="postgresql+asyncpg://u:p@localhost:5432/db?sslmode=require",
-        REDIS_URL="rediss://localhost:6379/0",
-        METRICS_BLOCKED_AT_EDGE=True,
-        **kwargs,  # type: ignore[arg-type]
+        **{**PROD_SAFE_OVERRIDES, "ENVIRONMENT": "staging", **kwargs},  # type: ignore[arg-type]
     )
 
 
