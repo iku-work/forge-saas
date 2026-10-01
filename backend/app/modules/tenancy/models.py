@@ -40,7 +40,9 @@ class Organization(UUIDPKMixin, TimestampMixin, SoftDeleteMixin, SQLModel, table
     name: str
     slug: str = Field(unique=True, index=True)
     logo_url: str | None = Field(default=None)
-    settings: dict[str, object] = Field(sa_column=Column(JSONB, nullable=False, default=dict))
+    settings: dict[str, object] = Field(
+        default_factory=dict, sa_column=Column(JSONB, nullable=False, default=dict)
+    )
     # Intentionally unused/null: entitlement is resolved from the org's
     # Subscription row, not this column (see billing.dependencies' docstring).
     # Stays nullable so non-billing products (T-065) never need to populate
@@ -67,8 +69,8 @@ class Invitation(UUIDPKMixin, TimestampMixin, SQLModel, table=True):
     role: MemberRole = Field(sa_column=Column(member_role_column(), nullable=False))
     token_hash: str = Field(unique=True)  # SHA-256 hex — never the plain token
     invited_by: UUID = Field(foreign_key="user.id")
-    expires_at: datetime = Field(sa_type=_TZ_DATETIME)  # type: ignore[call-overload]
-    accepted_at: datetime | None = Field(default=None, sa_type=_TZ_DATETIME)  # type: ignore[call-overload]
+    expires_at: datetime = Field(sa_type=_TZ_DATETIME)
+    accepted_at: datetime | None = Field(default=None, sa_type=_TZ_DATETIME)
 
 
 class OrgFeatureFlag(UUIDPKMixin, TimestampMixin, SQLModel, table=True):

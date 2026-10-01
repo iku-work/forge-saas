@@ -1,6 +1,7 @@
 """Request/response schemas for the storage module (T-112)."""
 
 from datetime import datetime
+from typing import Literal
 from uuid import UUID
 
 from pydantic import ConfigDict, Field
@@ -30,7 +31,13 @@ class StoredFilePublic(AppBaseModel):
     filename: str
     content_type: str
     size_bytes: int
-    status: str
+    # The closed set the service actually writes, not a bare `str`. It used
+    # to be the latter, which made the generated client type it `string` --
+    # so no frontend could exhaustively handle it, and a page deciding what
+    # to render per status had no compiler help at all (repo finding 12).
+    # Widening information, not a breaking change: every one of these is
+    # still assignable to the `string` a consumer may have stored it in.
+    status: Literal["pending", "ready", "infected", "failed", "deleted"]
     # "ready" doesn't change when the scan comes back clean (only "infected"/
     # "failed" change status -- see workers.jobs.virus_scan) -- this is the
     # only observable signal that a scan has actually completed vs. is still
@@ -39,6 +46,10 @@ class StoredFilePublic(AppBaseModel):
     bucket: str
     uploaded_by: UUID
     created_at: datetime
+    # When the row last changed; for a file still awaiting a verdict that is
+    # its confirmation, which is when the scan starts. `created_at` is the
+    # presign, which can be most of the upload window earlier (review OCT-06).
+    updated_at: datetime
 
 
 class DownloadUrlResponse(AppBaseModel):

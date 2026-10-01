@@ -34,7 +34,8 @@ from app.modules.admin.impersonation_handoff import (
 from app.modules.audit.models import AuditEvent
 from app.modules.auth.models import User
 from app.modules.auth.repository import UserRepository
-from app.modules.auth.utils import create_access_token, hash_password, verify_access_token
+from app.modules.auth.utils import hash_password, verify_access_token
+from tests._auth import session_token
 
 # T-291: this file needs admin enabled -- its routes, its tables, or
 # both. CI's module-matrix job deselects it in the combination that turns
@@ -43,11 +44,6 @@ pytestmark = pytest.mark.module_dependent
 
 _PASSWORD = "Correct-Horse9"
 _REASON = "User reports the upload sheet crashes on iOS, ticket 8812"
-
-
-@pytest.fixture
-def redis(_redis_client: Redis) -> Redis:
-    return _redis_client
 
 
 async def _make_user(
@@ -75,7 +71,7 @@ async def _start_impersonation(
     """
     admin = await _make_user(session, is_superadmin=True, totp_enabled=True)
     target = await _make_user(session)
-    client.headers["Authorization"] = f"Bearer {create_access_token(admin.id, None, ())}"
+    client.headers["Authorization"] = f"Bearer {await session_token(session, admin)}"
     response = await client.post(
         f"/api/v1/admin/users/{target.id}/impersonate",
         json={"reason": reason, "duration_minutes": 30},
@@ -116,7 +112,7 @@ async def test_handoff_requires_an_active_impersonation_session(
     # A superadmin's own ordinary token is authenticated but is not an
     # impersonation session -- there is nothing to hand off.
     admin = await _make_user(session, is_superadmin=True, totp_enabled=True)
-    client.headers["Authorization"] = f"Bearer {create_access_token(admin.id, None, ())}"
+    client.headers["Authorization"] = f"Bearer {await session_token(session, admin)}"
 
     response = await client.post("/api/v1/admin/impersonate/mobile-handoff")
 

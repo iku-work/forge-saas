@@ -11,29 +11,33 @@ Verifies T-034's main.py:
 """
 
 from collections.abc import AsyncGenerator
-from typing import Any
+from typing import TYPE_CHECKING, Any
 from unittest.mock import AsyncMock
 
 import pytest
 from arq import create_pool
 from arq.connections import RedisSettings
+from arq.constants import default_queue_name
 from arq.worker import Worker
 from redis.asyncio import Redis
-from testcontainers.redis import RedisContainer
 
 from app.core.config import get_settings
+from app.core.jobs import SCAN_QUEUE_NAME
 from app.workers.jobs.billing import send_dunning_email
 from app.workers.jobs.email import send_email
 from app.workers.jobs.encryption import rotate_encryption_keys_job
 from app.workers.jobs.gdpr import export_user_data, purge_user_data
-from app.workers.main import WorkerSettings, worker_shutdown, worker_startup
+from app.workers.jobs.virus_scan import virus_scan
+from app.workers.main import (
+    ScanWorkerSettings,
+    WorkerSettings,
+    scan_worker_startup,
+    worker_shutdown,
+    worker_startup,
+)
 
-
-@pytest.fixture(scope="module")
-def redis_container() -> "RedisContainer":
-    with RedisContainer("redis:7-alpine") as container:
-        yield container
-
+if TYPE_CHECKING:
+    from testcontainers.redis import RedisContainer
 
 # --- in-process ARQ round trip --------------------------------------------------
 
@@ -89,6 +93,19 @@ def test_worker_settings_has_agreed_shape() -> None:
     assert WorkerSettings.on_shutdown is worker_shutdown
 
 
+def test_scans_run_in_their_own_worker_on_their_own_queue() -> None:
+    """Review R4: the main worker no longer scans, and the scan worker does
+    nothing else -- a burst of uploads fills scan slots, never email's."""
+    assert virus_scan not in WorkerSettings.functions
+    assert ScanWorkerSettings.functions == [virus_scan]
+    assert ScanWorkerSettings.queue_name == SCAN_QUEUE_NAME
+    assert ScanWorkerSettings.queue_name != default_queue_name
+    assert ScanWorkerSettings.max_jobs == get_settings().SCAN_MAX_CONCURRENCY
+    assert ScanWorkerSettings.health_check_interval == WorkerSettings.health_check_interval
+    # No scheduler in the scan worker: two schedulers fire every job twice.
+    assert ScanWorkerSettings.on_startup is scan_worker_startup
+
+
 # --- worker_startup / worker_shutdown --------------------------------------------
 
 
@@ -127,6 +144,8 @@ async def test_worker_startup_wires_redis_and_starts_scheduler() -> None:
             "prune_webhook_deliveries",
             "sweep_due_webhook_deliveries",
             "reconcile_subscriptions",
+            "sweep_orphaned_objects",
+            "expire_abandoned_uploads",
             "refresh_active_sessions_gauge",
         }
     finally:

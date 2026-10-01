@@ -21,7 +21,6 @@ import json
 import socket
 from collections.abc import AsyncIterator, Callable
 from datetime import UTC, datetime, timedelta
-from types import SimpleNamespace
 from typing import Any
 from uuid import uuid4
 
@@ -54,6 +53,7 @@ from app.modules.webhooks.models import WebhookDelivery, WebhookEndpoint
 from app.modules.webhooks.repository import WebhookEndpointRepository
 from app.modules.webhooks.router import router
 from app.modules.webhooks.service import MAX_ENDPOINTS_PER_ORG, generate_secret
+from tests._sessions import reloading, rolling_back
 
 _PREFIX = "/api/v1/webhooks"
 _EVENTS = ["member.invited"]
@@ -67,7 +67,7 @@ _URL = "https://consumer.example.com/hook"
 # never reach getaddrinfo (see url_guard.py), so the SSRF cases below are
 # unaffected by the patch.
 #
-# It replaces the `socket` name *inside app.core.url_guard* rather than
+# It replaces `_getaddrinfo` *inside app.core.url_guard* rather than
 # `socket.getaddrinfo` globally, which test_url_guard.py can afford to do and
 # this file cannot: these tests hold a real Postgres connection, and a global
 # patch answers asyncpg's own lookup with a fabricated `(ip, 0)` sockaddr --
@@ -87,11 +87,10 @@ def _fake_getaddrinfo(host: str, *_args: object, **_kwargs: object) -> list[tupl
 
 @pytest.fixture(autouse=True)
 def _fake_dns(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(
-        url_guard,
-        "socket",
-        SimpleNamespace(getaddrinfo=_fake_getaddrinfo, gaierror=socket.gaierror),
-    )
+    async def _fake(host: str) -> list[object]:
+        return _fake_getaddrinfo(host)
+
+    monkeypatch.setattr(url_guard, "_getaddrinfo", _fake)
 
 
 @pytest.fixture(autouse=True)
@@ -126,10 +125,10 @@ ClientFactory = Callable[[tuple[Organization, Membership]], httpx.AsyncClient]
 @pytest.fixture
 async def api_client(
     session: AsyncSession,
-    _redis_client: Redis,
-    _rate_limit_storage: RedisStorage,
+    redis_client: Redis,
+    rate_limit_storage: RedisStorage,
 ) -> AsyncIterator[ClientFactory]:
-    _rate_limit_storage.reset()
+    rate_limit_storage.reset()
     clients: list[httpx.AsyncClient] = []
 
     def _make(caller: tuple[Organization, Membership]) -> httpx.AsyncClient:
@@ -137,9 +136,9 @@ async def api_client(
         register_exception_handlers(api)
         register_rate_limiting(api)
         api.include_router(router, prefix="/api/v1")
-        api.dependency_overrides[get_session] = lambda: session
-        api.dependency_overrides[get_redis] = lambda: _redis_client
-        api.dependency_overrides[get_current_org] = lambda: caller
+        api.dependency_overrides[get_session] = rolling_back(session)
+        api.dependency_overrides[get_redis] = lambda: redis_client
+        api.dependency_overrides[get_current_org] = reloading(session, caller)
         client = httpx.AsyncClient(transport=ASGITransport(app=api), base_url="https://testserver")
         clients.append(client)
         return client

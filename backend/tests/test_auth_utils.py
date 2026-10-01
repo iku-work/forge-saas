@@ -5,15 +5,18 @@ import pytest
 from argon2.exceptions import InvalidHashError
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
-from jose import jwt
+from joserfc import jwt
+from joserfc.jwk import OctKey, RSAKey
 
 from app.core.config import get_settings
 from app.core.exceptions import AuthenticationError
 from app.modules.auth.utils import (
     AccessTokenPayload,
+    backup_code_digests,
     check_password,
     create_access_token,
     generate_refresh_token,
+    hash_backup_code,
     hash_password,
     hash_token,
     sign_url_token,
@@ -132,11 +135,13 @@ def test_expired_access_token_raises_authentication_error() -> None:
         "sub": str(uuid4()),
         "org": None,
         "perms": [],
-        "iat": now - timedelta(minutes=20),
-        "exp": now - timedelta(minutes=5),
+        "iat": int((now - timedelta(minutes=20)).timestamp()),
+        "exp": int((now - timedelta(minutes=5)).timestamp()),
         "jti": str(uuid4()),
     }
-    expired_token = jwt.encode(claims, settings.JWT_PRIVATE_KEY, algorithm="RS256")
+    expired_token = jwt.encode(
+        {"alg": "RS256"}, claims, RSAKey.import_key(settings.JWT_PRIVATE_KEY)
+    )
 
     with pytest.raises(AuthenticationError):
         verify_access_token(expired_token)
@@ -148,15 +153,16 @@ def test_access_token_with_wrong_algorithm_raises_authentication_error() -> None
         "sub": str(uuid4()),
         "org": None,
         "perms": [],
-        "iat": now,
-        "exp": now + timedelta(minutes=15),
+        "iat": int(now.timestamp()),
+        "exp": int((now + timedelta(minutes=15)).timestamp()),
         "jti": str(uuid4()),
     }
     # A decoder that doesn't pin `algorithms=["RS256"]` would happily verify
     # a token signed with a different algorithm (the classic alg-confusion
-    # attack vector) — python-jose itself refuses to sign HS256 with a PEM
-    # key as the secret, so this uses an arbitrary HMAC secret instead.
-    forged_token = jwt.encode(claims, "attacker-controlled-secret", algorithm="HS256")
+    # attack vector).
+    forged_token = jwt.encode(
+        {"alg": "HS256"}, claims, OctKey.import_key("attacker-controlled-secret-32-bytes!")
+    )
 
     with pytest.raises(AuthenticationError):
         verify_access_token(forged_token)
@@ -398,3 +404,19 @@ def test_an_access_token_survives_rotating_the_keypair(
     monkeypatch.setattr(settings, "JWT_PUBLIC_KEY_OLD", "")
     with pytest.raises(AuthenticationError):
         verify_access_token(token)
+
+
+def test_a_backup_code_stored_before_a_pepper_rotation_still_matches(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("PASSWORD_PEPPER", "pepper-a")
+    get_settings.cache_clear()
+    stored = hash_backup_code("abcde12345")
+
+    monkeypatch.setenv("PASSWORD_PEPPER", "pepper-b")
+    monkeypatch.setenv("PASSWORD_PEPPER_OLD", "pepper-a")
+    get_settings.cache_clear()
+
+    assert stored in backup_code_digests("abcde12345")
+    assert hash_backup_code("abcde12345") != stored  # new codes use the new pepper
+    assert stored not in backup_code_digests("abcde12346")

@@ -114,6 +114,45 @@
 	header {
 		Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
 		-Server
+
+		# The SPA's HTML is served by Caddy from /srv/web, so it never passes
+		# through app.middleware.security_headers -- that middleware protects
+		# API *responses*, and this block is the only thing that protects the
+		# document. It used to set HSTS and nothing else, so the one origin
+		# that renders untrusted content into a DOM had no framing, sniffing,
+		# referrer or permissions policy at all. The marketing host next door
+		# has had all of these since T-307.
+		X-Frame-Options DENY
+		X-Content-Type-Options nosniff
+		Referrer-Policy strict-origin-when-cross-origin
+		Permissions-Policy "camera=(), microphone=(), geolocation=()"
+
+		# script-src is the part that matters, and it is strict: 'self' plus
+		# one hash. The hash is apps/web/index.html's inline theme-boot
+		# script (F-004 there), which has to run synchronously before first
+		# paint and so cannot be an external file. .gitattributes pins that
+		# file to LF for this reason -- a browser hashes the bytes it
+		# receives, and a CRLF checkout hashes differently. Both halves are
+		# checked by backend/tests/test_caddy_config.py, which recomputes the
+		# hash from the file and fails if this string has drifted from it.
+		#
+		# Two sources are deliberately loose, and both are worth knowing
+		# about rather than discovering:
+		#
+		#   style-src 'unsafe-inline'  Radix and sonner inject <style>
+		#     elements at runtime. Inline *style* cannot execute script; the
+		#     XSS sink this policy is really for is script-src, which stays
+		#     strict.
+		#
+		#   img-src/connect-src https:  An avatar is either a presigned URL
+		#     on the storage host or an absolute one from an OAuth provider
+		#     (see apps/web/src/lib/useAvatarSrc.ts), and an upload POSTs
+		#     directly to the storage host. In a template none of those
+		#     origins is known here: STORAGE_DOMAIN is a local MinIO in one
+		#     deployment and s3.amazonaws.com in the next. A deployment that
+		#     knows its own origins should narrow these two to them -- see
+		#     docs/runbooks/deploy-render.md.
+		Content-Security-Policy "default-src 'self'; script-src 'self' 'sha256-NWbEgzfTTy2SXvcSkaP7K75HFoDqMsZtwB5CL4bD6Ag='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; font-src 'self' data:; connect-src 'self' https:; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'"
 	}
 }
 

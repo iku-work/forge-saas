@@ -44,7 +44,6 @@ from sqlalchemy.ext.asyncio import (
     create_async_engine,
 )
 from sqlmodel import SQLModel
-from testcontainers.postgres import PostgresContainer
 from testcontainers.redis import RedisContainer
 
 from app.core import encrypted_type
@@ -58,6 +57,7 @@ from app.workers.jobs.encryption import (
     rotate_encryption_keys_job,
 )
 from app.workers.jobs.records import JobRecord
+from tests._database import DatabaseHandle
 
 DEMO_TABLE = "encryption_job_demo"
 DEMO_LABEL = f"{DEMO_TABLE}.secret_value"
@@ -75,12 +75,6 @@ raw_demo = Table(
 
 
 # --- fixtures -------------------------------------------------------------
-
-
-@pytest.fixture(scope="module")
-def rotation_postgres() -> Generator[PostgresContainer, None, None]:
-    with PostgresContainer("postgres:16-alpine") as container:
-        yield container
 
 
 @pytest.fixture(scope="module", autouse=True)
@@ -130,8 +124,8 @@ def _tables_under_test() -> list[Table]:
 # asyncpg-backed engine can't be reused across loops (same pattern as
 # tests/test_db.py).
 @pytest.fixture
-async def test_engine(rotation_postgres: PostgresContainer) -> AsyncGenerator[AsyncEngine, None]:
-    url = rotation_postgres.get_connection_url().replace("psycopg2", "asyncpg")
+async def test_engine(postgres_container: DatabaseHandle) -> AsyncGenerator[AsyncEngine, None]:
+    url = postgres_container.get_connection_url().replace("psycopg2", "asyncpg")
     engine = create_async_engine(url)
     tables = _tables_under_test()
     async with engine.begin() as conn:

@@ -308,8 +308,19 @@
           "maintenance": {
             "$ref": "#/components/schemas/MaintenanceResponse"
           },
+          "marketing_url": {
+            "title": "Marketing Url",
+            "type": "string"
+          },
           "modules": {
             "$ref": "#/components/schemas/ModulesResponse"
+          },
+          "oauth_providers": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Oauth Providers",
+            "type": "array"
           },
           "primary_color": {
             "title": "Primary Color",
@@ -358,6 +369,8 @@
           "default_locale",
           "support_tool",
           "support_url",
+          "oauth_providers",
+          "marketing_url",
           "maintenance"
         ],
         "title": "ConfigResponse",
@@ -3820,7 +3833,19 @@
             "type": "integer"
           },
           "status": {
+            "enum": [
+              "pending",
+              "ready",
+              "infected",
+              "failed",
+              "deleted"
+            ],
             "title": "Status",
+            "type": "string"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
             "type": "string"
           },
           "uploaded_by": {
@@ -3849,7 +3874,8 @@
           "virus_scan_result",
           "bucket",
           "uploaded_by",
-          "created_at"
+          "created_at",
+          "updated_at"
         ],
         "title": "StoredFilePublic",
         "type": "object"
@@ -5879,7 +5905,15 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Envelope_LoginResponse_"
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/Envelope_LoginResponse_"
+                    },
+                    {
+                      "$ref": "#/components/schemas/Envelope_TwoFactorRequiredResponse_"
+                    }
+                  ],
+                  "title": "Response Consume Magic Link Api V1 Auth Magic Link Consume Post"
                 }
               }
             },
@@ -5974,7 +6008,7 @@
     },
     "/api/v1/auth/me/avatar": {
       "get": {
-        "description": "A short-lived presigned URL for the caller's own uploaded avatar.\n\nThe avatars bucket is private like every other, so there is no public URL\nto put in a UserPublic -- and a presigned one does not belong there\neither, because it expires and that object is cached and re-serialised\neverywhere. Hence a separate endpoint the page calls when it renders.\n\n404 when the user has no uploaded avatar: an OAuth `picture` is already on\nUserPublic.avatar_url and needs nothing from here.",
+        "description": "A short-lived presigned URL for the caller's own uploaded avatar.\n\nThe avatars bucket is private like every other, so there is no public URL\nto put in a UserPublic -- and a presigned one does not belong there\neither, because it expires and that object is cached and re-serialised\neverywhere. Hence a separate endpoint the page calls when it renders.\n\n404 when the user has no uploaded avatar: an OAuth `picture` is already on\nUserPublic.avatar_url and needs nothing from here. 409 while the avatar's\nmalware scan has not come back clean.",
         "operationId": "get_my_avatar_api_v1_auth_me_avatar_get",
         "responses": {
           "200": {
@@ -6102,7 +6136,15 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Envelope_LoginResponse_"
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/Envelope_LoginResponse_"
+                    },
+                    {
+                      "$ref": "#/components/schemas/Envelope_TwoFactorRequiredResponse_"
+                    }
+                  ],
+                  "title": "Response Oauth Callback Api V1 Auth Oauth  Provider  Callback Get"
                 }
               }
             },

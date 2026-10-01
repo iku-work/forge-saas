@@ -14,7 +14,8 @@ import {
   listFilesApiV1FilesGetInfiniteQueryKey,
 } from "@forge/api-client";
 import type { StoredFilePublic } from "@forge/api-client";
-import { useOrg } from "@forge/hooks";
+import { usePermission, useOrg } from "@forge/hooks";
+import { Permission } from "@forge/types";
 import {
   Alert,
   AlertDescription,
@@ -35,20 +36,42 @@ import {
 } from "@forge/ui";
 import { formatBytes } from "@forge/utils";
 
+import {
+  displayStatus,
+  scanPollInterval,
+  type DisplayStatus,
+} from "./fileStatus";
+
 import { getErrorMessage } from "../auth/getErrorMessage";
 
-type StoredFileStatus = StoredFilePublic["status"];
+// The same condition the server applies in scan_gate.require_clean_scan.
+// Duplicated here knowingly: the server is still the authority and refuses
+// anything else, this only stops the page offering a button that 409s.
+function isDownloadable(file: StoredFilePublic): boolean {
+  return file.status === "ready" && file.virus_scan_result === "clean";
+}
 
 function statusVariant(
-  status: StoredFileStatus,
+  status: DisplayStatus,
 ): "default" | "secondary" | "destructive" | "outline" {
   if (status === "ready") return "default";
   if (status === "infected" || status === "failed") return "destructive";
   return "secondary";
 }
 
-function statusKey(status: StoredFileStatus): string {
+function statusKey(status: DisplayStatus): string {
   return `files.status.${status}`;
+}
+
+// Why the download button is off, in the user's words. Mapped explicitly
+// rather than interpolated: `StoredFilePublic.status` is typed `string` on
+// the wire, so an unmapped value would render a raw translation key in the
+// tooltip instead of a sentence.
+function downloadBlockedKey(status: DisplayStatus): string {
+  if (status === "scanning") return "files.action.download_blocked_scanning";
+  if (status === "infected") return "files.action.download_blocked_infected";
+  if (status === "failed") return "files.action.download_blocked_failed";
+  return "files.action.download_blocked_pending";
 }
 
 function uploaderInitials(uploaderId: string): string {
@@ -58,7 +81,17 @@ function uploaderInitials(uploaderId: string): string {
 export function FilesPage() {
   const { t } = useTranslation();
   const { org, isLoading: orgLoading } = useOrg();
+  // A MEMBER has files:read but not files:manage, so the uploader and the
+  // delete buttons were offering them two actions the API answers with 403.
+  // The server is still the gate; this stops the page lying about what the
+  // person in front of it can do.
+  const canManage = usePermission(Permission.FILES_MANAGE);
   const queryClient = useQueryClient();
+  // Download and delete both used to discard their failures -- `void` on
+  // the promise, no catch -- so a 409 on an unscanned file or a 403 on a
+  // delete produced no feedback whatsoever. One slot, because only one of
+  // these can be in flight from a single click.
+  const [actionError, setActionError] = useState<string | null>(null);
   // The file awaiting confirmation, or null. Holds the whole file rather than
   // its id so the dialog can name it -- "Delete report-q3.pdf?" is a question
   // the user can actually answer, which "Delete this file?" (what the old
@@ -79,6 +112,11 @@ export function FilesPage() {
     initialPageParam: null as string | null,
     getNextPageParam: (lastPage) => lastPage.meta.next_cursor ?? null,
     enabled: Boolean(org),
+    refetchInterval: (query) =>
+      scanPollInterval(
+        query.state.data?.pages.flatMap((page) => page.data ?? []) ?? [],
+        query.state.dataUpdatedAt,
+      ),
   });
 
   const deleteMutation = useMutation({
@@ -89,22 +127,36 @@ export function FilesPage() {
       });
     },
     onSuccess: async () => {
+      setActionError(null);
       await queryClient.invalidateQueries({
         queryKey: listFilesApiV1FilesGetInfiniteQueryKey(),
       });
     },
+    onError: (error) => {
+      setActionError(getErrorMessage(error, "files.page.error_delete"));
+    },
   });
 
   async function handleDownload(fileId: string): Promise<void> {
-    const { data } = await downloadFileApiV1FilesFileIdDownloadGet({
-      path: { file_id: fileId },
-      throwOnError: true,
-    });
-    const url = data.data?.url;
-    if (url) window.open(url, "_blank", "noopener,noreferrer");
+    setActionError(null);
+    try {
+      const { data } = await downloadFileApiV1FilesFileIdDownloadGet({
+        path: { file_id: fileId },
+        throwOnError: true,
+      });
+      const url = data.data?.url;
+      if (url) window.open(url, "_blank", "noopener,noreferrer");
+    } catch (error) {
+      setActionError(getErrorMessage(error, "files.page.error_download"));
+    }
   }
 
   const files = filesQuery.data?.pages.flatMap((page) => page.data ?? []) ?? [];
+  // Polling has given up on a scan that is still pending (see
+  // scanPollInterval) -- say so instead of leaving "Scanning" to look stuck.
+  const scanTakingLong =
+    files.some((file) => displayStatus(file) === "scanning") &&
+    scanPollInterval(files, filesQuery.dataUpdatedAt) === false;
 
   return (
     <div className="space-y-6 p-6">
@@ -112,13 +164,29 @@ export function FilesPage() {
         {t("files.page.title")}
       </h1>
 
-      <FileUploader
-        onUploaded={() => {
-          void queryClient.invalidateQueries({
-            queryKey: listFilesApiV1FilesGetInfiniteQueryKey(),
-          });
-        }}
-      />
+      {canManage ? (
+        <FileUploader
+          onUploaded={() => {
+            void queryClient.invalidateQueries({
+              queryKey: listFilesApiV1FilesGetInfiniteQueryKey(),
+            });
+          }}
+        />
+      ) : null}
+
+      {actionError ? (
+        <Alert variant="destructive">
+          <AlertDescription>{actionError}</AlertDescription>
+        </Alert>
+      ) : null}
+
+      {scanTakingLong ? (
+        <Alert data-testid="scan-taking-long">
+          <AlertDescription>
+            {t("files.page.scan_taking_long")}
+          </AlertDescription>
+        </Alert>
+      ) : null}
 
       {orgLoading || filesQuery.isLoading ? (
         <div className="space-y-2">
@@ -139,7 +207,11 @@ export function FilesPage() {
         <EmptyState
           icon={FolderOpen}
           title={t("files.page.empty_title")}
-          description={t("files.page.empty_body")}
+          description={
+            canManage
+              ? t("files.page.empty_body")
+              : t("files.page.empty_body_read_only")
+          }
         />
       ) : (
         <>
@@ -170,8 +242,8 @@ export function FilesPage() {
                     </Avatar>
                   </TableCell>
                   <TableCell>
-                    <Badge variant={statusVariant(file.status)}>
-                      {t(statusKey(file.status))}
+                    <Badge variant={statusVariant(displayStatus(file))}>
+                      {t(statusKey(displayStatus(file)))}
                     </Badge>
                   </TableCell>
                   <TableCell className="text-end">
@@ -180,21 +252,32 @@ export function FilesPage() {
                         type="button"
                         variant="outline"
                         size="sm"
+                        // Disabled rather than hidden: the row is still
+                        // there, and a button that vanishes mid-scan is
+                        // more confusing than one that explains itself.
+                        disabled={!isDownloadable(file)}
+                        title={
+                          isDownloadable(file)
+                            ? undefined
+                            : t(downloadBlockedKey(displayStatus(file)))
+                        }
                         onClick={() => void handleDownload(file.id)}
                       >
                         {t("files.action.download")}
                       </Button>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        disabled={deleteMutation.isPending}
-                        onClick={() => {
-                          setPendingDelete(file);
-                        }}
-                      >
-                        {t("files.action.delete")}
-                      </Button>
+                      {canManage ? (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          disabled={deleteMutation.isPending}
+                          onClick={() => {
+                            setPendingDelete(file);
+                          }}
+                        >
+                          {t("files.action.delete")}
+                        </Button>
+                      ) : null}
                     </div>
                   </TableCell>
                 </TableRow>

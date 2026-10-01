@@ -33,7 +33,7 @@ class ConsentRecord(SQLModel, table=True):
     version: str  # policy version accepted
     ip_address: str
     user_agent: str
-    ts: datetime = Field(default_factory=utcnow, sa_type=_TZ_DATETIME)  # type: ignore[call-overload]
+    ts: datetime = Field(default_factory=utcnow, sa_type=_TZ_DATETIME)
 
 
 class DataExportJob(UUIDPKMixin, TimestampMixin, SQLModel, table=True):
@@ -42,4 +42,4 @@ class DataExportJob(UUIDPKMixin, TimestampMixin, SQLModel, table=True):
     user_id: UUID = Field(foreign_key="user.id", index=True)
     status: str = Field(default="pending")  # "pending" | "ready" | "failed" | "expired"
     download_url: str | None = Field(default=None)
-    expires_at: datetime | None = Field(default=None, sa_type=_TZ_DATETIME)  # type: ignore[call-overload]
+    expires_at: datetime | None = Field(default=None, sa_type=_TZ_DATETIME)

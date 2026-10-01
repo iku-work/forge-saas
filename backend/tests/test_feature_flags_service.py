@@ -9,7 +9,7 @@ remember to.
 
 Same real-Postgres + real-Redis testcontainers pattern as
 test_notifications_repository.py / test_storage_service.py, via conftest's
-shared session/_redis_client/engine fixtures -- Plan, Subscription,
+shared session/redis_client/engine fixtures -- Plan, Subscription,
 Organization, and OrgFeatureFlag all already have real migrations.
 """
 
@@ -51,11 +51,6 @@ def _clear_modules_cache() -> Generator[None]:
     module_loader.get_modules.cache_clear()
     yield
     module_loader.get_modules.cache_clear()
-
-
-@pytest.fixture
-def redis(_redis_client: Redis) -> Redis:
-    return _redis_client
 
 
 @pytest.fixture

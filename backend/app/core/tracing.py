@@ -20,7 +20,6 @@ import os
 from collections.abc import Callable, Coroutine
 from typing import Any
 
-import opentelemetry.instrumentation.fastapi as _fastapi_instrumentation
 from fastapi import FastAPI
 from opentelemetry import trace
 from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
@@ -76,50 +75,10 @@ def _build_tracer_provider(settings: Settings) -> TracerProvider:
     return provider
 
 
-_fastapi_partial_match_bug_patched = False
-
-
-def _patch_fastapi_partial_match_bug() -> None:
-    """
-    Works around opentelemetry-instrumentation-fastapi==0.58b0's
-    _get_route_details(): on a partially-matched route (right path, wrong
-    method -- what would otherwise be a plain 405) it does
-    `route = starlette_route.path` with no try/except, unlike the identical
-    fully-matched branch just above it in the same function. This app's
-    build_router() (T-061) wraps every included sub-router in a lazy
-    _IncludedRouter with no `path` attribute (the same FastAPI 0.137.2 quirk
-    already noted for prometheus-fastapi-instrumentator above in
-    pyproject.toml) -- so any wrong-method request crashes FastAPIInstrumentor's
-    ASGI middleware with an unhandled AttributeError instead of the app
-    producing its own 405.
-
-    Fixed upstream in opentelemetry-instrumentation-fastapi>=0.64b0, but that
-    version requires opentelemetry-api>=1.43.0, which conflicts with
-    semgrep's opentelemetry-api~=1.37.0 pin (see pyproject.toml) -- so this
-    patches just the one broken line rather than bumping the package.
-    """
-    global _fastapi_partial_match_bug_patched  # noqa: PLW0603 -- guards the module-level singleton below
-    if _fastapi_partial_match_bug_patched:
-        return
-    # Deliberately patching a private, unexported function on a third-party
-    # module -- see the docstring above for why.
-    original_get_route_details = _fastapi_instrumentation._get_route_details  # noqa: SLF001
-
-    def _get_route_details_safe(scope: dict[str, Any]) -> str | None:
-        try:
-            return original_get_route_details(scope)  # type: ignore[no-any-return, no-untyped-call]
-        except AttributeError:
-            return scope.get("path")
-
-    _fastapi_instrumentation._get_route_details = _get_route_details_safe  # noqa: SLF001
-    _fastapi_partial_match_bug_patched = True
-
-
 def configure_tracing(app: FastAPI, settings: Settings) -> TracerProvider:
     provider = _build_tracer_provider(settings)
     trace.set_tracer_provider(provider)
 
-    _patch_fastapi_partial_match_bug()
     FastAPIInstrumentor.instrument_app(app, tracer_provider=provider)
     # "on the async engine's sync core": SQLAlchemyInstrumentor hooks
     # before/after_cursor_execute, which fire on the sync Engine/Connection

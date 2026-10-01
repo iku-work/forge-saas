@@ -283,7 +283,8 @@ export const updateMeApiV1AuthMePatch = <ThrowOnError extends boolean = false>(o
  * everywhere. Hence a separate endpoint the page calls when it renders.
  *
  * 404 when the user has no uploaded avatar: an OAuth `picture` is already on
- * UserPublic.avatar_url and needs nothing from here.
+ * UserPublic.avatar_url and needs nothing from here. 409 while the avatar's
+ * malware scan has not come back clean.
  */
 export const getMyAvatarApiV1AuthMeAvatarGet = <ThrowOnError extends boolean = false>(options?: Options<GetMyAvatarApiV1AuthMeAvatarGetData, ThrowOnError>): RequestResult<GetMyAvatarApiV1AuthMeAvatarGetResponses, unknown, ThrowOnError> => (options?.client ?? client).get<GetMyAvatarApiV1AuthMeAvatarGetResponses, unknown, ThrowOnError>({
     security: [{ scheme: 'bearer', type: 'http' }],

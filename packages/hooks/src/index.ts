@@ -9,6 +9,8 @@ export { usePermission } from "./usePermission";
 export { useFeatureFlag, useFeatureFlags } from "./useFeatureFlag";
 export {
   useModules,
+  useMarketingUrl,
+  useOAuthProviders,
   useSupportSettings,
   useGlobalBanner,
   useMaintenance,

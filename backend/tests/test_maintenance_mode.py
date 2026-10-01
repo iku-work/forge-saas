@@ -26,17 +26,13 @@ from app.middleware import maintenance
 from app.middleware.maintenance import MAINTENANCE_CODE
 from app.modules.auth.permissions import MemberRole
 from app.modules.auth.repository import UserRepository
-from app.modules.auth.utils import create_access_token, hash_password
+from app.modules.auth.utils import hash_password
 from app.modules.product_settings import keys
 from app.modules.product_settings.repository import ProductSettingsRepository
 from app.modules.tenancy.repository import MembershipRepository, OrganizationRepository
+from tests._auth import session_token
 
 _PASSWORD = "Correct-Horse9"
-
-
-@pytest.fixture
-def redis(_redis_client: Redis) -> Redis:
-    return _redis_client
 
 
 async def _store(session: AsyncSession, redis: Redis, settings: dict[str, object]) -> None:
@@ -62,7 +58,7 @@ async def superadmin_client(client: httpx.AsyncClient, session: AsyncSession) ->
         user_id=user.id, org_id=org.id, role=MemberRole.OWNER
     )
     await session.commit()
-    client.headers["Authorization"] = f"Bearer {create_access_token(user.id, None, ())}"
+    client.headers["Authorization"] = f"Bearer {await session_token(session, user)}"
     client.headers["X-Org-ID"] = str(org.id)
     return client
 

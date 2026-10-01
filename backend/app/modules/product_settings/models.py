@@ -67,7 +67,7 @@ class ProductSettings(SQLModel, table=True):
         default_factory=dict,
         sa_column=Column(JSONB, nullable=False, server_default="{}"),
     )
-    updated_at: datetime = Field(default_factory=utcnow, sa_type=_TZ_DATETIME)  # type: ignore[call-overload]
+    updated_at: datetime = Field(default_factory=utcnow, sa_type=_TZ_DATETIME)
     # Nullable and not a foreign_key, same reasoning as AuditEvent.actor_id:
     # the row survives the operator's own user row being deleted, and the
     # migration's seeded row has no author at all.

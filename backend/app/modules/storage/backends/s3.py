@@ -31,10 +31,11 @@ from botocore.client import Config as BotoConfig
 from botocore.exceptions import ClientError
 
 from app.core.resilience import resilient
-from app.modules.storage.backend import PresignedUpload
+from app.modules.storage.backend import ObjectChangedError, PresignedUpload
 
 _SSE_ALGORITHM = "AES256"
 _NOT_FOUND_CODES = {"404", "NoSuchKey", "NotFound"}
+_PRECONDITION_FAILED_CODES = {"412", "PreconditionFailed"}
 # T-225/ASVS V12.3.4 (Reflective File Download): strips CR/LF (header
 # injection) and path separators (a filename that looks like a path) before
 # a stored filename ever reaches a response header.
@@ -158,6 +159,31 @@ class S3Backend:
             return body
 
         return await asyncio.to_thread(_read)
+
+    @resilient("s3")
+    async def copy_if_match(self, source_key: str, destination_key: str, etag: str) -> None:
+        # Review R1: promotes a confirmed upload out of `incoming/`. The copy
+        # is atomic -- it copies one version of the source -- and the
+        # condition makes that version the one confirm_upload just checked.
+        def _copy() -> None:
+            try:
+                self._client.copy_object(
+                    Bucket=self._bucket,
+                    Key=destination_key,
+                    CopySource={"Bucket": self._bucket, "Key": source_key},
+                    CopySourceIfMatch=etag,
+                    MetadataDirective="COPY",  # keeps the Content-Type the upload set
+                    ServerSideEncryption=_SSE_ALGORITHM,
+                )
+            except ClientError as exc:
+                code = exc.response.get("Error", {}).get("Code")
+                if code in _PRECONDITION_FAILED_CODES or code in _NOT_FOUND_CODES:
+                    raise ObjectChangedError(
+                        f"{source_key} changed or disappeared before it could be copied"
+                    ) from exc
+                raise
+
+        await asyncio.to_thread(_copy)
 
     @resilient("s3")
     async def delete(self, key: str) -> None:

@@ -75,14 +75,6 @@ _MARKER = "impersonation-ok:"
 _MUTATING_METHODS = frozenset({"POST", "PUT", "PATCH", "DELETE"})
 
 
-@pytest.fixture
-def redis(_redis_client: Redis) -> Redis:
-    """Same aliasing as test_admin_impersonation_router.py: the shared fixture
-    is private by name, and pytest's own PT019 rule rejects injecting it under
-    that name into a test."""
-    return _redis_client
-
-
 # --- route table introspection ----------------------------------------------
 
 
@@ -394,6 +386,9 @@ async def test_forgot_password_without_impersonation_still_works(
 async def test_a_blocked_attempt_writes_an_elevated_audit_event(
     world: ImpersonatedWorld,
 ) -> None:
+    # Read now: the 403 rolls back the session this test shares with the
+    # app, which expires every row the world holds.
+    user_id, superadmin_id = world.user.id, world.superadmin.id
     await world.client.post(
         "/api/v1/auth/forgot-password",
         json={"email": world.user.email},
@@ -415,8 +410,8 @@ async def test_a_blocked_attempt_writes_an_elevated_audit_event(
     assert len(events) == 1
     event = events[0]
     assert event.severity == "elevated"
-    assert event.actor_id == world.user.id
-    assert event.impersonator_id == world.superadmin.id
+    assert event.actor_id == user_id
+    assert event.impersonator_id == superadmin_id
     assert event.diff == {
         "kind": "notifying",
         "method": "POST",
@@ -471,14 +466,15 @@ async def test_marking_a_notification_read_during_impersonation_leaves_it_unread
         idempotency_key=None,
     )
     await world.session.commit()
+    notification_id = notification.id  # read before the 403 expires it
 
     response = await world.client.patch(
-        f"/api/v1/notifications/{notification.id}/read", headers=world.impersonation_headers
+        f"/api/v1/notifications/{notification_id}/read", headers=world.impersonation_headers
     )
 
     assert response.status_code == 403
     assert response.json()["error"]["details"] == {"kind": "notification_read_state"}
-    still_unread = await world.session.get(Notification, notification.id)
+    still_unread = await world.session.get(Notification, notification_id)
     assert still_unread is not None
     await world.session.refresh(still_unread)
     assert still_unread.read_at is None

@@ -2,21 +2,26 @@
 Every cryptographic primitive used by the auth module lives here — password
 hashing, RS256 JWT access tokens, refresh-token opaque/hash pairs, single-use
 token hashing, and signed URL tokens. No other module should import argon2,
-jose, or itsdangerous directly.
+joserfc, or itsdangerous directly (app.modules.sso.oidc verifies
+third-party ID tokens with joserfc on its own, which is a different job).
 """
 
 import hashlib
+import hmac
 import secrets
 from collections.abc import Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
+from functools import lru_cache
 from typing import TYPE_CHECKING, Any
 from uuid import UUID, uuid4
 
 from argon2 import PasswordHasher
 from argon2.exceptions import VerifyMismatchError
 from itsdangerous import BadSignature, URLSafeTimedSerializer
-from jose import JWTError, jwt
+from joserfc import jwt
+from joserfc.errors import JoseError
+from joserfc.jwk import RSAKey
 
 from app.core.config import get_settings
 from app.core.exceptions import AuthenticationError
@@ -26,22 +31,34 @@ if TYPE_CHECKING:
 
 _JWT_ALGORITHM = "RS256"
 
-_password_hasher = PasswordHasher()
+
+@lru_cache(maxsize=4)
+def _hasher_for(time_cost: int, memory_kib: int, parallelism: int) -> PasswordHasher:
+    return PasswordHasher(time_cost=time_cost, memory_cost=memory_kib, parallelism=parallelism)
+
+
+def _password_hasher() -> PasswordHasher:
+    settings = get_settings()
+    return _hasher_for(
+        settings.ARGON2_TIME_COST, settings.ARGON2_MEMORY_KIB, settings.ARGON2_PARALLELISM
+    )
 
 
 def _peppered(plain: str, pepper: str) -> str:
-    # T-225/ASVS V2.4.5: an HMAC-SHA256 pre-hash keyed by the pepper, applied
+    # T-225/ASVS V2.4.5: a SHA-256 pre-hash of `pepper:plain`, applied
     # identically before both hash() and verify() so it is transparent to
-    # argon2-cffi itself. Blank pepper (dev only — enforced non-blank outside
-    # dev by Settings._enforce_startup_invariants) reduces to hashing the
-    # plaintext directly.
+    # argon2-cffi itself. Not an HMAC, and it need not be one: the digest is
+    # only ever fed to Argon2, never exposed, so length extension has nothing
+    # to attack. Changing the construction would invalidate every stored hash.
+    # A blank pepper (dev only -- enforced non-blank outside dev by Settings)
+    # reduces to hashing the plaintext directly.
     return hashlib.sha256(f"{pepper}:{plain}".encode()).hexdigest()
 
 
 def hash_password(plain: str) -> str:
     """Always hashes with the *current* pepper. Rotation moves rows forward
     one successful login at a time; see check_password."""
-    return _password_hasher.hash(_peppered(plain, get_settings().PASSWORD_PEPPER))
+    return _password_hasher().hash(_peppered(plain, get_settings().PASSWORD_PEPPER))
 
 
 @dataclass(frozen=True)
@@ -55,7 +72,7 @@ class PasswordCheck:
 def check_password(plain: str, hashed: str) -> PasswordCheck:
     """Verify against the current pepper, then the previous one.
 
-    Before this, PASSWORD_PEPPER could not be rotated at all: it is HMAC'd
+    Before this, PASSWORD_PEPPER could not be rotated at all: it is mixed
     into every password before Argon2, with no second pepper and no version
     marker on the stored hash, so changing it made every password fail to
     verify -- indistinguishably from a wrong password. The only remedy was a
@@ -82,26 +99,59 @@ def check_password(plain: str, hashed: str) -> PasswordCheck:
     """
     settings = get_settings()
     try:
-        _password_hasher.verify(hashed, _peppered(plain, settings.PASSWORD_PEPPER))
+        _password_hasher().verify(hashed, _peppered(plain, settings.PASSWORD_PEPPER))
     except VerifyMismatchError:
         previous = settings.PASSWORD_PEPPER_OLD
         if not previous:
             return PasswordCheck(ok=False, needs_rehash=False)
         try:
-            _password_hasher.verify(hashed, _peppered(plain, previous))
+            _password_hasher().verify(hashed, _peppered(plain, previous))
         except VerifyMismatchError:
             return PasswordCheck(ok=False, needs_rehash=False)
         return PasswordCheck(ok=True, needs_rehash=True)
     # Any other exception (e.g. InvalidHashError for a corrupt/foreign hash
     # format) propagates — that is a data-integrity bug, not a wrong password.
-    return PasswordCheck(ok=True, needs_rehash=_password_hasher.check_needs_rehash(hashed))
+    return PasswordCheck(ok=True, needs_rehash=_password_hasher().check_needs_rehash(hashed))
+
+
+# 2FA backup codes are 40 random bits, not a human's password: there is no
+# dictionary for Argon2 to slow down, and hashing them with it made every
+# wrong code at /auth/2fa/login cost up to ten Argon2 verifications. A keyed
+# SHA-256 (the pepper is the key, and it is not in the database) makes a
+# leaked table useless without the pepper, at the cost of one hash per try.
+_BACKUP_CODE_PREFIX = "hmac-sha256:"
+
+
+def hash_backup_code(code: str) -> str:
+    """How a backup code is stored: keyed by the current pepper."""
+    return _backup_code_digest(code, get_settings().PASSWORD_PEPPER)
+
+
+def backup_code_digests(code: str) -> tuple[str, ...]:
+    """Every stored form `code` may have: under the current pepper and,
+    while one is being rotated away, the previous one."""
+    settings = get_settings()
+    peppers = [settings.PASSWORD_PEPPER]
+    if settings.PASSWORD_PEPPER_OLD:
+        peppers.append(settings.PASSWORD_PEPPER_OLD)
+    return tuple(_backup_code_digest(code, pepper) for pepper in peppers)
+
+
+def is_legacy_backup_code(stored: str) -> bool:
+    """Argon2-hashed, as every code was before 2026-09-30. Those still verify
+    (the plaintext is gone, so they cannot be re-keyed) until the user
+    regenerates their codes."""
+    return stored.startswith("$argon2")
+
+
+def _backup_code_digest(code: str, pepper: str) -> str:
+    digest = hmac.new(pepper.encode(), code.encode(), hashlib.sha256).hexdigest()
+    return _BACKUP_CODE_PREFIX + digest
 
 
 def verify_password(plain: str, hashed: str) -> bool:
-    """The boolean-only view, for callers with nothing to re-hash.
-
-    2FA backup codes go through here: they are single-use and deleted on
-    redemption, so there is no row worth rewriting.
+    """The boolean-only view, for callers with nothing to re-hash (legacy
+    Argon2 backup codes among them: single-use, so no row worth rewriting).
     """
     return check_password(plain, hashed).ok
 
@@ -146,6 +196,18 @@ class AccessTokenPayload:
     # always sets `exp`, so there is no token this can legitimately be missing
     # from, and a default would only ever paper over a decode bug.
     expires_at: datetime = field(kw_only=True)
+    # The Session row this token was minted from, so a revoked session can
+    # take its already-issued access tokens down with it rather than leaving
+    # them usable until they expire (repository audit finding 6: "sign out
+    # all devices" was not containment, it was a 15-minute promise).
+    #
+    # `None` has two legitimate meanings and both must keep working:
+    #   - an impersonation token (T-142), which is deliberately issued with
+    #     no refresh token and therefore has no session at all. It is revoked
+    #     through the jti blocklist instead.
+    #   - a token minted before this claim existed, still in flight during a
+    #     deploy. Those drain within one access-token lifetime.
+    sid: UUID | None = field(default=None, kw_only=True)
 
 
 def create_access_token(  # noqa: PLR0913 -- T-218 adds auth_time on top of T-142's existing impersonator_id/expire_minutes
@@ -156,6 +218,7 @@ def create_access_token(  # noqa: PLR0913 -- T-218 adds auth_time on top of T-14
     impersonator_id: UUID | None = None,
     expire_minutes: int | None = None,
     auth_time: datetime | None = None,
+    sid: UUID | None = None,
 ) -> str:
     settings = get_settings()
     now = datetime.now(UTC)
@@ -166,17 +229,25 @@ def create_access_token(  # noqa: PLR0913 -- T-218 adds auth_time on top of T-14
         "sub": str(user_id),
         "org": str(org_id) if org_id is not None else None,
         "perms": list(permissions),
-        "iat": now,
-        "exp": now + timedelta(minutes=ttl_minutes),
+        # NumericDate is whole seconds (RFC 7519 §2).
+        "iat": int(now.timestamp()),
+        "exp": int((now + timedelta(minutes=ttl_minutes)).timestamp()),
         "jti": str(uuid4()),
-        # jose's datetime->epoch auto-conversion (in jwt.encode) only covers
-        # "exp"/"iat"/"nbf" by name, so this claim needs converting by hand
-        # or json.dumps chokes on a raw datetime.
         "auth_time": (auth_time or now).timestamp(),
     }
+    if sid is not None:
+        # Omitted rather than set to null for an impersonation token: absence
+        # is what get_current_user reads as "this token has no session to
+        # check", and a null would have to mean the same thing twice.
+        claims["sid"] = str(sid)
     if impersonator_id is not None:
         claims["impersonator_id"] = str(impersonator_id)
-    return jwt.encode(claims, settings.JWT_PRIVATE_KEY, algorithm=_JWT_ALGORITHM)
+    return jwt.encode(
+        {"alg": _JWT_ALGORITHM},
+        claims,
+        _rsa_key(settings.JWT_PRIVATE_KEY),
+        algorithms=[_JWT_ALGORITHM],
+    )
 
 
 _BEARER_PREFIX = "Bearer "
@@ -211,11 +282,32 @@ def _decode_with_rotation(token: str, settings: "Settings") -> dict[str, Any]:
     secret, would be accepted.
     """
     try:
-        return jwt.decode(token, settings.JWT_PUBLIC_KEY, algorithms=[_JWT_ALGORITHM])
-    except JWTError:
+        return _decode(token, settings.JWT_PUBLIC_KEY)
+    except JoseError:
         if not settings.JWT_PUBLIC_KEY_OLD:
             raise
-        return jwt.decode(token, settings.JWT_PUBLIC_KEY_OLD, algorithms=[_JWT_ALGORITHM])
+        return _decode(token, settings.JWT_PUBLIC_KEY_OLD)
+
+
+def _decode(token: str, public_key_pem: str) -> dict[str, Any]:
+    decoded = jwt.decode(token, _rsa_key(public_key_pem), algorithms=[_JWT_ALGORITHM])
+    # joserfc verifies the signature only. Expiry is a separate, explicit
+    # step -- skip it and an expired token is accepted forever.
+    _ACCESS_TOKEN_CLAIMS.validate(decoded.claims)
+    return dict(decoded.claims)
+
+
+# Checked on every access token: present, and `exp` not yet passed.
+_ACCESS_TOKEN_CLAIMS = jwt.JWTClaimsRegistry(
+    sub={"essential": True}, jti={"essential": True}, exp={"essential": True}
+)
+
+
+@lru_cache(maxsize=8)
+def _rsa_key(pem: str) -> RSAKey:
+    """Parsed once per PEM: key import is RSA parsing, not something to redo
+    on every request."""
+    return RSAKey.import_key(pem)
 
 
 def verify_access_token(token: str) -> AccessTokenPayload:
@@ -228,6 +320,7 @@ def verify_access_token(token: str) -> AccessTokenPayload:
         org = claims.get("org")
         impersonator_id = claims.get("impersonator_id")
         auth_time = claims.get("auth_time")
+        sid = claims.get("sid")
         return AccessTokenPayload(
             user_id=UUID(claims["sub"]),
             org_id=UUID(org) if org is not None else None,
@@ -240,8 +333,9 @@ def verify_access_token(token: str) -> AccessTokenPayload:
                 else datetime.fromtimestamp(claims["iat"], tz=UTC)
             ),
             expires_at=datetime.fromtimestamp(claims["exp"], tz=UTC),
+            sid=UUID(sid) if sid is not None else None,
         )
-    except (JWTError, KeyError, ValueError, TypeError) as exc:
+    except (JoseError, KeyError, ValueError, TypeError) as exc:
         raise AuthenticationError(
             "errors.invalid_access_token", fallback="Invalid or expired access token"
         ) from exc

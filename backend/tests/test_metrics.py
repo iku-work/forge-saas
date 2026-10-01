@@ -20,6 +20,7 @@ from prometheus_fastapi_instrumentator import Instrumentator
 
 from app.core import metrics as metrics_module
 from app.core.config import get_settings
+from app.core.jobs import SCAN_QUEUE_NAME
 from app.main import app
 
 
@@ -221,3 +222,15 @@ def _set_metrics_token(monkeypatch: pytest.MonkeyPatch, token: str) -> None:
     setting an environment variable here would change nothing.
     """
     monkeypatch.setattr(get_settings(), "METRICS_TOKEN", token)
+
+
+def test_scan_queue_depth_counts_the_scan_queue() -> None:
+    """Review OCT-04: scans wait on their own queue, which the shared depth
+    gauge never sees."""
+    client = metrics_module._get_sync_redis()
+    client.zadd(SCAN_QUEUE_NAME, {"scan-a": 1, "scan-b": 2})
+    try:
+        assert REGISTRY.get_sample_value("forge_scan_queue_depth") == 2.0
+        assert REGISTRY.get_sample_value("forge_arq_queue_depth") == 0.0
+    finally:
+        client.delete(SCAN_QUEUE_NAME)

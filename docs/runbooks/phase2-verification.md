@@ -155,7 +155,7 @@ just works — no `10.0.2.2`-style Android workaround needed).
    would have started failing the moment T-160's inviter-notification landed.**
    `TenancyService.invite` now also calls `NotificationService.send`, which
    enqueues a second `send_email` job right after the invitee's — both
-   `tests/test_tenancy_service.py` and `tests/test_tenancy_router.py` grabbed
+   `tests/committed/test_tenancy_service.py` and `tests/committed/test_tenancy_router.py` grabbed
    `enqueued_jobs[-1]`/`[0]` assuming the invitee's email was the only (or
    last) one enqueued. Fixed both to select the `send_email` call whose `to`
    matches the invitee, with a comment explaining why. Both files also build

@@ -8,6 +8,7 @@
 import { useSyncExternalStore } from "react";
 
 import {
+  login2FaApiV1Auth2FaLoginPost,
   loginApiV1AuthLoginPost,
   logoutApiV1AuthLogoutPost,
   meApiV1AuthMeGet,
@@ -94,10 +95,15 @@ onSessionExpired(() => {
   clearSession();
 });
 
-// Thrown when /auth/login responds with a 2FA challenge instead of tokens --
-// mirrors packages/hooks's useAuth.ts. There is no mobile 2FA-verification
-// screen yet (T-047 covers Phase-1 parity only, which has none on web
-// either), so this surfaces as a regular form error.
+// Thrown when a sign-in responds with a 2FA challenge instead of tokens --
+// mirrors packages/hooks's useAuth.ts. The login screen catches it and
+// swaps in the challenge form, which trades the temp token for real ones
+// via completeTwoFactorLogin below.
+//
+// It used to surface as an ordinary form error, which meant enrolling a
+// second factor locked the account out of this app entirely: the challenge
+// is issued for every password sign-in once TOTP or a security key exists,
+// and nothing here could answer it.
 export class TwoFactorRequiredError extends Error {
   constructor(public readonly tempToken: string) {
     super("Two-factor authentication is required to finish signing in.");
@@ -124,6 +130,39 @@ export async function login(
   }
   if (!payload?.refresh_token) {
     throw new Error("Login response did not include a refresh token.");
+  }
+  await setStoredTokens(payload.access_token, payload.refresh_token);
+  setSessionState({ user: payload.user, isLoading: false });
+  return payload.user;
+}
+
+/**
+ * The second leg of a 2FA-gated sign-in: trades the temp token for a real
+ * session.
+ *
+ * `code` takes either a TOTP code or a backup code -- the backend tries
+ * both against the same field (AuthService.confirm_login_2fa), so there is
+ * no second input and no mode switch for the user to get wrong.
+ *
+ * Security keys are deliberately not offered here. Web's
+ * TwoFactorChallenge can fall back to one because WebAuthn is a browser
+ * API; React Native has no equivalent without a native passkey module and
+ * a custom dev build. An account whose *only* second factor is a security
+ * key therefore still cannot finish signing in on mobile -- the screen
+ * says so rather than leaving the user typing codes they do not have.
+ */
+export async function completeTwoFactorLogin(
+  tempToken: string,
+  code: string,
+): Promise<UserPublic> {
+  const { data: envelope } = await login2FaApiV1Auth2FaLoginPost({
+    client,
+    body: { temp_token: tempToken, code },
+    throwOnError: true,
+  });
+  const payload = envelope.data;
+  if (!payload?.refresh_token) {
+    throw new Error("2FA login response did not include a refresh token.");
   }
   await setStoredTokens(payload.access_token, payload.refresh_token);
   setSessionState({ user: payload.user, isLoading: false });

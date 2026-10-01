@@ -7,6 +7,7 @@ errors and rule-file schema violations plain YAML parsing can't. Same
 pattern as test_caddy_config.py / test_grafana_dashboards.py.
 """
 
+import re
 import subprocess
 from pathlib import Path
 
@@ -44,3 +45,16 @@ def test_promtool_check_rules_passes() -> None:
     )
 
     assert result.returncode == 0, result.stdout + result.stderr
+
+
+def test_every_scraped_worker_has_a_down_alert() -> None:
+    # Review OCT-04: the scan worker was split out without a scrape target or
+    # a liveness alert, so a stopped scanner looked like a quiet queue.
+    scraped = set(
+        re.findall(r"job_name: (forge-[a-z-]*worker)", (GRAFANA_DIR / "prometheus.yml").read_text())
+    )
+    alerts = ALERTS_FILE.read_text()
+
+    assert scraped >= {"forge-worker", "forge-scanner-worker"}
+    for job in scraped:
+        assert f'up{{job="{job}"}} == 0' in alerts, job

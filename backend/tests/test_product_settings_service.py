@@ -32,13 +32,6 @@ from app.modules.product_settings.service import (
 _ACTOR = uuid4()
 
 
-@pytest.fixture
-def redis(_redis_client: Redis) -> Redis:
-    """Same aliasing as test_maintenance_mode.py -- the shared fixture's
-    leading underscore marks it as setup-only, and this file reads it."""
-    return _redis_client
-
-
 @pytest.fixture(autouse=True)
 def _settings_session(product_settings_session: None) -> None:
     """Every test here calls `read_settings` (directly, or through the

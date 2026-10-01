@@ -59,6 +59,17 @@ export interface SupportSettings {
 // link whose real destination isn't known yet.
 const UNRESOLVED_SUPPORT: SupportSettings = { tool: "none", url: "" };
 
+// UX-01: which social sign-in providers actually have credentials on this
+// deployment. Deny-by-default in the same sense as `modules` above -- an
+// empty list renders no buttons, which is the safe answer both before
+// /config resolves and on a product that configured no providers.
+//
+// A separate signal from `modules.oauth` on purpose: the module being on
+// says the *routes* exist, not that Google or GitHub will answer. Rendering
+// from the flag is what put two permanently-404ing buttons on the login
+// page of every deployment of this template.
+const NO_OAUTH_PROVIDERS: readonly string[] = [];
+
 // T-263: the operator-controlled half of /config. Unlike `modules` and
 // `support` above -- which are deploy-time and cannot change while the page is
 // open -- these three change when someone flips a switch in the admin UI
@@ -82,6 +93,8 @@ const NO_MAINTENANCE: MaintenanceState = { enabled: false, message: "" };
 interface ConfigState {
   modules: ActiveModules;
   support: SupportSettings;
+  oauthProviders: readonly string[];
+  marketingUrl: string;
   banner: GlobalBanner | null;
   maintenance: MaintenanceState;
   signupDisabled: boolean;
@@ -93,6 +106,8 @@ interface ConfigState {
 let state: ConfigState = {
   modules: DENY_BY_DEFAULT,
   support: UNRESOLVED_SUPPORT,
+  oauthProviders: NO_OAUTH_PROVIDERS,
+  marketingUrl: "",
   banner: null,
   maintenance: NO_MAINTENANCE,
   signupDisabled: false,
@@ -122,6 +137,14 @@ export function getModulesSnapshot(): ActiveModules {
 
 function getSupportSnapshot(): SupportSettings {
   return state.support;
+}
+
+function getOAuthProvidersSnapshot(): readonly string[] {
+  return state.oauthProviders;
+}
+
+function getMarketingUrlSnapshot(): string {
+  return state.marketingUrl;
 }
 
 function getBannerSnapshot(): GlobalBanner | null {
@@ -156,6 +179,8 @@ async function fetchConfig(): Promise<void> {
           tool: envelope.data.support_tool,
           url: envelope.data.support_url,
         },
+        oauthProviders: envelope.data.oauth_providers ?? NO_OAUTH_PROVIDERS,
+        marketingUrl: envelope.data.marketing_url ?? "",
         banner: envelope.data.banner ?? null,
         maintenance: envelope.data.maintenance,
         signupDisabled: envelope.data.signup_disabled ?? false,
@@ -193,6 +218,41 @@ export function useModules(): ActiveModules {
   }, []);
 
   return useSyncExternalStore(subscribeConfig, getModulesSnapshot);
+}
+
+/**
+ * The social sign-in providers this deployment has credentials for.
+ *
+ * Render buttons from this, never from `useModules().oauth` -- the module
+ * flag says the OAuth routes exist, not that any provider is configured,
+ * and the two are different questions with the same answer only by
+ * coincidence.
+ */
+export function useOAuthProviders(): readonly string[] {
+  useEffect(() => {
+    void bootstrapModules();
+  }, []);
+
+  return useSyncExternalStore(subscribeConfig, getOAuthProvidersSnapshot);
+}
+
+/**
+ * The origin of the marketing site, or "" when there is not one.
+ *
+ * UX-02: the terms and privacy pages live there, on a different host
+ * (T-307), so the app cannot link to them with a relative path and cannot
+ * guess the hostname. Empty means the marketing module is off and those
+ * pages do not exist -- callers render no link rather than a broken one.
+ *
+ * Paths under it are locale-prefixed, exactly as the marketing site routes
+ * them: `${marketingUrl}/${locale}/terms`.
+ */
+export function useMarketingUrl(): string {
+  useEffect(() => {
+    void bootstrapModules();
+  }, []);
+
+  return useSyncExternalStore(subscribeConfig, getMarketingUrlSnapshot);
 }
 
 // Same one-fetch-per-page-load store as useModules() above -- both read the

@@ -21,6 +21,7 @@ from app.modules.auth.utils import create_access_token, hash_password
 from app.modules.billing.models import Plan, Subscription
 from app.modules.tenancy.models import Organization
 from app.modules.tenancy.repository import MembershipRepository, OrganizationRepository
+from tests._auth import session_token
 
 # T-291: this file needs admin enabled -- its routes, its tables, or
 # both. CI's module-matrix job deselects it in the combination that turns
@@ -69,7 +70,7 @@ async def _as_superadmin(client: httpx.AsyncClient, session: AsyncSession) -> ht
         totp_enabled=True,
     )
     await session.commit()
-    token = create_access_token(user.id, None, ())
+    token = await session_token(session, user)
     client.headers["Authorization"] = f"Bearer {token}"
     return client
 

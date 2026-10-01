@@ -1,3 +1,25 @@
+# PROD-04: Docker's json-file log driver keeps every byte a container has
+# ever written, forever. On a single-box deployment that is a disk-full
+# incident with a date on it -- and the first service to notice is Postgres,
+# which cannot write a WAL segment. Every service below anchors this.
+# PROD-04, the other half: a container with no memory limit can take the
+# whole box down, and on a single-host deployment that means Postgres too.
+#
+# These are runaway guards, not reservations -- Docker does not reserve the
+# memory, it only refuses to let a service exceed its cap. The sum is
+# therefore allowed to exceed physical RAM, and does: with clamav's profile
+# enabled (2g, which clamd's signature database genuinely needs) the caps
+# total about 5 GB. On the 3.8 GB box this template was audited against,
+# clamav is the dominant consumer by a wide margin and the caps below are
+# well above every other service's steady state -- so a cap firing here is
+# a bug report, not a capacity signal. Capacity is the disk/memory alert's
+# job, not this file's.
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
 networks:
   forge-net:
     driver: bridge
@@ -38,6 +60,8 @@ services:
       interval: 5s
       timeout: 5s
       retries: 10
+    logging: *default-logging
+    mem_limit: 768m
     networks:
       - forge-net
 
@@ -76,6 +100,8 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+    logging: *default-logging
+    mem_limit: 64m
     networks:
       - forge-net
 
@@ -89,6 +115,8 @@ services:
       interval: 5s
       timeout: 5s
       retries: 10
+    logging: *default-logging
+    mem_limit: 256m
     networks:
       - forge-net
 
@@ -122,6 +150,8 @@ services:
       timeout: 5s
       retries: 5
       start_period: 10s
+    logging: *default-logging
+    mem_limit: 768m
     networks:
       - forge-net
 
@@ -139,6 +169,55 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+    # PROD-06: the worker had no healthcheck at all, so a wedged one looked
+    # exactly like a working one -- and everything slow in this product
+    # (email, virus scanning, GDPR deletion, webhook delivery) runs here.
+    #
+    # `arq --check` reads the heartbeat the worker writes from its main
+    # loop, which is a stronger claim than "the process is up": a job that
+    # blocks that loop stops the heartbeat, and the key's TTL is
+    # health_check_interval + 1s (30s, set in WorkerSettings -- arq's own
+    # default of an hour would make this probe meaningless).
+    healthcheck:
+      test: ["CMD", "arq", "--check", "app.workers.main.WorkerSettings"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    logging: *default-logging
+    mem_limit: 768m
+    networks:
+      - forge-net
+
+  # Review R4: virus scans, on their own queue (app.core.jobs.SCAN_QUEUE_NAME)
+  # and in their own container, so a burst of uploads fills scan slots and
+  # this memory limit -- not the worker's, which email, deletion and webhook
+  # delivery depend on. Scans stream the object, so memory per scan is a few
+  # 64 KiB chunks; SCAN_MAX_CONCURRENCY (default 4) bounds how many run.
+  #
+  # Measured 2026-10-01 on the production box (runbook step 5 in
+  # docs/runbooks/malware-scanning.md): idle ~105 MiB; four concurrent
+  # 100 MiB scans added ~102 MiB, so ~210 MiB peak. 384m is ~1.8x that.
+  # Re-measure if SCAN_MAX_CONCURRENCY or MAX_UPLOAD_BYTES goes up.
+  scanner-worker:
+    image: ${BACKEND_IMAGE:-forge-saas-backend}
+    restart: unless-stopped
+    env_file:
+      - ./backend/.env
+    command: arq app.workers.main.ScanWorkerSettings
+    depends_on:
+      pgbouncer:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "arq", "--check", "app.workers.main.ScanWorkerSettings"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    logging: *default-logging
+    mem_limit: 384m
     networks:
       - forge-net
 
@@ -163,16 +242,48 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+    logging: *default-logging
+    mem_limit: 64m
     networks:
       - forge-net
 
   # T-113: only started when explicitly requested (`docker compose --profile
   # clamav up`) -- settings.VIRUS_SCANNER must also be set to "clamav" (and
   # CLAMAV_HOST=clamav) in backend/.env for the worker to actually use it.
+  # PROD-04: the audit found the box at 68% of 38 GB with 13 GB of
+  # reclaimable build cache, and nothing that would have said so. Postgres
+  # is the service that notices a full disk first, by failing to write a WAL
+  # segment -- at which point the product is down and the fix is slow.
+  #
+  # node-exporter is here purely so docs/grafana/alerts.yml's DiskSpaceLow
+  # has a metric to read. Scraped inside forge-net exactly like
+  # postgres-exporter; it publishes no ports of its own.
+  #
+  # The mounts are read-only and the pid namespace is shared with the host
+  # because that is what the exporter needs to see the host's filesystems
+  # rather than its own container's. `--path.rootfs=/host` tells it where
+  # they were mounted.
+  node-exporter:
+    image: prom/node-exporter:v1.8.2
+    restart: unless-stopped
+    command:
+      - "--path.rootfs=/host"
+      - "--collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($$|/)"
+    pid: host
+    volumes:
+      - /:/host:ro,rslave
+    logging: *default-logging
+    mem_limit: 64m
+    networks:
+      - forge-net
+
   clamav:
     image: clamav/clamav:stable
     restart: unless-stopped
     profiles: ["clamav"]
+    # freshclam logs every signature update; unbounded, that is the largest
+    # log producer in the stack.
+    logging: *default-logging
     volumes:
       - clamav_data:/var/lib/clamav
     healthcheck:
@@ -181,6 +292,43 @@ services:
       timeout: 10s
       retries: 5
       start_period: 180s # first boot downloads the virus definition database
+    # Measured, not guessed: 955 MiB resident with the database loaded, 167 MB
+    # of signatures on disk, 149 MB image. Nearly all of that memory is the
+    # signature set itself, so it is resident from boot rather than
+    # proportional to scanning.
+    #
+    # The limit is 2G rather than ~1.2G because of freshclam: clamd's default
+    # ConcurrentDatabaseReload loads the *new* database before releasing the
+    # old one, so memory roughly doubles for the duration of a reload -- which
+    # happens unattended, several times a day. A limit sized to steady state
+    # is a limit that OOM-kills the scanner on a schedule.
+    mem_limit: 2g
+    environment:
+      # ...and this is why 2G is enough to be worth setting. Concurrent
+      # reload is what would need ~2x, and a 4 GB host does not have that
+      # spare on top of Postgres, Redis, MinIO, the backend and the worker.
+      # Turning it off makes a reload swap the database in place: scans block
+      # for a few seconds while it happens, which nobody notices, instead of
+      # the peak that gets something OOM-killed.
+      #
+      # `CLAMD_CONF_<Setting>` is the official image's own mechanism -- its
+      # /init writes each one into /etc/clamav/clamd.conf before starting
+      # clamd, so this needs no mounted config file to drift from the repo.
+      CLAMD_CONF_ConcurrentDatabaseReload: "no"
+      # Review R4, both verified against this image with `clamconf`:
+      #
+      # AlertExceedsMax defaults to off, and with it off an archive that
+      # expands past MaxScanSize, MaxFiles or MaxRecursion is reported OK --
+      # a zip bomb scans clean. On, it comes back as
+      # Heuristics.Limits.Exceeded, which the scanner maps to "failed" (no
+      # verdict, never downloadable), not to "infected".
+      #
+      # StreamMaxLength defaults to 100M, exactly MAX_UPLOAD_BYTES -- and
+      # confirm_upload allows 1 KiB over the claimed size, so a file at the
+      # ceiling could be refused mid-stream. Keep this above the ceiling;
+      # tests/test_storage_scanner.py fails if the two drift apart.
+      CLAMD_CONF_AlertExceedsMax: "yes"
+      CLAMD_CONF_StreamMaxLength: "101M"
     networks:
       - forge-net
 
@@ -205,21 +353,26 @@ services:
       interval: 5s
       timeout: 5s
       retries: 20
+    logging: *default-logging
+    mem_limit: 256m
     networks:
       - forge-net
 
   # Creates the bucket once, then exits. `--ignore-existing` so a restart of
-  # the stack is a no-op rather than an error.
+  # the stack is a no-op rather than an error. Also sets the bucket's
+  # lifecycle: incoming/ objects expire after a day (review R1 -- see the
+  # same service in docker-compose.yml for why, and why `ilm import`).
   minio-init:
     image: minio/minio
     restart: "no"
+    logging: *default-logging
     env_file:
       - ./.env.minio
     entrypoint:
       [
         "sh",
         "-c",
-        "mc alias set local http://minio:9000 \"$$MINIO_ROOT_USER\" \"$$MINIO_ROOT_PASSWORD\" && mc mb --ignore-existing \"local/$$MINIO_BUCKET\"",
+        "mc alias set local http://minio:9000 \"$$MINIO_ROOT_USER\" \"$$MINIO_ROOT_PASSWORD\" && mc mb --ignore-existing \"local/$$MINIO_BUCKET\" && echo '{\"Rules\":[{\"ID\":\"expire-incoming\",\"Status\":\"Enabled\",\"Filter\":{\"Prefix\":\"incoming/\"},\"Expiration\":{\"Days\":1}},{\"ID\":\"expire-data-exports\",\"Status\":\"Enabled\",\"Filter\":{\"Prefix\":\"data-exports/\"},\"Expiration\":{\"Days\":1}}]}' | mc ilm import \"local/$$MINIO_BUCKET\"",
       ]
     depends_on:
       minio:
@@ -246,8 +399,31 @@ services:
     # `docker compose config`, not assumed.
     image: ${CADDY_IMAGE:-caddy:2-alpine}
     restart: unless-stopped
-    env_file:
-      - ./backend/.env
+    # An explicit allowlist, never `env_file: ./backend/.env`. That file holds
+    # JWT_PRIVATE_KEY, ENCRYPTION_KEY, DATABASE_URL, STRIPE_SECRET_KEY and
+    # every other application secret, and handing the whole of it to the one
+    # container the internet can reach meant an edge compromise yielded token
+    # forgery, database access and decryption -- none of which Caddy needs to
+    # terminate TLS and proxy. It needs exactly these four, and all four are
+    # hostnames or CIDRs.
+    #
+    # Adding anything here is a decision about blast radius, not a
+    # convenience: tests/test_caddy_config.py fails the build if a name
+    # outside this list appears, and if a name the Caddyfiles *do* use goes
+    # missing.
+    #
+    # Empty is not the same as unset. Compose passes a set-but-empty variable
+    # through as the empty string, and Caddy then uses "" rather than the
+    # `{$VAR:default}` fallback -- which for MARKETING_DOMAIN produces a site
+    # block with no address and stops the whole edge, app host included. See
+    # docs/runbooks/deploy-render.md.
+    environment:
+      DOMAIN: ${DOMAIN:?DOMAIN must be set — see backend/.env.example}
+      MARKETING_DOMAIN: ${MARKETING_DOMAIN:-marketing.localhost}
+      STORAGE_DOMAIN: ${STORAGE_DOMAIN:-storage.localhost}
+      CADDY_TRUSTED_PROXIES: ${CADDY_TRUSTED_PROXIES:-10.0.0.0/8 172.16.0.0/12 192.168.0.0/16}
+    logging: *default-logging
+    mem_limit: 256m
     volumes:
       - caddy_data:/data
     ports:

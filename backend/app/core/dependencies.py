@@ -27,7 +27,7 @@ from sentry_sdk import set_user as set_sentry_user
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core import cache, cache_keys
-from app.core.db import get_session
+from app.core.db import get_session, persist_then_reject
 from app.core.exceptions import (
     AuthenticationError,
     DomainError,
@@ -35,11 +35,17 @@ from app.core.exceptions import (
     StepUpAuthRequiredError,
 )
 from app.core.token_blocklist import is_jti_blocked
+from app.middleware.budgets import charge_org, charge_user
 from app.models._mixins import utcnow
 from app.modules.audit.service import AuditService
+from app.modules.auth.amr import has_second_factor
 from app.modules.auth.models import User
 from app.modules.auth.permissions import ROLE_PERMISSIONS, Permission
-from app.modules.auth.repository import UserRepository, WebAuthnCredentialRepository
+from app.modules.auth.repository import (
+    SessionRepository,
+    UserRepository,
+    WebAuthnCredentialRepository,
+)
 from app.modules.auth.utils import AccessTokenPayload, bearer_token, verify_access_token
 from app.modules.tenancy.models import Membership, Organization
 from app.modules.tenancy.repository import MembershipRepository, OrganizationRepository
@@ -102,10 +108,42 @@ async def resolve_user_from_token(
         # revocation) lands here -- distinct from refresh-token rotation
         # (SessionRepository), which revokes a whole session, not one jti.
         raise AuthenticationError("errors.token_revoked", fallback="Token has been revoked")
+    session_row = (
+        await SessionRepository(session).get_usable_by_id(payload.sid)
+        if payload.sid is not None
+        else None
+    )
+    if payload.sid is not None and session_row is None:
+        # Repository audit finding 6. Revoking a session used to revoke only
+        # the *refresh* half: the access tokens already issued from it kept
+        # working until they expired, so "sign out all devices" was a promise
+        # about the next fifteen minutes rather than containment of a stolen
+        # bearer token. Every revocation path -- logout, logout-all, device
+        # revocation, password reset, refresh-token theft detection -- writes
+        # `revoked_at`, so all of them land here with nothing extra to
+        # remember.
+        #
+        # `sid is None` is not a bypass to be tightened later. It is how an
+        # impersonation token looks (T-142 issues no refresh token, so there
+        # is no session to check; the jti blocklist above is its revocation
+        # path), and how a token minted before this claim existed looks while
+        # it drains after a deploy.
+        raise AuthenticationError(
+            "errors.session_invalid",
+            fallback="Your session is no longer valid. Please log in again.",
+        )
     # T-218: stashed for require_recent_auth below to read without decoding
     # the token a second time -- FastAPI dedups get_current_user across
     # dependencies within one request, so this always runs first.
     request.state.auth_time = payload.auth_time
+    # Review R3: which session this is and what it proved, for
+    # require_superadmin and the enrollment step-up (AuthService.verify_2fa)
+    # -- read from the row just loaded, never from a token claim, so a factor
+    # proved mid-session counts on the very next request. Empty for a token
+    # with no session (impersonation, or one minted before `sid` existed),
+    # which is the right answer: nothing is known about how it was obtained.
+    request.state.session_id = payload.sid
+    request.state.session_amr = tuple(session_row.amr) if session_row is not None else ()
     cache_key = cache_keys.user_key(payload.user_id)
 
     cached = await cache.read_json(redis, cache_key)
@@ -120,6 +158,10 @@ async def resolve_user_from_token(
             raise AuthenticationError("errors.user_not_found", fallback="User not found")
         await cache.write_json(redis, cache_key, cache.dump(fetched))
         user = fetched
+
+    # Review R5: the per-user budget shared by every authenticated endpoint,
+    # charged once the token is known to be good.
+    charge_user(request, user.id)
 
     # T-201: id only, never email or name -- Sentry events raised for the
     # rest of this request (including by a nested dependency) get tagged
@@ -139,6 +181,7 @@ async def resolve_user_from_token(
 
 
 async def get_current_org(
+    request: Request,
     user: Annotated[User, Depends(get_current_user)],
     session: Annotated[AsyncSession, Depends(get_session)],
     redis: Annotated[Redis, Depends(get_redis)],
@@ -163,6 +206,9 @@ async def get_current_org(
         raise PermissionDeniedError(
             "errors.not_org_member", fallback="Not a member of this organization"
         )
+    # Review R5: only now, with membership proven -- charged on the header's
+    # say-so, anyone could spend another organization's budget.
+    charge_org(request, x_org_id)
     return org, membership
 
 
@@ -197,6 +243,19 @@ async def require_superadmin(
                     "authenticator app or a security key) before accessing admin features."
                 ),
             )
+    # Review R3: enrollment says a second factor exists; this says the
+    # session in hand went through one. They differ for any session opened
+    # before the factor was enrolled, and every such session used to pass
+    # here. Set by resolve_user_from_token, which get_current_user above has
+    # already run for this request.
+    if not has_second_factor(getattr(request.state, "session_amr", ())):
+        raise PermissionDeniedError(
+            "errors.superadmin_mfa_session_required",
+            fallback=(
+                "Sign in again with your second factor to use admin features. "
+                "This session was not established with it."
+            ),
+        )
     logger.bind(
         admin_action=True,
         actor_id=str(user.id),
@@ -251,25 +310,36 @@ def require_permission(permission: Permission) -> Callable[..., Awaitable[Member
     ) -> Membership:
         org, membership = org_and_membership
         if permission not in ROLE_PERMISSIONS[membership.role]:
-            await AuditService(session).log(
-                action="permission.denied",
-                resource_type="membership",
-                resource_id=str(membership.id),
-                org_id=org.id,
-                actor_id=membership.user_id,
-                diff={"permission": permission.value, "role": membership.role.value},
-                ip=request.client.host if request.client else None,
-                ua=request.headers.get("user-agent"),
-                severity="elevated",
-            )
-            # Same reason as reject_during_impersonation below: without this
-            # the raise unwinds get_session's rollback and the denial event
-            # never reaches the table it was written for.
-            await session.commit()
-            raise PermissionDeniedError(
-                "errors.missing_permission",
-                fallback=f"Missing permission: {permission.value}",
-                params={"permission": permission.value},
+            # Plain values, captured before persist_then_reject's rollback
+            # expires the rows they came from.
+            org_id, membership_id = org.id, membership.id
+            actor_id, role = membership.user_id, membership.role.value
+            ip = request.client.host if request.client else None
+            ua = request.headers.get("user-agent")
+
+            async def _record_denial() -> None:
+                await AuditService(session).log(
+                    action="permission.denied",
+                    resource_type="membership",
+                    resource_id=str(membership_id),
+                    org_id=org_id,
+                    actor_id=actor_id,
+                    diff={"permission": permission.value, "role": role},
+                    ip=ip,
+                    ua=ua,
+                    severity="elevated",
+                )
+
+            # Without persisting it, the raise unwinds get_session's rollback
+            # and the denial event never reaches the table it was written for.
+            await persist_then_reject(
+                session,
+                _record_denial,
+                PermissionDeniedError(
+                    "errors.missing_permission",
+                    fallback=f"Missing permission: {permission.value}",
+                    params={"permission": permission.value},
+                ),
             )
         return membership
 
@@ -362,35 +432,40 @@ def reject_during_impersonation(kind: BlockedActionKind) -> Callable[..., Awaita
         if payload is None:
             return
 
-        await AuditService(session).log(
-            action="impersonation.blocked",
-            resource_type="user",
-            resource_id=str(payload.user_id),
-            org_id=None,
-            # The impersonated user is the principal the request was made as;
-            # the superadmin behind it lands in impersonator_id automatically
-            # (app.core.audit_context), the same shape as every other event
-            # written during an impersonated request.
-            actor_id=payload.user_id,
-            diff={"kind": kind, "method": request.method, "path": request.url.path},
-            ip=request.client.host if request.client else None,
-            ua=request.headers.get("user-agent"),
-            severity="elevated",
-        )
-        # Committed here, not left to the router: raising below unwinds
-        # get_session's `except: rollback()`, which would take the audit row
-        # with it -- and an unrecorded block is the one outcome this event
-        # exists to prevent. Safe to commit the caller's session because no
-        # endpoint body has run yet; the only other dependencies that can have
-        # touched it are reads.
-        await session.commit()
-        raise PermissionDeniedError(
-            "errors.impersonation_blocked",
-            fallback=(
-                f"Action '{kind}' is blocked during impersonation. "
-                "End impersonation to perform this action as yourself."
+        ip = request.client.host if request.client else None
+        ua = request.headers.get("user-agent")
+
+        async def _record_block() -> None:
+            await AuditService(session).log(
+                action="impersonation.blocked",
+                resource_type="user",
+                resource_id=str(payload.user_id),
+                org_id=None,
+                # The impersonated user is the principal the request was made
+                # as; the superadmin behind it lands in impersonator_id
+                # automatically (app.core.audit_context), the same shape as
+                # every other event written during an impersonated request.
+                actor_id=payload.user_id,
+                diff={"kind": kind, "method": request.method, "path": request.url.path},
+                ip=ip,
+                ua=ua,
+                severity="elevated",
+            )
+
+        # Persisted, not left to the router: raising unwinds get_session's
+        # `except: rollback()`, which would take the audit row with it -- and
+        # an unrecorded block is the one outcome this event exists to prevent.
+        await persist_then_reject(
+            session,
+            _record_block,
+            PermissionDeniedError(
+                "errors.impersonation_blocked",
+                fallback=(
+                    f"Action '{kind}' is blocked during impersonation. "
+                    "End impersonation to perform this action as yourself."
+                ),
+                details={"kind": kind},
             ),
-            details={"kind": kind},
         )
 
     # setattr, not `checker.__impersonation_blocked_kind__ = kind`: the name is

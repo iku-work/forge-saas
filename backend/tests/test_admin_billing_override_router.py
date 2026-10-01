@@ -24,6 +24,7 @@ from app.modules.billing.repository import SubscriptionRepository
 from app.modules.billing.service import BillingService
 from app.modules.tenancy.models import Organization
 from app.modules.tenancy.repository import OrganizationRepository
+from tests._auth import session_token
 
 # T-291: this file needs admin + billing enabled -- its routes, its tables, or
 # both. CI's module-matrix job deselects it in the combination that turns
@@ -31,11 +32,6 @@ from app.modules.tenancy.repository import OrganizationRepository
 pytestmark = pytest.mark.module_dependent
 
 _PASSWORD = "Correct-Horse9"
-
-
-@pytest.fixture
-def redis(_redis_client: Redis) -> Redis:
-    return _redis_client
 
 
 async def _make_plan(session: AsyncSession, *, slug: str | None = None) -> Plan:
@@ -90,7 +86,7 @@ async def _as_superadmin(client: httpx.AsyncClient, session: AsyncSession) -> ht
         totp_enabled=True,
     )
     await session.commit()
-    token = create_access_token(user.id, None, ())
+    token = await session_token(session, user)
     client.headers["Authorization"] = f"Bearer {token}"
     return client
 

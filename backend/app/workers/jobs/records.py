@@ -32,6 +32,6 @@ class JobRecord(SQLModel, table=True):
     result: dict[str, Any] | None = Field(default=None, sa_column=Column(JSONB))
     error: str | None = Field(default=None)
     attempts: int = Field(default=0)
-    created_at: datetime = Field(default_factory=utcnow, sa_type=_TZ_DATETIME)  # type: ignore[call-overload]
-    started_at: datetime | None = Field(default=None, sa_type=_TZ_DATETIME)  # type: ignore[call-overload]
-    completed_at: datetime | None = Field(default=None, sa_type=_TZ_DATETIME)  # type: ignore[call-overload]
+    created_at: datetime = Field(default_factory=utcnow, sa_type=_TZ_DATETIME)
+    started_at: datetime | None = Field(default=None, sa_type=_TZ_DATETIME)
+    completed_at: datetime | None = Field(default=None, sa_type=_TZ_DATETIME)

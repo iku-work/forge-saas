@@ -21,7 +21,7 @@
 # failure window, not the restarts.
 #
 # Who is what, in this stack:
-#   verifiers : pgbouncer (of Postgres), backend, worker (of Redis)
+#   verifiers : pgbouncer (of Postgres), backend, worker, scanner-worker (of Redis)
 #   servers   : postgres, redis, pgbouncer (its client-facing certificate)
 #   neither   : the app's hop to pgbouncer is `sslmode=require`, which
 #               encrypts without checking who answered, so nothing there
@@ -30,7 +30,7 @@ set -euo pipefail
 
 CERT_DIR="${CERT_DIR:-./certs}"
 COMPOSE="docker compose -f docker-compose.prod.yml -f docker-compose.tls.yml"
-VERIFIERS="pgbouncer backend worker"
+VERIFIERS="pgbouncer backend worker scanner-worker"
 SERVERS="postgres redis pgbouncer"
 
 if [ ! -f "$CERT_DIR/server.crt" ]; then

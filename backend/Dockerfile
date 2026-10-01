@@ -17,10 +17,27 @@ ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
     PIP_NO_CACHE_DIR=1
 
-COPY backend/pyproject.toml ./
+COPY backend/pyproject.toml backend/requirements.lock ./
 COPY backend/app ./app
 
-RUN pip install --no-cache-dir --prefix=/install .
+# Repo finding 16: this used to be `pip install .`, which re-resolves every
+# open-ended minimum in pyproject.toml at build time -- so the same commit
+# produced different software on different days, and "it passed locally"
+# and "it runs in production" were claims about two different dependency
+# trees. The repo's own comments already record two resolver-driven
+# incompatibilities discovered that way.
+#
+# Two steps, and the order matters. First the locked dependency set, with
+# --require-hashes: every wheel is pinned by digest, so a compromised or
+# re-uploaded artifact fails the build instead of shipping. Then the app
+# itself with --no-deps, because its dependencies are already installed and
+# letting pip resolve them again is the thing this replaces.
+#
+# Regenerate with `make lock` after changing pyproject.toml. CI's pip-audit
+# runs against the same file, so a vulnerable pin fails there rather than
+# on a box.
+RUN pip install --no-cache-dir --prefix=/install --require-hashes -r requirements.lock \
+    && pip install --no-cache-dir --prefix=/install --no-deps .
 
 # Builds packages/email-templates' cli.js (T-106) -- send_email shells out to
 # it at runtime, but the runtime stage below only ever runs a bare `node`

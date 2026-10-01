@@ -66,10 +66,10 @@ class Subscription(UUIDPKMixin, TimestampMixin, SQLModel, table=True):
     plan_id: UUID = Field(foreign_key="plan.id", index=True)
     stripe_subscription_id: str = Field(unique=True)
     status: str  # "trialing" | "active" | "past_due" | "canceled" | "incomplete"
-    current_period_start: datetime = Field(sa_type=_TZ_DATETIME)  # type: ignore[call-overload]
-    current_period_end: datetime = Field(sa_type=_TZ_DATETIME)  # type: ignore[call-overload]
+    current_period_start: datetime = Field(sa_type=_TZ_DATETIME)
+    current_period_end: datetime = Field(sa_type=_TZ_DATETIME)
     cancel_at_period_end: bool = Field(default=False)
-    trial_end: datetime | None = Field(default=None, sa_type=_TZ_DATETIME)  # type: ignore[call-overload]
+    trial_end: datetime | None = Field(default=None, sa_type=_TZ_DATETIME)
     # T-141: admin force-assign (app.modules.admin.service.AdminBillingOverrideService)
     # sets these three on top of Stripe's own fields above. billing_interval
     # has no Stripe-webhook equivalent to read it back from (Stripe reports
@@ -81,7 +81,7 @@ class Subscription(UUIDPKMixin, TimestampMixin, SQLModel, table=True):
     # should be reviewed/revert, independent of current_period_end.
     billing_interval: str | None = Field(default=None)
     free_override: bool = Field(default=False)
-    override_expires_at: datetime | None = Field(default=None, sa_type=_TZ_DATETIME)  # type: ignore[call-overload]
+    override_expires_at: datetime | None = Field(default=None, sa_type=_TZ_DATETIME)
     # `created` of the newest Stripe *event* whose state is reflected here.
     #
     # Stripe does not promise delivery order, and its retries make disorder
@@ -93,7 +93,7 @@ class Subscription(UUIDPKMixin, TimestampMixin, SQLModel, table=True):
     # NULL means "no event has been applied yet" -- every row predating this
     # column, and every row the reconciler wrote (which reads current state
     # straight from the API and is therefore never stale).
-    last_stripe_event_at: datetime | None = Field(default=None, sa_type=_TZ_DATETIME)  # type: ignore[call-overload]
+    last_stripe_event_at: datetime | None = Field(default=None, sa_type=_TZ_DATETIME)
     # The same watermark for the *invoice* stream, kept separate on purpose.
     #
     # One shared watermark was wrong, and wrong in the direction that hurts:
@@ -108,7 +108,7 @@ class Subscription(UUIDPKMixin, TimestampMixin, SQLModel, table=True):
     # Ordering is meaningful *within* each stream (a redelivered
     # payment_failed must not undo a later payment_succeeded) and meaningless
     # across them, which is exactly what two columns express.
-    last_invoice_event_at: datetime | None = Field(default=None, sa_type=_TZ_DATETIME)  # type: ignore[call-overload]
+    last_invoice_event_at: datetime | None = Field(default=None, sa_type=_TZ_DATETIME)
 
 
 class DunningCampaign(UUIDPKMixin, TimestampMixin, SQLModel, table=True):
@@ -123,8 +123,8 @@ class DunningCampaign(UUIDPKMixin, TimestampMixin, SQLModel, table=True):
     # arq job ids for the day-1/day-3/day-7 steps, in that order -- so
     # DunningService.cancel/complete can revoke whichever haven't fired yet.
     scheduled_job_ids: list[str] = Field(sa_column=Column(JSONB, nullable=False))
-    started_at: datetime = Field(default_factory=utcnow, sa_type=_TZ_DATETIME)  # type: ignore[call-overload]
-    ended_at: datetime | None = Field(default=None, sa_type=_TZ_DATETIME)  # type: ignore[call-overload]
+    started_at: datetime = Field(default_factory=utcnow, sa_type=_TZ_DATETIME)
+    ended_at: datetime | None = Field(default=None, sa_type=_TZ_DATETIME)
 
 
 class WebhookEvent(SQLModel, table=True):
@@ -133,7 +133,7 @@ class WebhookEvent(SQLModel, table=True):
     id: str = Field(primary_key=True)  # Stripe event ID, e.g. "evt_..."
     type: str = Field(index=True)
     payload: dict[str, object] = Field(sa_column=Column(JSONB, nullable=False))
-    received_at: datetime = Field(default_factory=utcnow, sa_type=_TZ_DATETIME)  # type: ignore[call-overload]
-    processed_at: datetime | None = Field(default=None, sa_type=_TZ_DATETIME)  # type: ignore[call-overload]
+    received_at: datetime = Field(default_factory=utcnow, sa_type=_TZ_DATETIME)
+    processed_at: datetime | None = Field(default=None, sa_type=_TZ_DATETIME)
     error: str | None = Field(default=None)
     attempt_count: int = Field(default=0)

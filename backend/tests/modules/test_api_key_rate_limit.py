@@ -75,20 +75,15 @@ class LimitWorld:
 
 
 @pytest.fixture
-def redis(_redis_client: Redis) -> Redis:
-    return _redis_client
-
-
-@pytest.fixture
 async def world(
     client: httpx.AsyncClient,
     session: AsyncSession,
     redis: Redis,
-    _rate_limit_storage: RedisStorage,
+    rate_limit_storage: RedisStorage,
 ) -> LimitWorld:
     # A shared window across tests would make "the sixth request is refused"
     # depend on execution order.
-    _rate_limit_storage.reset()
+    rate_limit_storage.reset()
     user = await UserRepository(session).create(
         email=f"user-{uuid4()}@example.com",
         hashed_password=hash_password(_PASSWORD),
@@ -171,13 +166,16 @@ async def test_a_session_on_the_same_endpoint_is_not_limited_by_the_key_budget(
     endpoint the key was hitting -- which would otherwise be a self-inflicted
     outage every time an integration misbehaved."""
     _, key_headers = await _mint(world)
+    # Read before the 429: a rejected request rolls back the session this
+    # test shares with the app, which expires every row it holds.
+    org_id = world.org.id
     for _ in range(_budget()):
         await world.client.get(world.url, headers=key_headers)
     assert (await world.client.get(world.url, headers=key_headers)).status_code == 429
 
     session_headers = {
         "Authorization": f"Bearer {create_access_token(world.owner_id, None, ())}",
-        "X-Org-ID": str(world.org.id),
+        "X-Org-ID": str(org_id),
     }
     assert (await world.client.get(world.url, headers=session_headers)).status_code == 200
 

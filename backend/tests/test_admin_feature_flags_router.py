@@ -5,7 +5,7 @@ resolved flag (immediately, via T-120's own cache-invalidating
 set_override/delete_override), and every mutation writes an AuditEvent
 (action="admin.feature_flag.set").
 
-Uses conftest's shared client/session/_redis_client fixtures (full
+Uses conftest's shared client/session/redis_client fixtures (full
 migrations), same convention as test_feature_flags_router.py.
 """
 
@@ -23,6 +23,7 @@ from app.modules.auth.utils import create_access_token, hash_password
 from app.modules.billing.models import Plan, Subscription
 from app.modules.tenancy.models import Organization
 from app.modules.tenancy.repository import MembershipRepository, OrganizationRepository
+from tests._auth import session_token
 
 # T-291: this file needs admin + feature_flags enabled -- its routes, its tables, or
 # both. CI's module-matrix job deselects it in the combination that turns
@@ -70,7 +71,7 @@ async def _as_superadmin(client: httpx.AsyncClient, session: AsyncSession) -> ht
         totp_enabled=True,
     )
     await session.commit()
-    token = create_access_token(user.id, None, ())
+    token = await session_token(session, user)
     client.headers["Authorization"] = f"Bearer {token}"
     return client
 
@@ -199,7 +200,7 @@ async def test_set_override_reflected_on_member_endpoint_immediately(
     )
     await session.commit()
     member_headers = {"Authorization": f"Bearer {create_access_token(member.id, None, ())}"}
-    admin_headers = {"Authorization": f"Bearer {create_access_token(admin.id, None, ())}"}
+    admin_headers = {"Authorization": f"Bearer {await session_token(session, admin)}"}
 
     # Warm the member-facing cache before the override is set, proving the
     # PUT's cache invalidation (T-120) -- not just a cold read -- is what

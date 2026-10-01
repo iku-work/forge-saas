@@ -1,5 +1,6 @@
 import asyncio
 import os
+import socket
 from collections.abc import AsyncGenerator, Generator
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime
@@ -7,12 +8,13 @@ from pathlib import Path
 from typing import Any
 from uuid import uuid4
 
+import asyncpg
 import httpx
 import pytest
+import redis as redis_sync
+from alembic import command
 from dotenv import dotenv_values
-from httpx import ASGITransport
 from limits.storage import RedisStorage, storage_from_string
-from limits.strategies import FixedWindowRateLimiter
 from redis.asyncio import Redis
 from sqlalchemy import event
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, create_async_engine
@@ -25,19 +27,25 @@ from testcontainers.redis import RedisContainer
 from app.core import encrypted_type, metrics, resilience
 from app.core import jobs as jobs_module
 from app.core.config import get_settings
-from app.core.db import get_session
-from app.core.dependencies import get_redis
 from app.core.migrations import build_config
 from app.core.migrations import upgrade as upgrade_migrations
-from app.main import app
 from app.middleware import rate_limit as rate_limit_module
 from app.modules.auth.permissions import MemberRole
 from app.modules.auth.repository import UserRepository
 from app.modules.auth.utils import create_access_token, hash_password
 from app.modules.product_settings import service as product_settings_service
 from app.modules.tenancy.repository import MembershipRepository, OrganizationRepository
+from tests._client import serve_app
+from tests._database import DatabaseHandle
+from tests._sessions import rolling_back
 
 _ENV_TEST_FILE = Path(__file__).parent.parent / ".env.test"
+# Where `.env.test` points DATABASE_URL, REDIS_URL and AWS_ENDPOINT_URL. Nothing listens there
+# under test; see `_no_dead_addresses`.
+_DEAD_ADDRESSES = frozenset(
+    (host, port) for host in ("localhost", "127.0.0.1", "::1") for port in (5432, 6379, 9000)
+)
+_TEMPLATE_DATABASE = "forge_template"
 _AUTHED_PASSWORD = "Correct-Horse9"
 
 
@@ -47,6 +55,55 @@ def _settings_env(monkeypatch: pytest.MonkeyPatch) -> None:
         if value is not None:
             monkeypatch.setenv(key, value)
     get_settings.cache_clear()
+
+
+@pytest.fixture(autouse=True)
+def _no_dead_addresses(monkeypatch: pytest.MonkeyPatch) -> Generator[None]:
+    """Fail the test that connects to `.env.test`'s database or Redis.
+
+    Nothing listens there -- every test gets containers -- so a connection to
+    them is always a fixture that forgot to wire something (the lifespan's
+    own Redis client, the engine `app.core.db` built at import). Such code
+    used to fail open and carry on, after waiting on the refusal: seconds per
+    connect on Windows, and most of what made the suite take 53 minutes.
+    The connection is refused immediately here and the test fails at
+    teardown, naming the address.
+    """
+    hits: list[tuple[str, int]] = []
+    real_socket_connect = socket.socket.connect
+    real_loop_connect = asyncio.base_events.BaseEventLoop.create_connection
+
+    def _check(host: object, port: object) -> None:
+        if (host, port) in _DEAD_ADDRESSES:
+            hits.append((str(host), int(str(port))))
+            raise ConnectionRefusedError(
+                f"{host}:{port} is .env.test's address -- wire a container"
+            )
+
+    # socket.socket.connect covers every synchronous client (redis-py's,
+    # which the rate limiter uses, never calls socket.create_connection);
+    # BaseEventLoop.create_connection covers every asyncio one. The wrappers
+    # pass their signatures through, which are what they are.
+    def _socket_connect(sock: socket.socket, address: Any) -> None:  # noqa: ANN401 -- see above
+        if isinstance(address, tuple):
+            _check(*address[:2])
+        real_socket_connect(sock, address)
+
+    async def _loop_connect(
+        self: asyncio.AbstractEventLoop,
+        protocol_factory: Any,  # noqa: ANN401 -- passed through, see above
+        host: str | None = None,
+        port: int | None = None,
+        *args: Any,  # noqa: ANN401 -- passed through, see above
+        **kwargs: Any,  # noqa: ANN401 -- passed through, see above
+    ) -> Any:  # noqa: ANN401 -- passed through, see above
+        _check(host, port)
+        return await real_loop_connect(self, protocol_factory, host, port, *args, **kwargs)  # type: ignore[arg-type]
+
+    monkeypatch.setattr(socket.socket, "connect", _socket_connect)
+    monkeypatch.setattr(asyncio.base_events.BaseEventLoop, "create_connection", _loop_connect)
+    yield
+    assert not hits, f"connected to .env.test's dead address(es) {sorted(set(hits))}"
 
 
 @pytest.fixture(autouse=True)
@@ -91,7 +148,7 @@ def enqueued_jobs(monkeypatch: pytest.MonkeyPatch) -> list[tuple[str, dict[str, 
     # DunningService.start, have something realistic to store. revoke_job is
     # also faked to a no-op for the same reason -- DunningService.cancel/
     # complete call it with those synthetic ids, which would otherwise try (and
-    # fail) to reach a real Redis; see tests/test_billing_dunning_service.py
+    # fail) to reach a real Redis; see tests/committed/test_billing_dunning_service.py
     # for the dedicated real-Redis coverage of the genuine revoke_job.
     calls: list[tuple[str, dict[str, Any]]] = []
 
@@ -117,15 +174,144 @@ def enqueued_jobs(monkeypatch: pytest.MonkeyPatch) -> list[tuple[str, dict[str, 
 
 
 @pytest.fixture(scope="session")
-def postgres_container() -> Generator[PostgresContainer, None, None]:
+def _shared_postgres() -> Generator[PostgresContainer, None, None]:
+    """The single Postgres server for the whole run.
+
+    Every test file that needs its own schema used to start its own
+    container: 64 of them, at fifteen to twenty seconds each, which was most
+    of a fifty-two minute suite. They are not wrong to want isolation --
+    each creates and drops its own subset of tables, and doing that against
+    the migrated schema `engine` builds below would break every test that
+    came after. But isolation is what a *database* is for, and creating one
+    costs about a tenth of a second.
+    """
     with PostgresContainer("postgres:16-alpine") as container:
         yield container
+
+
+@pytest.fixture(scope="module")
+def postgres_container(
+    _shared_postgres: PostgresContainer, request: pytest.FixtureRequest
+) -> DatabaseHandle:
+    """A fresh, empty database for this module, on the shared server.
+
+    Named `postgres_container` deliberately: these files already override a
+    fixture of that name, so keeping it means deleting their override and
+    changing nothing else.
+
+    Not dropped afterwards. The server is thrown away at the end of the run,
+    and `DROP DATABASE` fails outright if any connection is still open --
+    turning a tidy-up into a flake that fires on whichever module happens to
+    leave a socket behind.
+    """
+    return _make_database(_shared_postgres, request.module.__name__)
+
+
+@pytest.fixture
+def fresh_database(
+    _shared_postgres: PostgresContainer, request: pytest.FixtureRequest
+) -> DatabaseHandle:
+    """A new database for *this test*, for the files that need one.
+
+    The migration and model tests run `alembic upgrade` against an empty
+    schema, so one database per module would leave the second test in a file
+    looking at the first one's tables. They used to buy that isolation with a
+    container per test, which is the most expensive way to get it.
+    """
+    return _make_database(_shared_postgres, request.node.name)
+
+
+def _make_database(container: PostgresContainer, label: str) -> DatabaseHandle:
+    base = container.get_connection_url()
+    # Postgres truncates identifiers at 63 bytes *silently*, so a long label
+    # could collide with another after truncation. The uuid goes first, and
+    # the label is only there to make the database list readable when
+    # something has gone wrong.
+    safe = "".join(c if c.isalnum() else "_" for c in label.rsplit(".", 1)[-1])
+    name = f"t{uuid4().hex[:12]}_{safe}"[:63]
+
+    # asyncpg, not a sync engine: psycopg2 is not installed here at all --
+    # which is why every test file in this suite does
+    # `.replace("psycopg2", "asyncpg")` on the URL testcontainers hands it.
+    # `asyncio.run` from a sync fixture is the same shape the `engine`
+    # fixture already uses for its teardown.
+    asyncio.run(_create_database(base.replace("+psycopg2", ""), name))
+
+    return DatabaseHandle(base.rsplit("/", 1)[0] + f"/{name}")
+
+
+async def _create_database(dsn: str, name: str) -> None:
+    conn = await asyncpg.connect(dsn)
+    try:
+        # No parameter binding: CREATE DATABASE takes an identifier, not a
+        # value. `name` is built above from a uuid and an alphanumeric-only
+        # label, so there is nothing here that came from outside this file.
+        await conn.execute(f'CREATE DATABASE "{name}"')
+    finally:
+        await conn.close()
+
+
+@pytest.fixture(scope="session")
+def migrated_template(_shared_postgres: PostgresContainer) -> str:
+    """A database migrated through every branch, to clone per test.
+
+    Every branch regardless of product.config: a test of a default-off
+    module needs its tables as much as any other, and a table nothing reads
+    costs nothing. Cloning a migrated database takes about 50 ms, far less
+    than migrating (1.2 s) and less than the `create_all`/`drop_all` of a
+    hand-picked table list the committed tests used to do per test -- which
+    also never saw anything that lives only in a migration: server defaults,
+    constraints, cascades, the product_settings row.
+    """
+    base = _shared_postgres.get_connection_url()
+    asyncio.run(_create_database(base.replace("+psycopg2", ""), _TEMPLATE_DATABASE))
+    url = base.rsplit("/", 1)[0].replace("+psycopg2", "+asyncpg") + f"/{_TEMPLATE_DATABASE}"
+    previous = os.environ.get("DATABASE_URL")
+    os.environ["DATABASE_URL"] = url
+    get_settings.cache_clear()
+    try:
+        command.upgrade(build_config(), "heads")
+    finally:
+        if previous is None:
+            del os.environ["DATABASE_URL"]
+        else:
+            os.environ["DATABASE_URL"] = previous
+        get_settings.cache_clear()
+    return _TEMPLATE_DATABASE
 
 
 @pytest.fixture(scope="session")
 def redis_container() -> Generator[RedisContainer, None, None]:
     with RedisContainer("redis:7-alpine") as container:
         yield container
+
+
+@pytest.fixture(autouse=True)
+def _metrics_redis(request: pytest.FixtureRequest, monkeypatch: pytest.MonkeyPatch) -> None:
+    """app.core.metrics reads its Redis-backed gauges through a sync client
+    built from REDIS_URL -- .env.test's address. Point it at the session
+    container instead, lazily: a test that never scrapes starts nothing."""
+    clients: list[redis_sync.Redis] = []
+
+    def _client() -> redis_sync.Redis:
+        if not clients:
+            container: RedisContainer = request.getfixturevalue("redis_container")
+            host = container.get_container_host_ip()
+            port = container.get_exposed_port(6379)
+            clients.append(redis_sync.Redis.from_url(f"redis://{host}:{port}/0"))
+        return clients[0]
+
+    monkeypatch.setattr(metrics, "_get_sync_redis", _client)
+
+
+@pytest.fixture(autouse=True)
+def _reset_rate_limit_stand_down() -> Generator[None, None, None]:
+    """Same trap as the metrics backoff below: one test that fails the
+    limiter's Redis would otherwise switch every limit off for the next 30
+    seconds of the suite."""
+    rate_limit_module.FailOpenSlidingWindow.reset_stand_down()
+    yield
+    rate_limit_module.FailOpenSlidingWindow.reset_stand_down()
 
 
 @pytest.fixture(autouse=True)
@@ -146,8 +332,8 @@ def _reset_metrics_scrape_backoff() -> Generator[None, None, None]:
 
 
 @pytest.fixture(scope="session")
-def engine(postgres_container: PostgresContainer) -> Generator[AsyncEngine, None, None]:
-    url = postgres_container.get_connection_url().replace("psycopg2", "asyncpg")
+def engine(_shared_postgres: PostgresContainer) -> Generator[AsyncEngine, None, None]:
+    url = _shared_postgres.get_connection_url().replace("psycopg2", "asyncpg")
     # alembic/env.py sources the DB URL from get_settings(), never from an
     # ini file (§0.4 law) -- monkeypatch isn't usable at session scope, so
     # the env var is set directly; nothing downstream depends on it once the
@@ -202,7 +388,7 @@ async def session(engine: AsyncEngine) -> AsyncGenerator[AsyncSession, None]:
 
 
 @pytest.fixture
-def _rate_limit_storage(redis_container: RedisContainer) -> Generator[RedisStorage, None, None]:
+def rate_limit_storage(redis_container: RedisContainer) -> Generator[RedisStorage, None, None]:
     # Same swap-the-singleton's-storage approach as test_rate_limit.py /
     # test_auth_router.py: auth_limit/sensitive_limit/api_limit close over
     # the one `limiter` built at import time, so any router hit through
@@ -212,21 +398,28 @@ def _rate_limit_storage(redis_container: RedisContainer) -> Generator[RedisStora
     host = redis_container.get_container_host_ip()
     port = redis_container.get_exposed_port(6379)
     storage = storage_from_string(f"redis://{host}:{port}/1")
+    storage.reset()  # counters from the previous test must not carry over
     rate_limit_module.limiter._storage = storage
-    rate_limit_module.limiter._limiter = FixedWindowRateLimiter(storage)
+    rate_limit_module.limiter._limiter = rate_limit_module.strategy_for(storage)
     yield storage
     rate_limit_module.limiter._storage = original_storage
     rate_limit_module.limiter._limiter = original_limiter
 
 
 @pytest.fixture
-async def _redis_client(redis_container: RedisContainer) -> AsyncGenerator[Redis, None]:
+async def redis_client(redis_container: RedisContainer) -> AsyncGenerator[Redis, None]:
     host = redis_container.get_container_host_ip()
     port = redis_container.get_exposed_port(6379)
     redis_conn: Redis = Redis.from_url(f"redis://{host}:{port}/0")
     await redis_conn.flushdb()
     yield redis_conn
     await redis_conn.aclose()
+
+
+@pytest.fixture
+def redis(redis_client: Redis) -> Redis:
+    """`redis_client` under the name the service-level tests pass it by."""
+    return redis_client
 
 
 @pytest.fixture
@@ -259,24 +452,15 @@ def product_settings_session(session: AsyncSession, monkeypatch: pytest.MonkeyPa
 @pytest.fixture
 async def client(
     session: AsyncSession,
-    _redis_client: Redis,
-    _rate_limit_storage: RedisStorage,
+    redis_client: Redis,
+    rate_limit_storage: RedisStorage,  # noqa: ARG001 -- the limiter must point at it
     product_settings_session: None,  # noqa: ARG001 -- see the fixture; the middleware needs it
 ) -> AsyncGenerator[httpx.AsyncClient, None]:
-    _rate_limit_storage.reset()
-    app.dependency_overrides[get_session] = lambda: session
-    app.dependency_overrides[get_redis] = lambda: _redis_client
-
-    try:
-        async with app.router.lifespan_context(app):
-            app.state.redis = _redis_client
-            transport = ASGITransport(app=app)
-            # https:// base_url so httpx's cookie jar forwards Secure-marked
-            # cookies (the refresh_token cookie) back on later requests.
-            async with httpx.AsyncClient(transport=transport, base_url="https://testserver") as c:
-                yield c
-    finally:
-        app.dependency_overrides.clear()
+    async with serve_app(
+        get_session_override=rolling_back(session),
+        redis=redis_client,
+    ) as c:
+        yield c
 
 
 @pytest.fixture

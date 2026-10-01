@@ -81,7 +81,10 @@ async def _member(
         email_verified_at=datetime.now(UTC),
     )
     await MembershipRepository(session).create(user_id=user.id, org_id=org.id, role=role)
-    await session.flush()
+    # Committed, not flushed: a refused login rolls the session back before
+    # it records the refusal (persist_then_reject), and in production this
+    # user would have been committed by an earlier request long before.
+    await session.commit()
     return user
 
 
@@ -99,7 +102,7 @@ async def _enforcing_org(session: AsyncSession, **overrides: object) -> Organiza
     }
     fields.update(overrides)
     await SsoConnectionRepository(session, org.id).create(**fields)
-    await session.flush()
+    await session.commit()
     return org
 
 
@@ -118,6 +121,7 @@ async def test_a_member_of_an_enforcing_org_cannot_use_a_password(
     await _member(session, org, MemberRole.OWNER)
     await _member(session, org, MemberRole.OWNER)
     member = await _member(session, org, MemberRole.MEMBER)
+    slug = org.slug  # read now: the refusal's rollback expires `org`
 
     with pytest.raises(PermissionDeniedError) as caught:
         await _login(session, member.email)
@@ -126,7 +130,7 @@ async def test_a_member_of_an_enforcing_org_cannot_use_a_password(
     # The message names the provider and the entry point, because a refusal
     # a person cannot act on is a support ticket.
     assert caught.value.params["provider"] == "Acme IdP"
-    assert caught.value.params["org_slug"] == org.slug
+    assert caught.value.params["org_slug"] == slug
 
 
 @pytest.mark.usefixtures("sso_enabled")
@@ -172,28 +176,42 @@ async def test_being_the_last_owner_somewhere_does_not_excuse_you_elsewhere(
     )
     # The second org has its own owner, so the user is not its last one.
     await _member(session, other_org, MemberRole.OWNER)
-    await session.flush()
+    await session.commit()
 
     with pytest.raises(PermissionDeniedError):
         await _login(session, user.email)
 
 
 @pytest.mark.usefixtures("sso_enabled")
-async def test_a_refusal_is_audited(session: AsyncSession) -> None:
+async def test_a_refusal_is_audited_and_nothing_else_is_kept(session: AsyncSession) -> None:
+    """The refusal is written down; the rest of the refused login is not.
+
+    By the time enforcement refuses, login has already reset the user's
+    failed-login counter (the password was right). That reset belongs to a
+    login that did not happen, so it must not survive the refusal -- which
+    is the difference between persist_then_reject and a plain
+    commit-before-raise (review R2).
+    """
     org = await _enforcing_org(session)
     await _member(session, org, MemberRole.OWNER)
     await _member(session, org, MemberRole.OWNER)
     member = await _member(session, org, MemberRole.MEMBER)
+    member_id, email = member.id, member.email
+    await UserRepository(session).update(member_id, failed_login_count=3)
+    await session.commit()
 
     with pytest.raises(PermissionDeniedError):
-        await _login(session, member.email)
+        await _login(session, email)
 
     actions = (
-        (await session.execute(select(AuditEvent.action).where(AuditEvent.actor_id == member.id)))
+        (await session.execute(select(AuditEvent.action).where(AuditEvent.actor_id == member_id)))
         .scalars()
         .all()
     )
     assert "user.password_login_refused_sso" in actions
+    refreshed = await UserRepository(session).get_by_id(member_id)
+    assert refreshed is not None
+    assert refreshed.failed_login_count == 3
 
 
 @pytest.mark.usefixtures("sso_enabled")

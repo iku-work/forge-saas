@@ -41,7 +41,6 @@ import pytest
 from alembic.config import Config
 from fastapi import FastAPI
 from fastapi.routing import iter_route_contexts
-from testcontainers.postgres import PostgresContainer
 
 from app.api.v1 import build_router
 from app.core import migrations as migration_runner
@@ -49,6 +48,7 @@ from app.core import module_loader
 from app.core.config import get_settings
 from app.core.modules import EnabledModules, ModuleConfig, ModuleName
 from product import config as product_config
+from tests._database import DatabaseHandle
 
 
 class ModuleSurface(NamedTuple):
@@ -234,13 +234,17 @@ def _clear_modules_cache() -> Generator[None]:
 
 
 @pytest.fixture
-def postgres_container() -> Generator[PostgresContainer]:
-    with PostgresContainer("postgres:16-alpine") as container:
-        yield container
+def postgres_container(fresh_database: object) -> object:
+    """A per-test database on the shared server (see tests/conftest.py).
+
+    These tests migrate an empty schema, so they need a clean database
+    each -- which is what this is. It used to be a whole container each.
+    """
+    return fresh_database
 
 
 @pytest.fixture
-def real_config(postgres_container: PostgresContainer, monkeypatch: pytest.MonkeyPatch) -> Config:
+def real_config(postgres_container: DatabaseHandle, monkeypatch: pytest.MonkeyPatch) -> Config:
     url = postgres_container.get_connection_url().replace("psycopg2", "asyncpg")
     monkeypatch.setenv("DATABASE_URL", url)
     get_settings.cache_clear()

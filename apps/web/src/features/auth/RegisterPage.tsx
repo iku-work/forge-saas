@@ -2,9 +2,12 @@ import { useState } from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Link } from "@tanstack/react-router";
 import { useForm } from "react-hook-form";
-import { useTranslation } from "react-i18next";
+// `Trans`, not string concatenation: the sentence has two inline links,
+// and splitting it into fragments would fix English word order for every
+// language. The only use of Trans in this app so far, for that reason.
+import { Trans, useTranslation } from "react-i18next";
 
-import { useAuth, useSignupDisabled } from "@forge/hooks";
+import { useAuth, useMarketingUrl, useSignupDisabled } from "@forge/hooks";
 import {
   Alert,
   AlertDescription,
@@ -29,6 +32,7 @@ import { getErrorMessage } from "./getErrorMessage";
 export function RegisterPage() {
   const { t } = useTranslation();
   const locale = useRouteLocale();
+  const marketingUrl = useMarketingUrl();
   const { register } = useAuth();
   const signupDisabled = useSignupDisabled();
   const [formError, setFormError] = useState<string | null>(null);
@@ -91,16 +95,51 @@ export function RegisterPage() {
       title={t("auth.register.title")}
       description={t("auth.register.description")}
       footer={
-        <p>
-          {t("auth.register.have_account")}{" "}
-          <Link
-            to="/$locale/login"
-            params={{ locale }}
-            className="underline underline-offset-4"
-          >
-            {t("auth.register.login_link")}
-          </Link>
-        </p>
+        <div className="space-y-2">
+          <p>
+            {t("auth.register.have_account")}{" "}
+            <Link
+              to="/$locale/login"
+              params={{ locale }}
+              className="underline underline-offset-4"
+            >
+              {t("auth.register.login_link")}
+            </Link>
+          </p>
+          {/* UX-02: the terms assert that creating an account is acceptance
+              of them, and this screen linked to neither document. Asking
+              someone to agree to something you have not shown them is not a
+              detail -- it is the part that makes the assertion worthless.
+
+              Rendered only when there is somewhere to link to: the pages
+              live on the marketing host, so they do not exist at all in a
+              product that switched that module off. */}
+          {marketingUrl ? (
+            <p className="text-xs text-muted-foreground">
+              <Trans
+                i18nKey="auth.register.legal_notice"
+                components={{
+                  terms: (
+                    <a
+                      href={`${marketingUrl}/${locale}/terms`}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="underline underline-offset-4"
+                    />
+                  ),
+                  privacy: (
+                    <a
+                      href={`${marketingUrl}/${locale}/privacy`}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="underline underline-offset-4"
+                    />
+                  ),
+                }}
+              />
+            </p>
+          ) : null}
+        </div>
       }
     >
       {formError ? (

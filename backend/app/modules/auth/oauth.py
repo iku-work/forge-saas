@@ -33,8 +33,14 @@ from app.core.exceptions import AuthenticationError, DomainError, NotFoundError
 from app.middleware.rate_limit import api_limit, auth_limit, sensitive_limit
 from app.modules.auth.models import User
 from app.modules.auth.router import _client_ip, _request_id, _set_refresh_cookie
-from app.modules.auth.schemas import LoginResponse, OAuthAccountPublic, OAuthProfile, UserPublic
-from app.modules.auth.service import AuthService
+from app.modules.auth.schemas import (
+    LoginResponse,
+    OAuthAccountPublic,
+    OAuthProfile,
+    TwoFactorRequiredResponse,
+    UserPublic,
+)
+from app.modules.auth.service import AuthService, TwoFactorChallenge
 from app.modules.auth.utils import sign_url_token, verify_url_token
 
 _STATE_COOKIE_NAME = "oauth_state"
@@ -252,7 +258,7 @@ async def oauth_callback(  # noqa: PLR0913 -- state/code/provider/session are ea
     state: str,
     clients: Annotated[dict[str, OAuthClient], Depends(get_oauth_clients)],
     session: Annotated[AsyncSession, Depends(get_session)],
-) -> Envelope[LoginResponse]:
+) -> Envelope[LoginResponse] | Envelope[TwoFactorRequiredResponse]:
     client = _get_client_or_raise(clients, provider)
 
     cookie_state = request.cookies.get(_STATE_COOKIE_NAME)
@@ -265,11 +271,26 @@ async def oauth_callback(  # noqa: PLR0913 -- state/code/provider/session are ea
     redirect_uri = str(request.url_for("oauth_callback", provider=provider))
     profile = await client.fetch_profile(code=code, redirect_uri=redirect_uri)
 
-    access_token, refresh_plain, user = await AuthService(session).oauth_login(
+    result = await AuthService(session).oauth_login(
         provider, profile, _client_ip(request), request.headers.get("user-agent", "")
     )
     await session.commit()
 
+    if isinstance(result, TwoFactorChallenge):
+        # A verified social identity is one factor. An account whose owner
+        # enrolled a second one here gets asked for it here, whatever the
+        # provider may or may not have checked upstream -- see
+        # AuthService._second_factor_challenge.
+        #
+        # No refresh cookie is set on this path: there is no session yet, and
+        # the temp token is the only thing the holder has earned.
+        response.delete_cookie(_STATE_COOKIE_NAME, path=_STATE_COOKIE_PATH)
+        return Envelope(
+            data=TwoFactorRequiredResponse(temp_token=result.temp_token),
+            meta=Meta(request_id=_request_id(request)),
+        )
+
+    access_token, refresh_plain, user = result
     _set_refresh_cookie(response, refresh_plain)
     response.delete_cookie(_STATE_COOKIE_NAME, path=_STATE_COOKIE_PATH)
     data = LoginResponse(access_token=access_token, user=UserPublic.model_validate(user))

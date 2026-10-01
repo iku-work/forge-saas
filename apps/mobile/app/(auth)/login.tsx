@@ -11,7 +11,8 @@ import { AuthCard } from "../../src/components/AuthCard";
 import { Banner } from "../../src/components/Banner";
 import { Button } from "../../src/components/Button";
 import { FormField } from "../../src/components/FormField";
-import { login } from "../../src/lib/auth";
+import { TwoFactorChallenge } from "../../src/components/TwoFactorChallenge";
+import { login, TwoFactorRequiredError } from "../../src/lib/auth";
 import { getErrorMessage } from "../../src/lib/getErrorMessage";
 
 // No "Continue with Google/GitHub" buttons here yet: the backend's OAuth
@@ -26,6 +27,7 @@ export default function LoginScreen() {
   const { t } = useTranslation();
   const router = useRouter();
   const [formError, setFormError] = useState<string | null>(null);
+  const [tempToken, setTempToken] = useState<string | null>(null);
 
   const { control, handleSubmit, formState } = useForm<LoginInput>({
     resolver: zodResolver(loginSchema),
@@ -38,9 +40,33 @@ export default function LoginScreen() {
       await login(values.email, values.password);
       router.replace("/dashboard");
     } catch (error) {
+      // Not a failure: the password was right and the account wants a
+      // second factor. Swapping the form out is the whole fix -- this used
+      // to fall through to setFormError, which rendered "Two-factor
+      // authentication is required" as a dead end.
+      if (error instanceof TwoFactorRequiredError) {
+        setTempToken(error.tempToken);
+        return;
+      }
       setFormError(getErrorMessage(error, "auth.login.error_default"));
     }
   };
+
+  if (tempToken) {
+    return (
+      <AuthCard
+        title={t("auth.two_factor_challenge.title")}
+        description={t("auth.two_factor_challenge.description")}
+      >
+        <TwoFactorChallenge
+          tempToken={tempToken}
+          onSuccess={() => {
+            router.replace("/dashboard");
+          }}
+        />
+      </AuthCard>
+    );
+  }
 
   return (
     <AuthCard

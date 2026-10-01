@@ -39,6 +39,7 @@ from app.workers.jobs.billing import (
     notify_expiring_trials,
     reconcile_subscriptions,
 )
+from app.workers.jobs.storage import expire_abandoned_uploads, sweep_orphaned_objects
 from app.workers.jobs.usage import report_usage_to_stripe
 from app.workers.jobs.webhooks import prune_webhook_deliveries, sweep_due_webhook_deliveries
 
@@ -225,6 +226,36 @@ def create_scheduler(redis_client: Redis) -> AsyncIOScheduler:
         sweep_due_webhook_deliveries,
         "sweep_due_webhook_deliveries",
         CronTrigger(minute="*/5", timezone="UTC"),
+    )
+    # The reconciliation half of StorageService.delete_file. The deferred
+    # hard-delete job is a single Redis entry seven days out; anything that
+    # loses it loses the deletion silently, and the object keeps costing
+    # money with no row left pointing at it. Daily is ample -- every row this
+    # finds is already past its grace period, so nothing is urgent, and the
+    # first run after deploying this will have a backlog to drain in
+    # _SWEEP_BATCH_SIZE-sized bites.
+    _add_locked_job(
+        scheduler,
+        redis_client,
+        sweep_orphaned_objects,
+        "sweep_orphaned_objects",
+        CronTrigger(hour=4, minute=0, timezone="UTC"),
+    )
+
+    # The other half of counting live presigns toward the storage quota
+    # (app.modules.storage.quota): without this, a client that abandons an
+    # upload holds its org's allowance down permanently. Hourly, against an
+    # hour-long reservation window, so an abandoned presign clears in one to
+    # two hours.
+    _add_locked_job(
+        scheduler,
+        redis_client,
+        expire_abandoned_uploads,
+        "expire_abandoned_uploads",
+        # Minute 40, not 20: reconcile_subscriptions already owns 20, and
+        # the point of giving each hourly sweep its own minute is that a
+        # slow one does not starve the next out of the same pool.
+        CronTrigger(minute=40, timezone="UTC"),
     )
 
     async def _run_refresh_active_sessions_gauge() -> None:

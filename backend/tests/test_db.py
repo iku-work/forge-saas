@@ -9,9 +9,10 @@ from sqlalchemy.ext.asyncio import (
     async_sessionmaker,
     create_async_engine,
 )
-from testcontainers.postgres import PostgresContainer
 
 from app.core import db as db_module
+from app.core.exceptions import PermissionDeniedError
+from tests._database import DatabaseHandle
 
 metadata = MetaData()
 _demo_table = Table(
@@ -27,14 +28,8 @@ _demo_table = Table(
 session_cm = asynccontextmanager(db_module.get_session)
 
 
-@pytest.fixture(scope="module")
-def postgres_container() -> "PostgresContainer":
-    with PostgresContainer("postgres:16-alpine") as container:
-        yield container
-
-
 @pytest.fixture
-async def test_engine(postgres_container: "PostgresContainer") -> AsyncGenerator[AsyncEngine, None]:
+async def test_engine(postgres_container: DatabaseHandle) -> AsyncGenerator[AsyncEngine, None]:
     url = postgres_container.get_connection_url().replace("psycopg2", "asyncpg")
     engine = create_async_engine(url)
     async with engine.begin() as conn:
@@ -87,3 +82,32 @@ async def test_get_session_rolls_back_on_exception() -> None:
 
 async def test_dispose_engine_runs_without_error() -> None:
     await db_module.dispose_engine()
+
+
+async def _write_then_reject(session: AsyncSession) -> None:
+    await session.execute(_demo_table.insert().values(id=3, name="unrelated"))
+
+    async def _consequence() -> None:
+        await session.execute(_demo_table.insert().values(id=4, name="revocation"))
+
+    await db_module.persist_then_reject(
+        session, _consequence, PermissionDeniedError("errors.test", fallback="denied")
+    )
+
+
+async def test_persist_then_reject_keeps_the_consequence_and_nothing_else() -> None:
+    """Review R2: a rejection whose consequence must survive it.
+
+    Driven through get_session, so the rejection unwinds the same rollback a
+    real request's does. Before the request fails it writes something
+    unrelated (id=3); the consequence writes the security state (id=4). Only
+    the consequence may be left afterwards.
+    """
+    with pytest.raises(PermissionDeniedError):
+        async with session_cm() as session:
+            await _write_then_reject(session)
+
+    async with session_cm() as session:
+        names = (await session.execute(select(_demo_table.c.name))).scalars().all()
+
+    assert names == ["revocation"]

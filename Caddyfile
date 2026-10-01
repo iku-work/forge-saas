@@ -76,6 +76,29 @@ localhost, caddy {
 		header @web_revalidated Cache-Control "no-cache"
 	}
 
+	# Deliberately the same document headers Caddyfile.prod's app block sets,
+	# and kept identical by backend/tests/test_caddy_config.py.
+	#
+	# Parity here is what makes the policy testable at all. A CSP that only
+	# exists in the production config is first exercised by real users: the
+	# way to find out that a dependency injects a <style> element, or that an
+	# upload POSTs to an origin connect-src forgot, is for the dev stack and
+	# the Playwright suite that runs against it to hit the same policy.
+	header {
+		X-Frame-Options DENY
+		X-Content-Type-Options nosniff
+		Referrer-Policy strict-origin-when-cross-origin
+		Permissions-Policy "camera=(), microphone=(), geolocation=()"
+		# One deliberate difference from the production policy, and it is a
+		# property of the dev stack rather than a relaxation: backend/.env.example
+		# sets AWS_ENDPOINT_URL=http://localhost:9000, so every presigned
+		# upload and avatar URL a dev browser is handed is plain http on a
+		# port. Production has no such origin -- MinIO is behind Caddy on
+		# STORAGE_DOMAIN over TLS, or storage is managed entirely. Naming the
+		# exact origin keeps the rest of the policy as strict as production's.
+		Content-Security-Policy "default-src 'self'; script-src 'self' 'sha256-NWbEgzfTTy2SXvcSkaP7K75HFoDqMsZtwB5CL4bD6Ag='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https: http://localhost:9000; font-src 'self' data:; connect-src 'self' https: http://localhost:9000; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'"
+	}
+
 	tls internal
 }
 

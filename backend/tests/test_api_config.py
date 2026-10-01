@@ -16,6 +16,7 @@ import pytest
 
 from app.api.v1.config import ModulesResponse
 from app.core import module_loader
+from app.core.config import get_settings
 from app.core.i18n import get_supported_locales
 from app.core.locales import EnabledLocales, LocaleConfig
 from app.core.modules import EnabledModules, ModuleConfig, ModuleName
@@ -66,6 +67,116 @@ async def test_returns_branding_and_default_module_config(
     }
     assert data["supported_locales"] == get_supported_locales()
     assert data["default_locale"] == product_config.DEFAULT_LOCALE
+
+
+# --- UX-01: which social providers actually exist -------------------------
+#
+# The login page rendered "Continue with Google" and "Continue with GitHub"
+# whenever the oauth *module* was on. Neither provider is configured on a
+# fresh deployment of this template, so both buttons led to a 404 -- the
+# module flag says the routes exist, which is a different question from
+# whether any provider will answer.
+
+
+async def test_reports_no_oauth_providers_when_none_are_configured(
+    client: httpx.AsyncClient,
+) -> None:
+    """The default, and the state the finding was reported against: the
+    module is on and there are no client IDs anywhere."""
+    response = await client.get("/api/v1/config")
+
+    assert response.json()["data"]["oauth_providers"] == []
+
+
+async def test_reports_only_the_providers_that_have_credentials(
+    client: httpx.AsyncClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Half-configured is the common case -- a product registers a Google
+    app and never gets round to GitHub."""
+    settings = get_settings()
+    monkeypatch.setattr(settings, "GOOGLE_CLIENT_ID", "google-client-id")
+    monkeypatch.setattr(settings, "GOOGLE_CLIENT_SECRET", "google-secret")
+
+    response = await client.get("/api/v1/config")
+
+    assert response.json()["data"]["oauth_providers"] == ["google"]
+
+
+async def test_a_provider_with_only_half_its_credentials_is_not_offered(
+    client: httpx.AsyncClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """An ID with no secret cannot complete an exchange, so advertising it
+    would reproduce the finding in a subtler form."""
+    settings = get_settings()
+    monkeypatch.setattr(settings, "GITHUB_CLIENT_ID", "github-client-id")
+    monkeypatch.setattr(settings, "GITHUB_CLIENT_SECRET", "")
+
+    response = await client.get("/api/v1/config")
+
+    assert response.json()["data"]["oauth_providers"] == []
+
+
+# --- UX-02: where the legal pages live ------------------------------------
+#
+# The terms document asserts that creating an account is acceptance of it,
+# and the registration screen linked to neither it nor the privacy policy.
+# They are served by the marketing app on its own host (T-307), so the
+# frontend cannot build a relative link or guess the hostname -- it has to
+# be told.
+
+
+async def test_reports_the_marketing_origin(
+    client: httpx.AsyncClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    settings = get_settings()
+    monkeypatch.setattr(settings, "MARKETING_DOMAIN", "www.example.com")
+
+    response = await client.get("/api/v1/config")
+
+    # https, not http: Caddy terminates TLS for this host in every
+    # environment, dev included.
+    assert response.json()["data"]["marketing_url"] == "https://www.example.com"
+
+
+async def test_the_marketing_url_is_empty_when_the_module_is_off(
+    client: httpx.AsyncClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """There is no terms page and no privacy page in that product, so the
+    app must render no link rather than one that 404s."""
+    monkeypatch.setattr(
+        product_config,
+        "MODULES",
+        EnabledModules(marketing=ModuleConfig(enabled=False)),
+    )
+
+    response = await client.get("/api/v1/config")
+
+    assert response.json()["data"]["marketing_url"] == ""
+
+
+async def test_disabling_the_module_empties_the_list(
+    client: httpx.AsyncClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Configured credentials must not leak through a disabled module --
+    the routes are not registered, so a button would 404 again.
+
+    This is why clients can render from `oauth_providers` alone without
+    also consulting `modules.oauth`.
+    """
+    settings = get_settings()
+    monkeypatch.setattr(settings, "GOOGLE_CLIENT_ID", "google-client-id")
+    monkeypatch.setattr(settings, "GOOGLE_CLIENT_SECRET", "google-secret")
+    monkeypatch.setattr(
+        product_config,
+        "MODULES",
+        EnabledModules(oauth=ModuleConfig(enabled=False)),
+    )
+
+    response = await client.get("/api/v1/config")
+
+    body = response.json()["data"]
+    assert body["modules"]["oauth"] is False
+    assert body["oauth_providers"] == []
 
 
 def test_modules_response_covers_every_registered_module() -> None:

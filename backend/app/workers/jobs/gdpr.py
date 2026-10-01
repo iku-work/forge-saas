@@ -22,50 +22,55 @@ job's worth of put_object/generate_presigned_url calls doesn't justify
 building that abstraction early (the same "no abstraction ahead of need"
 call app.workers.jobs.email makes for Resend).
 
-Both jobs skip Notification and StoredFile rows -- those models don't exist
-until T-101 and T-110. When they land, add purge's entry to _DELETE_BY_USER
-(StoredFile also needs a storage.delete(key) call per row, per the agents.md
-T-036 spec, before the row itself is deleted) and export's entry to
-_collect_export_payload.
+Purge covers every column that references a user through USER_REFERENCES;
+tests/committed/test_gdpr_purge_job.py fails when a new foreign key to
+user.id is not listed there.
 """
 
 import asyncio
 import json
 import logging
 import zipfile
+from dataclasses import dataclass
 from datetime import timedelta
 from io import BytesIO
-from typing import Any, cast
+from typing import Any, Literal, cast
 from uuid import UUID
 
 import boto3
 from redis.asyncio import Redis
-from sqlalchemy import delete, func, select, update
+from sqlalchemy import delete, func, inspect, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import SQLModel
 
 from app.core.config import get_settings
 from app.core.db import async_session_factory
 from app.core.dependencies import invalidate_org_cache, invalidate_user_cache
-from app.core.module_loader import is_enabled
 from app.core.tracing import trace_job
 from app.models._mixins import utcnow
 from app.modules.api_keys.models import ApiKey
 from app.modules.api_keys.schemas import ApiKeyPublic
 from app.modules.audit.models import AuditEvent
 from app.modules.auth.models import (
+    EmailChangeToken,
     EmailVerificationToken,
     MagicLinkToken,
     OAuthAccount,
     PasswordResetToken,
     TOTPSecret,
     User,
+    WebAuthnCredential,
 )
 from app.modules.auth.models import Session as SessionModel
 from app.modules.auth.schemas import UserPublic
 from app.modules.gdpr.models import ConsentRecord, DataExportJob
 from app.modules.gdpr.repository import DataExportJobRepository
-from app.modules.tenancy.models import Membership, Organization
+from app.modules.notifications.models import Notification, PushToken
+from app.modules.storage.backend import get_storage_backend
+from app.modules.storage.keys import delete_every_copy
+from app.modules.storage.models import StoredFile
+from app.modules.tenancy.models import Invitation, Membership, Organization
+from app.modules.webhooks.models import WebhookEndpoint
 from app.workers.jobs.email import send_email
 
 logger = logging.getLogger(__name__)
@@ -73,20 +78,54 @@ logger = logging.getLogger(__name__)
 _EXPORT_URL_TTL = timedelta(hours=24)
 _EXPORT_URL_TTL_SECONDS = int(_EXPORT_URL_TTL.total_seconds())
 
-# Dependency order per agents.md T-036 (minus Notification/StoredFile -- see
-# module docstring). AuditEvent is filtered by actor_id, not user_id -- it's
-# the one column here that isn't even a foreign key (see app.modules.audit.models).
-_DELETE_BY_USER: tuple[tuple[type[SQLModel], str], ...] = (
-    (DataExportJob, "user_id"),
-    (ConsentRecord, "user_id"),
-    (AuditEvent, "actor_id"),
-    (MagicLinkToken, "user_id"),
-    (PasswordResetToken, "user_id"),
-    (EmailVerificationToken, "user_id"),
-    (TOTPSecret, "user_id"),
-    (OAuthAccount, "user_id"),
-    (SessionModel, "user_id"),
-    (Membership, "user_id"),
+
+@dataclass(frozen=True)
+class UserReference:
+    """A column that points at a user, and what purge does with it.
+
+    `delete` removes the row -- it is the user's own data. `null` keeps the
+    row and forgets who made it -- it belongs to the organization (an API key,
+    a webhook endpoint, a colleague's membership).
+
+    Applied when the table exists, not when its module is enabled (review
+    OCT-02): turning a module off leaves its tables and rows in place, and
+    the user's rows in them would block the final delete.
+    """
+
+    model: type[SQLModel]
+    column: str
+    action: Literal["delete", "null"] = "delete"
+
+
+# In dependency order: children before the rows they point at.
+USER_REFERENCES: tuple[UserReference, ...] = (
+    UserReference(DataExportJob, "user_id"),
+    UserReference(ConsentRecord, "user_id"),
+    # Not a foreign key -- preserved after org deletion -- but it is the
+    # user's activity trail, so it goes too.
+    UserReference(AuditEvent, "actor_id"),
+    UserReference(Notification, "user_id"),
+    UserReference(PushToken, "user_id"),
+    # T-036: the object in storage goes as well; see _delete_stored_objects.
+    UserReference(StoredFile, "uploaded_by"),
+    UserReference(MagicLinkToken, "user_id"),
+    UserReference(PasswordResetToken, "user_id"),
+    UserReference(EmailVerificationToken, "user_id"),
+    UserReference(EmailChangeToken, "user_id"),
+    UserReference(TOTPSecret, "user_id"),
+    UserReference(WebAuthnCredential, "user_id"),
+    UserReference(OAuthAccount, "user_id"),
+    UserReference(SessionModel, "user_id"),
+    UserReference(Membership, "user_id"),
+    # Invitations this user sent and nobody accepted. NOT NULL, so they can
+    # only go; an accepted one already became a Membership.
+    UserReference(Invitation, "invited_by"),
+    UserReference(Membership, "invited_by", action="null"),
+    # T-310: an API key this user minted belongs to their organization;
+    # deleting it would take an integration down because a colleague
+    # exercised a right that has nothing to do with it.
+    UserReference(ApiKey, "created_by", action="null"),
+    UserReference(WebhookEndpoint, "created_by", action="null"),
 )
 
 
@@ -110,30 +149,23 @@ async def purge_user_data(
         )
         org_ids: list[UUID] = list(org_ids_result.scalars().all())
 
-        for model, column_name in _DELETE_BY_USER:
-            column = getattr(cast("Any", model), column_name)
-            await session.execute(delete(model).where(column == user_id))
-
-        # Other users' Membership rows may record this user as their inviter
-        # (Membership.invited_by, nullable) -- null those out so the FK to
-        # user.id doesn't block the delete below. Invitation.invited_by is
-        # NOT NULL, so a pending invitation this user sent is a known gap;
-        # agents.md's T-036 purge order doesn't include Invitation.
-        await session.execute(
-            update(Membership).where(membership.invited_by == user_id).values(invited_by=None)
-        )
-
-        # T-310: an API key this user minted belongs to their *organization*,
-        # not to them. Erasure nulls `created_by` and leaves the credential
-        # alive -- deleting it would take an integration down because a
-        # colleague exercised a right that has nothing to do with it. The
-        # column is nullable for exactly this, and the offboarding runbook
-        # says so out loud, because the natural assumption is the opposite.
-        if is_enabled("public_api"):
-            api_key = cast("Any", ApiKey)
-            await session.execute(
-                update(ApiKey).where(api_key.created_by == user_id).values(created_by=None)
-            )
+        tables = await _existing_tables(session)
+        references = [r for r in USER_REFERENCES if r.model.__tablename__ in tables]
+        if StoredFile.__tablename__ in tables:
+            await _delete_stored_objects(session, user_id)
+        # Review OCT-03: export archives are not StoredFile rows. The whole
+        # prefix, so failed and orphaned exports go too.
+        await asyncio.to_thread(_delete_export_archives, user_id)
+        for reference in references:
+            column = getattr(cast("Any", reference.model), reference.column)
+            if reference.action == "delete":
+                await session.execute(delete(reference.model).where(column == user_id))
+            else:
+                await session.execute(
+                    update(reference.model)
+                    .where(column == user_id)
+                    .values({reference.column: None})
+                )
 
         await session.execute(delete(User).where(cast("Any", User).id == user_id))
         await session.commit()
@@ -148,6 +180,27 @@ async def purge_user_data(
 
     await _detach_orphaned_org_billing(org_ids, redis)
     logger.info("purge_user_data: purged all data for user_id=%s", user_id)
+
+
+async def _existing_tables(session: AsyncSession) -> set[str]:
+    """Tables in the database, whatever product.config says today."""
+    return await session.run_sync(lambda s: set(inspect(s.connection()).get_table_names()))
+
+
+async def _delete_stored_objects(session: AsyncSession, user_id: UUID) -> None:
+    """The files this user uploaded, from storage, before their rows go.
+
+    Storage first: a delete of an object that is already gone succeeds, so a
+    retry after a failed commit is safe. The other order could commit the
+    rows away and then fail, leaving the bytes with nothing pointing at them.
+    """
+    stored_file = cast("Any", StoredFile)
+    keys = (
+        await session.execute(select(stored_file.key).where(stored_file.uploaded_by == user_id))
+    ).scalars()
+    backend = get_storage_backend()
+    for key in keys:
+        await delete_every_copy(backend, key)
 
 
 async def _detach_orphaned_org_billing(org_ids: list[UUID], redis: Redis | None) -> None:
@@ -210,10 +263,11 @@ async def export_user_data(
     async with async_session_factory() as session:
         job = await DataExportJobRepository(session).get_by_id(job_id)
         if job is None:
-            # Deleted between the check above and now -- the upload already
-            # happened (cheap to leave it orphaned in the bucket vs. adding
-            # transactional coupling here); just skip the status update + email.
-            logger.warning("export_user_data: job_id=%s vanished mid-export, skipping", job_id)
+            # Deleted between the check above and now -- the account was
+            # purged mid-export. The archive just uploaded is that account's
+            # data, so it goes too (review OCT-03).
+            logger.warning("export_user_data: job_id=%s vanished mid-export, deleting", job_id)
+            await asyncio.to_thread(_delete_export_archives, user_id)
             return
         job.status = "ready"
         job.download_url = download_url
@@ -230,69 +284,62 @@ async def export_user_data(
     logger.info("export_user_data: export ready for user_id=%s job_id=%s", user_id, job_id)
 
 
+async def _rows(
+    session: AsyncSession, model: type[SQLModel], column: str, user_id: UUID
+) -> list[Any]:
+    where = getattr(cast("Any", model), column) == user_id
+    return list((await session.execute(select(model).where(where))).scalars().all())
+
+
+def _dump(rows: list[Any], *, exclude: set[str] | None = None) -> list[dict[str, Any]]:
+    return [row.model_dump(mode="json", exclude=exclude) for row in rows]
+
+
 async def _collect_export_payload(session: AsyncSession, user: User) -> dict[str, Any]:
-    """Everything GDPRService.get_export_job's caller is entitled to see about themselves."""
-    session_model = cast("Any", SessionModel)
-    oauth_account = cast("Any", OAuthAccount)
-    consent_record = cast("Any", ConsentRecord)
-    audit_event = cast("Any", AuditEvent)
-    membership = cast("Any", Membership)
+    """Everything GDPRService.get_export_job's caller is entitled to see about themselves.
 
-    session_rows = (
-        (await session.execute(select(SessionModel).where(session_model.user_id == user.id)))
-        .scalars()
-        .all()
-    )
-    oauth_rows = (
-        (await session.execute(select(OAuthAccount).where(oauth_account.user_id == user.id)))
-        .scalars()
-        .all()
-    )
-    consent_rows = (
-        (await session.execute(select(ConsentRecord).where(consent_record.user_id == user.id)))
-        .scalars()
-        .all()
-    )
-    audit_rows = (
-        (await session.execute(select(AuditEvent).where(audit_event.actor_id == user.id)))
-        .scalars()
-        .all()
-    )
-    membership_rows = (
-        (await session.execute(select(Membership).where(membership.user_id == user.id)))
-        .scalars()
-        .all()
-    )
-
-    # T-310/T-037: the keys this user minted. Read through ApiKeyPublic, not
-    # the row -- an export is a file a person downloads and forwards, and
-    # `key_hash` has no business in one. Gated on the module because the
-    # table only physically exists where `public_api` has been enabled at
-    # least once (MODULE_TABLES), and selecting from a table that was never
-    # created is an error, not an empty list.
-    api_key_rows: list[ApiKey] = []
-    if is_enabled("public_api"):
-        api_key = cast("Any", ApiKey)
-        api_key_rows = list(
-            (await session.execute(select(ApiKey).where(api_key.created_by == user.id)))
-            .scalars()
-            .all()
-        )
-
-    return {
+    An export is a file a person downloads and forwards, so no secret-derived
+    value goes in it: no refresh-token hash, no API key hash. Tables of
+    optional modules are read where the table exists -- a module switched off
+    after use still holds this user's rows.
+    """
+    payload: dict[str, Any] = {
         # UserPublic, not User.model_dump() -- excludes hashed_password,
         # failed_login_count, locked_until, same exclusions T-015 mandates
         # for anything that leaves the auth module.
         "user": UserPublic.model_validate(user).model_dump(mode="json"),
-        "sessions": [row.model_dump(mode="json") for row in session_rows],
-        "oauth_accounts": [row.model_dump(mode="json") for row in oauth_rows],
-        "consent_records": [row.model_dump(mode="json") for row in consent_rows],
-        "audit_events": [row.model_dump(mode="json") for row in audit_rows],
-        "memberships": [row.model_dump(mode="json") for row in membership_rows],
-        "api_keys": [
-            ApiKeyPublic.model_validate(row).model_dump(mode="json") for row in api_key_rows
-        ],
+        "sessions": _dump(
+            await _rows(session, SessionModel, "user_id", user.id),
+            exclude={"refresh_token_hash"},
+        ),
+        "oauth_accounts": _dump(await _rows(session, OAuthAccount, "user_id", user.id)),
+        "consent_records": _dump(await _rows(session, ConsentRecord, "user_id", user.id)),
+        "audit_events": _dump(await _rows(session, AuditEvent, "actor_id", user.id)),
+        "memberships": _dump(await _rows(session, Membership, "user_id", user.id)),
     }
+    # Present either way, so the file has one shape; empty where there is no table.
+    tables = await _existing_tables(session)
+    payload["notifications"] = (
+        _dump(await _rows(session, Notification, "user_id", user.id))
+        if Notification.__tablename__ in tables
+        else []
+    )
+    # Metadata only (T-037); the bytes are the user's to download already.
+    payload["stored_files"] = (
+        _dump(await _rows(session, StoredFile, "uploaded_by", user.id))
+        if StoredFile.__tablename__ in tables
+        else []
+    )
+    # T-310: ApiKeyPublic, not the row -- `key_hash` has no business here.
+    payload["api_keys"] = (
+        [
+            ApiKeyPublic.model_validate(row).model_dump(mode="json")
+            for row in await _rows(session, ApiKey, "created_by", user.id)
+        ]
+        if ApiKey.__tablename__ in tables
+        else []
+    )
+    return payload
 
 
 def _build_export_zip(payload: dict[str, Any]) -> bytes:
@@ -313,9 +360,26 @@ def _s3_client() -> Any:  # noqa: ANN401 -- boto3 ships no stubs, see mypy.ini's
     )
 
 
+def _export_prefix(user_id: UUID) -> str:
+    return f"data-exports/{user_id}/"
+
+
+def _delete_export_archives(user_id: UUID) -> None:
+    """Every archive exported for this user. Retention otherwise is the
+    bucket's lifecycle rule (one day, matching the signed link)."""
+    bucket = get_settings().AWS_BUCKET_NAME
+    client = _s3_client()
+    listing = client.list_objects_v2(Bucket=bucket, Prefix=_export_prefix(user_id))
+    keys = [{"Key": item["Key"]} for item in listing.get("Contents", [])]
+    if keys:
+        # ponytail: one page (1000 keys); a user with more exports than that
+        # needs the paginator.
+        client.delete_objects(Bucket=bucket, Delete={"Objects": keys})
+
+
 async def _upload_export_zip(user_id: UUID, job_id: UUID, zip_bytes: bytes) -> str:
     settings = get_settings()
-    object_key = f"data-exports/{user_id}/{job_id}.zip"
+    object_key = f"{_export_prefix(user_id)}{job_id}.zip"
 
     def _put_and_sign() -> str:
         client = _s3_client()

@@ -21,6 +21,7 @@ from uuid import UUID
 from sqlalchemy import func, select, tuple_
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.exceptions import InvalidCursorError
 from app.core.module_loader import is_enabled
 from app.core.repository import DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE
 from app.modules.auth.models import User
@@ -77,9 +78,18 @@ class AdminOrgRepository:
 
         stmt = stmt.order_by(m.created_at.desc(), m.id.desc()).limit(capped_limit + 1)
         if after is not None:
+            # Deliberately not filtered on deleted_at: the anchor is read for
+            # its (created_at, id) alone, and an org soft-deleted while an
+            # admin was paging past it is still a perfectly good position.
+            # Excluding it used to drop the WHERE clause entirely, which
+            # silently restarts the list at page one.
             anchor = await self.session.get(Organization, after)
-            if anchor is not None and anchor.deleted_at is None:
-                stmt = stmt.where(tuple_(m.created_at, m.id) < (anchor.created_at, anchor.id))
+            if anchor is None:
+                raise InvalidCursorError(
+                    "errors.invalid_cursor",
+                    fallback=("This page cursor is no longer valid -- start from the first page"),
+                )
+            stmt = stmt.where(tuple_(m.created_at, m.id) < (anchor.created_at, anchor.id))
 
         result = await self.session.execute(stmt)
         entries: list[OrgListRow]

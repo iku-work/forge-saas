@@ -15,7 +15,7 @@ import { request } from "@playwright/test";
 
 import { BASE_URL } from "../config";
 
-// Ports app.modules.billing.webhooks' _sign() (backend/tests/test_billing_webhooks.py)
+// Ports app.modules.billing.webhooks' _sign() (backend/tests/committed/test_billing_webhooks.py)
 // to Node -- see that file's docstring for the exact scheme this mirrors
 // (Stripe's own documented "t=<ts>,v1=<hmac>" signature header format).
 function signStripePayload(payload: Buffer, secret: string, timestamp: number): string {

@@ -61,7 +61,9 @@ async def verify_2fa(
     session: Annotated[AsyncSession, Depends(get_session)],
     redis: Annotated[Redis, Depends(get_redis)],
 ) -> Envelope[Verify2FAResponse]:
-    backup_codes = await AuthService(session).verify_2fa(user, body.code)
+    backup_codes = await AuthService(session).verify_2fa(
+        user, body.code, current_session_id=getattr(request.state, "session_id", None)
+    )
     await session.commit()
     # T-240: flips User.totp_enabled, which require_superadmin reads off the
     # cached row to decide whether a superadmin has a second factor at all.

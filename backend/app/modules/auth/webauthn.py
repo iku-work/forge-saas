@@ -68,7 +68,11 @@ async def register(
     session: Annotated[AsyncSession, Depends(get_session)],
 ) -> Envelope[WebAuthnCredentialPublic]:
     record = await AuthService(session).complete_webauthn_registration(
-        user, body.challenge_token, body.credential, body.nickname
+        user,
+        body.challenge_token,
+        body.credential,
+        body.nickname,
+        current_session_id=getattr(request.state, "session_id", None),
     )
     await session.commit()
     return Envelope(

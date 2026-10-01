@@ -4,7 +4,11 @@
     "empty": "Noch keine Dateien. Laden Sie eine hoch, um loszulegen.",
     "error_load": "Dateien konnten nicht geladen werden.",
     "empty_title": "Noch keine Dateien",
-    "empty_body": "Hier hochgeladene Dateien sind nur für deine Organisation sichtbar und werden vor dem Herunterladen auf Viren geprüft. Lade oben deine erste Datei hoch."
+    "empty_body": "Hier hochgeladene Dateien sind nur für deine Organisation sichtbar und werden vor dem Herunterladen auf Viren geprüft. Lade oben deine erste Datei hoch.",
+    "error_download": "Der Download konnte nicht gestartet werden.",
+    "error_delete": "Die Datei konnte nicht gelöscht werden.",
+    "empty_body_read_only": "In Ihrer Organisation hat noch niemand eine Datei hochgeladen. Wenden Sie sich an eine Administratorin oder einen Administrator, wenn Sie eine hinzufügen möchten.",
+    "scan_taking_long": "Die Prüfung einiger Dateien dauert länger als üblich. Laden Sie die Seite neu, um erneut nachzusehen."
   },
   "uploader": {
     "drop_here": "Dateien hier ablegen",
@@ -31,14 +35,19 @@
     "pending": "Ausstehend",
     "ready": "Bereit",
     "infected": "Infiziert",
-    "failed": "Fehlgeschlagen"
+    "failed": "Fehlgeschlagen",
+    "scanning": "Wird geprüft"
   },
   "action": {
     "download": "Herunterladen",
     "delete": "Löschen",
     "delete_confirm": "Diese Datei löschen?",
     "delete_confirm_title": "Diese Datei löschen?",
-    "delete_confirm_body": "{filename} wird für alle in deiner Organisation entfernt. Das kann nicht rückgängig gemacht werden."
+    "delete_confirm_body": "{filename} wird für alle in deiner Organisation entfernt. Das kann nicht rückgängig gemacht werden.",
+    "download_blocked_scanning": "Diese Datei wird noch auf Schadsoftware geprüft.",
+    "download_blocked_pending": "Dieser Upload ist noch nicht abgeschlossen.",
+    "download_blocked_infected": "In dieser Datei wurde Schadsoftware gefunden, daher kann sie nicht heruntergeladen werden.",
+    "download_blocked_failed": "Diese Datei konnte nicht geprüft werden und kann daher nicht heruntergeladen werden."
   },
   "picker": {
     "upload_button": "Hochladen",

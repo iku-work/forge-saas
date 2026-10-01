@@ -20,10 +20,15 @@ from uuid import UUID, uuid4
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.exceptions import UnprocessableEntityError
+from app.core.exceptions import ConflictError, NotFoundError, UnprocessableEntityError
 from app.modules.auth.models import User
 from app.modules.auth.service import AuthService
-from app.modules.storage.avatars import AVATAR_BUCKET, resolve_own_avatar_key
+from app.modules.storage import avatars as avatars_module
+from app.modules.storage.avatars import (
+    AVATAR_BUCKET,
+    presign_own_avatar,
+    resolve_own_avatar_key,
+)
 from app.modules.storage.models import StoredFile
 from app.modules.tenancy.models import Organization
 
@@ -50,13 +55,18 @@ async def owner(session: AsyncSession) -> User:
     return user
 
 
-async def _make_file(
+async def _make_file(  # noqa: PLR0913 -- a row factory; every field is a test knob
     session: AsyncSession,
     *,
     uploaded_by: UUID,
     org_id: UUID,
     bucket: str = AVATAR_BUCKET,
     status: str = "ready",
+    # An avatar is an attacker-supplied file handed to a browser with an
+    # image content type, so it passes the same scan gate as every other
+    # download. The default here is the post-scan state; the tests at the
+    # bottom of this file cover what happens before one.
+    virus_scan_result: str | None = "clean",
 ) -> StoredFile:
     stored = StoredFile(
         org_id=org_id,
@@ -67,6 +77,7 @@ async def _make_file(
         size_bytes=1024,
         bucket=bucket,
         status=status,
+        virus_scan_result=virus_scan_result,
     )
     session.add(stored)
     await session.flush()
@@ -180,3 +191,106 @@ async def test_clearing_an_avatar_needs_no_storage_module(
     )
 
     assert await AuthService(session).resolve_avatar_change(owner.id, None) is None
+
+
+async def test_an_avatar_still_being_scanned_can_be_chosen(
+    session: AsyncSession, owner: User, org: Organization
+) -> None:
+    """Review R7 / plan D4: choosing is allowed before the verdict, serving is not.
+
+    The profile page sets the avatar the moment the upload is confirmed, and
+    no scanner finishes that fast -- requiring a verdict here failed nearly
+    every first avatar upload. The scan gate moved to `presign_own_avatar`,
+    which every read goes through (tests below).
+    """
+    stored = await _make_file(session, uploaded_by=owner.id, org_id=org.id, virus_scan_result=None)
+
+    assert await resolve_own_avatar_key(session, user_id=owner.id, file_id=stored.id) == stored.key
+
+
+async def test_an_avatar_that_could_not_be_scanned_cannot_be_chosen(
+    session: AsyncSession, owner: User, org: Organization
+) -> None:
+    stored = await _make_file(session, uploaded_by=owner.id, org_id=org.id, status="failed")
+
+    assert await resolve_own_avatar_key(session, user_id=owner.id, file_id=stored.id) is None
+
+
+async def test_an_infected_avatar_does_not_resolve(
+    session: AsyncSession, owner: User, org: Organization
+) -> None:
+    stored = await _make_file(
+        session,
+        uploaded_by=owner.id,
+        org_id=org.id,
+        status="infected",
+        virus_scan_result="Eicar-Test-Signature",
+    )
+
+    assert await resolve_own_avatar_key(session, user_id=owner.id, file_id=stored.id) is None
+
+
+# --- serving: the scan gate for avatars (review R7) ------------------------
+
+
+class _FakeAvatarBackend:
+    async def presign_download(
+        self,
+        key: str,
+        expires_in: int = 3600,  # noqa: ARG002 -- StorageBackend's signature
+        *,
+        filename: str | None = None,  # noqa: ARG002 -- as above
+    ) -> str:
+        return f"https://fake.example/{key}"
+
+
+@pytest.fixture
+def fake_avatar_backend(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(avatars_module, "get_storage_backend", _FakeAvatarBackend)
+
+
+@pytest.mark.usefixtures("fake_avatar_backend")
+async def test_a_clean_avatar_is_served(
+    session: AsyncSession, owner: User, org: Organization
+) -> None:
+    stored = await _make_file(session, uploaded_by=owner.id, org_id=org.id)
+
+    assert await presign_own_avatar(session, stored.key) == f"https://fake.example/{stored.key}"
+
+
+@pytest.mark.usefixtures("fake_avatar_backend")
+async def test_an_avatar_is_not_served_until_its_scan_is_clean(
+    session: AsyncSession, owner: User, org: Organization
+) -> None:
+    """Chosen before the verdict, served only after it -- a 409 the page
+    treats as "show initials for now", not as a missing avatar."""
+    stored = await _make_file(session, uploaded_by=owner.id, org_id=org.id, virus_scan_result=None)
+
+    with pytest.raises(ConflictError) as caught:
+        await presign_own_avatar(session, stored.key)
+
+    assert caught.value.message_key == "errors.file_scan_pending"
+
+
+@pytest.mark.usefixtures("fake_avatar_backend")
+async def test_an_avatar_found_infected_after_it_was_chosen_is_not_served(
+    session: AsyncSession, owner: User, org: Organization
+) -> None:
+    stored = await _make_file(
+        session,
+        uploaded_by=owner.id,
+        org_id=org.id,
+        status="infected",
+        virus_scan_result="Eicar-Test-Signature",
+    )
+
+    with pytest.raises(ConflictError) as caught:
+        await presign_own_avatar(session, stored.key)
+
+    assert caught.value.message_key == "errors.file_infected"
+
+
+@pytest.mark.usefixtures("fake_avatar_backend")
+async def test_a_deleted_avatar_is_not_found(session: AsyncSession) -> None:
+    with pytest.raises(NotFoundError):
+        await presign_own_avatar(session, "org/avatars/gone/me.png")

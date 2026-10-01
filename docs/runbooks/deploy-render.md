@@ -7,7 +7,7 @@ build and push the image but the deploy fails on its first step.
 
 Since 2026-09-14 it is one of three sibling workflows -- Render, Hetzner and
 AWS -- selected by the `DEPLOY_TARGET` repository variable and sharing one
-built, scanned image and one preflight (env, guards, migrations). See
+built, scanned image and one preflight (env and guards). See
 `docs/runbooks/deploy-pipeline.md` for the shared half; this file covers only
 what is specific to Render. An unset `DEPLOY_TARGET` still means Render, so
 nothing here changed for an existing deployment.
@@ -49,19 +49,29 @@ image.
   see below).
 - A **Background Worker**, same image, start command
   `arq app.workers.main.WorkerSettings`.
+- A second **Background Worker** for virus scans, same image, start command
+  `arq app.workers.main.ScanWorkerSettings`. Scans run on their own queue
+  (review R4). **Without this service no upload is ever scanned**, so every
+  file stays "scanning" and can't be downloaded. That fails closed, but it
+  fails.
 - A **PostgreSQL** instance and a **Key Value (Redis)** instance.
 
 On the Web Service:
 - **Health Check Path**: `/health/ready`
-- **Pre-Deploy Command** (optional, defense in depth alongside CI's own
-  migration step): `python -m app.core.migrations`
+- **Pre-Deploy Command** (**required**): `python -m app.core.migrations`
+
+  This is the only thing that migrates on Render. CI used to migrate from
+  the GitHub runner, which meant the production database had to accept
+  connections from GitHub's network; since 2026-09-29 (review C4) it does
+  not, and the deploy workflow reads this setting through the API and
+  refuses to deploy when it is anything else.
 
   **Not `alembic upgrade head`.** Every optional module's first migration
   branches off the core trunk with its own `branch_labels`, so there is no
   single head to upgrade to and that command cannot succeed against this
   schema. `app.core.migrations` asks Alembic for `<branch>@head` once per
   *enabled* module, which is also what keeps a disabled module's tables out
-  of the database entirely. CI's `deploy` job already runs this one.
+  of the database entirely.
 
 ### 2. Registry credential (only if the GHCR package is private)
 
@@ -75,7 +85,8 @@ Dashboard → Account Settings → Registry Credentials → add a GitHub PAT wit
 | `RENDER_API_KEY` | Dashboard → Account Settings → API Keys |
 | `RENDER_BACKEND_SERVICE_ID` | Web service page URL: `srv-xxxxxxxxxxxx` |
 | `RENDER_WORKER_SERVICE_ID` | Worker service page URL: `srv-xxxxxxxxxxxx` |
-| `PROD_ENV_FILE` | Full contents of a production `backend/.env` (see `backend/.env.example` for the field list) — written to disk and passed to the migration container via `--env-file` |
+| `RENDER_SCANNER_WORKER_SERVICE_ID` | The scan worker's page URL (review R4). The deploy refuses to run without it: a scan worker left on an old image would stop consuming the scan queue after a queue change |
+| `PROD_ENV_FILE` | Full contents of a production `backend/.env` (see `backend/.env.example` for the field list) — checked by the preflight guards; the services themselves take their env from Render |
 | `PROD_DOMAIN` | The domain Caddy/Render terminates TLS for, e.g. `app.example.com` — used for the post-deploy smoke test |
 
 ### 4. Environment values Render specifically needs
@@ -91,19 +102,38 @@ running in the wrong shape:
 | `METRICS_TOKEN` | a generated token | On Render the app is the edge. Without this (or `METRICS_BLOCKED_AT_EDGE`, which would be a lie here) startup refuses, because `/metrics` would otherwise answer 200 to anyone. |
 | `TRUSTED_PROXY_IPS` | `10.0.0.0/8,172.16.0.0/12,192.168.0.0/16` | Render's router reaches the container over the private network. Without this the app believes the socket, so every anonymous caller shares one rate-limit bucket and every audit event records the router. **Not `*`:** Render appends to `X-Forwarded-For` without resetting a client-supplied value, and `*` makes uvicorn take the leftmost (caller-supplied) entry — so anyone could pick their own rate-limit bucket and forge the IP on their audit events. Add Cloudflare's published ranges if you put it in front. |
 
-`PROD_ENV_FILE`'s `DATABASE_URL` must be the Postgres instance's **External**
-connection string — the GitHub-hosted runner isn't on Render's private
-network, only Render's own services are.
+The Postgres instance does **not** need its External connection string
+opened to GitHub: nothing on the runner connects to it any more (C4). Keep
+external access off, or allowlisted to your own addresses for `psql`.
+
+### 5. Object-store lifecycle rules (S3 or R2 only)
+
+On MinIO, `minio-init` installs both rules. On S3 or R2, add them to the
+bucket once, with the provider's lifecycle settings or
+`aws s3api put-bucket-lifecycle-configuration` (the JSON `minio-init` imports
+is in `docker-compose.prod.yml`):
+
+- **Expire prefix `incoming/` after 1 day.** Uploads land there and are
+  copied out on confirm (review R1); a re-posted form can leave a copy no row
+  points at. Without the rule they just accumulate outside anyone's quota.
+- **Expire prefix `data-exports/` after 1 day.** GDPR export archives; the
+  download link lasts 24 hours (review OCT-03). Without the rule every
+  export is kept indefinitely -- a copy of that user's data the purge only
+  catches if the account is later erased.
 
 ## What CI does on a push to `main`
 
-1. `alembic upgrade head` runs inside the freshly-built, freshly-scanned
-   image against the production DB. Failure aborts — nothing below runs.
-2. Triggers a Render deploy for both services via the
+1. Checks through the API that the backend service's Pre-Deploy Command is
+   `python -m app.core.migrations`, and stops if it is not.
+2. Triggers a backend deploy via the
    [Deploys API](https://api-docs.render.com/reference/create-deploy),
-   pointing at the new image.
+   pointing at the new image. Render runs the pre-deploy migration in that
+   image, on its own network, and fails the deploy (`pre_deploy_failed`)
+   without moving traffic if it exits non-zero.
 3. Polls the backend deploy until Render reports `live` (or a failed/canceled
-   status, which fails the job).
+   status, which fails the job), then deploys the worker and the scan
+   worker. After, not beside: the workers have no pre-deploy step, so
+   starting them first would run new job code against an unmigrated schema.
 4. Smoke-tests `https://$PROD_DOMAIN/health/ready`.
 5. On smoke-test failure, calls the
    [rollback endpoint](https://api-docs.render.com/reference/rollback-deploy)
@@ -136,6 +166,71 @@ if it fails. Do the other half by hand the first time, because a green
 - The negative check: hit the backend service's own Render URL directly. If it
   answers, it is reachable without going through your edge, and the TLS/header
   guarantees above are bypassable.
+- **The app origin's document headers.** `curl -sI https://$PROD_DOMAIN/` must
+  show `content-security-policy`, `x-frame-options`, `x-content-type-options`,
+  `referrer-policy` and `permissions-policy`. These come from the edge, not
+  from `app.middleware.security_headers` — that middleware protects API
+  responses and never sees the SPA's HTML, which Caddy serves straight off
+  disk. On Render, where there is no Caddy, the platform or CDN must supply
+  them; nothing in this repo will.
+- **Then open the app with the browser console visible and use it.** The CSP
+  is enforced, not report-only, and the two directives most likely to be
+  wrong for a given deployment are `img-src` and `connect-src`: an avatar is
+  either a presigned URL on your storage host or an absolute one from an
+  OAuth provider, and an upload POSTs directly to the storage host. The
+  template ships both as `https:`, which is permissive enough to work
+  anywhere and looser than a deployment that knows its own origins should
+  settle for. Narrow them in `Caddyfile.prod` once you know them, and re-run
+  this check — a blocked upload is silent apart from the console.
+
+  `script-src` is the part that must stay strict. It is `'self'` plus one
+  hash, which covers the inline theme-boot script in `apps/web/index.html`
+  (that script has to run before first paint, so it cannot become an external
+  file). Editing that script changes its hash and blocks it; the symptom is a
+  white flash into a dark app, and `backend/tests/test_caddy_config.py` fails
+  the build before it can reach you.
+
+## Restarting one service on the compose host
+
+`docker compose` composes the **set of files you pass it**, and nothing warns
+you when that set is smaller than the one a container was created with. The
+missing overlays' contributions — bind mounts especially — are simply absent
+from the recreated container.
+
+This happened on 2026-09-25 and took the API down for about eight minutes.
+`docker compose -f docker-compose.prod.yml up -d --force-recreate backend worker`
+looks complete and is not: this host's stack was created with the TLS and
+host-build overlays too. Dropping the TLS one dropped `./certs:/certs:ro`, so
+`rediss://redis:6379/0?ssl_ca_certs=/certs/ca.crt` could not open its CA and
+every request touching Redis answered 500.
+
+**The failure is quiet in the worst way.** `docker ps` reported the backend
+*healthy* throughout, because its healthcheck hits `/health`, which touches
+nothing. `/health/ready` was the only endpoint telling the truth, and the SPA
+and marketing site stayed up because Caddy serves those off disk — so the
+site looked fine while every API call failed.
+
+Recover the real set from a container you have **not** recreated, rather than
+from memory or from this document:
+
+```bash
+docker inspect forge-caddy-1   --format '{{index .Config.Labels "com.docker.compose.project.config_files"}}'
+```
+
+Then pass all of them:
+
+```bash
+docker compose -f docker-compose.prod.yml   -f docker-compose.tls.yml -f docker-compose.host-build.yml   up -d --force-recreate backend worker
+```
+
+Afterwards, check the labels match what you started from, and check
+`/health/ready` rather than the container's health badge:
+
+```bash
+docker inspect forge-backend-1   --format '{{index .Config.Labels "com.docker.compose.project.config_files"}}'
+curl -s -o /dev/null -w '%{http_code}
+' https://$PROD_DOMAIN/health/ready
+```
 
 ## Rollback
 
@@ -148,10 +243,9 @@ Manually: Render dashboard → the service → **Deploys** → *Rollback* on the
 last known-good deploy. Both services need it, and they are independent — a
 rolled-back backend against a still-new worker is a real state to end up in.
 
-**The migration is the part that does not roll back.** Its step 1 runs
-`alembic upgrade head` against the production database *before* either
-service is redeployed, so a rollback restores the old image against the new
-schema. That is fine for additive migrations and is not fine for a destructive
+**The migration is the part that does not roll back.** The pre-deploy
+command migrates the production database *before* the new backend takes
+traffic, so a rollback restores the old image against the new schema. That is fine for additive migrations and is not fine for a destructive
 one; a migration that drops or renames anything needs the expand/contract
 split across two deploys, not a rollback plan. Data-level recovery is
 `backup-restore.md`.
@@ -160,8 +254,9 @@ split across two deploys, not a rollback plan. Data-level recovery is
 
 - **The `deploy` job fails on its first step**: the secrets are missing or
   misnamed. That is the dormant state described at the top, not an incident.
-- **Migration step fails**: nothing has deployed yet — the old image is still
-  serving. Fix forward on the migration; do not re-run the job hoping for a
+- **Migration fails** (deploy status `pre_deploy_failed`): nothing has
+  deployed yet — the old image is still serving. Its output is in the
+  deploy's logs on the Render dashboard, not in the GitHub run. Fix forward on the migration; do not re-run the job hoping for a
   different result against a half-applied schema. Check `alembic current`
   against production before the second attempt.
 - **Deploy reports live but the smoke test fails**: usually DNS/TLS
@@ -178,8 +273,39 @@ Two DNS records, two certificates, one edge:
 
 | Host | Serves | Where it is configured |
 |---|---|---|
-| `example.com` (apex) | `apps/marketing/dist`, statically | `MARKETING_DOMAIN` in `backend/.env` |
-| `app.example.com` | the API and the SPA | `DOMAIN` in `backend/.env` |
+| `example.com` (apex) | `apps/marketing/dist`, statically | `MARKETING_DOMAIN` in `backend/.env` **and** the compose `.env` |
+| `app.example.com` | the API and the SPA | `DOMAIN` in `backend/.env` **and** the compose `.env` |
+
+**Both names have to be in two places, and that is deliberate.** The edge
+container no longer takes `env_file: ./backend/.env`. That file holds
+`JWT_PRIVATE_KEY`, `ENCRYPTION_KEY`, `DATABASE_URL` and `STRIPE_SECRET_KEY`,
+and handing all of it to the one container the internet can reach meant an
+edge compromise yielded token forgery, database access and decryption — none
+of which Caddy needs in order to terminate TLS and proxy. It now gets an
+explicit allowlist of four non-secret values: `DOMAIN`, `MARKETING_DOMAIN`,
+`STORAGE_DOMAIN`, `CADDY_TRUSTED_PROXIES`.
+
+Compose interpolates `${...}` only from the shell and from the compose
+project's own `.env` (see `.env.example` at the repo root) — never from
+`backend/.env`, which it treats purely as a container env file. So those four
+must be in the root `.env` as well. `DOMAIN` has no default and compose
+refuses to start without it, which is the intended failure: an edge that
+booted on a fallback hostname would serve the wrong certificate.
+
+After deploying this change, confirm the edge is clean:
+
+```
+docker compose -f docker-compose.prod.yml exec caddy env | grep -E 'JWT|ENCRYPTION|DATABASE|STRIPE'
+```
+
+Expect no output. `backend/tests/test_caddy_config.py` fails the build if the
+allowlist grows a name the Caddyfiles do not use, or loses one they do.
+
+**Rotate afterwards.** These values were readable from an internet-facing
+container. There is no evidence anything read them, but the cheap move is to
+assume otherwise: `docs/runbooks/credential-rotation.md` covers the JWT and
+integration keys, and `docs/runbooks/encryption-key-rotation.md` covers
+`ENCRYPTION_KEY`, which rotates with no downtime via `ENCRYPTION_KEY_OLD`.
 
 **DNS.** An `A`/`AAAA` record for the apex and one for `app.`, both pointing at
 the host running the stack. Caddy obtains a certificate per hostname over

@@ -58,6 +58,7 @@ from app.modules.api_keys import service as api_key_service
 from app.modules.api_keys.models import KEY_PREFIX, PREFIX_LENGTH, ApiKey
 from app.modules.api_keys.repository import ApiKeyRepository
 from app.modules.api_keys.router import router
+from tests._sessions import reloading, rolling_back
 
 _PREFIX = "/api/v1/api-keys"
 _SCOPES = ["orgs:read"]
@@ -94,11 +95,11 @@ ClientFactory = Callable[[tuple[Organization, Membership]], httpx.AsyncClient]
 @pytest.fixture
 async def api_client(
     session: AsyncSession,
-    _redis_client: Redis,
-    _rate_limit_storage: RedisStorage,
+    redis_client: Redis,
+    rate_limit_storage: RedisStorage,
 ) -> AsyncIterator[ClientFactory]:
     """Builds a client that calls this module's routes as a given org+member."""
-    _rate_limit_storage.reset()
+    rate_limit_storage.reset()
     clients: list[httpx.AsyncClient] = []
 
     def _make(caller: tuple[Organization, Membership]) -> httpx.AsyncClient:
@@ -106,9 +107,9 @@ async def api_client(
         register_exception_handlers(api)  # DomainError -> status code + envelope
         register_rate_limiting(api)  # @api_limit needs app.state.limiter
         api.include_router(router, prefix="/api/v1")
-        api.dependency_overrides[get_session] = lambda: session
-        api.dependency_overrides[get_redis] = lambda: _redis_client
-        api.dependency_overrides[get_current_org] = lambda: caller
+        api.dependency_overrides[get_session] = rolling_back(session)
+        api.dependency_overrides[get_redis] = lambda: redis_client
+        api.dependency_overrides[get_current_org] = reloading(session, caller)
         client = httpx.AsyncClient(transport=ASGITransport(app=api), base_url="https://testserver")
         clients.append(client)
         return client
@@ -459,14 +460,16 @@ async def test_a_revoked_key_still_counts_against_the_cap(
     monkeypatch.setattr(api_key_service, "MAX_KEYS_PER_ORG", 1)
     owner = await _make_org(session, MemberRole.OWNER)
     key = await _seed_key(session, owner, "revoked but present")
+    # Read before the 402 below rolls back the shared session and expires it.
+    key_id = key.id
     client = api_client(owner)
-    await client.post(f"{_PREFIX}/{key.id}/revoke")
+    await client.post(f"{_PREFIX}/{key_id}/revoke")
 
     refused = await client.post(_PREFIX, json={"name": "next", "scopes": _SCOPES})
     assert refused.status_code == 402
 
     # Deleting it does free a slot: a deleted key is gone from the list too.
-    await client.delete(f"{_PREFIX}/{key.id}")
+    await client.delete(f"{_PREFIX}/{key_id}")
     assert (await client.post(_PREFIX, json={"name": "next", "scopes": _SCOPES})).status_code == 200
 
 

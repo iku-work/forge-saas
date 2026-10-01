@@ -158,6 +158,28 @@ prod-compose-tls-check: internal-certs
 new-module:
 	cd backend && python scripts/new_module.py "$(NAME)"
 
+# Repo finding 16: backend/pyproject.toml declares open-ended minimums, so
+# without a lock the same commit resolves differently on different days and
+# the Docker image is not reproducible. Two files, because they answer
+# different questions: requirements.lock is what ships (runtime only, used
+# by backend/Dockerfile with --require-hashes), requirements-dev.lock is
+# what CI and a developer install (adds ruff, mypy, pytest at the exact
+# versions this tree is verified green against).
+#
+# uv rather than pip-compile: pip-compile resolves for the platform it runs
+# on, and this repo is developed on Windows and deployed on Linux -- a
+# platform-specific lock would be wrong for the image it is meant to pin.
+# uv resolves universally and emits environment markers.
+#
+# Run this after any change to pyproject.toml's dependencies, in the same
+# commit. Then `pip-audit -r backend/requirements.lock` before pushing: a
+# lock's whole value is that it pins something deliberately, and a
+# deliberate pin of a vulnerable version is worse than a floating one.
+lock:
+	cd backend && uv lock --python 3.12
+	cd backend && uv export --frozen --no-dev --no-emit-project --format requirements-txt -o requirements.lock
+	cd backend && uv export --frozen --extra dev --no-emit-project --format requirements-txt -o requirements-dev.lock
+
 install-hooks:
 	pre-commit install
 

@@ -12,10 +12,10 @@ from datetime import datetime
 from typing import Any, ClassVar, Protocol, cast
 from uuid import UUID
 
-from sqlalchemy import CursorResult, delete, func, select, tuple_
+from sqlalchemy import CursorResult, delete, func, or_, select, tuple_, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.exceptions import NotFoundError
+from app.core.exceptions import InvalidCursorError, NotFoundError
 from app.core.repository import DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE
 from app.models._mixins import utcnow
 from app.modules.auth.models import (
@@ -76,10 +76,28 @@ class UserRepository:
         await self.session.flush()
         return user
 
-    async def increment_failed_login(self, user_id: UUID) -> None:
-        user = await self._get_or_raise(user_id)
-        user.failed_login_count += 1
-        await self.session.flush()
+    async def increment_failed_login(self, user_id: UUID) -> int:
+        """Count one failed attempt, returning the new total.
+
+        A single `UPDATE ... SET n = n + 1 RETURNING n`, not load-add-flush:
+        the read-modify-write version let parallel wrong guesses -- the one
+        shape of attack the lockout exists for -- each read the same count
+        and each write back count + 1, so N guesses could cost one.
+        """
+        m = cast("Any", User)
+        stmt = (
+            update(User)
+            .where(m.id == user_id)
+            .values(failed_login_count=m.failed_login_count + 1)
+            .returning(m.failed_login_count)
+            # Refreshes the identity-map copy too, so a caller holding the
+            # User row reads the count this statement produced.
+            .execution_options(synchronize_session="fetch")
+        )
+        count = (await self.session.execute(stmt)).scalar_one_or_none()
+        if count is None:
+            raise NotFoundError("errors.user_not_found", fallback="User not found")
+        return int(count)
 
     async def reset_failed_login(self, user_id: UUID) -> None:
         user = await self._get_or_raise(user_id)
@@ -111,9 +129,18 @@ class UserRepository:
             stmt = stmt.where(m.is_active.is_(active))
         stmt = stmt.order_by(m.created_at.desc(), m.id.desc()).limit(capped_limit + 1)
         if after is not None:
-            anchor = await self.get_by_id(after)
-            if anchor is not None:
-                stmt = stmt.where(tuple_(m.created_at, m.id) < (anchor.created_at, anchor.id))
+            # get_by_id excludes soft-deleted users, which is right for a
+            # lookup and wrong for a cursor: the anchor is read only for its
+            # (created_at, id), and a user deleted while an admin was paging
+            # past them still marks a valid position. Skipping the clause
+            # restarts the list at page one instead of continuing it.
+            anchor = await self.session.get(User, after)
+            if anchor is None:
+                raise InvalidCursorError(
+                    "errors.invalid_cursor",
+                    fallback=("This page cursor is no longer valid -- start from the first page"),
+                )
+            stmt = stmt.where(tuple_(m.created_at, m.id) < (anchor.created_at, anchor.id))
         result = await self.session.execute(stmt)
         items = list(result.scalars().all())
         page = items[:capped_limit]
@@ -136,6 +163,15 @@ class UserRepository:
         return user
 
 
+# Session.revoked_reason. Only ROTATED marks a token that a legitimate client
+# should never present again, so only ROTATED turns a presentation into a
+# theft signal (AuthService.refresh). Everything else is an ordinary end.
+REVOKED_ROTATED = "rotated"
+REVOKED_SIGNED_OUT = "signed_out"  # logout, device revocation, password change, 2FA enrollment
+REVOKED_EXPIRED = "expired"
+REVOKED_THEFT = "theft"  # swept up by a theft response
+
+
 class SessionRepository:
     def __init__(self, session: AsyncSession) -> None:
         self.session = session
@@ -150,6 +186,7 @@ class SessionRepository:
         user_agent: str,
         expires_at: datetime,
         auth_time: datetime | None = None,
+        amr: Collection[str] = (),
     ) -> SessionModel:
         now = utcnow()
         session_obj = SessionModel(
@@ -165,10 +202,28 @@ class SessionRepository:
             # *original* session's auth_time through explicitly, since a
             # silent refresh doesn't re-verify credentials.
             auth_time=auth_time or now,
+            amr=list(amr),
         )
         self.session.add(session_obj)
         await self.session.flush()
         return session_obj
+
+    async def add_amr(self, session_id: UUID, method: str) -> None:
+        """Record that this session has now also passed `method`.
+
+        Review R3. Only ever adds: a session's assurance can rise within its
+        life (the user proves a factor while enrolling it) and never falls.
+        A single UPDATE so a concurrent refresh copying `amr` into its
+        successor sees either the old list or the new one, never a torn one.
+        """
+        m = cast("Any", SessionModel)
+        stmt = (
+            update(SessionModel)
+            .where(m.id == session_id, ~m.amr.contains([method]))
+            .values(amr=m.amr.op("||")(func.jsonb_build_array(method)))
+            .execution_options(synchronize_session="fetch")
+        )
+        await self.session.execute(stmt)
 
     async def get_by_token_hash(self, token_hash: str) -> SessionModel | None:
         m = cast("Any", SessionModel)
@@ -176,12 +231,64 @@ class SessionRepository:
         result = await self.session.execute(stmt)
         return result.scalar_one_or_none()
 
-    async def revoke(self, session_id: UUID) -> None:
+    async def get_usable_by_id(self, session_id: UUID) -> SessionModel | None:
+        """A still-usable session by id, or None if it is revoked or expired.
+
+        This is the read behind every authenticated request: an access token
+        carries its session's id (`AccessTokenPayload.sid`), and this is what
+        turns revoking that session into the token ceasing to work *now*
+        rather than whenever it happened to expire.
+
+        Deliberately uncached, and deliberately the same
+        `usable_session_clauses` every other caller uses. `get_current_org`
+        already accepts one uncached membership lookup per request for
+        exactly this reason -- a revoked membership has to stop working on
+        the next request, not at the end of a TTL -- and a revoked session is
+        the same class of fact.
+        """
+        m = cast("Any", SessionModel)
+        stmt = select(SessionModel).where(m.id == session_id, *usable_session_clauses())
+        result = await self.session.execute(stmt)
+        return result.scalar_one_or_none()
+
+    async def revoke(self, session_id: UUID, *, reason: str = REVOKED_SIGNED_OUT) -> None:
         session_obj = await self._get_or_raise(session_id)
         session_obj.revoked_at = utcnow()
+        session_obj.revoked_reason = reason
         await self.session.flush()
 
-    async def revoke_all_for_user(self, user_id: UUID, *, except_id: UUID | None = None) -> None:
+    async def revoke_if_active(self, session_id: UUID) -> bool:
+        """Revoke a session, returning whether this caller is the one that did.
+
+        The atomic half of refresh-token rotation. `refresh()` used to check
+        `revoked_at is None` in Python and revoke a few statements later, so
+        two refreshes presenting the same token could both pass the check and
+        both rotate -- producing two live successor sessions from one refresh
+        token, with the theft detector silent because neither ever saw a
+        revoked row.
+
+        Losing this race is not a retry. It means the token was presented
+        twice concurrently, which is either a client bug or precisely the
+        theft the detector exists for, and `refresh()` treats it as theft.
+        """
+        m = cast("Any", SessionModel)
+        stmt = (
+            update(SessionModel)
+            .where(m.id == session_id, m.revoked_at.is_(None))
+            .values(revoked_at=utcnow(), revoked_reason=REVOKED_ROTATED)
+            .execution_options(synchronize_session=False)
+        )
+        result = await self.session.execute(stmt)
+        await self.session.flush()
+        return cast("CursorResult[Any]", result).rowcount == 1
+
+    async def revoke_all_for_user(
+        self,
+        user_id: UUID,
+        *,
+        except_id: UUID | None = None,
+        reason: str = REVOKED_SIGNED_OUT,
+    ) -> None:
         # T-216: except_id lets change_password() keep the session the
         # request itself is authenticated with alive while revoking every
         # other one (ASVS V3.3.4's "all *other* active sessions" -- unlike
@@ -195,6 +302,7 @@ class SessionRepository:
         now = utcnow()
         for session_obj in result.scalars().all():
             session_obj.revoked_at = now
+            session_obj.revoked_reason = reason
         await self.session.flush()
 
     async def list_active_for_user(self, user_id: UUID) -> list[SessionModel]:
@@ -356,10 +464,55 @@ class TOTPSecretRepository:
         record.backup_codes_hash = backup_codes_hash
         await self.session.flush()
 
-    async def mark_step_consumed(self, user_id: UUID, step: int) -> None:
-        record = await self._get_or_raise(user_id)
-        record.last_consumed_step = step
+    async def swap_backup_codes(self, user_id: UUID, *, expected: str, replacement: str) -> bool:
+        """Compare-and-swap the backup-code list, returning whether we won.
+
+        The list is one JSON column, and spending a code is read-modify-write
+        over the whole of it: load, remove one entry, write it all back. Two
+        requests doing that concurrently produce a last-writer-wins result --
+        the same code accepted twice, or worse, a *different* code that the
+        loser had removed reappearing in the winner's copy.
+
+        `expected` is the exact string the caller read. If the row still
+        holds it, nobody else has spent a code since, and the swap is safe.
+        If not, the caller is working from a stale list and must not write.
+        """
+        m = cast("Any", TOTPSecret)
+        stmt = (
+            update(TOTPSecret)
+            .where(m.user_id == user_id, m.backup_codes_hash == expected)
+            .values(backup_codes_hash=replacement)
+            .execution_options(synchronize_session=False)
+        )
+        result = await self.session.execute(stmt)
         await self.session.flush()
+        return cast("CursorResult[Any]", result).rowcount == 1
+
+    async def mark_step_consumed(self, user_id: UUID, step: int) -> bool:
+        """Advance the replay watermark, returning whether this caller did.
+
+        Monotonic on purpose: the UPDATE only matches when `step` is strictly
+        newer than what is stored. That makes the read-compare-write in
+        `_verify_totp_and_track_replay` safe against itself -- two requests
+        submitting the same code both read the old watermark and both decide
+        the code is fresh, and this is what stops both of them acting on it.
+
+        A False here means the step was already consumed, which is the replay
+        the caller is checking for.
+        """
+        m = cast("Any", TOTPSecret)
+        stmt = (
+            update(TOTPSecret)
+            .where(
+                m.user_id == user_id,
+                or_(m.last_consumed_step.is_(None), m.last_consumed_step < step),
+            )
+            .values(last_consumed_step=step)
+            .execution_options(synchronize_session=False)
+        )
+        result = await self.session.execute(stmt)
+        await self.session.flush()
+        return cast("CursorResult[Any]", result).rowcount == 1
 
     async def disable(self, user_id: UUID) -> None:
         record = await self._get_or_raise(user_id)
@@ -483,19 +636,40 @@ class _TokenRepository[T: _SingleUseToken]:
         result = await self.session.execute(stmt)
         return result.scalar_one_or_none()
 
-    async def mark_used(self, token_id: UUID) -> None:
+    async def consume(self, token_id: UUID) -> bool:
+        """Spend the token, returning whether *this* caller was the one who did.
+
+        Single-use has to mean single-use under concurrency, and the previous
+        version could not deliver that: it SELECTed the row, assigned
+        `used_at` in Python, and flushed. Two requests arriving together both
+        read `used_at IS NULL`, both assigned, and both proceeded -- so one
+        magic link signed in twice, and one password-reset link reset a
+        password twice.
+
+        The condition now lives in the UPDATE. Postgres serialises the two
+        statements on the row, the second re-evaluates `used_at IS NULL`
+        against the committed result of the first, and matches nothing. The
+        loser gets False and the caller raises the same "invalid or expired"
+        error a replay gets, which is exactly what it is.
+
+        `rowcount` rather than RETURNING because no caller needs the row
+        back: each already read it for its own checks, and re-reading it here
+        would only invite someone to trust the stale copy.
+        """
         m = cast("Any", self.model)
-        stmt = select(self.model).where(m.id == token_id)
+        stmt = (
+            update(self.model)
+            .where(m.id == token_id, m.used_at.is_(None))
+            .values(used_at=utcnow())
+            # The in-memory copy is deliberately not synchronised: callers
+            # hold a row they read *before* this ran, and nothing downstream
+            # reads `used_at` off it. 'auto' would issue an extra SELECT to
+            # keep a value nobody looks at current.
+            .execution_options(synchronize_session=False)
+        )
         result = await self.session.execute(stmt)
-        token = result.scalar_one_or_none()
-        if token is None:
-            raise NotFoundError(
-                "errors.resource_not_found",
-                fallback=f"{self.model.__name__} not found",
-                params={"resource": self.model.__name__},
-            )
-        token.used_at = utcnow()
         await self.session.flush()
+        return cast("CursorResult[Any]", result).rowcount == 1
 
     async def delete_expired(self) -> int:
         m = cast("Any", self.model)

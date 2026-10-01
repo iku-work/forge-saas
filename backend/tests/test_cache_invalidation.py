@@ -23,6 +23,7 @@ from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import Any
+from unittest.mock import Mock
 from uuid import UUID, uuid4
 
 import httpx
@@ -54,6 +55,7 @@ from app.workers.jobs import billing as billing_job_module
 from app.workers.jobs import gdpr as gdpr_job_module
 from app.workers.jobs.billing import expire_trials_to_inactive, send_dunning_email
 from app.workers.jobs.gdpr import purge_user_data
+from tests._auth import session_token
 from tests.fixtures.query_counter import assert_max_queries
 
 # T-291: this file needs billing, notifications and file_storage enabled --
@@ -63,11 +65,6 @@ pytestmark = pytest.mark.module_dependent
 
 _PASSWORD = "Correct-Horse9"
 _NEW_PASSWORD = "Correct-Horse10"
-
-
-@pytest.fixture
-def redis(_redis_client: Redis) -> Redis:
-    return _redis_client
 
 
 @pytest.fixture(autouse=True)
@@ -85,6 +82,11 @@ def _jobs_use_the_test_session(monkeypatch: pytest.MonkeyPatch, session: AsyncSe
 
     monkeypatch.setattr(billing_job_module, "async_session_factory", _factory)
     monkeypatch.setattr(gdpr_job_module, "async_session_factory", _factory)
+    # Purge also clears the user's export archives from the bucket; this
+    # matrix is about the cache, not storage.
+    s3 = Mock()
+    s3.list_objects_v2.return_value = {}
+    monkeypatch.setattr(gdpr_job_module, "_s3_client", lambda: s3)
 
 
 # --- world ------------------------------------------------------------------
@@ -155,6 +157,13 @@ async def world(client: httpx.AsyncClient, session: AsyncSession, redis: Redis) 
 
 def _as(world: World, user: User) -> None:
     world.client.headers["Authorization"] = f"Bearer {create_access_token(user.id, None, ())}"
+
+
+async def _as_superadmin(world: World) -> None:
+    # A session that passed a second factor: require_superadmin reads the
+    # session's methods, not the account's enrollment (review R3).
+    token = await session_token(world.session, world.superadmin)
+    world.client.headers["Authorization"] = f"Bearer {token}"
 
 
 def _payload_for(world: World, key: str) -> cache.JsonDict:
@@ -285,7 +294,7 @@ async def _write_disable_totp(world: World) -> None:
 async def _write_admin_disable_totp(world: World) -> None:
     await _write_enable_totp(world)
     await _seed(world, cache_keys.user_key(world.owner.id))
-    _as(world, world.superadmin)
+    await _as_superadmin(world)
 
     response = await world.client.post(
         f"/api/v1/admin/users/{world.owner.id}/disable-totp",
@@ -345,7 +354,7 @@ async def _write_subscription_webhook(world: World) -> None:
 
 
 async def _write_admin_plan_override(world: World) -> None:
-    _as(world, world.superadmin)
+    await _as_superadmin(world)
     response = await world.client.put(
         f"/api/v1/admin/orgs/{world.org.id}/plan",
         json={"plan_slug": world.plan.slug, "free_override": True},
@@ -360,7 +369,7 @@ async def _write_admin_extend_trial(world: World) -> None:
         stripe_subscription_id=f"admin_override_{uuid4()}",
         trial_end=utcnow() + timedelta(days=3),
     )
-    _as(world, world.superadmin)
+    await _as_superadmin(world)
 
     response = await world.client.post(
         f"/api/v1/admin/orgs/{world.org.id}/extend-trial", json={"days": 14}
@@ -369,7 +378,7 @@ async def _write_admin_extend_trial(world: World) -> None:
 
 
 async def _write_feature_flag_toggle(world: World) -> None:
-    _as(world, world.superadmin)
+    await _as_superadmin(world)
     response = await world.client.put(
         f"/api/v1/admin/orgs/{world.org.id}/feature-flags/storage_gb", json={"enabled": False}
     )

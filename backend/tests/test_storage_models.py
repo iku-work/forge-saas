@@ -26,7 +26,6 @@ from sqlalchemy.ext.asyncio import (
     async_sessionmaker,
     create_async_engine,
 )
-from testcontainers.postgres import PostgresContainer
 
 from app.core.config import get_settings
 from app.core.migrations import build_config
@@ -34,6 +33,7 @@ from app.core.migrations import upgrade as upgrade_migrations
 from app.modules.auth.models import User
 from app.modules.storage.models import StoredFile
 from app.modules.tenancy.models import Organization
+from tests._database import DatabaseHandle
 
 # T-291: this file needs file_storage enabled -- its routes, its tables, or
 # both. CI's module-matrix job deselects it in the combination that turns
@@ -42,15 +42,17 @@ pytestmark = pytest.mark.module_dependent
 
 
 @pytest.fixture
-def postgres_container() -> "PostgresContainer":
-    with PostgresContainer("postgres:16-alpine") as container:
-        yield container
+def postgres_container(fresh_database: object) -> object:
+    """A per-test database on the shared server (see tests/conftest.py).
+
+    These tests migrate an empty schema, so they need a clean database
+    each -- which is what this is. It used to be a whole container each.
+    """
+    return fresh_database
 
 
 @pytest.fixture
-def alembic_config(
-    postgres_container: "PostgresContainer", monkeypatch: pytest.MonkeyPatch
-) -> Config:
+def alembic_config(postgres_container: DatabaseHandle, monkeypatch: pytest.MonkeyPatch) -> Config:
     url = postgres_container.get_connection_url().replace("psycopg2", "asyncpg")
     monkeypatch.setenv("DATABASE_URL", url)
     get_settings.cache_clear()
@@ -75,7 +77,7 @@ def migrated_db(alembic_config: Config) -> None:
 @pytest.fixture
 async def migrated_session(
     migrated_db: None,  # noqa: ARG001 -- ordering dependency only, see migrated_db above
-    postgres_container: "PostgresContainer",
+    postgres_container: DatabaseHandle,
 ) -> AsyncGenerator[AsyncSession, None]:
     url = postgres_container.get_connection_url().replace("psycopg2", "asyncpg")
     engine: AsyncEngine = create_async_engine(url)

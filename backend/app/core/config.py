@@ -1,11 +1,23 @@
 from functools import lru_cache
 from typing import Literal, Self
 
+from argon2.profiles import RFC_9106_LOW_MEMORY
 from cryptography.fernet import Fernet
-from pydantic import PostgresDsn, RedisDsn, field_validator, model_validator
+from pydantic import Field, PostgresDsn, RedisDsn, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from app.core.module_loader import is_enabled
+
+# VIRUS_SCANNER values that cannot establish a file is safe, and so must not
+# be selected outside dev. "noop" returns clean without looking; "virustotal"
+# is a reputation lookup that has no record of any novel file -- including,
+# by definition, every targeted one -- so it fails closed there rather than
+# guessing. See app.modules.storage.scanner's module docstring.
+_NON_SCANNING_VIRUS_SCANNERS = frozenset({"noop", "virustotal"})
+
+# The profile argon2-cffi's PasswordHasher() uses by default -- read, not
+# retyped, so the settings' defaults and the floor below cannot drift from it.
+_ARGON2_DEFAULTS = RFC_9106_LOW_MEMORY
 
 
 class Settings(BaseSettings):
@@ -98,6 +110,13 @@ class Settings(BaseSettings):
     AUTH_RATE_LIMIT: str = "5/minute"
     SENSITIVE_RATE_LIMIT: str = "3/minute"
     API_RATE_LIMIT: str = "100/minute"
+    # Review R5: the combined budget of every person in one organization,
+    # charged after membership is verified (app.middleware.budgets). 5000/hour
+    # was decided 2026-09-29 in place of §0.6's original 1000/hour -- about 16
+    # requests a minute for a whole org, which a few active users would spend
+    # -- and is to be confirmed from a week of measured traffic (the plan's
+    # D1). API keys are not counted here; they have their own budget.
+    ORG_RATE_LIMIT: str = "5000/hour"
     # T-312: the per-minute budget an API key gets, before any per-key
     # override (ApiKey.rate_limit_per_minute). An integer rather than a
     # slowapi limit string because this limit is not applied by slowapi's
@@ -296,6 +315,16 @@ class Settings(BaseSettings):
     AWS_ACCESS_KEY_ID: str = ""
     AWS_SECRET_ACCESS_KEY: str = ""
     AWS_ENDPOINT_URL: str | None = None
+    # The absolute per-file ceiling, enforced for every upload whether or
+    # not the billing module is on. The plan's own `max_upload_mb` feature
+    # is a *product* limit and only exists where there is a plan to read it
+    # from; switching billing off used to remove the only cap in the
+    # system, which made "no billing" mean "unbounded upload". A template
+    # that lets anyone fill its disk the moment billing is disabled is a
+    # template bug, not a product decision -- so this one is not negotiable
+    # by module config. A product that wants larger uploads raises it here
+    # deliberately, having thought about its disk.
+    MAX_UPLOAD_BYTES: int = 100 * 1024 * 1024
 
     # Encryption (column-level Fernet, see EncryptedString in T-009.5)
     ENCRYPTION_KEY: str
@@ -335,19 +364,40 @@ class Settings(BaseSettings):
     # must never occupy a worker; ten seconds is generous for a request whose
     # only job is to return 200 and enqueue something.
     WEBHOOK_TIMEOUT_SECONDS: float = 10.0
+    # Review R6: the whole attempt -- DNS, connect, send, and reading the
+    # response -- end to end. The timeout above is per operation, so a
+    # receiver trickling a byte at a time never tripped it.
+    WEBHOOK_DEADLINE_SECONDS: float = Field(default=30.0, gt=0)
 
-    # Virus scanning (T-113) — "clamav" | "virustotal" | "noop". "noop" (the
-    # dev default) marks every uploaded file "clean" immediately.
+    # Virus scanning (T-113) — "clamav" | "virustotal" | "noop". Only "clamav"
+    # actually scans: "noop" (the dev default) marks every uploaded file
+    # "clean" immediately, and "virustotal" is a hash lookup that fails closed
+    # on anything it has not seen before. Both are refused outside dev by
+    # _NON_SCANNING_VIRUS_SCANNERS below.
     VIRUS_SCANNER: Literal["clamav", "virustotal", "noop"] = "noop"
     CLAMAV_HOST: str = "localhost"
     CLAMAV_PORT: int = 3310
     VIRUSTOTAL_API_KEY: str = ""
+    # Review R4: how many scans the scan worker runs at once. Each streams
+    # rather than buffering, so memory per scan is a few chunks; this bounds
+    # clamd connections and object-store reads, and how much of the scan
+    # worker's memory budget a burst can claim.
+    SCAN_MAX_CONCURRENCY: int = Field(default=4, ge=1)
 
     # Superadmin (T-140) — dedicated Loguru sink admin actions are written to,
     # in addition to the normal log stream.
     ADMIN_AUDIT_LOG_PATH: str = "admin-audit.log"
 
-    # Password pepper (T-225/ASVS V2.4.5) — an HMAC key mixed into every
+    # Argon2id cost. The defaults are argon2-cffi's own (RFC 9106's second
+    # recommended profile) and the floor outside dev. Raising them migrates
+    # stored hashes on each user's next login (check_password's needs_rehash);
+    # lowering them is for the test suite, where every register, login and
+    # 2FA enrollment would otherwise pay ~50 ms per hash.
+    ARGON2_TIME_COST: int = _ARGON2_DEFAULTS.time_cost
+    ARGON2_MEMORY_KIB: int = _ARGON2_DEFAULTS.memory_cost
+    ARGON2_PARALLELISM: int = _ARGON2_DEFAULTS.parallelism
+
+    # Password pepper (T-225/ASVS V2.4.5) — a secret mixed into every
     # password before it reaches Argon2 (see app.modules.auth.utils), on top
     # of Argon2's own per-hash salt. Blank in dev (matches every other
     # dev-optional secret here); required outside dev, enforced below.
@@ -396,6 +446,49 @@ class Settings(BaseSettings):
         """
         return str(self.MIGRATIONS_DATABASE_URL or self.DATABASE_URL)
 
+    def _non_dev_violations(self) -> list[str]:
+        """What makes this configuration unfit outside dev, most important first.
+
+        A table rather than a chain of ifs: adding a rule is adding a row, and
+        the first violated rule is the one reported.
+        """
+        weak_argon2 = [
+            name
+            for name, value, floor in (
+                ("ARGON2_TIME_COST", self.ARGON2_TIME_COST, _ARGON2_DEFAULTS.time_cost),
+                ("ARGON2_MEMORY_KIB", self.ARGON2_MEMORY_KIB, _ARGON2_DEFAULTS.memory_cost),
+                ("ARGON2_PARALLELISM", self.ARGON2_PARALLELISM, _ARGON2_DEFAULTS.parallelism),
+            )
+            if value < floor
+        ]
+        rules = (
+            ("*" in self.ALLOWED_ORIGINS, "ALLOWED_ORIGINS must not contain '*' outside dev"),
+            (not self.FORCE_HTTPS, "FORCE_HTTPS must be true in non-dev environments"),
+            (
+                self.VIRUS_SCANNER in _NON_SCANNING_VIRUS_SCANNERS,
+                f"VIRUS_SCANNER={self.VIRUS_SCANNER!r} does not scan anything and must "
+                "not be used outside dev. 'noop' marks every file clean; 'virustotal' "
+                "only looks a hash up in a reputation database, which can report a "
+                "file known-bad but can never establish that an unknown one is safe. "
+                "Set VIRUS_SCANNER=clamav (docker-compose.prod.yml ships a clamav "
+                "service behind the 'clamav' profile).",
+            ),
+            (not self.PASSWORD_PEPPER, "PASSWORD_PEPPER must be set outside dev"),
+            (
+                bool(weak_argon2),
+                f"{', '.join(weak_argon2)} below argon2-cffi's defaults outside dev -- "
+                "cheaper password hashes are for the test suite only",
+            ),
+            (
+                not self.METRICS_TOKEN and not self.METRICS_BLOCKED_AT_EDGE,
+                "/metrics would be publicly readable. Set METRICS_TOKEN to require a "
+                "bearer token on it, or METRICS_BLOCKED_AT_EDGE=true if a reverse "
+                "proxy in front of this app already refuses the route (both Caddyfiles "
+                "in this repo do). See app/core/metrics.py.",
+            ),
+        )
+        return [message for violated, message in rules if violated]
+
     @model_validator(mode="after")
     def _enforce_startup_invariants(self) -> Self:
         # T-244: not gated on ENVIRONMENT — running migrations through a
@@ -417,24 +510,9 @@ class Settings(BaseSettings):
                     "bypassing pgbouncer (see docs/adr/0002-pgbouncer.md)"
                 )
         if self.ENVIRONMENT != "dev":
-            if "*" in self.ALLOWED_ORIGINS:
-                raise RuntimeError("ALLOWED_ORIGINS must not contain '*' outside dev")
-            if not self.FORCE_HTTPS:
-                raise RuntimeError("FORCE_HTTPS must be true in non-dev environments")
-            if self.VIRUS_SCANNER == "noop":
-                raise RuntimeError(
-                    "VIRUS_SCANNER must not be 'noop' outside dev — uploaded files would "
-                    "never actually be scanned. Set it to 'clamav' or 'virustotal'."
-                )
-            if not self.PASSWORD_PEPPER:
-                raise RuntimeError("PASSWORD_PEPPER must be set outside dev")
-            if not self.METRICS_TOKEN and not self.METRICS_BLOCKED_AT_EDGE:
-                raise RuntimeError(
-                    "/metrics would be publicly readable. Set METRICS_TOKEN to require a "
-                    "bearer token on it, or METRICS_BLOCKED_AT_EDGE=true if a reverse "
-                    "proxy in front of this app already refuses the route (both Caddyfiles "
-                    "in this repo do). See app/core/metrics.py."
-                )
+            violations = self._non_dev_violations()
+            if violations:
+                raise RuntimeError(violations[0])
             self._validate_transport_tls()
         self._validate_encryption_key()
         return self

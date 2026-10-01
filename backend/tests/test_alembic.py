@@ -23,10 +23,10 @@ import pytest
 from alembic import command
 from alembic.config import Config
 from sqlmodel import Field, SQLModel
-from testcontainers.postgres import PostgresContainer
 
 from app.core.config import get_settings
 from app.models._mixins import SoftDeleteMixin, TimestampMixin, UUIDPKMixin
+from tests._database import DatabaseHandle
 
 _REAL_ALEMBIC_DIR = Path(__file__).parent.parent / "alembic"
 
@@ -40,14 +40,18 @@ class AlembicRoundTripEntity(UUIDPKMixin, TimestampMixin, SoftDeleteMixin, SQLMo
 
 
 @pytest.fixture
-def postgres_container() -> "PostgresContainer":
-    with PostgresContainer("postgres:16-alpine") as container:
-        yield container
+def postgres_container(fresh_database: object) -> object:
+    """A per-test database on the shared server (see tests/conftest.py).
+
+    These tests migrate an empty schema, so they need a clean database
+    each -- which is what this is. It used to be a whole container each.
+    """
+    return fresh_database
 
 
 @pytest.fixture
 def alembic_config(
-    tmp_path: Path, postgres_container: "PostgresContainer", monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path, postgres_container: DatabaseHandle, monkeypatch: pytest.MonkeyPatch
 ) -> Config:
     alembic_dir = tmp_path / "alembic"
     (alembic_dir / "versions").mkdir(parents=True)

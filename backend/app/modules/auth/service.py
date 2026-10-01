@@ -12,7 +12,7 @@ import hmac
 import json
 import logging
 import secrets
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import timedelta
 from typing import Any
@@ -33,6 +33,7 @@ from webauthn.helpers.structs import (
 
 from app.core import jobs
 from app.core.config import get_settings
+from app.core.db import persist_then_reject
 from app.core.exceptions import (
     AuthenticationError,
     ConflictError,
@@ -45,10 +46,14 @@ from app.core.module_loader import is_enabled
 from app.core.urls import frontend_url
 from app.models._mixins import utcnow
 from app.modules.audit.service import AuditService
+from app.modules.auth import amr as amr_methods
 from app.modules.auth.device_label import describe_device
 from app.modules.auth.models import OAuthAccount, TOTPSecret, User, WebAuthnCredential
 from app.modules.auth.models import Session as SessionModel
 from app.modules.auth.repository import (
+    REVOKED_EXPIRED,
+    REVOKED_ROTATED,
+    REVOKED_THEFT,
     EmailChangeTokenRepository,
     EmailVerificationTokenRepository,
     MagicLinkTokenRepository,
@@ -63,11 +68,14 @@ from app.modules.auth.schemas import LoginRequest, OAuthProfile, RegisterRequest
 from app.modules.auth.session_rules import is_session_usable
 from app.modules.auth.utils import (
     PasswordCheck,
+    backup_code_digests,
     check_password,
     create_access_token,
     generate_refresh_token,
+    hash_backup_code,
     hash_password,
     hash_token,
+    is_legacy_backup_code,
     sign_url_token,
     verify_password,
     verify_url_token,
@@ -166,6 +174,13 @@ def _match_totp_step(secret: str, code: str) -> int | None:
     return None
 
 
+def _session_invalid() -> AuthenticationError:
+    return AuthenticationError(
+        "errors.session_invalid",
+        fallback="Your session is no longer valid. Please log in again.",
+    )
+
+
 class AuthService:
     def __init__(self, session: AsyncSession) -> None:
         # The unit of work itself, not only repositories built from it: T-331's
@@ -233,7 +248,14 @@ class AuthService:
                 fallback="Invalid or expired verification token",
             )
 
-        await self._email_verification_tokens.mark_used(record.id)
+        if not await self._email_verification_tokens.consume(record.id):
+            # Lost the race to another request presenting the same
+            # token. Same answer a replay gets, because that is what
+            # it is -- see _TokenRepository.consume.
+            raise AuthenticationError(
+                "errors.invalid_verification_token",
+                fallback="Invalid or expired verification token",
+            )
         await self._users.mark_email_verified(record.user_id)
         return user
 
@@ -263,36 +285,16 @@ class AuthService:
             req.password, user.hashed_password or _DUMMY_PASSWORD_HASH
         )
         if not password_check.ok:
-            await self._users.increment_failed_login(user.id)
-            if user.failed_login_count >= _MAX_FAILED_LOGIN_ATTEMPTS:
-                await self._users.set_lockout(user.id, utcnow() + _LOCKOUT_DURATION)
-                await self._users.reset_failed_login(user.id)
-                # T-219/ASVS V7.2.1: the counter increment above is state, not
-                # a discrete security event -- lockout is the high-severity
-                # one (an active brute-force attempt), so it gets its own
-                # audit action rather than folding into user.login_failed.
-                await self._audit.log(
-                    action="user.account_locked",
-                    resource_type="user",
-                    resource_id=str(user.id),
-                    org_id=None,
-                    actor_id=user.id,
-                    ip=ip,
-                    ua=user_agent,
-                    severity="elevated",
-                )
-            else:
-                await self._audit.log(
-                    action="user.login_failed",
-                    resource_type="user",
-                    resource_id=str(user.id),
-                    org_id=None,
-                    actor_id=user.id,
-                    ip=ip,
-                    ua=user_agent,
-                )
-            raise AuthenticationError(
-                "errors.invalid_credentials", fallback="Invalid email or password"
+            user_id = user.id
+            # Persisted despite the 401 it produces: raised the ordinary way,
+            # get_session's rollback took the count with it, so the counter
+            # never rose and T-018's lockout never engaged over HTTP.
+            await persist_then_reject(
+                self._db,
+                lambda: self._record_failed_login(user_id, ip, user_agent),
+                AuthenticationError(
+                    "errors.invalid_credentials", fallback="Invalid email or password"
+                ),
             )
 
         await self._users.reset_failed_login(user.id)
@@ -316,44 +318,42 @@ class AuthService:
         # (not even a query) when `enterprise_sso` is off.
         blocked = await sso_enforcement.password_login_blocked(self._db, user.id)
         if blocked is not None:
-            await self._audit.log(
-                action="user.password_login_refused_sso",
-                resource_type="user",
-                resource_id=str(user.id),
-                org_id=None,
-                actor_id=user.id,
-                ip=ip,
-                ua=user_agent,
-            )
-            raise PermissionDeniedError(
-                "errors.sso_required",
-                fallback=(
-                    f"Your organization signs in with {blocked.provider_label}. "
-                    "Use single sign-on instead of a password."
+            user_id = user.id
+
+            async def _record_refusal() -> None:
+                await self._audit.log(
+                    action="user.password_login_refused_sso",
+                    resource_type="user",
+                    resource_id=str(user_id),
+                    org_id=None,
+                    actor_id=user_id,
+                    ip=ip,
+                    ua=user_agent,
+                )
+
+            # The refusal is recorded; the failed-login reset and any rehash
+            # above are not -- this request did not sign anybody in.
+            await persist_then_reject(
+                self._db,
+                _record_refusal,
+                PermissionDeniedError(
+                    "errors.sso_required",
+                    fallback=(
+                        f"Your organization signs in with {blocked.provider_label}. "
+                        "Use single sign-on instead of a password."
+                    ),
+                    params={
+                        "provider": blocked.provider_label,
+                        "org_slug": blocked.org_slug,
+                    },
                 ),
-                params={
-                    "provider": blocked.provider_label,
-                    "org_slug": blocked.org_slug,
-                },
             )
 
-        # §T-217: a registered security key is treated as an alternative to
-        # TOTP at this same gate, not an additional required factor -- a user
-        # with only a WebAuthn credential (no TOTP) still needs to clear this
-        # challenge, just via /auth/webauthn/login instead of /auth/2fa/login.
-        has_webauthn = await self._webauthn_credentials.exists_for_user(user.id)
-        if user.totp_enabled or has_webauthn:
-            # Password is correct, but that alone isn't enough to issue real
-            # tokens -- temp_token only proves this much and must be traded
-            # for a code at /auth/2fa/login (confirm_login_2fa below) or a
-            # security-key assertion at /auth/webauthn/login/options+/login.
-            temp_token = sign_url_token(
-                {"user_id": str(user.id), "purpose": _TOTP_LOGIN_PURPOSE},
-                _TOTP_LOGIN_TOKEN_TTL_SECONDS,
-            )
-            return TwoFactorChallenge(temp_token=temp_token)
+        challenge = await self._second_factor_challenge(user, first_factor=amr_methods.PASSWORD)
+        if challenge is not None:
+            return challenge
 
-        result = await self._create_session(user, ip, user_agent)
+        result = await self._create_session(user, ip, user_agent, amr=[amr_methods.PASSWORD])
         await self._audit.log(
             action="user.login_success",
             resource_type="user",
@@ -365,12 +365,59 @@ class AuthService:
         )
         return result
 
-    async def _create_session(self, user: User, ip: str, user_agent: str) -> tuple[str, str, User]:
+    async def _second_factor_challenge(
+        self, user: User, *, first_factor: str
+    ) -> TwoFactorChallenge | None:
+        """The one place any sign-in decides whether a second factor is owed.
+
+        None means "issue a session"; a challenge means the caller must
+        return it instead, and the holder trades it for a code at
+        /auth/2fa/login or a security-key assertion at
+        /auth/webauthn/login/options+/login.
+
+        Every entry point consults this -- password, magic link, social
+        OAuth, enterprise SSO -- and that is the point. They used to decide
+        separately, and three of the four decided wrong:
+
+        - magic link and social OAuth called `_create_session` directly, so
+          an account with TOTP or a security key enrolled could be signed
+          into with neither. Possession of an inbox, or of a Google session,
+          was enough.
+        - SSO checked `totp_enabled` alone, so a user whose only second
+          factor was a security key was never challenged.
+
+        The social case was a deliberate decision once, on the reasoning that
+        for Google or GitHub "the account *is* the factor". That is a claim
+        about the provider, and it is not ours to make on the user's behalf:
+        someone who enrolled a second factor here asked for it to be checked
+        here. If we want to accept the provider's own MFA we should read its
+        `amr` claim and say so, rather than assume it.
+
+        §T-217: a registered security key is an alternative to TOTP at this
+        gate, not an additional factor -- a user with only WebAuthn still
+        clears it, via a different endpoint.
+        """
+        # Short-circuited rather than `totp_enabled or exists_for_user(...)`:
+        # the answer is already yes, and this runs on every sign-in.
+        if not user.totp_enabled and not await self._webauthn_credentials.exists_for_user(user.id):
+            return None
+        temp_token = sign_url_token(
+            # "amr": the first factor already passed, so the session the
+            # challenge eventually issues records both (review R3).
+            {"user_id": str(user.id), "purpose": _TOTP_LOGIN_PURPOSE, "amr": first_factor},
+            _TOTP_LOGIN_TOKEN_TTL_SECONDS,
+        )
+        return TwoFactorChallenge(temp_token=temp_token)
+
+    async def _create_session(
+        self, user: User, ip: str, user_agent: str, *, amr: Sequence[str]
+    ) -> tuple[str, str, User]:
         settings = get_settings()
         now = utcnow()
-        access_token = create_access_token(user.id, None, (), auth_time=now)
         refresh_plain, refresh_hash = generate_refresh_token()
-        await self._sessions.create(
+        # The session is created *before* the access token, not after, because
+        # the token now carries that session's id -- see AccessTokenPayload.sid.
+        session = await self._sessions.create(
             user_id=user.id,
             token_hash=refresh_hash,
             device_label=describe_device(user_agent),
@@ -378,7 +425,9 @@ class AuthService:
             user_agent=user_agent,
             expires_at=now + timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS),
             auth_time=now,
+            amr=amr,
         )
+        access_token = create_access_token(user.id, None, (), auth_time=now, sid=session.id)
         return access_token, refresh_plain, user
 
     async def refresh(self, refresh_token_plain: str, ip: str, user_agent: str) -> tuple[str, str]:
@@ -400,33 +449,59 @@ class AuthService:
         session = await self._sessions.get_by_token_hash(hash_token(refresh_token_plain))
 
         if session is None:
-            raise AuthenticationError(
-                "errors.session_invalid",
-                fallback="Your session is no longer valid. Please log in again.",
+            raise _session_invalid()
+
+        # Captured before any rejection below: persist_then_reject rolls
+        # back first, which expires `session`.
+        session_id = session.id
+        user_id = session.user_id
+
+        if session.revoked_at is not None and session.revoked_reason in {REVOKED_ROTATED, None}:
+            # Rotated away and presented again: the one legitimate holder
+            # moved on, so this is a copy. (NULL: revoked before reasons were
+            # recorded, when every revocation was treated this way -- kept
+            # conservative for those rows.)
+            await persist_then_reject(
+                self._db,
+                lambda: self._contain_refresh_theft(user_id, session_id, ip, user_agent),
+                _session_invalid(),
             )
 
         if session.revoked_at is not None:
-            await self._sessions.revoke_all_for_user(session.user_id)
-            raise AuthenticationError(
-                "errors.session_invalid",
-                fallback="Your session is no longer valid. Please log in again.",
-            )
+            # Revoked on purpose -- signed out, password changed, second
+            # factor enrolled. The device holding it will try it once more;
+            # that is not theft, and treating it as theft signed the user out
+            # of the very session that did the revoking.
+            raise _session_invalid()
 
         # Same rule the session list and the active-sessions gauge apply, from
         # one definition (session_rules) -- they disagreed until 2026-09-21,
         # and the list was the one that was wrong.
         if not is_session_usable(session):
-            await self._sessions.revoke(session.id)
-            raise AuthenticationError(
-                "errors.session_invalid",
-                fallback="Your session is no longer valid. Please log in again.",
+            await persist_then_reject(
+                self._db,
+                lambda: self._sessions.revoke(session_id, reason=REVOKED_EXPIRED),
+                _session_invalid(),
             )
 
-        await self._sessions.revoke(session.id)
+        if not await self._sessions.revoke_if_active(session_id):
+            # Another request rotated this same session between the check
+            # above and here. One refresh token, two successors -- which is
+            # either a client racing itself or the theft this detector is
+            # for, and there is no way to tell them apart from here. Treat it
+            # as theft, exactly as a presented-after-revocation token is.
+            await persist_then_reject(
+                self._db,
+                lambda: self._contain_refresh_theft(user_id, session_id, ip, user_agent),
+                _session_invalid(),
+            )
 
-        access_token = create_access_token(session.user_id, None, (), auth_time=session.auth_time)
         refresh_plain, refresh_hash = generate_refresh_token()
-        await self._sessions.create(
+        # As in _create_session: the successor session has to exist before the
+        # token that names it. A rotation mints a token bound to the *new*
+        # session, so revoking the old one does not take the fresh token with
+        # it.
+        rotated = await self._sessions.create(
             user_id=session.user_id,
             token_hash=refresh_hash,
             # The chain keeps the identity it was created with -- a rotation
@@ -443,9 +518,69 @@ class AuthService:
             # target ASVS V3.3.2 asks for.
             expires_at=session.expires_at,
             auth_time=session.auth_time,
+            # Like auth_time: a rotation proves nothing new (review R3).
+            amr=session.amr,
+        )
+        access_token = create_access_token(
+            session.user_id, None, (), auth_time=session.auth_time, sid=rotated.id
         )
 
         return access_token, refresh_plain
+
+    async def _record_failed_login(self, user_id: UUID, ip: str, user_agent: str) -> None:
+        """One wrong password: count it, and lock the account at the limit.
+
+        Always run through persist_then_reject -- see login().
+        """
+        count = await self._users.increment_failed_login(user_id)
+        if count >= _MAX_FAILED_LOGIN_ATTEMPTS:
+            await self._users.set_lockout(user_id, utcnow() + _LOCKOUT_DURATION)
+            await self._users.reset_failed_login(user_id)
+            # T-219/ASVS V7.2.1: the counter increment above is state, not a
+            # discrete security event -- lockout is the high-severity one (an
+            # active brute-force attempt), so it gets its own audit action
+            # rather than folding into user.login_failed.
+            await self._audit.log(
+                action="user.account_locked",
+                resource_type="user",
+                resource_id=str(user_id),
+                org_id=None,
+                actor_id=user_id,
+                ip=ip,
+                ua=user_agent,
+                severity="elevated",
+            )
+            return
+        await self._audit.log(
+            action="user.login_failed",
+            resource_type="user",
+            resource_id=str(user_id),
+            org_id=None,
+            actor_id=user_id,
+            ip=ip,
+            ua=user_agent,
+        )
+
+    async def _contain_refresh_theft(
+        self, user_id: UUID, session_id: UUID, ip: str, user_agent: str
+    ) -> None:
+        """T-019's response to a refresh token presented twice: every session
+        the user holds goes, including the successor a thief would be using.
+
+        Always run through persist_then_reject. Raised the ordinary way, the
+        rejection rolled this back and the successor kept working.
+        """
+        await self._sessions.revoke_all_for_user(user_id, reason=REVOKED_THEFT)
+        await self._audit.log(
+            action="user.refresh_token_reuse",
+            resource_type="session",
+            resource_id=str(session_id),
+            org_id=None,
+            actor_id=user_id,
+            ip=ip,
+            ua=user_agent,
+            severity="elevated",
+        )
 
     async def request_password_reset(self, email: str) -> None:
         user = await self._users.get_by_email(email)
@@ -475,7 +610,13 @@ class AuthService:
                 "errors.invalid_reset_token", fallback="Invalid or expired reset token"
             )
 
-        await self._password_reset_tokens.mark_used(record.id)
+        if not await self._password_reset_tokens.consume(record.id):
+            # Lost the race to another request presenting the same
+            # token. Same answer a replay gets, because that is what
+            # it is -- see _TokenRepository.consume.
+            raise AuthenticationError(
+                "errors.invalid_reset_token", fallback="Invalid or expired reset token"
+            )
         await self._users.update(
             user.id, hashed_password=await _hash_password_off_loop(new_password)
         )
@@ -505,7 +646,7 @@ class AuthService:
 
     async def consume_magic_link(
         self, token: str, ip: str, user_agent: str
-    ) -> tuple[str, str, User]:
+    ) -> tuple[str, str, User] | TwoFactorChallenge:
         record = await self._magic_link_tokens.get_by_hash(hash_token(token))
         if record is None:
             raise AuthenticationError(
@@ -518,13 +659,26 @@ class AuthService:
                 "errors.invalid_magic_link", fallback="Invalid or expired magic link"
             )
 
-        await self._magic_link_tokens.mark_used(record.id)
+        if not await self._magic_link_tokens.consume(record.id):
+            # Lost the race to another request presenting the same
+            # token. Same answer a replay gets, because that is what
+            # it is -- see _TokenRepository.consume.
+            raise AuthenticationError(
+                "errors.invalid_magic_link", fallback="Invalid or expired magic link"
+            )
 
-        return await self._create_session(user, ip, user_agent)
+        # The token is spent either way: it proved control of the inbox, and
+        # that is all it was ever good for. Whether that is enough to issue a
+        # session is _second_factor_challenge's call, not this method's.
+        challenge = await self._second_factor_challenge(user, first_factor=amr_methods.MAGIC_LINK)
+        if challenge is not None:
+            return challenge
+
+        return await self._create_session(user, ip, user_agent, amr=[amr_methods.MAGIC_LINK])
 
     async def oauth_login(
         self, provider: str, profile: OAuthProfile, ip: str, user_agent: str
-    ) -> tuple[str, str, User]:
+    ) -> tuple[str, str, User] | TwoFactorChallenge:
         oauth_account = await self._oauth_accounts.get_by_provider_account(
             provider, profile.provider_user_id
         )
@@ -572,7 +726,11 @@ class AuthService:
                     user, "oauth_linked", provider=provider
                 )
 
-        return await self._create_session(user, ip, user_agent)
+        challenge = await self._second_factor_challenge(user, first_factor=amr_methods.SOCIAL_OAUTH)
+        if challenge is not None:
+            return challenge
+
+        return await self._create_session(user, ip, user_agent, amr=[amr_methods.SOCIAL_OAUTH])
 
     async def sso_login(  # noqa: PLR0913 -- the identity's four parts plus ip/ua
         self,
@@ -629,17 +787,27 @@ class AuthService:
             ua=user_agent,
         )
 
-        if user.totp_enabled and not mfa_asserted:
-            # Same shape as the password path's challenge: the IdP has proven
-            # who they are, which is not yet enough to issue real tokens for
-            # an account whose owner asked for a second factor.
-            temp_token = sign_url_token(
-                {"user_id": str(user.id), "purpose": _TOTP_LOGIN_PURPOSE},
-                _TOTP_LOGIN_TOKEN_TTL_SECONDS,
+        if not mfa_asserted:
+            # The IdP has proven who they are, which is not yet enough to
+            # issue real tokens for an account whose owner asked for a second
+            # factor. `mfa_asserted` is the one thing that skips it, and it
+            # comes from the IdP's own amr/acr claim -- an upstream factor we
+            # were actually told about, rather than one we assumed.
+            #
+            # This used to test `user.totp_enabled` directly, which meant a
+            # user whose only second factor was a security key was never
+            # challenged here. Going through the shared helper is what keeps
+            # the four sign-in paths from drifting apart again.
+            challenge = await self._second_factor_challenge(
+                user, first_factor=amr_methods.ENTERPRISE_SSO
             )
-            return TwoFactorChallenge(temp_token=temp_token)
+            if challenge is not None:
+                return challenge
 
-        return await self._create_session(user, ip, user_agent)
+        first = [amr_methods.ENTERPRISE_SSO]
+        return await self._create_session(
+            user, ip, user_agent, amr=[*first, amr_methods.IDP_MFA] if mfa_asserted else first
+        )
 
     async def change_password(
         self,
@@ -833,7 +1001,14 @@ class AuthService:
                 "errors.conflict", fallback="This email address is no longer available"
             )
 
-        await self._email_change_tokens.mark_used(record.id)
+        if not await self._email_change_tokens.consume(record.id):
+            # Lost the race to another request presenting the same
+            # token. Same answer a replay gets, because that is what
+            # it is -- see _TokenRepository.consume.
+            raise AuthenticationError(
+                "errors.invalid_email_change_token",
+                fallback="This email change link is invalid or has expired",
+            )
         old_email = user.email
         # Sent to the *old* address before the mutation below -- the User
         # object this method holds and the one UserRepository.update()
@@ -979,8 +1154,15 @@ class AuthService:
         )
         return provisioning_uri, secret
 
-    async def verify_2fa(self, user: User, code: str) -> list[str]:
-        """Activates 2FA and returns the plaintext backup codes -- shown once."""
+    async def verify_2fa(
+        self, user: User, code: str, *, current_session_id: UUID | None = None
+    ) -> list[str]:
+        """Activates 2FA and returns the plaintext backup codes -- shown once.
+
+        `current_session_id` is the session making the request: it has just
+        proved the factor, so it is the one session that keeps working (see
+        _second_factor_enrolled).
+        """
         record = await self._totp_secrets.get_by_user_id(user.id)
         if record is None or record.enabled_at is not None:
             raise ConflictError(
@@ -994,11 +1176,44 @@ class AuthService:
             )
 
         backup_codes = [secrets.token_hex(5) for _ in range(_BACKUP_CODE_COUNT)]
-        hashed_backup_codes = [await _hash_password_off_loop(c) for c in backup_codes]
+        hashed_backup_codes = [hash_backup_code(c) for c in backup_codes]
+        had_second_factor = await self._webauthn_credentials.exists_for_user(user.id)
         await self._totp_secrets.mark_enabled(user.id, json.dumps(hashed_backup_codes))
         await self._users.update(user.id, totp_enabled=True)
+        await self._second_factor_enrolled(
+            user.id,
+            current_session_id,
+            amr_methods.TOTP,
+            raises_the_bar=not had_second_factor,
+        )
         await self._enqueue_security_notification_email(user, "totp_enabled")
         return backup_codes
+
+    async def _second_factor_enrolled(
+        self,
+        user_id: UUID,
+        current_session_id: UUID | None,
+        method: str,
+        *,
+        raises_the_bar: bool,
+    ) -> None:
+        """Review R3: what enrolling a factor does to the sessions that exist.
+
+        The session making the request has just proved the factor (a valid
+        TOTP code, or a completed registration ceremony), so it records it.
+
+        If this is the account's *first* second factor, every other session
+        was opened below the bar the account now sets, and is revoked. Left
+        alone, a password-only session from before enrollment -- on a stolen
+        laptop, say -- carried on, and passed require_superadmin, which
+        checked enrollment rather than the session. Someone who turns on 2FA
+        because they suspect a compromise expects the other devices signed
+        out, and this is what does it.
+        """
+        if current_session_id is not None:
+            await self._sessions.add_amr(current_session_id, method)
+        if raises_the_bar:
+            await self._sessions.revoke_all_for_user(user_id, except_id=current_session_id)
 
     async def disable_2fa(self, user: User, password: str, code: str) -> None:
         if not await _verify_password_off_loop(
@@ -1046,10 +1261,18 @@ class AuthService:
                 fallback="Invalid or expired two-factor session",
             )
 
-        if await self._verify_totp_and_track_replay(
-            user, record, code
-        ) or await self._consume_backup_code(record, code):
-            return await self._create_session(user, ip, user_agent)
+        # Legacy challenge tokens (issued before review R3, five-minute TTL)
+        # carry no first factor; every issuer of one then was a password or
+        # an equivalent, and the second factor is what the admin gate reads.
+        first_factor = str(payload.get("amr", amr_methods.PASSWORD))
+        if await self._verify_totp_and_track_replay(user, record, code):
+            return await self._create_session(
+                user, ip, user_agent, amr=[first_factor, amr_methods.TOTP]
+            )
+        if await self._consume_backup_code(record, code):
+            return await self._create_session(
+                user, ip, user_agent, amr=[first_factor, amr_methods.BACKUP_CODE]
+            )
 
         raise AuthenticationError("errors.invalid_totp_code", fallback="Invalid two-factor code")
 
@@ -1078,19 +1301,46 @@ class AuthService:
             )
             await self._enqueue_security_notification_email(user, "totp_replay_rejected")
             return False
-        await self._totp_secrets.mark_step_consumed(record.user_id, step)
+        if not await self._totp_secrets.mark_step_consumed(record.user_id, step):
+            # Another request consumed this step (or a newer one) between the
+            # comparison above and here -- the same replay, arriving
+            # concurrently rather than sequentially.
+            logger.warning(
+                "auth.totp: concurrent replay rejected (user_id=%s, step=%s)",
+                record.user_id,
+                step,
+            )
+            await self._enqueue_security_notification_email(user, "totp_replay_rejected")
+            return False
         return True
 
     async def _consume_backup_code(self, record: TOTPSecret, code: str) -> bool:
-        hashed_codes: list[str] = json.loads(record.backup_codes_hash)
-        for hashed in hashed_codes:
-            if await _verify_password_off_loop(code, hashed):
-                hashed_codes.remove(hashed)
-                await self._totp_secrets.update_backup_codes(
-                    record.user_id, json.dumps(hashed_codes)
-                )
-                return True
-        return False
+        original = record.backup_codes_hash
+        stored: list[str] = json.loads(original)
+        candidates = backup_code_digests(code)
+        match = next(
+            (s for s in stored if any(hmac.compare_digest(s, c) for c in candidates)), None
+        )
+        if match is None:
+            match = await self._match_legacy_backup_code(stored, code)
+        if match is None:
+            return False
+        stored.remove(match)
+        # Compare-and-swap against the exact list we read. Losing means
+        # another request spent a code in between, and writing our copy
+        # would put theirs back. Refusing is the safe side: the user retries
+        # with an unspent code.
+        return await self._totp_secrets.swap_backup_codes(
+            record.user_id, expected=original, replacement=json.dumps(stored)
+        )
+
+    async def _match_legacy_backup_code(self, stored: list[str], code: str) -> str | None:
+        """Argon2 codes from before keyed digests (see utils.is_legacy_backup_code).
+        Only accounts that still hold some pay the Argon2 cost."""
+        for hashed in stored:
+            if is_legacy_backup_code(hashed) and await _verify_password_off_loop(code, hashed):
+                return hashed
+        return None
 
     async def list_webauthn_credentials(self, user_id: UUID) -> list[WebAuthnCredential]:
         return await self._webauthn_credentials.list_for_user(user_id)
@@ -1128,6 +1378,8 @@ class AuthService:
         challenge_token: str,
         credential: dict[str, Any],
         nickname: str | None,
+        *,
+        current_session_id: UUID | None = None,
     ) -> WebAuthnCredential:
         payload = verify_url_token(challenge_token, max_age=_WEBAUTHN_CHALLENGE_TTL_SECONDS)
         if payload.get("purpose") != _WEBAUTHN_REGISTER_PURPOSE or payload.get("user_id") != str(
@@ -1151,6 +1403,9 @@ class AuthService:
                 "errors.invalid_webauthn_response", fallback="Could not verify security key"
             ) from exc
 
+        had_second_factor = user.totp_enabled or await self._webauthn_credentials.exists_for_user(
+            user.id
+        )
         record = await self._webauthn_credentials.create(
             user_id=user.id,
             credential_id=bytes_to_base64url(verified.credential_id),
@@ -1158,6 +1413,12 @@ class AuthService:
             sign_count=verified.sign_count,
             aaguid=verified.aaguid,
             nickname=nickname,
+        )
+        await self._second_factor_enrolled(
+            user.id,
+            current_session_id,
+            amr_methods.SECURITY_KEY,
+            raises_the_bar=not had_second_factor,
         )
         await self._enqueue_security_notification_email(user, "webauthn_registered")
         return record
@@ -1204,6 +1465,8 @@ class AuthService:
                 "user_id": str(user_id),
                 "purpose": _WEBAUTHN_LOGIN_PURPOSE,
                 "challenge": bytes_to_base64url(options.challenge),
+                # Carried through from the first-factor challenge (review R3).
+                "amr": str(payload.get("amr", amr_methods.PASSWORD)),
             },
             _WEBAUTHN_CHALLENGE_TTL_SECONDS,
         )
@@ -1256,13 +1519,40 @@ class AuthService:
                     user_id,
                     record.id,
                 )
-                await self._sessions.revoke_all_for_user(user_id)
+                record_id = record.id
+
+                async def _contain_clone() -> None:
+                    await self._sessions.revoke_all_for_user(user_id, reason=REVOKED_THEFT)
+                    await self._audit.log(
+                        action="user.webauthn_clone_detected",
+                        resource_type="webauthn_credential",
+                        resource_id=str(record_id),
+                        org_id=None,
+                        actor_id=user_id,
+                        ip=ip,
+                        ua=user_agent,
+                        severity="elevated",
+                    )
+
+                # Through persist_then_reject for the same reason as refresh's
+                # theft response: raised plainly, the revocation rolled back.
+                await persist_then_reject(
+                    self._db,
+                    _contain_clone,
+                    AuthenticationError(
+                        "errors.invalid_webauthn_response",
+                        fallback="Could not verify security key",
+                    ),
+                )
             raise AuthenticationError(
                 "errors.invalid_webauthn_response", fallback="Could not verify security key"
             ) from exc
 
         await self._webauthn_credentials.update_sign_count(record.id, verified.new_sign_count)
-        return await self._create_session(user, ip, user_agent)
+        first_factor = str(payload.get("amr", amr_methods.PASSWORD))
+        return await self._create_session(
+            user, ip, user_agent, amr=[first_factor, amr_methods.SECURITY_KEY]
+        )
 
     async def _enqueue_verification_email(self, user: User, token: str) -> None:
         await jobs.enqueue_job(

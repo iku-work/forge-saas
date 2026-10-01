@@ -1,0 +1,21 @@
+# The Content-Security-Policy in Caddyfile.prod carries a sha256 of the inline
+# theme-boot script in apps/web/index.html (see F-004 there), and a browser
+# hashes the exact bytes it receives. With git's default autocrlf those bytes
+# are CRLF in a Windows checkout and LF in the Linux build that actually
+# ships -- two different hashes for one script, so the policy would be right
+# on one platform and silently wrong on the other.
+#
+# Pinning the file to LF makes the hash machine-independent, which is what
+# lets the hash be a committed constant that a test can check rather than
+# something regenerated per build.
+apps/web/index.html text eol=lf
+
+# Shell scripts run on Linux -- the deploy box, the containers -- and a CRLF
+# shebang there fails with `bad interpreter: /usr/bin/env bash^M`, which is
+# an error message that tells you almost nothing about its cause.
+#
+# core.autocrlf already stores these as LF today, so this changes nothing in
+# the repository. It says so explicitly instead, because the alternative is
+# a setting on one developer's machine being load-bearing for whether
+# scripts/backup-postgres.sh runs at all.
+*.sh text eol=lf

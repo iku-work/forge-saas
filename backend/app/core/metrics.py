@@ -39,6 +39,7 @@ from redis.retry import Retry
 
 from app.core.config import get_settings
 from app.core.db import write_engine
+from app.core.jobs import SCAN_QUEUE_NAME
 
 logger = logging.getLogger(__name__)
 
@@ -72,6 +73,11 @@ FORGE_DB_POOL_SIZE = Gauge(
     "forge_db_pool_size", "Configured size of the backend's async engine pool"
 )
 FORGE_ARQ_QUEUE_DEPTH = Gauge("forge_arq_queue_depth", "Pending jobs waiting in the ARQ queue")
+# Review OCT-04: scans have their own queue and worker (R4), so their backlog
+# needs its own number; the shared one never sees them.
+FORGE_SCAN_QUEUE_DEPTH = Gauge(
+    "forge_scan_queue_depth", "Pending virus scans waiting in the scan queue"
+)
 FORGE_ACTIVE_SESSIONS = Gauge(
     "forge_active_sessions",
     "Non-revoked, non-expired sessions (refreshed every 60s by a worker job, not per-scrape)",
@@ -228,12 +234,12 @@ def reset_scrape_backoff() -> None:
     _redis_unreachable_until = 0.0
 
 
-def _read_arq_queue_depth() -> float:
+def _read_arq_queue_depth(key: str = _ARQ_QUEUE_KEY) -> float:
     client = _redis_or_none()
     if client is None:
         return 0.0
     try:
-        depth = cast("int", client.zcard(_ARQ_QUEUE_KEY))
+        depth = cast("int", client.zcard(key))
     except redis.RedisError:
         _note_redis_failure()
         return 0.0
@@ -276,6 +282,7 @@ def _read_db_pool_size() -> int:
 FORGE_DB_POOL_USED.set_function(_read_db_pool_used)
 FORGE_DB_POOL_SIZE.set_function(_read_db_pool_size)
 FORGE_ARQ_QUEUE_DEPTH.set_function(_read_arq_queue_depth)
+FORGE_SCAN_QUEUE_DEPTH.set_function(lambda: _read_arq_queue_depth(SCAN_QUEUE_NAME))
 FORGE_ACTIVE_SESSIONS.set_function(_read_active_sessions)
 FORGE_REENCRYPT_REMAINING.set_function(_read_reencrypt_remaining)
 FORGE_WEBHOOK_QUEUE_DEPTH.set_function(_read_webhook_queue_depth)

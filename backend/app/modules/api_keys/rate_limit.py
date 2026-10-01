@@ -29,7 +29,6 @@ from time import time
 from uuid import UUID
 
 from limits import RateLimitItemPerMinute
-from loguru import logger
 
 from app.core.config import get_settings
 from app.core.exceptions import RateLimitError
@@ -95,25 +94,16 @@ def budget_for(override: int | None) -> int:
 def check(key_id: UUID, override: int | None) -> RateLimitVerdict:
     """Consume one request from `key_id`'s budget.
 
-    Fails *open* on a storage error, deliberately: this limiter protects
-    capacity, and a Redis outage has already cost capacity -- refusing every
-    API request on top of it turns a degraded dependency into a total one.
-    The call that would have denied is logged at WARNING instead, so the
-    outage is visible rather than silent. (Contrast
+    Fails *open* on a storage error, like every limit here: the shared
+    strategy (FailOpenSlidingWindow) decides that once. (Contrast
     `ApiKeyAuthenticator.touch_used`, which fails *closed* on the same error:
     there the safe side of a broken throttle is not writing.)
     """
     limit = budget_for(override)
     item = RateLimitItemPerMinute(limit)
     strategy = current_strategy()
-    try:
-        allowed = strategy.hit(item, identity(key_id))
-        stats = strategy.get_window_stats(item, identity(key_id))
-    except Exception as exc:  # noqa: BLE001 -- any storage failure, see the docstring
-        logger.warning("api_key.rate_limit_unavailable: key_id={} error={}", key_id, exc)
-        return RateLimitVerdict(
-            allowed=True, limit=limit, remaining=limit, reset_seconds=_WINDOW_SECONDS
-        )
+    allowed = strategy.hit(item, identity(key_id))
+    stats = strategy.get_window_stats(item, identity(key_id))
     return RateLimitVerdict(
         allowed=allowed,
         limit=limit,

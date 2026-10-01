@@ -51,6 +51,7 @@ from app.core.exceptions import (
     UnprocessableEntityError,
 )
 from app.core.module_loader import is_enabled
+from app.middleware.budgets import charge_org
 from app.modules.api_keys import rate_limit as api_key_rate_limit
 from app.modules.api_keys.scopes import SCOPE_PERMISSIONS, Scope
 from app.modules.api_keys.service import ApiKeyAuthenticator, looks_like_api_key
@@ -233,6 +234,10 @@ async def _principal_from_session(  # noqa: PLR0913 -- as above
         raise PermissionDeniedError(
             "errors.not_org_member", fallback="Not a member of this organization"
         )
+    # Review R5: a session's request counts toward its organization, as on
+    # every other membership-checked route. (API keys do not -- see
+    # app.middleware.budgets.)
+    charge_org(request, org_id)
     permission = SCOPE_PERMISSIONS[scope]
     if permission not in ROLE_PERMISSIONS[membership.role]:
         raise PermissionDeniedError(

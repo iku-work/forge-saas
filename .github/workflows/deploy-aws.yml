@@ -24,7 +24,14 @@ name: Deploy — AWS (ECS Fargate)
 #   vars.ECS_CLUSTER          cluster name
 #   vars.ECS_BACKEND_SERVICE  service running the API
 #   vars.ECS_WORKER_SERVICE   service running the arq worker
-#   secrets.PROD_ENV_FILE     the complete backend/.env, for migrations
+#   vars.ECS_SCANNER_WORKER_SERVICE
+#                             service running the scan worker (review R4) --
+#                             container `scanner-worker`, command
+#                             `arq app.workers.main.ScanWorkerSettings`
+#   secrets.PROD_ENV_FILE     the complete backend/.env, checked by the
+#                             preflight guards. The tasks themselves -- the
+#                             migration task included -- take their env from
+#                             the task definition.
 #   secrets.PROD_DOMAIN       for the smoke test
 #
 # The frontend is not deployed here. On AWS the sensible home for the bundle
@@ -62,13 +69,36 @@ jobs:
       # credentials error that reads like a policy problem.
       id-token: write
 
+    # C4: values reach scripts through `env:`, never `${{ }}` in the source.
     env:
       GHCR_IMAGE: ghcr.io/${{ github.repository }}:${{ inputs.image-tag }}
+      TAG: ${{ inputs.image-tag }}
+      CLUSTER: ${{ vars.ECS_CLUSTER }}
+      BACKEND_SERVICE: ${{ vars.ECS_BACKEND_SERVICE }}
+      ECR_REPOSITORY: ${{ vars.ECR_REPOSITORY }}
+      PROD_DOMAIN: ${{ secrets.PROD_DOMAIN }}
 
     steps:
+      - name: Validate the image tag
+        run: |
+          [[ "$TAG" =~ ^[0-9a-f]{7,40}$ ]] || { echo "image-tag must be a commit SHA, got: $TAG" >&2; exit 1; }
+
       - uses: actions/checkout@v4
 
-      - name: Preflight — env, guards, migrations
+      # Review R4: scans have their own queue and their own worker. Without a
+      # service consuming that queue, nothing is ever scanned and every
+      # upload stays undownloadable -- fail the deploy, before anything
+      # (migrations included) has changed, instead of shipping that quietly.
+      - name: Require a scan worker service
+        env:
+          SCANNER_SERVICE: ${{ vars.ECS_SCANNER_WORKER_SERVICE }}
+        run: |
+          if [ -z "$SCANNER_SERVICE" ]; then
+            echo "vars.ECS_SCANNER_WORKER_SERVICE is not set -- uploads would never be scanned." >&2
+            exit 1
+          fi
+
+      - name: Preflight — env and guards
         uses: ./.github/actions/deploy-preflight
         with:
           image: ${{ env.GHCR_IMAGE }}
@@ -91,8 +121,10 @@ jobs:
       # time a base layer moved.
       - name: Copy the scanned image into ECR
         id: push
+        env:
+          REGISTRY: ${{ steps.ecr.outputs.registry }}
         run: |
-          ECR_IMAGE="${{ steps.ecr.outputs.registry }}/${{ vars.ECR_REPOSITORY }}:${{ inputs.image-tag }}"
+          ECR_IMAGE="$REGISTRY/$ECR_REPOSITORY:$TAG"
           docker pull "$GHCR_IMAGE"
           docker tag "$GHCR_IMAGE" "$ECR_IMAGE"
           docker push "$ECR_IMAGE"
@@ -102,8 +134,8 @@ jobs:
         id: previous
         run: |
           ARN=$(aws ecs describe-services \
-            --cluster "${{ vars.ECS_CLUSTER }}" \
-            --services "${{ vars.ECS_BACKEND_SERVICE }}" \
+            --cluster "$CLUSTER" \
+            --services "$BACKEND_SERVICE" \
             --query 'services[0].taskDefinition' --output text)
           echo "task_definition=$ARN" >> "$GITHUB_OUTPUT"
           echo "currently running: $ARN"
@@ -115,6 +147,42 @@ jobs:
           task-definition-family: ${{ vars.ECS_BACKEND_SERVICE }}
           container-name: backend
           image: ${{ steps.push.outputs.image }}
+
+      # C4: a one-off Fargate task, from the new task definition, inside the
+      # backend service's own VPC, subnets and security groups -- so the
+      # database is reached from where the application reaches it, and never
+      # from GitHub's network. Its env and secrets come from the task
+      # definition, exactly what the new tasks will run with. The deploy
+      # waits for it to stop and fails on anything but exit code 0, before
+      # any service changes.
+      # `python -m app.core.migrations`, never `alembic upgrade head`: this
+      # schema has branched module heads and `head` (singular) cannot run.
+      - name: Run migrations as a one-off task
+        id: migrate
+        env:
+          TASK_DEFINITION_FILE: ${{ steps.backend-task.outputs.task-definition }}
+        run: |
+          TASK_DEF=$(aws ecs register-task-definition --cli-input-json "file://$TASK_DEFINITION_FILE" \
+            --query 'taskDefinition.taskDefinitionArn' --output text)
+          NETWORK=$(aws ecs describe-services --cluster "$CLUSTER" --services "$BACKEND_SERVICE" \
+            --query 'services[0].networkConfiguration' --output json)
+          OVERRIDES=$(jq -n '{containerOverrides: [{name: "backend", command: ["python", "-m", "app.core.migrations"]}]}')
+          TASK=$(aws ecs run-task --cluster "$CLUSTER" --launch-type FARGATE \
+            --task-definition "$TASK_DEF" \
+            --network-configuration "$NETWORK" \
+            --overrides "$OVERRIDES" \
+            --started-by "migrate-$TAG" \
+            --query 'tasks[0].taskArn' --output text)
+          echo "migration task: $TASK"
+          aws ecs wait tasks-stopped --cluster "$CLUSTER" --tasks "$TASK"
+          EXIT_CODE=$(aws ecs describe-tasks --cluster "$CLUSTER" --tasks "$TASK" \
+            --query "tasks[0].containers[?name=='backend'].exitCode | [0]" --output text)
+          if [ "$EXIT_CODE" != "0" ]; then
+            REASON=$(aws ecs describe-tasks --cluster "$CLUSTER" --tasks "$TASK" \
+              --query 'tasks[0].stoppedReason' --output text)
+            echo "migration task exited with '$EXIT_CODE' ($REASON). Nothing has been deployed; its logs are in the backend's log group." >&2
+            exit 1
+          fi
 
       # wait-for-service-stability is what makes this a gate rather than a
       # fire-and-forget: ECS keeps the old tasks serving until the new ones
@@ -145,22 +213,43 @@ jobs:
           cluster: ${{ vars.ECS_CLUSTER }}
           wait-for-service-stability: true
 
+      - name: Render the scan worker task definition
+        id: scanner-worker-task
+        uses: aws-actions/amazon-ecs-render-task-definition@v1
+        with:
+          task-definition-family: ${{ vars.ECS_SCANNER_WORKER_SERVICE }}
+          container-name: scanner-worker
+          image: ${{ steps.push.outputs.image }}
+
+      - name: Deploy the scan worker service
+        uses: aws-actions/amazon-ecs-deploy-task-definition@v2
+        with:
+          task-definition: ${{ steps.scanner-worker-task.outputs.task-definition }}
+          service: ${{ vars.ECS_SCANNER_WORKER_SERVICE }}
+          cluster: ${{ vars.ECS_CLUSTER }}
+          wait-for-service-stability: true
+
       - name: Smoke test
         id: smoke_test
-        run: curl -sf "https://${{ secrets.PROD_DOMAIN }}/health/ready"
+        run: curl -sf "https://$PROD_DOMAIN/health/ready"
 
+      # C5, same rule as Hetzner: once the backend deploy has *started* --
+      # including one that failed partway through its stability wait -- a
+      # failure rolls it back. `== 'success'` skipped exactly that case.
       # Only the tasks move backwards; the database does not. A migration
       # that has applied stays applied, which is why they have to work
       # against the previous release too.
       - name: Roll back to the previous task definition
-        if: failure() && steps.deploy-backend.outcome == 'success'
+        if: failure() && steps.deploy-backend.outcome != 'skipped'
+        env:
+          PREVIOUS: ${{ steps.previous.outputs.task_definition }}
         run: |
           aws ecs update-service \
-            --cluster "${{ vars.ECS_CLUSTER }}" \
-            --service "${{ vars.ECS_BACKEND_SERVICE }}" \
-            --task-definition "${{ steps.previous.outputs.task_definition }}" \
+            --cluster "$CLUSTER" \
+            --service "$BACKEND_SERVICE" \
+            --task-definition "$PREVIOUS" \
             --force-new-deployment
           aws ecs wait services-stable \
-            --cluster "${{ vars.ECS_CLUSTER }}" \
-            --services "${{ vars.ECS_BACKEND_SERVICE }}"
-          echo "rolled back to ${{ steps.previous.outputs.task_definition }}" >&2
+            --cluster "$CLUSTER" \
+            --services "$BACKEND_SERVICE"
+          echo "rolled back to $PREVIOUS" >&2

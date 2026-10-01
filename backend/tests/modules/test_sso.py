@@ -27,7 +27,6 @@ import socket
 import time
 from collections.abc import AsyncIterator, Callable
 from datetime import UTC, datetime
-from types import SimpleNamespace
 from typing import Any
 from uuid import uuid4
 
@@ -49,7 +48,7 @@ from app.core.dependencies import get_current_org, get_redis
 from app.core.handlers import register_exception_handlers
 from app.middleware.rate_limit import register_rate_limiting
 from app.modules.audit.models import AuditEvent
-from app.modules.auth.models import OAuthAccount, User
+from app.modules.auth.models import OAuthAccount, User, WebAuthnCredential
 from app.modules.auth.permissions import MemberRole
 from app.modules.auth.repository import UserRepository
 from app.modules.auth.utils import hash_password
@@ -64,6 +63,7 @@ from app.modules.sso import service as sso_service
 from app.modules.sso.models import SsoConnection
 from app.modules.sso.repository import SsoConnectionRepository
 from app.modules.sso.router import router
+from tests._sessions import reloading, rolling_back
 
 _PREFIX = "/api/v1/auth/sso"
 _ISSUER = "https://idp.example.test"
@@ -86,11 +86,13 @@ def _fake_getaddrinfo(host: str, *_args: object, **_kwargs: object) -> list[tupl
 
 @pytest.fixture(autouse=True)
 def _fake_dns(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(
-        url_guard,
-        "socket",
-        SimpleNamespace(getaddrinfo=_fake_getaddrinfo, gaierror=socket.gaierror),
-    )
+    # Patched at url_guard's own resolver rather than `socket.getaddrinfo`
+    # globally: these tests hold a real Postgres connection, and a global
+    # patch answers asyncpg's lookup too.
+    async def _fake(host: str) -> list[object]:
+        return _fake_getaddrinfo(host)
+
+    monkeypatch.setattr(url_guard, "_getaddrinfo", _fake)
 
 
 @pytest.fixture(autouse=True)
@@ -183,7 +185,12 @@ def idp(monkeypatch: pytest.MonkeyPatch) -> _MockIdp:
     # every request in the test to the mock IdP -- which shows up as an empty
     # 404 from a route that plainly exists, and costs half an hour.
     monkeypatch.setattr(
-        discovery_module, "new_client", lambda: httpx.AsyncClient(transport=transport)
+        discovery_module,
+        "new_client",
+        # Takes (and discards) the pinned transport the real one is now
+        # handed: the mock IdP is reached through this MockTransport, and a
+        # pinned transport would try to open a real socket to a fake address.
+        lambda _pinned=None: httpx.AsyncClient(transport=transport),
     )
 
     real_exchange = oidc.exchange_code
@@ -239,10 +246,10 @@ ClientFactory = Callable[..., httpx.AsyncClient]
 @pytest.fixture
 async def api_client(
     session: AsyncSession,
-    _redis_client: Redis,
-    _rate_limit_storage: RedisStorage,
+    redis_client: Redis,
+    rate_limit_storage: RedisStorage,
 ) -> AsyncIterator[ClientFactory]:
-    _rate_limit_storage.reset()
+    rate_limit_storage.reset()
     clients: list[httpx.AsyncClient] = []
 
     def _make(caller: tuple[Organization, Membership] | None = None) -> httpx.AsyncClient:
@@ -250,10 +257,10 @@ async def api_client(
         register_exception_handlers(api)
         register_rate_limiting(api)
         api.include_router(router, prefix="/api/v1")
-        api.dependency_overrides[get_session] = lambda: session
-        api.dependency_overrides[get_redis] = lambda: _redis_client
+        api.dependency_overrides[get_session] = rolling_back(session)
+        api.dependency_overrides[get_redis] = lambda: redis_client
         if caller is not None:
-            api.dependency_overrides[get_current_org] = lambda: caller
+            api.dependency_overrides[get_current_org] = reloading(session, caller)
         client = httpx.AsyncClient(
             transport=ASGITransport(app=api),
             base_url="https://testserver",
@@ -650,6 +657,50 @@ async def test_an_amr_claim_naming_a_second_factor_satisfies_totp(
     assert body["user"]["id"] == str(user.id)
 
 
+async def test_sso_challenges_a_user_whose_only_second_factor_is_a_security_key(
+    session: AsyncSession, api_client: ClientFactory, idp: _MockIdp
+) -> None:
+    """The half this gate used to miss.
+
+    It tested `user.totp_enabled` directly, so an account whose only second
+    factor was a registered security key went straight to a session -- the
+    IdP had proven who they were, and the factor its owner had enrolled here
+    was never asked for. All four sign-in paths now ask the same helper,
+    which treats a key as an alternative to TOTP rather than something else
+    entirely.
+    """
+    org, _ = await _make_org(session)
+    await _connect(session, org)
+    user = await UserRepository(session).create(
+        # Must be the address the mock IdP asserts, or the callback
+        # JIT-provisions a *different* user and the credential below belongs
+        # to nobody in the flow.
+        email=f"newcomer@{_DOMAIN}",
+        hashed_password=hash_password("Correct-Horse9"),
+        email_verified_at=datetime.now(UTC),
+    )
+    session.add(
+        WebAuthnCredential(
+            user_id=user.id,
+            credential_id=f"cred-{uuid4()}",
+            public_key="cHVibGljLWtleQ==",
+            sign_count=0,
+            aaguid="00000000-0000-0000-0000-000000000000",
+        )
+    )
+    await session.flush()
+    client = api_client()
+
+    state, nonce = await _start(client, org.slug)
+    idp.nonce = nonce
+    response = await client.get(f"{_PREFIX}/callback", params={"code": "c", "state": state})
+
+    assert response.status_code == 200, response.text
+    body = response.json()["data"]
+    assert body["temp_token"]
+    assert "access_token" not in body
+
+
 async def test_a_discovery_document_missing_a_required_field_names_it(
     session: AsyncSession, api_client: ClientFactory, idp: _MockIdp
 ) -> None:
@@ -750,7 +801,7 @@ async def test_a_group_claim_is_read_in_every_shape_an_idp_sends_it(
 async def test_reconfiguring_a_connection_updates_it_and_drops_the_cached_document(
     session: AsyncSession,
     api_client: ClientFactory,
-    _redis_client: Redis,  # noqa: PT019 -- conftest names it this; its value is used below
+    redis_client: Redis,
 ) -> None:
     """A second PUT edits the row rather than creating a second one, and
     throws away the cached discovery document.
@@ -764,8 +815,8 @@ async def test_reconfiguring_a_connection_updates_it_and_drops_the_cached_docume
     org, _ = caller
     existing = await _connect(session, org, provider_label="Old IdP")
     # Warm the cache the way a login would, so there is something to lose.
-    await discovery_module.fetch_discovery(_redis_client, _DISCOVERY_URL)
-    assert await _redis_client.get(cache_keys.sso_discovery_key(_DISCOVERY_URL)) is not None
+    await discovery_module.fetch_discovery(redis_client, _DISCOVERY_URL)
+    assert await redis_client.get(cache_keys.sso_discovery_key(_DISCOVERY_URL)) is not None
 
     client = api_client(caller)
     response = await client.put(
@@ -788,7 +839,7 @@ async def test_reconfiguring_a_connection_updates_it_and_drops_the_cached_docume
     await session.refresh(existing)
     assert existing.client_id == "rotated-client"
 
-    assert await _redis_client.get(cache_keys.sso_discovery_key(_DISCOVERY_URL)) is None
+    assert await redis_client.get(cache_keys.sso_discovery_key(_DISCOVERY_URL)) is None
 
 
 async def test_a_callback_for_a_connection_disabled_mid_flight_is_refused(
@@ -1050,7 +1101,7 @@ async def test_saving_a_connection_whose_issuer_disagrees_is_refused(
 async def test_owner_is_refused_as_a_jit_default_role(
     session: AsyncSession,
     api_client: ClientFactory,
-    idp: _MockIdp,  # noqa: ARG001
+    idp: _MockIdp,  # noqa: ARG001 -- IdP serves discovery
 ) -> None:
     """An IdP says who somebody is, not what they may do here."""
     caller = await _make_org(session)
@@ -1183,4 +1234,51 @@ async def test_an_unsafe_discovery_url_is_refused(
     )
 
     assert response.status_code == 422
+    assert response.json()["error"]["message_key"] == "errors.sso_unsafe_url"
+
+
+async def test_a_token_endpoint_pointing_inward_is_refused(
+    session: AsyncSession, api_client: ClientFactory, idp: _MockIdp
+) -> None:
+    """The endpoint the outbound guard used to miss, and the worst one to.
+
+    `discovery_url` was guarded; the `token_endpoint` *inside* the document
+    it returns was not. An organisation admin who pointed discovery at a
+    document naming an internal address had this server POST the client
+    secret there -- before the ID token it gets back is validated at all.
+    """
+    org, _ = await _make_org(session)
+    await _connect(session, org)
+    # https, deliberately: http would be refused by the credential-bearing
+    # scheme check before the address is ever looked at, and this test is
+    # about the address.
+    idp.discovery = {
+        **idp.discovery,
+        "token_endpoint": "https://169.254.169.254/latest/meta-data/",
+    }
+    client = api_client()
+
+    state, nonce = await _start(client, org.slug)
+    idp.nonce = nonce
+    response = await client.get(f"{_PREFIX}/callback", params={"code": "c", "state": state})
+
+    assert response.status_code == 401
+    assert response.json()["error"]["message_key"] == "errors.sso_unsafe_url"
+
+
+async def test_a_plaintext_token_endpoint_is_refused(
+    session: AsyncSession, api_client: ClientFactory, idp: _MockIdp
+) -> None:
+    # Public but plaintext: the address is fine, and http would still hand
+    # the client secret to anything on the path.
+    org, _ = await _make_org(session)
+    await _connect(session, org)
+    idp.discovery = {**idp.discovery, "token_endpoint": "http://idp.example.test/token"}
+    client = api_client()
+
+    state, nonce = await _start(client, org.slug)
+    idp.nonce = nonce
+    response = await client.get(f"{_PREFIX}/callback", params={"code": "c", "state": state})
+
+    assert response.status_code == 401
     assert response.json()["error"]["message_key"] == "errors.sso_unsafe_url"

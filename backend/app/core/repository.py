@@ -9,7 +9,7 @@ from sqlalchemy import Select, select, tuple_
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core import db
-from app.core.exceptions import NotFoundError
+from app.core.exceptions import InvalidCursorError, NotFoundError
 from app.models._mixins import utcnow
 
 MAX_PAGE_SIZE = 100
@@ -170,6 +170,37 @@ class BaseRepository[T: _OrgScopedRecord](ReplicaReadMixin):
         )
         return await self._fetch_one(stmt, use_read_replica=use_read_replica)
 
+    async def get_cursor_anchor(self, entity_id: UUID, *, use_read_replica: bool = False) -> T:
+        """Resolve a pagination cursor to the row whose position it names.
+
+        Two things separate this from `get`, and both are the finding.
+
+        It ignores `deleted_at`. The anchor is read only for its
+        `(created_at, id)`, which is just as valid a position after the row
+        is soft-deleted as before -- and soft-deleting a row a user happens
+        to be paging past is an ordinary Tuesday, not an error.
+
+        It raises rather than returning None. Every cursor implementation
+        here used to fall back to "no cursor", which does not mean "no more
+        pages" -- it means *page one*. An infinite list appends that, so the
+        user scrolls and sees the first twenty rows again. Silently.
+
+        Still org-scoped, so another tenant's id is unresolvable here
+        exactly as it was before; it now says so instead of quietly
+        restarting.
+        """
+        m = cast("Any", self.model)
+        stmt = select(self.model).where(m.id == entity_id, m.org_id == self.org_id)
+        # Annotated because `_fetch_one` is generic in its return type and
+        # nothing else here pins it -- mypy otherwise infers `None`.
+        anchor: T | None = await self._fetch_one(stmt, use_read_replica=use_read_replica)
+        if anchor is None:
+            raise InvalidCursorError(
+                "errors.invalid_cursor",
+                fallback="This page cursor is no longer valid -- start from the first page",
+            )
+        return anchor
+
     async def get_or_raise(self, entity_id: UUID) -> T:
         # No use_read_replica here, by design: update() and soft_delete() load
         # the row they are about to mutate through this method, and a row read
@@ -202,9 +233,8 @@ class BaseRepository[T: _OrgScopedRecord](ReplicaReadMixin):
             # The anchor read follows the page it anchors: resolving the cursor
             # on the primary while paging from the replica would compare a
             # (created_at, id) pair against rows that may not exist there yet.
-            anchor = await self.get(after, use_read_replica=use_read_replica)
-            if anchor is not None:
-                stmt = stmt.where(tuple_(m.created_at, m.id) < (anchor.created_at, anchor.id))
+            anchor = await self.get_cursor_anchor(after, use_read_replica=use_read_replica)
+            stmt = stmt.where(tuple_(m.created_at, m.id) < (anchor.created_at, anchor.id))
         items: list[T] = await self._fetch_all(stmt, use_read_replica=use_read_replica)
         page = items[:capped_limit]
         # `page` guards against a non-positive limit: items can still be

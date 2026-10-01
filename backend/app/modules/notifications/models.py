@@ -71,9 +71,9 @@ class Notification(UUIDPKMixin, TimestampMixin, OrgScopedMixin, SQLModel, table=
     # id (a hard PK), this is just an indexed lookup the service checks
     # before inserting -- best-effort dedup, not a DB-enforced constraint.
     idempotency_key: str | None = Field(default=None)
-    read_at: datetime | None = Field(default=None, sa_type=_TZ_DATETIME)  # type: ignore[call-overload]
-    email_sent_at: datetime | None = Field(default=None, sa_type=_TZ_DATETIME)  # type: ignore[call-overload]
-    push_sent_at: datetime | None = Field(default=None, sa_type=_TZ_DATETIME)  # type: ignore[call-overload]
+    read_at: datetime | None = Field(default=None, sa_type=_TZ_DATETIME)
+    email_sent_at: datetime | None = Field(default=None, sa_type=_TZ_DATETIME)
+    push_sent_at: datetime | None = Field(default=None, sa_type=_TZ_DATETIME)
 
 
 class PushToken(UUIDPKMixin, TimestampMixin, SoftDeleteMixin, SQLModel, table=True):
@@ -83,4 +83,4 @@ class PushToken(UUIDPKMixin, TimestampMixin, SoftDeleteMixin, SQLModel, table=Tr
     token: str = Field(unique=True)  # Expo push token
     platform: str  # "ios" | "android"
     device_label: str | None = Field(default=None)
-    last_used_at: datetime = Field(sa_type=_TZ_DATETIME)  # type: ignore[call-overload]
+    last_used_at: datetime = Field(sa_type=_TZ_DATETIME)

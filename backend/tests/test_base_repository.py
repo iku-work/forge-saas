@@ -11,11 +11,11 @@ from sqlalchemy.ext.asyncio import (
     create_async_engine,
 )
 from sqlmodel import Field, SQLModel
-from testcontainers.postgres import PostgresContainer
 
-from app.core.exceptions import NotFoundError
+from app.core.exceptions import InvalidCursorError, NotFoundError
 from app.core.repository import BaseRepository
 from app.models._mixins import SoftDeleteMixin, TimestampMixin, UUIDPKMixin
+from tests._database import DatabaseHandle
 
 
 class TestEntity(UUIDPKMixin, TimestampMixin, SoftDeleteMixin, SQLModel, table=True):
@@ -31,17 +31,11 @@ class TestEntityRepository(BaseRepository[TestEntity]):
     model = TestEntity
 
 
-@pytest.fixture(scope="module")
-def postgres_container() -> "PostgresContainer":
-    with PostgresContainer("postgres:16-alpine") as container:
-        yield container
-
-
 # Function-scoped (not module-scoped): pytest-asyncio gives each test its own
 # event loop by default, and an asyncpg-backed engine can't be reused across
 # loops — see tests/test_db.py for the same pattern.
 @pytest.fixture
-async def test_engine(postgres_container: "PostgresContainer") -> AsyncGenerator[AsyncEngine, None]:
+async def test_engine(postgres_container: DatabaseHandle) -> AsyncGenerator[AsyncEngine, None]:
     url = postgres_container.get_connection_url().replace("psycopg2", "asyncpg")
     engine = create_async_engine(url)
     async with engine.begin() as conn:
@@ -232,12 +226,75 @@ async def test_list_cursor_excludes_soft_deleted(repo_a: TestEntityRepository) -
     assert cursor is None
 
 
-async def test_list_cursor_with_cursor_from_other_org_returns_first_page(
+# --- cursors that cannot be resolved (repo finding 13) --------------------
+#
+# Every one of these used to fall back to "no cursor", which does not mean
+# "no more pages" -- it means page one. An infinite list appends that page
+# instead of replacing it, so the user scrolls and sees the first rows
+# again, and reads it as the product losing their data.
+
+
+async def test_a_cursor_from_another_org_is_refused_not_ignored(
     repo_a: TestEntityRepository, repo_b: TestEntityRepository
 ) -> None:
+    """Still unresolvable across tenants -- it just says so now.
+
+    The old behaviour returned org A's first page, which is not a leak but
+    is indistinguishable from a successful "continue" to the client.
+    """
     other_org_entity = await repo_b.create(name="theirs")
-    own = await repo_a.create(name="mine")
+    await repo_a.create(name="mine")
 
-    page, _ = await repo_a.list_cursor(after=other_org_entity.id)
+    with pytest.raises(InvalidCursorError):
+        await repo_a.list_cursor(after=other_org_entity.id)
 
-    assert [e.id for e in page] == [own.id]
+
+async def test_an_unknown_cursor_is_refused(repo_a: TestEntityRepository) -> None:
+    await repo_a.create(name="mine")
+
+    with pytest.raises(InvalidCursorError):
+        await repo_a.list_cursor(after=uuid4())
+
+
+async def test_paging_continues_past_an_anchor_that_was_soft_deleted(
+    repo_a: TestEntityRepository,
+) -> None:
+    """The finding itself, at its smallest.
+
+    Someone deletes a row while a user is scrolling past it. The anchor is
+    read only for its (created_at, id), so the position is still perfectly
+    good -- but `get()` hides soft-deleted rows, so the clause was dropped
+    and page two came back as page one.
+    """
+    created = [await repo_a.create(name=f"e{i}") for i in range(4)]
+
+    page1, cursor1 = await repo_a.list_cursor(limit=2)
+    assert cursor1 is not None
+    # The row the cursor names disappears between the two requests.
+    await repo_a.soft_delete(cursor1)
+
+    page2, _ = await repo_a.list_cursor(after=cursor1, limit=2)
+
+    ids1 = [e.id for e in page1]
+    ids2 = [e.id for e in page2]
+    assert not set(ids1) & set(ids2), "page two repeated page one"
+    # And it is the *right* continuation, not merely a different one: page
+    # two is exactly the rows page one did not show. Compared as sets
+    # because the four rows are created in the same instant, so `created_at`
+    # ties and the real ordering falls to `id DESC` -- which is uuid4 order,
+    # not insertion order.
+    assert set(ids2) == {e.id for e in created} - set(ids1)
+
+
+async def test_a_soft_deleted_anchor_is_not_itself_returned(
+    repo_a: TestEntityRepository,
+) -> None:
+    """Resolving the anchor ignores `deleted_at`; the page it anchors does
+    not. Those are different queries and only the first one changed."""
+    first = await repo_a.create(name="first")
+    second = await repo_a.create(name="second")
+    await repo_a.soft_delete(second.id)
+
+    page, _ = await repo_a.list_cursor(limit=10)
+
+    assert [e.id for e in page] == [first.id]
