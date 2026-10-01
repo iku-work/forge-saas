@@ -211,3 +211,7 @@ instead of per-PR.
 | 2026-09-01 | 4a7ec23 | browse | - | - | PASS |
 | 2026-09-01 | 4a7ec23 | presign | - | - | PASS |
 | 2026-09-01 | 4a7ec23 | mixed | - | - | FAIL |
+| 2026-10-01 | 26ad3e3 | login-burst | - | - | FAIL |
+| 2026-10-01 | 26ad3e3 | browse | - | - | FAIL |
+| 2026-10-01 | 26ad3e3 | presign | - | - | FAIL |
+| 2026-10-01 | 26ad3e3 | mixed | - | - | FAIL |
