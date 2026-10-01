@@ -884,6 +884,9 @@ jobs:
 
     env:
       COMPOSE_PROJECT_NAME: forge-pgbouncer
+      # docker-compose.prod.yml requires it (caddy) even for services that
+      # never start here; compose interpolates the whole file.
+      DOMAIN: localhost
 
     steps:
       - uses: actions/checkout@v4
@@ -1001,6 +1004,9 @@ jobs:
 
     env:
       COMPOSE_PROJECT_NAME: forge-tls
+      # docker-compose.prod.yml requires it (caddy) even for services that
+      # never start here; compose interpolates the whole file.
+      DOMAIN: localhost
 
     steps:
       - uses: actions/checkout@v4
@@ -1048,6 +1054,9 @@ jobs:
       # file would not clear it. docker-compose.prod.yml is deliberately NOT
       # excluded: the dev stack is the only one whose credentials are
       # throwaway by construction.
+      #
+      # The lockfiles' package sha256 hashes match the SentryToken detector,
+      # and docs/handbook.html's DSNs carry `$PGPASS`, never a value.
       - name: Trufflehog (git history secret scan)
         run: |
           trufflehog git file://. --fail --no-update \
