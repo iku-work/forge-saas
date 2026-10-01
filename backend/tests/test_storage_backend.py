@@ -46,7 +46,7 @@ _BUCKET = "storage-backend-tests"
 # upload. A recent image + MINIO_KMS_SECRET_KEY (MinIO's local, no-Vault-
 # required auto-encryption key) is required for SSE-S3 to actually work, not
 # just for the policy condition to be present.
-_MINIO_IMAGE = "minio/minio:RELEASE.2025-09-07T16-13-09Z"
+_MINIO_IMAGE = "pgsty/minio:RELEASE.2026-08-04T00-00-00Z"
 
 
 @pytest.fixture(scope="session")

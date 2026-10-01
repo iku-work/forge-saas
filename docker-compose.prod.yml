@@ -339,7 +339,7 @@ services:
   # against has to be the one the browser can reach. The console (9001) is
   # deliberately not exposed at all.
   minio:
-    image: minio/minio
+    image: pgsty/minio:RELEASE.2026-08-04T00-00-00Z
     restart: unless-stopped
     command: server /data
     # Its own env file (copied from .env.minio.example) for the same reason as
@@ -363,7 +363,7 @@ services:
   # lifecycle: incoming/ objects expire after a day (review R1 -- see the
   # same service in docker-compose.yml for why, and why `ilm import`).
   minio-init:
-    image: minio/minio
+    image: pgsty/minio:RELEASE.2026-08-04T00-00-00Z
     restart: "no"
     logging: *default-logging
     env_file:

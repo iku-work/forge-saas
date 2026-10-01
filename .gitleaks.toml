@@ -34,7 +34,3 @@ paths = [
   '''\.env\.postgres-exporter\.example''',
   '''docker-compose\.yml''',
 ]
-# The handbook's example env file says `sk_test_placeholder`, a value that
-# no Stripe account can issue. Matched by value, so a real key pasted into
-# the handbook is still caught.
-regexes = ['''sk_test_placeholder''']
