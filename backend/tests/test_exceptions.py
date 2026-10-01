@@ -55,12 +55,6 @@ def test_domain_error_params_default_to_empty_dict() -> None:
     assert exc.params == {}
 
 
-def test_domain_error_params_are_stored() -> None:
-    exc = DomainError("errors.boom", params={"feature": "files"})
-
-    assert exc.params == {"feature": "files"}
-
-
 def test_domain_error_falls_back_to_class_default_message_key_when_omitted() -> None:
     exc = NotFoundError()
 

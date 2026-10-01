@@ -35,54 +35,30 @@ def _point_at_test_redis(redis_container: RedisContainer, monkeypatch: pytest.Mo
 
 
 @pytest.mark.usefixtures("_point_at_test_redis")
-async def test_enqueue_job_creates_pool_lazily_and_enqueues() -> None:
-    assert jobs._pool is None
-
+async def test_enqueue_job_queues_the_job_under_the_id_it_returns() -> None:
     job_id = await real_enqueue_job(
         "send_email", to="x@example.com", template="welcome", context={}
     )
 
-    assert jobs._pool is not None
+    queued = await (await jobs._get_pool()).queued_jobs()
     assert job_id is not None
-    queued = await jobs._pool.queued_jobs()
-    assert any(j.function == "send_email" for j in queued)
+    assert any(j.job_id == job_id and j.function == "send_email" for j in queued)
 
 
 @pytest.mark.usefixtures("_point_at_test_redis")
-async def test_enqueue_job_returns_the_arq_job_id() -> None:
+async def test_enqueue_still_works_after_the_pool_was_disposed() -> None:
+    # Shutdown disposes the pool; anything enqueued after that (a test, a
+    # lifespan restart) must get a fresh one rather than a closed connection.
+    await real_enqueue_job("send_email", to="x@example.com", template="welcome", context={})
+    await jobs.dispose_pool()
+    await jobs.dispose_pool()  # twice is harmless
+
     job_id = await real_enqueue_job(
         "send_email", to="x@example.com", template="welcome", context={}
     )
 
-    queued = await jobs._pool.queued_jobs()
-    assert job_id is not None
+    queued = await (await jobs._get_pool()).queued_jobs()
     assert any(j.job_id == job_id for j in queued)
-
-
-@pytest.mark.usefixtures("_point_at_test_redis")
-async def test_get_pool_reuses_existing_pool() -> None:
-    first = await jobs._get_pool()
-    second = await jobs._get_pool()
-
-    assert first is second
-
-
-@pytest.mark.usefixtures("_point_at_test_redis")
-async def test_dispose_pool_closes_and_clears() -> None:
-    await jobs._get_pool()
-    assert jobs._pool is not None
-
-    await jobs.dispose_pool()
-
-    assert jobs._pool is None
-
-
-async def test_dispose_pool_without_a_pool_is_a_no_op() -> None:
-    assert jobs._pool is None
-
-    await jobs.dispose_pool()
-
-    assert jobs._pool is None
 
 
 @pytest.mark.usefixtures("_point_at_test_redis")

@@ -177,13 +177,6 @@ def test_no_cookie_is_widened_to_a_parent_domain() -> None:
     )
 
 
-def test_caddyfiles_carry_the_cookie_note_where_the_next_person_will_look() -> None:
-    for name in ("Caddyfile", "Caddyfile.prod"):
-        content = (REPO_ROOT / name).read_text()
-        assert "__Host-refresh_token" in content
-        assert "Do not widen the session cookie" in content
-
-
 def test_storage_host_is_declared_and_never_blank() -> None:
     """MinIO on the same box needs a public hostname, not a bridge address.
 

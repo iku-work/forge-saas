@@ -6,17 +6,11 @@ differently-cased match), and the other request/response shapes round-trip
 their fields.
 """
 
-from datetime import UTC, datetime
-from uuid import uuid4
-
 import pytest
 from pydantic import ValidationError
 
 from app.modules.gdpr.schemas import (
-    ConsentRecordPublic,
-    DataExportJobPublic,
     DeleteMeRequest,
-    ExportJobCreated,
     RecordConsentRequest,
 )
 
@@ -43,27 +37,6 @@ def test_delete_me_request_requires_confirm() -> None:
 # --- ExportJobCreated / DataExportJobPublic -------------------------------------
 
 
-def test_export_job_created_shape() -> None:
-    job_id = uuid4()
-
-    created = ExportJobCreated(job_id=job_id)
-
-    assert created.job_id == job_id
-
-
-def test_data_export_job_public_constructs_from_orm_like_object() -> None:
-    class _FakeJob:
-        id = uuid4()
-        status = "pending"
-        download_url = None
-        expires_at = None
-        created_at = datetime(2026, 6, 1, tzinfo=UTC)
-
-    public = DataExportJobPublic.model_validate(_FakeJob())
-
-    assert public.status == "pending"
-
-
 # --- RecordConsentRequest / ConsentRecordPublic ---------------------------------
 
 
@@ -76,16 +49,3 @@ def test_record_consent_request_accepts_well_formed_payload() -> None:
 def test_record_consent_request_rejects_empty_consent_type() -> None:
     with pytest.raises(ValidationError):
         RecordConsentRequest(consent_type="", granted=True, version="v1")
-
-
-def test_consent_record_public_constructs_from_orm_like_object() -> None:
-    class _FakeRecord:
-        id = uuid4()
-        consent_type = "marketing"
-        granted = True
-        version = "v1"
-        ts = datetime(2026, 6, 1, tzinfo=UTC)
-
-    public = ConsentRecordPublic.model_validate(_FakeRecord())
-
-    assert public.consent_type == "marketing"

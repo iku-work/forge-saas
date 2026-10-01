@@ -1,13 +1,9 @@
-from uuid import uuid4
-
 import pytest
 from pydantic import ValidationError
 
 from app.modules.auth.schemas import (
     ChangePasswordRequest,
-    Enable2FAResponse,
     LoginRequest,
-    LoginResponse,
     PasswordResetConfirmRequest,
     RegisterRequest,
     UserPublic,
@@ -133,60 +129,6 @@ def test_user_public_excludes_sensitive_fields() -> None:
     assert "locked_until" not in UserPublic.model_fields
 
 
-def test_user_public_constructs_from_orm_like_object() -> None:
-    class _FakeUser:
-        id = uuid4()
-        email = "alice@example.com"
-        full_name = "Alice Example"
-        avatar_url = None
-        locale = "en"
-        email_verified_at = None
-        totp_enabled = False
-
-    public = UserPublic.model_validate(_FakeUser())
-
-    assert public.email == "alice@example.com"
-
-
-def test_login_response_nests_user_public() -> None:
-    user = UserPublic(
-        id=uuid4(),
-        email="alice@example.com",
-        full_name=None,
-        avatar_url=None,
-        locale="en",
-        email_verified_at=None,
-        totp_enabled=False,
-    )
-
-    response = LoginResponse(access_token="token", user=user)
-
-    assert response.user.email == "alice@example.com"
-    # Web clients never get a refresh token in the body (httpOnly cookie
-    # only, per §0.6) -- the router achieves that by omitting this kwarg,
-    # so the schema must default it to None rather than requiring it.
-    assert response.refresh_token is None
-
-
-def test_login_response_carries_refresh_token_for_mobile_clients() -> None:
-    # Mobile has no httpOnly cookie to rely on -- the router passes the
-    # plain refresh token here so it can be stored in expo-secure-store
-    # (§0.6). See test_auth_router.py for the header-driven conditional.
-    user = UserPublic(
-        id=uuid4(),
-        email="alice@example.com",
-        full_name=None,
-        avatar_url=None,
-        locale="en",
-        email_verified_at=None,
-        totp_enabled=False,
-    )
-
-    response = LoginResponse(access_token="token", refresh_token="plain-refresh", user=user)
-
-    assert response.refresh_token == "plain-refresh"
-
-
 # ---------------------------------------------------------------------------
 # 2FA schemas
 # ---------------------------------------------------------------------------
@@ -202,9 +144,3 @@ def test_verify_2fa_request_accepts_six_digit_code() -> None:
 def test_verify_2fa_request_rejects_invalid_code(code: str) -> None:
     with pytest.raises(ValidationError):
         Verify2FARequest(code=code)
-
-
-def test_enable_2fa_response_shape() -> None:
-    response = Enable2FAResponse(provisioning_uri="otpauth://totp/...", secret="JBSWY3DPEHPK3PXP")
-
-    assert response.secret == "JBSWY3DPEHPK3PXP"

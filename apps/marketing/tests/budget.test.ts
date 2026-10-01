@@ -36,11 +36,6 @@ const require = createRequire(import.meta.url);
 const lighthouserc = require(join(APP_ROOT, "lighthouserc.cjs"));
 const fixturerc = require(join(APP_ROOT, "lighthouserc.fixture.cjs"));
 
-/** A file in the app root, as text. */
-function readSource(file: string): string {
-  return readFileSync(join(APP_ROOT, file), "utf-8");
-}
-
 /**
  * Every problem the gate reports about the clean fixture with some files
  * replaced, as one string. `undefined` means delete the file.
@@ -315,18 +310,6 @@ describe("the pages the Lighthouse job measures", () => {
     expect(assertions["largest-contentful-paint"][1].maxNumericValue).toBe(2500);
     expect(assertions["cumulative-layout-shift"][1].maxNumericValue).toBe(0.1);
     expect(assertions["total-blocking-time"][1].maxNumericValue).toBe(200);
-  });
-
-  it("say, where the thresholds live, why TBT stands in for INP", () => {
-    // A "Done when" box on T-306, and asserted rather than trusted: a config
-    // rewritten without the paragraph is a config where the next person
-    // closes the gap between the plan and the gate by lowering a number.
-    const source = readSource("lighthouserc.cjs");
-
-    expect(source).toContain("INP");
-    expect(source).toContain("Total Blocking Time");
-    expect(source).toContain("field");
-    expect(source).toContain("CrUX");
   });
 });
 

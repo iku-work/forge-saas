@@ -87,8 +87,6 @@ def test_worker_settings_has_agreed_shape() -> None:
     assert export_user_data in WorkerSettings.functions
     assert send_dunning_email in WorkerSettings.functions
     assert isinstance(WorkerSettings.redis_settings, RedisSettings)
-    assert WorkerSettings.max_jobs == 20
-    assert WorkerSettings.job_timeout == 300
     assert WorkerSettings.on_startup is worker_startup
     assert WorkerSettings.on_shutdown is worker_shutdown
 

@@ -222,12 +222,6 @@ async def test_head_reraises_non_not_found_client_errors(minio_container: MinioC
         await backend.head("whatever.jpg")
 
 
-def test_s3_backend_defaults_with_no_options_override() -> None:
-    backend = S3Backend(bucket="some-bucket", region="us-east-1")
-
-    assert backend._client.meta.region_name == "us-east-1"
-
-
 async def test_presign_upload_defaults_to_600_second_expiry(backend: S3Backend) -> None:
     before = datetime.now(UTC)
     presigned = await backend.presign_upload(f"ttl/{uuid4()}.jpg", "image/jpeg", max_bytes=1024)

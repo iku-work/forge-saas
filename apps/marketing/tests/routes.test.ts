@@ -142,17 +142,10 @@ describe("locale routing", () => {
     }
   });
 
-  it("prefixes the default locale too, exactly as astro.config.mjs says", () => {
-    // The prefix policy is one decision expressed in two files
-    // (src/lib/routing.ts and astro.config.mjs's `routing` block), and T-305
-    // moved both to match apps/web's T-233. This is what fails if only one of
-    // them ever moves back.
-    const config = readFileSync(join(APP_ROOT, "astro.config.mjs"), "utf-8");
-    expect(config).toMatch(/prefixDefaultLocale:\s*true/);
-    expect(
-      readFileSync(join(APP_ROOT, "src", "lib", "routing.ts"), "utf-8"),
-    ).toMatch(/DEFAULT_LOCALE_IS_PREFIXED = true/);
-
+  it("prefixes the default locale too", () => {
+    // The prefix policy lives in two files (src/lib/routing.ts and
+    // astro.config.mjs). The built pages catch astro.config.mjs moving back;
+    // "links only routes it actually built" catches routing.ts doing so.
     expect(existsSync(join(DIST, "en", "index.html"))).toBe(true);
     expect(existsSync(join(DIST, "fr", "index.html"))).toBe(true);
     // The English landing page is /en/, and nothing else is: the file at the
