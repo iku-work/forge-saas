@@ -195,9 +195,10 @@ services:
   # delivery depend on. Scans stream the object, so memory per scan is a few
   # 64 KiB chunks; SCAN_MAX_CONCURRENCY (default 4) bounds how many run.
   #
-  # The limit below is a starting point, not a measurement: set it from the
-  # burst test in docs/runbooks/malware-scanning.md (peak RSS with
-  # SCAN_MAX_CONCURRENCY maximum-size uploads in flight) before relying on it.
+  # Measured 2026-10-01 on the production box (runbook step 5 in
+  # docs/runbooks/malware-scanning.md): idle ~105 MiB; four concurrent
+  # 100 MiB scans added ~102 MiB, so ~210 MiB peak. 384m is ~1.8x that.
+  # Re-measure if SCAN_MAX_CONCURRENCY or MAX_UPLOAD_BYTES goes up.
   scanner-worker:
     image: ${BACKEND_IMAGE:-forge-saas-backend}
     restart: unless-stopped
