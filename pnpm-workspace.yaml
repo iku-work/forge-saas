@@ -66,7 +66,7 @@ overrides:
   # (advisories list "0.8.13, 0.9.10 or above" as the fixed versions), so it
   # satisfies the security job without the 0.9.0 breaking change. Tilde-pinned
   # so a future `pnpm install` can't silently float across that line again.
-  "@xmldom/xmldom": "~0.8.13"
+  "@xmldom/xmldom": "~0.8.15"
   # Bumped from >=7.5.11 (T-350): the floor only covers the CVEs known when it
   # was written, and 7.5.16 resolved under it carries CVE-2026-59873
   # (CRITICAL, gzip bomb), -59874 and -73566. 7.5.21 is the highest fix line
@@ -79,11 +79,12 @@ overrides:
   # which asks for `^1.1.7`. Forcing a transitive dependency across two major
   # versions to fix a DoS in one of them trades a known bug for an unknown
   # one, in glob matching, in the build tooling.
-  "brace-expansion@1": ">=1.1.18 <2"
+  "brace-expansion@1": ">=1.1.20 <2"
+  "brace-expansion@2": ">=2.1.6 <3"
   # The 1.x pin above fixed the copy `minimatch@3` asks for; newer consumers
   # pull their own 5.x, which carries the same advisory and needed its own
   # floor. A scoped override fixes one line, not the package.
-  "brace-expansion@5": ">=5.0.9 <6"
+  "brace-expansion@5": ">=5.0.11 <6"
   # T-350: the rest of what trivy's HIGH set found once the job could finally
   # reach this step. All seven are transitive build tooling -- none is a
   # dependency of apps/web or any packages/* -- and every one is pinned to a
@@ -95,7 +96,7 @@ overrides:
   # anything -- so a bare `>=3.15.0` resolved every `^3` consumer onto 4.x,
   # which is where `safeLoad` was removed. Each of these stays inside the
   # major it was asked for.
-  "fast-uri@3": ">=3.1.3 <4"
+  "fast-uri@3": ">=3.1.7 <4"
   "js-yaml@3": ">=3.15.0 <4"
   "nanoid@3": ">=3.3.18 <4"
   "postcss@8": ">=8.5.18 <9"
@@ -144,16 +145,22 @@ auditConfig:
     - GHSA-qffp-2rhf-9h96
     - GHSA-r292-9mhp-454m
     - GHSA-r6q2-hw4h-h46w
-    # image-size, via metro (React Native's bundler). **The advisory's fixed
-    # version does not exist**: it names >=2.0.3 and npm's latest is 2.0.2.
-    # There is nothing to upgrade to, which is also why trivy's scan passes
-    # `--ignore-unfixed` rather than listing it.
+    # image-size, via metro (React Native's bundler). 2.0.3 exists now
+    # (2026-10-01) but is a major: metro calls `require("image-size")` as a
+    # function and 2.x exports a named `imageSize`. Dated trivy entries in
+    # .trivyignore.yaml carry the same reasoning.
     - GHSA-5p2g-fcmc-qvqq
     - GHSA-w3rx-r6r6-pgpr
     # extract-zip, via @lhci/cli>lighthouse>puppeteer-core. Same shape: the
     # advisory names >=2.0.2 and npm's latest is 2.0.1. The package is
     # effectively unmaintained, so this is fixed when puppeteer stops using it.
     - GHSA-jmr9-qjv8-65gv
+    - GHSA-7pqw-9j4j-h8q3
+    # basic-ftp, via @lhci/cli>proxy-agent>pac-proxy-agent>get-uri. Fixed only
+    # in 6.x, and get-uri's latest (8.0.1) still asks for ^5.3.1. Reached only
+    # if the Lighthouse runner fetches a PAC file over ftp://, which it never
+    # does here.
+    - GHSA-c475-qrg2-pj4r
     # tmp, via @lhci/cli>inquirer>external-editor. A fix exists (0.2.6) but its
     # consumers ask for ^0.0.33 and ^0.1.0 -- in 0.x semver those are two
     # breaking jumps away, forced on a transitive dependency of a dev-only
