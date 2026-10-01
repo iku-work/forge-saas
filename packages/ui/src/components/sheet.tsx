@@ -21,8 +21,8 @@ import { cn } from "@forge/utils";
  *
  * Sides are logical (`start`/`end`), not physical: the shell's navigation
  * lives on the inline-start edge, which is the right-hand side under the `ar`
- * locale (T-231). A `left-0` here would put the drawer on the wrong side of
- * an rtl page, and the rtl visual baseline would catch it.
+ * locale (T-231). A physical left-edge class here would put the drawer on the
+ * wrong side of an rtl page, and the rtl visual baseline would catch it.
  */
 const Sheet = DialogPrimitive.Root;
 const SheetTrigger = DialogPrimitive.Trigger;

@@ -366,7 +366,9 @@ real `product/config.py`, or the frontend build. Three combinations, each
 copying a fixture from `backend/tests/fixtures/module_configs/` over **both**
 config files and then migrating, booting, curl-ing `/api/v1/config`, running
 `pytest -m "not module_dependent"`, and building/linting/type-checking the
-whole workspace:
+whole workspace. It runs weekly (Monday 04:00 UTC) and on demand from the
+Actions tab (Run workflow), not on every merge; label a PR `module-matrix`
+when it touches product config, a module toggle or a migration:
 
 | Combination | Config | Why it is there |
 |---|---|---|

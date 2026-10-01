@@ -11,6 +11,11 @@ on:
   push:
     branches: [main]
   pull_request:
+  # The weekly run exists for `module-matrix` (see its `if:`); dispatch is the
+  # same thing on demand. Neither deploys -- the deploy jobs require a push.
+  schedule:
+    - cron: "0 4 * * 1"
+  workflow_dispatch:
 
 # Three pushes in five minutes used to mean three full runs, and only the
 # last one's result was ever looked at. Superseded runs on a branch are
@@ -402,14 +407,17 @@ jobs:
   # most likely to want and least likely to have been tested.
   module-matrix:
     needs: test
-    # 45 of the ~88 billed minutes a full CI run costs are these three legs,
+    # ~45 of the ~120 billed minutes a main run costs are these three legs,
     # and what they check -- that the product still boots and builds under a
-    # different module configuration -- does not change commit to commit on a
-    # feature branch. So they run on what lands, not on every push toward it.
-    # `github.ref` is refs/pull/N/merge on a pull_request event, so this is
-    # true only for a push to main; label a PR `module-matrix` to opt one in
-    # when it touches product config, a module toggle, or a migration.
-    if: github.ref == 'refs/heads/main' || contains(github.event.pull_request.labels.*.name, 'module-matrix')
+    # different module configuration -- rarely changes merge to merge. So
+    # they run weekly (the `schedule` trigger) and on demand
+    # (workflow_dispatch), not on every push to main (2026-10-01). Label a PR
+    # `module-matrix` to opt it in when it touches product config, a module
+    # toggle, or a migration.
+    if: >-
+      github.event_name == 'schedule'
+      || github.event_name == 'workflow_dispatch'
+      || contains(github.event.pull_request.labels.*.name, 'module-matrix')
     runs-on: ubuntu-latest
     timeout-minutes: 35
 
@@ -1669,7 +1677,7 @@ jobs:
   # render, so a repository with no variables at all was one push to main
   # away from a deploy nobody had chosen.
   deploy-render:
-    if: github.ref == 'refs/heads/main' && vars.DEPLOY_TARGET == 'render'
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && vars.DEPLOY_TARGET == 'render'
     # C2: E2E and the ZAP baseline gate the deploy, not only the image build
     # (test and security arrive through build). A red e2e-web blocks it.
     needs: [build, e2e-web, zap-baseline]
@@ -1684,7 +1692,7 @@ jobs:
       image-tag: ${{ github.sha }}
 
   deploy-hetzner:
-    if: github.ref == 'refs/heads/main' && vars.DEPLOY_TARGET == 'hetzner'
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && vars.DEPLOY_TARGET == 'hetzner'
     # C2: E2E and the ZAP baseline gate the deploy, not only the image build
     # (test and security arrive through build). A red e2e-web blocks it.
     needs: [build, e2e-web, zap-baseline]
@@ -1699,7 +1707,7 @@ jobs:
       image-tag: ${{ github.sha }}
 
   deploy-aws:
-    if: github.ref == 'refs/heads/main' && vars.DEPLOY_TARGET == 'aws'
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && vars.DEPLOY_TARGET == 'aws'
     # C2: E2E and the ZAP baseline gate the deploy, not only the image build
     # (test and security arrive through build). A red e2e-web blocks it.
     needs: [build, e2e-web, zap-baseline]
