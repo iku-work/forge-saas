@@ -345,9 +345,7 @@ def test_every_backend_image_service_gets_the_internal_ca_under_tls() -> None:
     tls = yaml.safe_load((REPO_ROOT / "docker-compose.tls.yml").read_text(encoding="utf-8"))
     backend_image = prod["services"]["backend"]["image"]
     users = {
-        name
-        for name, service in prod["services"].items()
-        if service.get("image") == backend_image
+        name for name, service in prod["services"].items() if service.get("image") == backend_image
     }
     assert users >= {"backend", "worker", "scanner-worker"}
     for name in users:

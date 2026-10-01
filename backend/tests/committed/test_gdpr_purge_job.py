@@ -19,6 +19,7 @@ of rows it created itself.
 
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
+from unittest.mock import Mock
 from uuid import uuid4
 
 import pytest
@@ -83,6 +84,15 @@ def _use_test_engine(monkeypatch: pytest.MonkeyPatch, test_engine: AsyncEngine) 
     # test_encryption_job.py / test_worker_scheduler.py.
     factory = async_sessionmaker(test_engine, expire_on_commit=False, class_=AsyncSession)
     monkeypatch.setattr(gdpr_job_module, "async_session_factory", factory)
+
+
+@pytest.fixture(autouse=True)
+def fake_s3_client(monkeypatch: pytest.MonkeyPatch) -> Mock:
+    """Export archives live in the bucket, outside any table (review OCT-03)."""
+    client = Mock()
+    client.list_objects_v2.return_value = {}
+    monkeypatch.setattr(gdpr_job_module, "_s3_client", lambda: client)
+    return client
 
 
 async def _make_user(session: AsyncSession, email: str, *, deleted: bool = True) -> User:
@@ -203,7 +213,6 @@ def test_purge_handles_every_reference_to_a_user() -> None:
     assert {ref for ref in referencing if "__" not in ref[0]} <= handled
 
 
-@pytest.mark.module_dependent
 async def test_purge_succeeds_for_a_user_who_used_every_feature(
     session: AsyncSession,
     session_factory: async_sessionmaker[AsyncSession],
@@ -291,6 +300,59 @@ async def test_purge_succeeds_for_a_user_who_used_every_feature(
     assert len(deleted_keys) == 1  # the stored object went too, not only its row
 
 
+async def test_purge_succeeds_after_a_module_used_by_the_user_is_switched_off(
+    session: AsyncSession, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Review OCT-02. Switching a module off keeps its tables and rows; the
+    purge used to skip them by flag and then fail on their foreign keys."""
+    org = await _make_org(session)
+    user = await _make_user(session, "had-notifications@example.com")
+    session.add(
+        Notification(
+            org_id=org.id,
+            user_id=user.id,
+            type="file_uploaded",
+            title="t",
+            body="b",
+            channels=["in_app"],
+        )
+    )
+    await session.commit()
+    user_id = user.id
+    monkeypatch.setattr(
+        product_config,
+        "MODULES",
+        replace(product_config.MODULES, notifications=ModuleConfig(enabled=False)),
+    )
+    module_loader.get_modules.cache_clear()
+
+    try:
+        await purge_user_data({}, user_id=user_id)
+    finally:
+        module_loader.get_modules.cache_clear()
+
+    session.expire_all()
+    assert await session.get(User, user_id) is None
+    assert await _count(session, Notification, "user_id", user_id) == 0
+
+
+async def test_purge_deletes_the_users_export_archives(
+    session: AsyncSession, fake_s3_client: Mock
+) -> None:
+    """The archive is a copy of the user's data; deleting its job row alone
+    left it in the bucket after erasure (review OCT-03)."""
+    user = await _make_user(session, "exported@example.com")
+    await session.commit()
+    key = f"data-exports/{user.id}/{uuid4()}.zip"
+    fake_s3_client.list_objects_v2.return_value = {"Contents": [{"Key": key}]}
+
+    await purge_user_data({}, user_id=user.id)
+
+    assert fake_s3_client.list_objects_v2.call_args.kwargs["Prefix"] == f"data-exports/{user.id}/"
+    fake_s3_client.delete_objects.assert_called_once()
+    assert fake_s3_client.delete_objects.call_args.kwargs["Delete"] == {"Objects": [{"Key": key}]}
+
+
 # --- guard clauses -----------------------------------------------------------
 
 
@@ -342,7 +404,7 @@ async def test_purge_user_data_nulls_invited_by_on_other_memberships(
 
 
 async def test_purge_user_data_nulls_created_by_and_keeps_the_organizations_keys(
-    session: AsyncSession, monkeypatch: pytest.MonkeyPatch
+    session: AsyncSession,
 ) -> None:
     """T-310. An API key belongs to the *organization*, not to the person who
     minted it, so erasure nulls `created_by` and leaves the credential alive.
@@ -352,13 +414,6 @@ async def test_purge_user_data_nulls_created_by_and_keeps_the_organizations_keys
     docs/runbooks/api-keys.md makes reviewing a leaver's keys an explicit
     step rather than something the purge is assumed to have done.
     """
-    monkeypatch.setattr(
-        product_config,
-        "MODULES",
-        replace(product_config.MODULES, public_api=ModuleConfig(enabled=True)),
-    )
-    module_loader.get_modules.cache_clear()
-
     org = await _make_org(session)
     user = await _make_user(session, "leaver@example.com")
     key = ApiKey(
@@ -385,7 +440,6 @@ async def test_purge_user_data_nulls_created_by_and_keeps_the_organizations_keys
     # ...and the user really is gone, so this is not a purge that silently
     # did nothing.
     assert await session.get(User, user_id) is None
-    module_loader.get_modules.cache_clear()
 
 
 async def test_purge_user_data_clears_stripe_customer_when_org_has_no_members_left(

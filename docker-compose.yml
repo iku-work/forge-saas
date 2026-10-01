@@ -107,7 +107,7 @@ services:
         mc mb --ignore-existing local/forge-local &&
         mc mb --ignore-existing local/forge-test &&
         for bucket in forge-local forge-test; do
-          echo '{"Rules":[{"ID":"expire-incoming","Status":"Enabled","Filter":{"Prefix":"incoming/"},"Expiration":{"Days":1}}]}' | mc ilm import "local/$$bucket" || exit 1
+          echo '{"Rules":[{"ID":"expire-incoming","Status":"Enabled","Filter":{"Prefix":"incoming/"},"Expiration":{"Days":1}},{"ID":"expire-data-exports","Status":"Enabled","Filter":{"Prefix":"data-exports/"},"Expiration":{"Days":1}}]}' | mc ilm import "local/$$bucket" || exit 1
         done
     depends_on:
       minio:

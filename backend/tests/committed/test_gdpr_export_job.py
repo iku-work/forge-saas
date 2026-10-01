@@ -60,6 +60,7 @@ def _use_test_engine(monkeypatch: pytest.MonkeyPatch, test_engine: AsyncEngine) 
 def fake_s3_client(monkeypatch: pytest.MonkeyPatch) -> Mock:
     client = Mock()
     client.generate_presigned_url.return_value = _DOWNLOAD_URL
+    client.list_objects_v2.return_value = {}
     monkeypatch.setattr(gdpr_job_module, "_s3_client", lambda: client)
     return client
 
@@ -317,6 +318,7 @@ async def test_export_user_data_skips_email_when_job_vanishes_after_upload(
     session_factory: async_sessionmaker[AsyncSession],
     monkeypatch: pytest.MonkeyPatch,
     fake_send_email: AsyncMock,
+    fake_s3_client: Mock,
 ) -> None:
     user = await _make_user(session, "vanishing@example.com")
     job = DataExportJob(user_id=user.id)
@@ -336,9 +338,14 @@ async def test_export_user_data_skips_email_when_job_vanishes_after_upload(
 
     monkeypatch.setattr(gdpr_job_module, "_upload_export_zip", _upload_and_delete_job)
 
+    key = f"data-exports/{user.id}/{job.id}.zip"
+    fake_s3_client.list_objects_v2.return_value = {"Contents": [{"Key": key}]}
+
     await export_user_data({}, user_id=user.id, job_id=job.id)
 
     fake_send_email.assert_not_awaited()
+    # A purge mid-export: the archive just uploaded must not outlive it (OCT-03).
+    assert fake_s3_client.delete_objects.call_args.kwargs["Delete"] == {"Objects": [{"Key": key}]}
 
 
 # --- _s3_client ----------------------------------------------------------------

@@ -39,15 +39,13 @@ from uuid import UUID
 
 import boto3
 from redis.asyncio import Redis
-from sqlalchemy import delete, func, select, update
+from sqlalchemy import delete, func, inspect, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import SQLModel
 
 from app.core.config import get_settings
 from app.core.db import async_session_factory
 from app.core.dependencies import invalidate_org_cache, invalidate_user_cache
-from app.core.module_loader import is_enabled
-from app.core.modules import ModuleName
 from app.core.tracing import trace_job
 from app.models._mixins import utcnow
 from app.modules.api_keys.models import ApiKey
@@ -87,14 +85,16 @@ class UserReference:
 
     `delete` removes the row -- it is the user's own data. `null` keeps the
     row and forgets who made it -- it belongs to the organization (an API key,
-    a webhook endpoint, a colleague's membership). `module` names the module
-    whose table it is; when that module is off the table does not exist.
+    a webhook endpoint, a colleague's membership).
+
+    Applied when the table exists, not when its module is enabled (review
+    OCT-02): turning a module off leaves its tables and rows in place, and
+    the user's rows in them would block the final delete.
     """
 
     model: type[SQLModel]
     column: str
     action: Literal["delete", "null"] = "delete"
-    module: ModuleName | None = None
 
 
 # In dependency order: children before the rows they point at.
@@ -104,10 +104,10 @@ USER_REFERENCES: tuple[UserReference, ...] = (
     # Not a foreign key -- preserved after org deletion -- but it is the
     # user's activity trail, so it goes too.
     UserReference(AuditEvent, "actor_id"),
-    UserReference(Notification, "user_id", module="notifications"),
-    UserReference(PushToken, "user_id", module="notifications"),
+    UserReference(Notification, "user_id"),
+    UserReference(PushToken, "user_id"),
     # T-036: the object in storage goes as well; see _delete_stored_objects.
-    UserReference(StoredFile, "uploaded_by", module="file_storage"),
+    UserReference(StoredFile, "uploaded_by"),
     UserReference(MagicLinkToken, "user_id"),
     UserReference(PasswordResetToken, "user_id"),
     UserReference(EmailVerificationToken, "user_id"),
@@ -124,8 +124,8 @@ USER_REFERENCES: tuple[UserReference, ...] = (
     # T-310: an API key this user minted belongs to their organization;
     # deleting it would take an integration down because a colleague
     # exercised a right that has nothing to do with it.
-    UserReference(ApiKey, "created_by", action="null", module="public_api"),
-    UserReference(WebhookEndpoint, "created_by", action="null", module="outbound_webhooks"),
+    UserReference(ApiKey, "created_by", action="null"),
+    UserReference(WebhookEndpoint, "created_by", action="null"),
 )
 
 
@@ -149,9 +149,13 @@ async def purge_user_data(
         )
         org_ids: list[UUID] = list(org_ids_result.scalars().all())
 
-        references = [r for r in USER_REFERENCES if r.module is None or is_enabled(r.module)]
-        if is_enabled("file_storage"):
+        tables = await _existing_tables(session)
+        references = [r for r in USER_REFERENCES if r.model.__tablename__ in tables]
+        if StoredFile.__tablename__ in tables:
             await _delete_stored_objects(session, user_id)
+        # Review OCT-03: export archives are not StoredFile rows. The whole
+        # prefix, so failed and orphaned exports go too.
+        await asyncio.to_thread(_delete_export_archives, user_id)
         for reference in references:
             column = getattr(cast("Any", reference.model), reference.column)
             if reference.action == "delete":
@@ -176,6 +180,11 @@ async def purge_user_data(
 
     await _detach_orphaned_org_billing(org_ids, redis)
     logger.info("purge_user_data: purged all data for user_id=%s", user_id)
+
+
+async def _existing_tables(session: AsyncSession) -> set[str]:
+    """Tables in the database, whatever product.config says today."""
+    return await session.run_sync(lambda s: set(inspect(s.connection()).get_table_names()))
 
 
 async def _delete_stored_objects(session: AsyncSession, user_id: UUID) -> None:
@@ -254,10 +263,11 @@ async def export_user_data(
     async with async_session_factory() as session:
         job = await DataExportJobRepository(session).get_by_id(job_id)
         if job is None:
-            # Deleted between the check above and now -- the upload already
-            # happened (cheap to leave it orphaned in the bucket vs. adding
-            # transactional coupling here); just skip the status update + email.
-            logger.warning("export_user_data: job_id=%s vanished mid-export, skipping", job_id)
+            # Deleted between the check above and now -- the account was
+            # purged mid-export. The archive just uploaded is that account's
+            # data, so it goes too (review OCT-03).
+            logger.warning("export_user_data: job_id=%s vanished mid-export, deleting", job_id)
+            await asyncio.to_thread(_delete_export_archives, user_id)
             return
         job.status = "ready"
         job.download_url = download_url
@@ -290,8 +300,8 @@ async def _collect_export_payload(session: AsyncSession, user: User) -> dict[str
 
     An export is a file a person downloads and forwards, so no secret-derived
     value goes in it: no refresh-token hash, no API key hash. Tables of
-    optional modules are read only where the module is on -- selecting from a
-    table that was never created is an error.
+    optional modules are read where the table exists -- a module switched off
+    after use still holds this user's rows.
     """
     payload: dict[str, Any] = {
         # UserPublic, not User.model_dump() -- excludes hashed_password,
@@ -307,16 +317,17 @@ async def _collect_export_payload(session: AsyncSession, user: User) -> dict[str
         "audit_events": _dump(await _rows(session, AuditEvent, "actor_id", user.id)),
         "memberships": _dump(await _rows(session, Membership, "user_id", user.id)),
     }
-    # Present either way, so the file has one shape; empty where the module is off.
+    # Present either way, so the file has one shape; empty where there is no table.
+    tables = await _existing_tables(session)
     payload["notifications"] = (
         _dump(await _rows(session, Notification, "user_id", user.id))
-        if is_enabled("notifications")
+        if Notification.__tablename__ in tables
         else []
     )
     # Metadata only (T-037); the bytes are the user's to download already.
     payload["stored_files"] = (
         _dump(await _rows(session, StoredFile, "uploaded_by", user.id))
-        if is_enabled("file_storage")
+        if StoredFile.__tablename__ in tables
         else []
     )
     # T-310: ApiKeyPublic, not the row -- `key_hash` has no business here.
@@ -325,7 +336,7 @@ async def _collect_export_payload(session: AsyncSession, user: User) -> dict[str
             ApiKeyPublic.model_validate(row).model_dump(mode="json")
             for row in await _rows(session, ApiKey, "created_by", user.id)
         ]
-        if is_enabled("public_api")
+        if ApiKey.__tablename__ in tables
         else []
     )
     return payload
@@ -349,9 +360,26 @@ def _s3_client() -> Any:  # noqa: ANN401 -- boto3 ships no stubs, see mypy.ini's
     )
 
 
+def _export_prefix(user_id: UUID) -> str:
+    return f"data-exports/{user_id}/"
+
+
+def _delete_export_archives(user_id: UUID) -> None:
+    """Every archive exported for this user. Retention otherwise is the
+    bucket's lifecycle rule (one day, matching the signed link)."""
+    bucket = get_settings().AWS_BUCKET_NAME
+    client = _s3_client()
+    listing = client.list_objects_v2(Bucket=bucket, Prefix=_export_prefix(user_id))
+    keys = [{"Key": item["Key"]} for item in listing.get("Contents", [])]
+    if keys:
+        # ponytail: one page (1000 keys); a user with more exports than that
+        # needs the paginator.
+        client.delete_objects(Bucket=bucket, Delete={"Objects": keys})
+
+
 async def _upload_export_zip(user_id: UUID, job_id: UUID, zip_bytes: bytes) -> str:
     settings = get_settings()
-    object_key = f"data-exports/{user_id}/{job_id}.zip"
+    object_key = f"{_export_prefix(user_id)}{job_id}.zip"
 
     def _put_and_sign() -> str:
         client = _s3_client()

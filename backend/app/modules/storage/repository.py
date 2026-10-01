@@ -37,6 +37,24 @@ class StoredFileRepository(BaseRepository[StoredFile]):
     def __init__(self, session: AsyncSession, org_id: UUID) -> None:
         super().__init__(session, org_id)
 
+    async def get_for_update(self, file_id: UUID) -> StoredFile | None:
+        """The row, locked until this transaction ends (review OCT-01).
+
+        Two confirmations of one file used to both read it as pending, so the
+        second could promote replacement bytes over a served key the first
+        had already confirmed (and the scan had cleared). Locked, the second
+        waits, then reads the committed state. `populate_existing` because
+        the session may already hold a stale copy of the row.
+        """
+        m = cast("Any", StoredFile)
+        stmt = (
+            select(StoredFile)
+            .where(m.id == file_id, m.org_id == self.org_id, m.deleted_at.is_(None))
+            .with_for_update()
+            .execution_options(populate_existing=True)
+        )
+        return (await self.session.execute(stmt)).scalar_one_or_none()
+
     async def lock_for_quota_check(self) -> None:
         """Serialise this org's quota checks for the rest of the transaction.
 

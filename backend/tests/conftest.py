@@ -40,10 +40,10 @@ from tests._database import DatabaseHandle
 from tests._sessions import rolling_back
 
 _ENV_TEST_FILE = Path(__file__).parent.parent / ".env.test"
-# Where `.env.test` points DATABASE_URL and REDIS_URL. Nothing listens there
+# Where `.env.test` points DATABASE_URL, REDIS_URL and AWS_ENDPOINT_URL. Nothing listens there
 # under test; see `_no_dead_addresses`.
 _DEAD_ADDRESSES = frozenset(
-    (host, port) for host in ("localhost", "127.0.0.1", "::1") for port in (5432, 6379)
+    (host, port) for host in ("localhost", "127.0.0.1", "::1") for port in (5432, 6379, 9000)
 )
 _TEMPLATE_DATABASE = "forge_template"
 _AUTHED_PASSWORD = "Correct-Horse9"

@@ -113,6 +113,32 @@ groups:
       # died with an empty queue. Depth stays at zero, every dashboard looks
       # calm, and the first symptom is a customer asking where their email
       # went. `up` is Prometheus's own per-target liveness sample.
+      # Review OCT-04: scans run on their own queue and worker, invisible to
+      # the two alerts either side of this one. A stopped scanner does not
+      # fail anything loudly; uploads just stay "scanning" forever.
+      - alert: ScanQueueNotDraining
+        expr: forge_scan_queue_depth > 20
+        for: 10m
+        labels:
+          severity: critical
+        annotations:
+          summary: "{{ $value }} virus scans queued and not draining"
+          description: >-
+            New uploads cannot be downloaded until scanned. Check
+            `docker compose ps scanner-worker clamav`, then their logs.
+
+      - alert: ScannerWorkerDown
+        expr: up{job="forge-scanner-worker"} == 0
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "The scan worker is not responding to scrapes"
+          description: >-
+            forge-scanner-worker has failed its metrics scrape for five
+            minutes. Uploads stay unscanned, and undownloadable, until it
+            is back.
+
       - alert: WorkerDown
         expr: up{job="forge-worker"} == 0
         for: 5m

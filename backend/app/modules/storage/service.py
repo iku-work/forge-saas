@@ -30,7 +30,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core import jobs
 from app.core.db import persist_then_reject
-from app.core.exceptions import ConflictError, PlanLimitError, UnprocessableEntityError
+from app.core.exceptions import (
+    ConflictError,
+    NotFoundError,
+    PlanLimitError,
+    UnprocessableEntityError,
+)
 from app.models._mixins import utcnow
 from app.modules.audit.service import AuditService
 from app.modules.billing.dependencies import OrgSubscription
@@ -198,7 +203,13 @@ class StorageService:
                 )
 
     async def confirm_upload(self, user_id: UUID, file_id: UUID) -> StoredFile:
-        stored_file = await self._repo.get_or_raise(file_id)
+        stored_file = await self._repo.get_for_update(file_id)
+        if stored_file is None:
+            raise NotFoundError(
+                "errors.resource_not_found",
+                fallback="StoredFile not found",
+                params={"resource": "StoredFile"},
+            )
         if stored_file.status != "pending":
             # Idempotent: re-confirming an already-ready file is a no-op
             # success rather than an error (T-112 Build section).

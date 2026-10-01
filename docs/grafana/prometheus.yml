@@ -19,6 +19,12 @@ scrape_configs:
     metrics_path: /metrics
     static_configs:
       - targets: ["worker:9100"]
+  # The scan worker (review R4), scraped for the same reason: a stopped
+  # scanner leaves every new upload undownloadable while the queue looks idle.
+  - job_name: forge-scanner-worker
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["scanner-worker:9100"]
   # T-205: prometheuscommunity/postgres-exporter (docker-compose.yml's
   # observability profile) exposing pg_stat_statements per statement.
   - job_name: forge-postgres
