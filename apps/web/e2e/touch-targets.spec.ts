@@ -78,7 +78,9 @@ async function undersizedTargets(page: import("@playwright/test").Page) {
         continue;
       }
       const box = htmlElement.getBoundingClientRect();
-      if (box.width === 0 && box.height === 0) {
+      // 1x1 is `sr-only`: the skip link until it is focused. Not a pointer
+      // target; once focused it renders at full size.
+      if (box.width <= 1 && box.height <= 1) {
         continue;
       }
       // Disabled controls are not targets. 2.5.8 exempts them by the same

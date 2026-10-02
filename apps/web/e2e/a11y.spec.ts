@@ -40,6 +40,9 @@ test("key pages have no serious/critical WCAG A/AA violations", async ({
   page,
   browser,
 }, testInfo) => {
+  // One test, many pages, an axe run on each: ~19s on chromium, past the 30s
+  // default on webkit's slower axe.
+  test.slow(testInfo.project.name === "webkit", "axe is slower on webkit");
   await test.step("login", async () => {
     await page.goto("/login");
     await expect(page.getByTestId("login-email-input")).toBeVisible();

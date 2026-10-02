@@ -42,6 +42,16 @@ function dynamicRegionMasks(page: import("@playwright/test").Page) {
   ];
 }
 
+// journey.spec.ts gives the same account a newer "Journey <runId>" org, and
+// the app opens on the newest one. Pick the seeded org so the shot is stable.
+async function useSeededOrg(page: import("@playwright/test").Page) {
+  await page.getByTestId("org-switcher-trigger").click();
+  await page.getByRole("menuitem", { name: "Forge Demo" }).click();
+  await expect(page.getByTestId("org-switcher-trigger")).toContainText(
+    "Forge Demo",
+  );
+}
+
 const SNAPSHOT_TARGETS = [
   { path: "/", name: "dashboard", readyTestId: "app-shell" },
   {
@@ -78,6 +88,7 @@ test.describe("visual regression: dashboard + settings", () => {
     await page.getByTestId("login-password-input").fill(SUPERADMIN_PASSWORD);
     await page.getByTestId("login-submit").click();
     await expect(page.getByTestId("app-shell")).toBeVisible();
+    await useSeededOrg(page);
 
     for (const viewport of VIEWPORTS) {
       await page.setViewportSize(viewport.size);
@@ -123,6 +134,7 @@ test.describe("visual regression: dashboard + settings", () => {
     await page.getByTestId("login-password-input").fill(SUPERADMIN_PASSWORD);
     await page.getByTestId("login-submit").click();
     await expect(page.getByTestId("app-shell")).toBeVisible();
+    await useSeededOrg(page);
 
     for (const target of SNAPSHOT_TARGETS.filter(
       (t) => t.name !== "settings-org",
