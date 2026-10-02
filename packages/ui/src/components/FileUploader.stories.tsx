@@ -13,7 +13,13 @@ function envelope<T>(data: T) {
 function presignHandler() {
   return http.post("*/api/v1/files/presign", () =>
     HttpResponse.json(
-      envelope({ file_id: "story-file-id", upload_url: MOCK_UPLOAD_URL }),
+      envelope({
+        file_id: "story-file-id",
+        upload_url: MOCK_UPLOAD_URL,
+        // A signed POST policy, as backends/s3.py returns: the browser posts
+        // these fields plus the file to the bucket URL.
+        fields: { key: "incoming/mock-key", policy: "mock-policy" },
+      }),
     ),
   );
 }
@@ -35,7 +41,8 @@ function confirmHandler() {
 }
 
 function selectFile(canvasElement: HTMLElement, file: File) {
-  const input = canvasElement.querySelector<HTMLInputElement>('input[type="file"]');
+  const input =
+    canvasElement.querySelector<HTMLInputElement>('input[type="file"]');
   if (!input) throw new Error("file input not found");
   return userEvent.upload(input, file);
 }
@@ -62,7 +69,7 @@ export const Uploading: Story = {
         presignHandler(),
         // Never resolves within the story's lifetime -- the component stays
         // parked mid-upload so the progress bar is what gets snapshotted.
-        http.put(MOCK_UPLOAD_URL, async () => {
+        http.post(MOCK_UPLOAD_URL, async () => {
           await delay("infinite");
           return new HttpResponse(null, { status: 200 });
         }),
@@ -75,14 +82,25 @@ export const Uploading: Story = {
     });
     await selectFile(canvasElement, file);
     await waitFor(() =>
-      expect(within(canvasElement).getByRole("progressbar")).toBeInTheDocument(),
+      expect(
+        within(canvasElement).getByRole("progressbar"),
+      ).toBeInTheDocument(),
     );
   },
 };
 
 export const Success: Story = {
   parameters: {
-    msw: { handlers: [presignHandler(), confirmHandler(), http.put(MOCK_UPLOAD_URL, () => new HttpResponse(null, { status: 200 }))] },
+    msw: {
+      handlers: [
+        presignHandler(),
+        confirmHandler(),
+        http.post(
+          MOCK_UPLOAD_URL,
+          () => new HttpResponse(null, { status: 204 }),
+        ),
+      ],
+    },
   },
   play: async ({ canvasElement, args }) => {
     const file = new File(["a".repeat(1024)], "quarterly-report.pdf", {
@@ -98,7 +116,10 @@ export const UploadError: Story = {
     msw: {
       handlers: [
         presignHandler(),
-        http.put(MOCK_UPLOAD_URL, () => new HttpResponse(null, { status: 500 })),
+        http.post(
+          MOCK_UPLOAD_URL,
+          () => new HttpResponse(null, { status: 500 }),
+        ),
       ],
     },
   },
@@ -108,7 +129,9 @@ export const UploadError: Story = {
     });
     await selectFile(canvasElement, file);
     await waitFor(() =>
-      expect(within(canvasElement).getByRole("button", { name: /retry/i })).toBeInTheDocument(),
+      expect(
+        within(canvasElement).getByRole("button", { name: /retry/i }),
+      ).toBeInTheDocument(),
     );
   },
 };

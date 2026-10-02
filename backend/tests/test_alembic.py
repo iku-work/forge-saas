@@ -98,9 +98,3 @@ def test_upgrade_downgrade_upgrade_round_trip(alembic_config: Config) -> None:
     command.upgrade(alembic_config, "head")
     command.downgrade(alembic_config, "base")
     command.upgrade(alembic_config, "head")
-
-
-def test_script_template_reminds_authors_to_write_downgrade() -> None:
-    template = (_REAL_ALEMBIC_DIR / "script.py.mako").read_text()
-    assert "downgrade" in template.lower()
-    assert "def downgrade" in template

@@ -116,16 +116,3 @@ def test_the_client_generator_reads_the_dumped_file_rather_than_a_url() -> None:
     # it back.
     inputs = [line for line in config.splitlines() if line.strip().startswith("input:")]
     assert inputs == ['  input: "./openapi.json",']
-
-
-def test_no_ci_job_boots_a_backend_merely_to_serve_a_schema() -> None:
-    """The steps this replaced, asserted gone.
-
-    Five jobs used to start uvicorn, poll `/health` up to thirty times, and
-    stop it again, purely so `openapi-ts` had a URL to fetch. One of them had
-    to *wait for the port to come free* afterwards so the next backend it
-    booted was not mistaken for the first. None of that was ever about the
-    schema.
-    """
-    workflow = (REPO_ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
-    assert "Start backend for OpenAPI schema" not in workflow

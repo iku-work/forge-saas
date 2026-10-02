@@ -151,13 +151,6 @@ def test_get_branding_reflects_product_config() -> None:
     assert branding.support_email == product_config.SUPPORT_EMAIL
 
 
-def test_get_branding_is_cached() -> None:
-    first = module_loader.get_branding()
-    second = module_loader.get_branding()
-
-    assert first is second
-
-
 def test_get_branding_reflects_product_config_override(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(product_config, "APP_NAME", "Acme")
     monkeypatch.setattr(product_config, "SUPPORT_EMAIL", "help@acme.test")

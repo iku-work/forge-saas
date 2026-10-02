@@ -24,6 +24,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, get_args
 
 import pytest
+import yaml
 
 from app.core.module_loader import validate_modules
 from app.core.modules import EnabledModules, ModuleName
@@ -119,7 +120,13 @@ def test_there_is_a_fixture_for_every_combination_the_matrix_job_runs() -> None:
     # Not "at least" -- an orphaned fixture nobody runs is as much of a
     # problem as a missing one, since the two below are the only things
     # keeping the guards in this file honest about what CI actually does.
-    assert _FIXTURES == ["minimal.py", "phase4.py"]
+    workflow = yaml.safe_load((_REPO_ROOT / ".github" / "workflows" / "ci.yml").read_text())
+    legs = next(
+        job["strategy"]["matrix"]["include"]
+        for job in workflow["jobs"].values()
+        if "fixture" in str(job.get("strategy", {}).get("matrix", {}))
+    )
+    assert sorted(f"{leg['fixture']}.py" for leg in legs if leg["fixture"]) == _FIXTURES
 
 
 @pytest.mark.parametrize("filename", _FIXTURES)

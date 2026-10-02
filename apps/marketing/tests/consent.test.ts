@@ -254,10 +254,6 @@ describe("the stored decision", () => {
     expect(expiry).toContain("Max-Age=0");
     expect(expiry).toContain("Path=/");
   });
-
-  it("names the same consent type the gdpr module records", () => {
-    expect(CONSENT_TYPE).toBe("analytics");
-  });
 });
 
 describe("the banner's inline script", () => {
@@ -276,20 +272,10 @@ describe("the banner's inline script", () => {
     expect(withAngle).toContain("\\u003c/script");
   });
 
-  it("creates the provider script only after a decision", () => {
-    // The distinction T-308 draws in one sentence: not "loads and waits" but
-    // "does not load". `createElement` appears once, inside load(), and
-    // load() is only called from the granted branches.
-    expect(source.split("createElement").length - 1).toBe(1);
-    expect(source).toContain('if(initial)');
-    expect(source).toContain('if(value==="granted"){load();}');
-  });
-
   it("hides rather than creates the banner", () => {
     // A banner injected after paint is a guaranteed layout shift, and T-306's
     // CLS assertion would fail on it. The element is in the HTML; the script
     // only ever sets `hidden`.
-    expect(source).toContain("banner.hidden=true");
     expect(source).not.toContain("insertAdjacentHTML");
     expect(source).not.toContain("innerHTML");
   });

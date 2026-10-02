@@ -1,3 +1,4 @@
+import json
 import os
 import re
 import shutil
@@ -12,9 +13,11 @@ REPO_ROOT = Path(__file__).parent.parent.parent
 
 def test_dockerfile_is_multi_stage_with_pinned_base_image() -> None:
     content = (REPO_ROOT / "backend" / "Dockerfile").read_text()
-    assert content.count("FROM python:3.12-slim") == 2
-    assert "AS builder" in content
-    assert "AS runtime" in content
+    images = re.findall(r"^FROM\s+(\S+)", content, re.MULTILINE)
+    assert len(images) >= 2, "build tools must stay out of the runtime stage"
+    for image in images:
+        assert ":" in image, image
+        assert not image.endswith(":latest"), image
 
 
 def test_dockerfile_runs_as_non_root_user() -> None:
@@ -24,13 +27,17 @@ def test_dockerfile_runs_as_non_root_user() -> None:
 
 
 def test_docker_compose_prod_uses_hardened_dockerfile() -> None:
-    content = (REPO_ROOT / "docker-compose.prod.yml").read_text()
-    assert "dockerfile: Dockerfile.dev" not in content
+    services = yaml.safe_load((REPO_ROOT / "docker-compose.prod.yml").read_text())["services"]
+    builds = [s["build"] for s in services.values() if "build" in s]
+    assert builds
     # T-244: `backend/Dockerfile` with a repo-root build context, not
     # `Dockerfile` with `context: ./backend` -- that Dockerfile COPYs
     # packages/i18n/locales, which ./backend can't reach, so the previous
     # spelling could never build. Same invocation the CI build job uses.
-    assert content.count("dockerfile: backend/Dockerfile") == 2
+    for build in builds:
+        assert build.get("dockerfile") != "Dockerfile.dev", build
+        if build.get("dockerfile") == "backend/Dockerfile":
+            assert build["context"] in (".", "./"), build
 
 
 def _ci_workflow() -> dict:
@@ -109,6 +116,8 @@ def _preflight_action() -> dict:
 def test_deploy_only_runs_on_main_and_needs_the_full_gate(target: str) -> None:
     job = _ci_workflow()["jobs"][f"deploy-{target}"]
     assert "refs/heads/main" in job["if"]
+    # The weekly scheduled run is on main too; only a push may deploy.
+    assert "github.event_name == 'push'" in job["if"]
     # C2: the browser suite and the ZAP baseline gate the deploy as well as
     # the image build (test and security arrive transitively through build).
     assert set(job["needs"]) == {"build", "e2e-web", "zap-baseline"}
@@ -268,7 +277,8 @@ def test_security_job_runs_dependency_audits_non_optionally() -> None:
     audit_steps = [
         s for s in steps if "pip-audit" in s.get("run", "") or "pnpm audit" in s.get("run", "")
     ]
-    assert len(audit_steps) == 2
+    assert any("pip-audit" in s["run"] for s in audit_steps)
+    assert any("pnpm audit" in s["run"] for s in audit_steps)
     assert all("continue-on-error" not in s for s in audit_steps)
 
 
@@ -369,3 +379,28 @@ def test_hetzner_verifies_every_service_before_declaring_success() -> None:
     assert names.index("Pull and switch") < verify < names.index("Smoke test")
     for service in ("backend", "worker", "scanner-worker", "caddy"):
         assert f"check {service} " in steps[verify]["run"], service
+
+
+def test_module_matrix_runs_weekly_not_on_every_merge() -> None:
+    # ~45 billed minutes a run (2026-10-01): too dear for every push to main.
+    workflow = _ci_workflow()
+    triggers = workflow[True]  # PyYAML reads the bare `on:` key as True
+    assert "schedule" in triggers
+    assert "workflow_dispatch" in triggers
+    condition = workflow["jobs"]["module-matrix"]["if"]
+    assert "'schedule'" in condition
+    assert "refs/heads/main" not in condition
+
+
+def test_e2e_runs_in_the_playwright_image_matching_the_installed_version() -> None:
+    # Baselines are generated in that image; the bare runner renders other
+    # fonts. A tag that drifts from @playwright/test also finds no browsers.
+    run = next(
+        s["run"]
+        for s in _ci_workflow()["jobs"]["e2e-web"]["steps"]
+        if s.get("name") == "Run Playwright (chromium + webkit)"
+    )
+    tag = re.search(r"mcr\.microsoft\.com/playwright:v([\d.]+)-", run)
+    assert tag, run
+    package = json.loads((REPO_ROOT / "apps" / "web" / "package.json").read_text())
+    assert package["devDependencies"]["@playwright/test"].lstrip("^~") == tag[1]

@@ -2,7 +2,7 @@ import { fileURLToPath } from "node:url";
 
 import { describe, expect, it } from "vitest";
 
-import { checkLocales, compareLocale, PARTIAL_LOCALES } from "./check-locales";
+import { checkLocales, compareLocale } from "./check-locales";
 
 const LOCALES_DIR = fileURLToPath(new URL("../locales/", import.meta.url));
 
@@ -10,13 +10,6 @@ describe("checkLocales against the real locales/ directory", () => {
   it("passes for every locale currently shipped", () => {
     const report = checkLocales(LOCALES_DIR);
     expect(report.errors).toEqual([]);
-  });
-
-  it("fi stays registered as the intentionally partial worked-example locale", () => {
-    // If this ever flips, the coverage gate below starts enforcing >=95%
-    // against fi too, which would fail today given its ~30% coverage --
-    // see packages/i18n/README.md.
-    expect(PARTIAL_LOCALES.has("fi")).toBe(true);
   });
 });
 

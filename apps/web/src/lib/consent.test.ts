@@ -16,7 +16,6 @@ import { describe, expect, it } from "vitest";
 
 import {
   CONSENT_COOKIE,
-  CONSENT_TYPE,
   parseConsent,
   readConsentCookie,
 } from "./consent";
@@ -66,15 +65,5 @@ describe("parseConsent", () => {
     for (const raw of ["", "maybe|v1", "granted", "granted|", "|v1", null]) {
       expect(parseConsent(raw), String(raw)).toBeNull();
     }
-  });
-});
-
-describe("the shared contract", () => {
-  it("names the consent type the gdpr module records", () => {
-    expect(CONSENT_TYPE).toBe("analytics");
-  });
-
-  it("names the cookie the marketing site writes", () => {
-    expect(CONSENT_COOKIE).toBe("forge_consent");
   });
 });

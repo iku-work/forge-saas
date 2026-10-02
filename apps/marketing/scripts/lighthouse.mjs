@@ -73,12 +73,19 @@ async function productionOrigin() {
   return PRODUCTION_ORIGIN;
 }
 
-/** `astro build`, through the guard like every other build in this repo. */
+/**
+ * `astro build`, through the guard like every other build in this repo.
+ *
+ * A production build refuses links into an app on localhost
+ * (check-app-links.mjs), so the app needs some public origin. Which one does
+ * not matter to Lighthouse: app links are never followed or measured.
+ */
 function build(extraEnv) {
+  const env = { PUBLIC_APP_URL: "https://app.example.com", ...process.env, ...extraEnv };
   const result = spawnSync(
     process.execPath,
     [join(APP_ROOT, "scripts", "guard-enabled.mjs"), "astro", "build"],
-    { cwd: APP_ROOT, stdio: "inherit", env: { ...process.env, ...extraEnv } },
+    { cwd: APP_ROOT, stdio: "inherit", env },
   );
   if (result.status !== 0) {
     throw new Error(`astro build exited ${result.status}`);

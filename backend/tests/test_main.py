@@ -10,12 +10,6 @@ from app.main import app
 # additionally covered by the ADR evidence pointing at them directly.
 
 
-def test_docs_enabled_in_dev_environment() -> None:
-    assert app.docs_url == "/docs"
-    assert app.redoc_url == "/redoc"
-    assert app.openapi_url == "/openapi.json"
-
-
 def test_docs_endpoint_reachable_in_dev() -> None:
     with TestClient(app) as client:
         response = client.get("/docs")

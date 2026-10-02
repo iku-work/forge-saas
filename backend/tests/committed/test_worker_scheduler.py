@@ -30,10 +30,12 @@ scheduler_log_messages below for how this is worked around.
 import logging
 from collections.abc import Generator
 from datetime import UTC, datetime, timedelta
+from itertools import pairwise
 from typing import Any
 from uuid import uuid4
 
 import pytest
+from apscheduler.triggers.cron import CronTrigger
 from redis.asyncio import Redis
 from sqlalchemy.ext.asyncio import (
     AsyncEngine,
@@ -484,40 +486,66 @@ async def test_create_scheduler_registers_all_jobs_in_utc(redis_client: Redis) -
         "expire_abandoned_uploads",
         "refresh_active_sessions_gauge",
     }
-    assert "hour='*/6'" in repr(jobs_by_id["cleanup_expired_sessions"].trigger)
-    assert "hour='8'" in repr(jobs_by_id["sync_expiring_trials"].trigger)
-    assert "hour='9'" in repr(jobs_by_id["notify_expiring_trials"].trigger)
-    assert "hour='10'" in repr(jobs_by_id["expire_trials_to_inactive"].trigger)
-    assert "hour=" not in repr(jobs_by_id["cleanup_expired_tokens"].trigger)
-    assert "hour=" not in repr(jobs_by_id["expire_data_export_urls"].trigger)
-    assert "minute='*/15'" in repr(jobs_by_id["report_usage_to_stripe"].trigger)
-    # Hourly, on a minute of its own: the window between paying and being
-    # upgraded is what this job bounds, so a daily sweep would leave a
-    # customer effectively un-upgraded for a day.
-    assert "minute='20'" in repr(jobs_by_id["reconcile_subscriptions"].trigger)
-    assert "hour=" not in repr(jobs_by_id["reconcile_subscriptions"].trigger)
-    assert "hour='2'" in repr(jobs_by_id["prune_old_notifications"].trigger)
-    # An hour after the notification prune, so the two biggest delete sweeps
-    # never contend for the same window.
-    assert "hour='3'" in repr(jobs_by_id["prune_webhook_deliveries"].trigger)
-    # Daily, and an hour of its own: every row it finds is already past its
-    # grace period, so nothing is urgent -- but it shares the pool with the
-    # rest of these, and stacking them on one hour is how a slow one starves
-    # the next.
-    assert "hour='4'" in repr(jobs_by_id["sweep_orphaned_objects"].trigger)
-    # Every five minutes, not hourly: it only re-enqueues deliveries that are
-    # already due, and the case it exists for (a Redis restart that lost the
-    # deferred jobs) otherwise strands every pending delivery until the next
-    # tick.
-    assert "minute='*/5'" in repr(jobs_by_id["sweep_due_webhook_deliveries"].trigger)
-    # Hourly, against an hour-long reservation window, so an abandoned
-    # presign clears in one to two hours. Minute 40 because
-    # reconcile_subscriptions holds 20 -- see its comment above.
-    assert "minute='40'" in repr(jobs_by_id["expire_abandoned_uploads"].trigger)
-    assert "hour=" not in repr(jobs_by_id["expire_abandoned_uploads"].trigger)
-    assert "seconds=60" in repr(jobs_by_id["refresh_active_sessions_gauge"].trigger)
     for job in jobs_by_id.values():
         assert "timezone='UTC'" in repr(job.trigger)
+
+
+def _fire_times(trigger: CronTrigger) -> list[datetime]:
+    """One UTC day of a cron trigger's fire times."""
+    day = datetime(2026, 1, 1, tzinfo=UTC)
+    times: list[datetime] = []
+    at = trigger.get_next_fire_time(None, day)
+    while at < day + timedelta(days=1):
+        times.append(at)
+        at = trigger.get_next_fire_time(at, at + timedelta(seconds=1))
+    return times
+
+
+def _longest_gap(times: list[datetime]) -> timedelta:
+    wrapped = [*times, times[0] + timedelta(days=1)]
+    return max(b - a for a, b in pairwise(wrapped))
+
+
+async def test_each_safety_net_runs_often_enough_for_what_it_bounds(redis_client: Redis) -> None:
+    jobs = {job.id: job.trigger for job in create_scheduler(redis_client).get_jobs()}
+    fires = {
+        job_id: _fire_times(t)
+        for job_id, t in jobs.items()
+        if job_id != "refresh_active_sessions_gauge"
+    }
+
+    # A daily reconcile would leave someone who paid un-upgraded for a day.
+    assert _longest_gap(fires["reconcile_subscriptions"]) <= timedelta(hours=1)
+    # An abandoned presign holds its org's quota until this runs.
+    assert _longest_gap(fires["expire_abandoned_uploads"]) <= timedelta(hours=1)
+    # A Redis restart strands every pending delivery until the next tick.
+    assert _longest_gap(fires["sweep_due_webhook_deliveries"]) <= timedelta(minutes=5)
+    assert _longest_gap(fires["report_usage_to_stripe"]) <= timedelta(minutes=15)
+    assert jobs["refresh_active_sessions_gauge"].interval <= timedelta(seconds=60)
+
+    # Trial warnings go out before the trial is expired, never after.
+    assert (
+        fires["sync_expiring_trials"][0]
+        < fires["notify_expiring_trials"][0]
+        < fires["expire_trials_to_inactive"][0]
+    )
+
+
+async def test_the_big_sweeps_never_share_a_slot(redis_client: Redis) -> None:
+    # The daily delete sweeps share one pool; stacking them on the same hour
+    # is how a slow one starves the next. Likewise the two hourly jobs that
+    # took minutes of their own.
+    jobs = {job.id: job.trigger for job in create_scheduler(redis_client).get_jobs()}
+    daily = ["prune_old_notifications", "prune_webhook_deliveries", "sweep_orphaned_objects"]
+    hours = [_fire_times(jobs[job_id])[0].hour for job_id in daily]
+    assert len(set(hours)) == len(hours), dict(zip(daily, hours, strict=True))
+
+    minutes = [
+        _fire_times(jobs[job_id])[0].minute
+        for job_id in ("reconcile_subscriptions", "expire_abandoned_uploads")
+    ]
+    assert 0 not in minutes, "the hourly :00 batch already holds minute 0"
+    assert len(set(minutes)) == len(minutes)
 
 
 async def test_create_scheduler_job_runs_the_underlying_function_under_the_lock(

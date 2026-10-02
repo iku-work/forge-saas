@@ -77,3 +77,27 @@ vulnerabilities:
       Same pinned node-tar 6.2.1 again. 6.x is end-of-life; the fix is an
       @expo/cli upgrade, not another line in this file.
     expired_at: 2026-12-01
+
+  # 2026-10-01 iku-work — expires 2027-01-01
+  #
+  # image-size 1.2.1, reachable only through metro@0.81.5 (the React Native
+  # bundler). The fix is 2.0.3, a major that replaced the callable default
+  # export with a named `imageSize`; metro's src/Assets.js does
+  # `const getImageSize = require("image-size")` and calls it, so overriding
+  # to 2.x breaks every asset bundle. What is exposed: metro sizing image
+  # assets from this repo, on a developer machine or a mobile build. Not
+  # shipped, not reachable from the deployed product. The fix is the Expo SDK
+  # upgrade that moves metro past 0.81 -- the same upgrade the tar entries
+  # above are waiting on.
+  - id: CVE-2025-71329
+    paths:
+      - "pnpm-lock.yaml"
+    statement: >-
+      image-size 1.2.1 via metro (dev bundler); 2.x breaks metro's
+      require-and-call usage. Build-time only, not in the product.
+    expired_at: 2027-01-01
+  - id: CVE-2025-71330
+    paths:
+      - "pnpm-lock.yaml"
+    statement: Same image-size 1.2.1 via metro as CVE-2025-71329.
+    expired_at: 2027-01-01

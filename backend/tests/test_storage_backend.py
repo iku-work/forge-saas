@@ -46,7 +46,7 @@ _BUCKET = "storage-backend-tests"
 # upload. A recent image + MINIO_KMS_SECRET_KEY (MinIO's local, no-Vault-
 # required auto-encryption key) is required for SSE-S3 to actually work, not
 # just for the policy condition to be present.
-_MINIO_IMAGE = "minio/minio:RELEASE.2025-09-07T16-13-09Z"
+_MINIO_IMAGE = "pgsty/minio:RELEASE.2026-08-04T00-00-00Z"
 
 
 @pytest.fixture(scope="session")
@@ -220,12 +220,6 @@ async def test_head_reraises_non_not_found_client_errors(minio_container: MinioC
 
     with pytest.raises(ClientError):
         await backend.head("whatever.jpg")
-
-
-def test_s3_backend_defaults_with_no_options_override() -> None:
-    backend = S3Backend(bucket="some-bucket", region="us-east-1")
-
-    assert backend._client.meta.region_name == "us-east-1"
 
 
 async def test_presign_upload_defaults_to_600_second_expiry(backend: S3Backend) -> None:

@@ -52,7 +52,7 @@ services:
       - forge-net
 
   minio:
-    image: minio/minio
+    image: pgsty/minio:RELEASE.2026-08-04T00-00-00Z
     command: server /data --console-address ":9001"
     environment:
       MINIO_ROOT_USER: minioadmin
@@ -79,7 +79,7 @@ services:
       - forge-net
 
   # One-shot: creates the AWS_BUCKET_NAME bucket (T-037's export job uploads
-  # here) -- minio/minio ships its own `mc` client, so no separate image is
+  # here) -- the minio image ships its own `mc` client, so no separate image is
   # needed. Idempotent (--ignore-existing), exits after running once.
   #
   # Creates both bucket names that appear across the repo's env files
@@ -92,7 +92,7 @@ services:
   # exercised a real upload through this compose stack (vs. testcontainers'
   # own dedicated bucket in test_storage_backend.py) until T-223's presign.js.
   minio-init:
-    image: minio/minio
+    image: pgsty/minio:RELEASE.2026-08-04T00-00-00Z
     entrypoint: ["/bin/sh", "-c"]
     # Review R1: uploads land under incoming/ and confirm copies them out, so
     # anything still there after a day is either an upload nobody confirmed

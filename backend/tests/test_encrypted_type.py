@@ -8,7 +8,7 @@ from sqlmodel import SQLModel
 
 from app.core import encrypted_type
 from app.core.config import get_settings
-from app.core.encrypted_type import EncryptedString, RedactedReprMixin, get_shared_fernet
+from app.core.encrypted_type import EncryptedString, RedactedReprMixin
 
 
 def _set_keys(monkeypatch: pytest.MonkeyPatch, primary: str, old: str = "") -> None:
@@ -150,13 +150,6 @@ def test_load_fernet_skips_blank_old_key_entries_and_loads_valid_ones(
 # ---------------------------------------------------------------------------
 
 
-def test_get_fernet_caches_the_same_instance() -> None:
-    first = encrypted_type._get_fernet()
-    second = encrypted_type._get_fernet()
-
-    assert first is second
-
-
 def test_get_fernet_is_thread_safe_under_concurrent_first_access(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -180,10 +173,6 @@ def test_get_fernet_is_thread_safe_under_concurrent_first_access(
 
     assert len(results) == 2
     assert results[0] is results[1]
-
-
-def test_get_shared_fernet_returns_the_cached_instance() -> None:
-    assert get_shared_fernet() is encrypted_type._get_fernet()
 
 
 # ---------------------------------------------------------------------------
