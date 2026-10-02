@@ -39,7 +39,7 @@ jobs:
       issues: write # to file/dedupe findings as issues, see "File findings" below
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Make report output directory
         run: mkdir -p zap-reports
@@ -59,7 +59,7 @@ jobs:
 
       - name: Upload testssl.sh report
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: testssl-report
           path: zap-reports/testssl-report.json
@@ -86,7 +86,7 @@ jobs:
 
       - name: Upload ZAP report
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: zap-full-report
           path: zap-reports/
