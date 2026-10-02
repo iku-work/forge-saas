@@ -223,6 +223,10 @@ class Settings(BaseSettings):
     EMAIL_BACKEND: Literal["resend", "smtp"] = "resend"
     SMTP_HOST: str = "localhost"
     SMTP_PORT: int = 1025
+    # Where the image put its assets (backend/Dockerfile sets both); unset means
+    # resolve them beside the source tree. See app/core/i18n.py.
+    LOCALES_DIR: str | None = None
+    EMAIL_RENDERER_CLI: str | None = None
     SENTRY_DSN: str | None = None
     SENTRY_TRACES_SAMPLE_RATE: float = 0.1
 

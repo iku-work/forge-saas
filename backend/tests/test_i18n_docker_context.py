@@ -12,6 +12,7 @@ from pathlib import Path
 import pytest
 import yaml
 
+from app.core.config import get_settings
 from app.core.i18n import _locales_dir
 from app.workers.jobs.email import _email_renderer_cli_path
 
@@ -83,6 +84,7 @@ def test_both_are_read_per_call_not_bound_at_import(monkeypatch: pytest.MonkeyPa
     monkeypatch.delenv("LOCALES_DIR", raising=False)
     before = _locales_dir()
     monkeypatch.setenv("LOCALES_DIR", "/changed/after/import")
+    get_settings.cache_clear()
 
     assert _locales_dir() != before
 

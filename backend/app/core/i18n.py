@@ -18,12 +18,12 @@ backend.
 from __future__ import annotations
 
 import json
-import os
 import re
 from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
+from app.core.config import get_settings
 from app.core.locales import validate_locales
 
 _PLACEHOLDER_RE = re.compile(r"\{(\w+)\}")
@@ -47,11 +47,8 @@ _BAKED_LOCALES_DIR = Path(__file__).resolve().parents[2] / "locales"
 # locales raise nothing at startup: `load_translations()` just caches empty
 # catalogs, and the failure surfaces later as a KeyError from `t()` on
 # whichever request first needs a translated string.
-_LOCALES_DIR_ENV = "LOCALES_DIR"
-
-
 def _locales_dir() -> Path:
-    override = os.environ.get(_LOCALES_DIR_ENV)
+    override = get_settings().LOCALES_DIR
     if override:
         return Path(override)
     if _PACKAGE_LOCALES_DIR.is_dir():
