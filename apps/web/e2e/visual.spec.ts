@@ -46,10 +46,15 @@ function dynamicRegionMasks(page: import("@playwright/test").Page) {
 // the app opens on the newest one. Pick the seeded org so the shot is stable.
 async function useSeededOrg(page: import("@playwright/test").Page) {
   await page.getByTestId("org-switcher-trigger").click();
-  await page.getByRole("menuitem", { name: "Forge Demo" }).click();
+  await page
+    .getByTestId("org-switcher-option")
+    .filter({ hasText: "Forge Demo" })
+    .click();
   await expect(page.getByTestId("org-switcher-trigger")).toContainText(
     "Forge Demo",
   );
+  // The pointer is left where the menu item was, over a nav link: hover state.
+  await page.mouse.move(0, 0);
 }
 
 const SNAPSHOT_TARGETS = [

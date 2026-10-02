@@ -148,6 +148,7 @@ function OrgSwitcher() {
           {orgs.map((candidate) => (
             <DropdownMenuItem
               key={candidate.id}
+              data-testid="org-switcher-option"
               onSelect={() => {
                 switchOrg(candidate.id);
               }}
