@@ -1547,10 +1547,6 @@ jobs:
         env:
           VITE_API_URL: ""
 
-      - name: Install Playwright browsers
-        working-directory: apps/web
-        run: pnpm exec playwright install --with-deps chromium webkit
-
       # T-220's own "Done when": zero non-data-testid selectors in the E2E
       # suite. Cheap enough as a grep that a dedicated eslint rule isn't
       # worth authoring.
@@ -1653,11 +1649,18 @@ jobs:
             -H 'Accept-Language: de-DE,de;q=0.9' https://marketing.localhost/pricing/)
           test "$location" = "https://marketing.localhost/de/pricing/"
 
+      # In the image the visual baselines are generated in, not on the bare
+      # runner: chromium on ubuntu-latest resolves the system font stack to
+      # DejaVu Sans, the image to something else, and every screenshot then
+      # differs by ~1%. --network host keeps https://localhost and MailHog
+      # exactly as the stack publishes them. The tag must match
+      # @playwright/test in apps/web/package.json (test_ci_build_deploy.py).
       - name: Run Playwright (chromium + webkit)
-        working-directory: apps/web
-        run: pnpm e2e
-        env:
-          CI: "true"
+        run: |
+          docker run --rm --network host --ipc host -e CI=true \
+            -v "$PWD":/repo -w /repo/apps/web \
+            mcr.microsoft.com/playwright:v1.61.1-noble \
+            npx playwright test -c e2e/playwright.config.ts
 
       - name: Upload Playwright report + traces
         if: always()

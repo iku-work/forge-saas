@@ -147,15 +147,20 @@ test("signup -> verify -> invite -> upgrade", async ({ page, browser }) => {
   await expect(page).toHaveURL(/\/en\/?$/);
   await page.goto("/settings/profile");
   await expect(page).toHaveURL(/\/en\/settings\/profile$/);
-  const head = await page.evaluate(() => ({
-    canonical: document
-      .querySelector('link[rel="canonical"]')
-      ?.getAttribute("href"),
-    robots: document.querySelector('meta[name="robots"]')?.getAttribute("content"),
-    alternates: document.querySelectorAll('link[rel="alternate"]').length,
-  }));
-  expect(head.canonical).toBe("https://localhost/en/settings/profile");
+  // Polled: LocaleHead writes these in an effect after the URL settles, and
+  // a single read can land in between.
+  const readHead = () =>
+    page.evaluate(() => ({
+      canonical: document
+        .querySelector('link[rel="canonical"]')
+        ?.getAttribute("href"),
+      robots: document.querySelector('meta[name="robots"]')?.getAttribute("content"),
+      alternates: document.querySelectorAll('link[rel="alternate"]').length,
+    }));
   // Behind auth: canonical only, noindex on, no hreflang alternates.
-  expect(head.robots).toBe("noindex, nofollow");
-  expect(head.alternates).toBe(0);
+  await expect.poll(readHead).toEqual({
+    canonical: "https://localhost/en/settings/profile",
+    robots: "noindex, nofollow",
+    alternates: 0,
+  });
 });

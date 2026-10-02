@@ -1,3 +1,4 @@
+import json
 import os
 import re
 import shutil
@@ -389,3 +390,17 @@ def test_module_matrix_runs_weekly_not_on_every_merge() -> None:
     condition = workflow["jobs"]["module-matrix"]["if"]
     assert "'schedule'" in condition
     assert "refs/heads/main" not in condition
+
+
+def test_e2e_runs_in_the_playwright_image_matching_the_installed_version() -> None:
+    # Baselines are generated in that image; the bare runner renders other
+    # fonts. A tag that drifts from @playwright/test also finds no browsers.
+    run = next(
+        s["run"]
+        for s in _ci_workflow()["jobs"]["e2e-web"]["steps"]
+        if s.get("name") == "Run Playwright (chromium + webkit)"
+    )
+    tag = re.search(r"mcr\.microsoft\.com/playwright:v([\d.]+)-", run)
+    assert tag, run
+    package = json.loads((REPO_ROOT / "apps" / "web" / "package.json").read_text())
+    assert package["devDependencies"]["@playwright/test"].lstrip("^~") == tag[1]
