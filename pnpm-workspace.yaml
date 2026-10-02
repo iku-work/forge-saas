@@ -97,6 +97,7 @@ overrides:
   # which is where `safeLoad` was removed. Each of these stays inside the
   # major it was asked for.
   "fast-uri@3": ">=3.1.7 <4"
+  "devalue@5": ">=5.9.3 <6"
   "js-yaml@3": ">=3.15.0 <4"
   "nanoid@3": ">=3.3.18 <4"
   "postcss@8": ">=8.5.18 <9"
@@ -161,6 +162,10 @@ auditConfig:
     # if the Lighthouse runner fetches a PAC file over ftp://, which it never
     # does here.
     - GHSA-c475-qrg2-pj4r
+    # node-forge, via react-native's dev-middleware>selfsigned (a local dev
+    # server certificate). The advisory names >=1.4.1; npm's latest is 1.4.0
+    # (2026-10-02). Take the fix once it is published.
+    - GHSA-86w9-cpqp-85rv
     # tmp, via @lhci/cli>inquirer>external-editor. A fix exists (0.2.6) but its
     # consumers ask for ^0.0.33 and ^0.1.0 -- in 0.x semver those are two
     # breaking jumps away, forced on a transitive dependency of a dev-only
