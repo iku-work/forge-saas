@@ -16,7 +16,8 @@ COPY . .
 
 # The same lock CI installs (C1), so "works in the dev container" and "green
 # in CI" are claims about the same dependency set.
-RUN pip install --no-cache-dir --require-hashes -r requirements-dev.lock \n    && pip install --no-cache-dir --no-deps -e .
+RUN pip install --no-cache-dir --require-hashes -r requirements-dev.lock \
+    && pip install --no-cache-dir --no-deps -e .
 
 EXPOSE 8000
 
