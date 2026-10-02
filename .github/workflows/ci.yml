@@ -650,7 +650,7 @@ jobs:
             curl -sfk https://localhost/ -o /dev/null && break
             sleep 1
           done
-          curl -sfk https://localhost/ | grep -q '<div id="root">'
+          curl -sfk https://localhost/ | grep '<div id="root">' >/dev/null
 
           # Behavioural, because the text assertion in test_caddy_config.py
           # could not catch what actually went wrong here: `respond /metrics
@@ -667,7 +667,7 @@ jobs:
 
           # Deep links are the other thing the SPA split has to get right: a
           # client-side route must reach index.html, not FastAPI's 404.
-          curl -sfk https://localhost/settings/billing | grep -q '<div id="root">'
+          curl -sfk https://localhost/settings/billing | grep '<div id="root">' >/dev/null
 
           enabled=$(cd backend && python -c \
             "from product.config import MODULES; print(str(MODULES.marketing.enabled).lower())")
@@ -1336,18 +1336,20 @@ jobs:
       # compose-on-a-VPS deploy uses this (Render serves the frontend itself;
       # on AWS the bundle belongs in S3+CloudFront) -- but it is built on
       # every main build so the tag always exists for a rollback to reach
-      # back to.
+      # back to. Only when DEPLOY_TARGET is hetzner, though: its URLs come from
+      # repository variables set alongside that target, and without them
+      # Astro stops on an empty site URL ("Invalid URL").
       #
       # It compiles the frontend again rather than reusing the turbo build
       # above, so the image is reproducible from the Dockerfile alone. The
       # GitHub Actions layer cache is what keeps that from costing a full
       # rebuild each time; only a lockfile or source change invalidates it.
       - name: Set up Buildx for the edge image
-        if: github.ref == 'refs/heads/main'
+        if: github.ref == 'refs/heads/main' && vars.DEPLOY_TARGET == 'hetzner'
         uses: docker/setup-buildx-action@v3
 
       - name: Build and push the edge image
-        if: github.ref == 'refs/heads/main'
+        if: github.ref == 'refs/heads/main' && vars.DEPLOY_TARGET == 'hetzner'
         uses: docker/build-push-action@v6
         with:
           context: .
@@ -1612,10 +1614,10 @@ jobs:
           marketing() { curl -sk --resolve marketing.localhost:443:127.0.0.1 "$@"; }
 
           echo "--- the app host is still the app"
-          curl -sfk https://localhost/ | grep -q '<div id="root">'
+          curl -sfk https://localhost/ | grep '<div id="root">' >/dev/null
 
           echo "--- the marketing host serves marketing, over its own TLS leaf"
-          marketing -f https://marketing.localhost/en/ | grep -q '<html lang="en"'
+          marketing -f https://marketing.localhost/en/ | grep '<html lang="en"' >/dev/null
 
           headers=$(marketing -D- -o /dev/null https://marketing.localhost/en/ | tr -d '\r')
           echo "$headers"
@@ -1633,7 +1635,7 @@ jobs:
           page=$(marketing https://marketing.localhost/en/)
           asset=$(printf '%s' "$page" | grep -o '/_astro/[A-Za-z0-9._-]*\.css' | sort -u | head -1)
           marketing -D- -o /dev/null "https://marketing.localhost$asset" \
-            | tr -d '\r' | grep -qi '^cache-control: public, max-age=31536000, immutable'
+            | tr -d '\r' | grep -i '^cache-control: public, max-age=31536000, immutable' >/dev/null
 
           echo "--- this build is not the production origin, so: noindex"
           echo "$headers" | grep -qi '^x-robots-tag: noindex'
