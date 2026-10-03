@@ -219,3 +219,7 @@ instead of per-PR.
 | 2026-10-02 | 1fe6b31 | browse | - | - | FAIL |
 | 2026-10-02 | 1fe6b31 | presign | - | - | FAIL |
 | 2026-10-02 | 1fe6b31 | mixed | - | - | FAIL |
+| 2026-10-03 | bf8e4f8 | login-burst | - | - | FAIL |
+| 2026-10-03 | bf8e4f8 | browse | - | - | PASS |
+| 2026-10-03 | bf8e4f8 | presign | - | - | PASS |
+| 2026-10-03 | bf8e4f8 | mixed | - | - | FAIL |
