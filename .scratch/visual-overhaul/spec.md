@@ -211,7 +211,7 @@ One quiet, premium design language shared by the app and the marketing site: Str
 - A display serif or any third typeface.
 - New pages, features or information architecture beyond what's listed. The navigation items stay the same.
 - Re-laying-out marketing pages other than the landing page. They take the new tokens and type only.
-- Fixing the Arabic RTL visual test, which already cannot pass on `main`. It is regenerated with the rest but not newly fixed here.
+- New visual test cases. The existing 16 baselines (including the four Arabic ones) are regenerated, not extended.
 
 ## Further Notes
 
