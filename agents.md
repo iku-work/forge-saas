@@ -269,6 +269,22 @@ Every task below follows this template. Read **only the current task** — each 
 
 ---
 
+## Agent skills
+
+### Issue tracker
+
+Specs and tickets are local markdown under `.scratch/<feature>/`. See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+The five default roles, label string equal to role name (`needs-triage`, `ready-for-agent`, ...). See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Single-context: `GLOSSARY.md` and `docs/adr/` at the repo root. See `docs/agents/domain.md`.
+
+---
+
 # Task index
 
 Every task by number, with where its full spec lives. Code comments cite tasks as `T-NNN`; look them up here.
