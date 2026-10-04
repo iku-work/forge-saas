@@ -77,7 +77,7 @@ const SheetContent = forwardRef<
         // as "the menu does not open and everything turns blue". Nothing
         // errors on an unknown Tailwind class, so only the built CSS shows
         // it; sheet.test.tsx now asserts these class names.
-        "fixed inset-y-0 z-50 flex h-dvh w-72 max-w-[85vw] flex-col gap-0 overflow-y-auto bg-card p-4 shadow-elevated transition ease-in-out data-[state=closed]:duration-200 data-[state=open]:duration-300 data-[state=open]:animate-in data-[state=closed]:animate-out",
+        "fixed inset-y-0 z-50 flex h-dvh w-72 max-w-[85vw] flex-col gap-0 overflow-y-auto bg-card p-4 shadow-menu transition ease-in-out data-[state=closed]:duration-200 data-[state=open]:duration-300 data-[state=open]:animate-in data-[state=closed]:animate-out",
         side === "start"
           ? "start-0 data-[state=closed]:slide-out-to-left data-[state=open]:slide-in-from-left"
           : "end-0 data-[state=closed]:slide-out-to-right data-[state=open]:slide-in-from-right",

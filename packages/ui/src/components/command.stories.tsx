@@ -64,7 +64,7 @@ type Story = StoryObj<typeof meta>;
 /** Inline, so the list can be inspected without a modal in the way. */
 export const Inline: Story = {
   render: () => (
-    <Command className="w-96 rounded-lg border shadow-card">
+    <Command className="w-96 rounded-lg shadow-menu">
       <CommandInput placeholder="Search pages and actions..." />
       <Rows />
     </Command>
@@ -85,7 +85,7 @@ export const AsDialog: Story = {
  *  to tell the user what to do next (F-010/F-011). */
 export const NoResults: Story = {
   render: () => (
-    <Command className="w-96 rounded-lg border shadow-card" value="">
+    <Command className="w-96 rounded-lg shadow-menu" value="">
       <CommandInput placeholder="Search pages and actions..." value="zzzzzz" />
       <Rows />
     </Command>

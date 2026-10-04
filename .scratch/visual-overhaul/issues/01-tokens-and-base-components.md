@@ -174,3 +174,24 @@ re-measure (any WCAG contrast calculator).
 - Don't rename existing token variables (hundreds of classes depend on them).
 - Don't change layouts, the sidebar or pages; later tickets do that.
 - Don't add the font files (ticket 02).
+
+## Notes
+
+**Progress (2026-10-04).** Steps 1–4 are done and committed: every colour value,
+the new tokens (including the step-6 warning pair), radii, per-theme shadows,
+motion tokens, the 112.5% root, `--font-sans`/`--font-mono`, `.type-title`, the
+1.5 icon stroke. The removed `shadow-card`/`-elevated`/`-button` classes were
+replaced at all five call sites.
+
+Step 5 is **partial**: `button.tsx` (all variants and sizes, grey disabled
+state), `input.tsx`, and `dropdown-menu.tsx`'s content panel are done. Still to
+do: dropdown **menu items** (size, height, hover, destructive), `popover`,
+`command`, `tooltip`, `dialog`, `sheet` radius/overlay, `card`, `badge`,
+`tabs`, `checkbox`, `password-input`, and links. Step 6 (hardcoded palette
+classes) is not started; the warning tokens it needs already exist.
+
+Leave the `color-mix()` tokens repeated under `.dark` in `tokens.css`: they
+are not duplicates (see the comment above `.dark`).
+
+The pre-commit prettier is v4 alpha; `pnpm exec prettier` (3.x) formats
+differently. Format with the hook: `pre-commit run prettier --files <files>`.

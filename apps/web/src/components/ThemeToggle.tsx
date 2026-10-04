@@ -64,7 +64,7 @@ export function ThemeToggle() {
               // min-h/min-w 44px: WCAG 2.2 2.5.8 sets the floor at 24, the
               // Apple HIG at 44, and this control is three targets sitting
               // side by side -- the case where the difference is felt.
-              className="flex min-h-11 min-w-11 cursor-pointer items-center justify-center gap-2 rounded-md px-3 text-body-sm font-medium text-muted-foreground transition-colors hover:bg-background/60 peer-checked:bg-background peer-checked:text-foreground peer-checked:shadow-card peer-focus-visible:outline-none peer-focus-visible:ring-2 peer-focus-visible:ring-ring peer-focus-visible:ring-offset-2"
+              className="flex min-h-11 min-w-11 cursor-pointer items-center justify-center gap-2 rounded-md px-3 text-body-sm font-medium text-muted-foreground transition-colors hover:bg-background/60 peer-checked:bg-background peer-checked:text-foreground peer-checked:shadow-panel peer-focus-visible:outline-none peer-focus-visible:ring-2 peer-focus-visible:ring-ring peer-focus-visible:ring-offset-2"
             >
               <Icon className="size-4 shrink-0" aria-hidden="true" />
               {t(`common.theme.${value}`)}
