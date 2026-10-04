@@ -3,6 +3,7 @@
 You are implementing a visual redesign of `apps/web` (React + Vite + Tailwind v4)
 and `apps/marketing` (Astro), sharing components from `packages/ui` (`@forge/ui`).
 This file holds the rules shared by every ticket. Each ticket is in `issues/NN-*.md`.
+**Current state of every ticket: `PROGRESS.md`. Read it first; update it when you finish a step or a ticket.**
 
 ## How to work (important for a small context window)
 
