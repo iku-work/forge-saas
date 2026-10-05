@@ -5,6 +5,7 @@ import {
   useMutation,
   useQueryClient,
 } from "@tanstack/react-query";
+import { UserRound } from "lucide-react";
 import { useForm } from "react-hook-form";
 import { useTranslation } from "react-i18next";
 import { z } from "zod";
@@ -23,12 +24,13 @@ import { MemberRole, Permission } from "@forge/types";
 import {
   Alert,
   AlertDescription,
-  Badge,
+  Avatar,
+  AvatarFallback,
+  AvatarImage,
   Button,
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
+  DataListColumns,
+  DataListMuted,
+  DataListRow,
   Dialog,
   DialogContent,
   DialogHeader,
@@ -36,6 +38,12 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
+  DropdownMenuSeparator,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
   DropdownMenuTrigger,
   Form,
   FormControl,
@@ -44,11 +52,17 @@ import {
   FormLabel,
   FormMessage,
   Input,
+  Page,
+  PageHeader,
+  RowActionsButton,
   Skeleton,
+  StatusPill,
 } from "@forge/ui";
+import { formatDate } from "@forge/utils";
 
 import { VirtualList } from "../../components/VirtualList";
 import { MEMBERS_LIST_SCROLL_ID } from "../../lib/scrollRestorationIds";
+import { useAvatarSrc } from "../../lib/useAvatarSrc";
 import { getErrorMessage } from "../auth/getErrorMessage";
 import { PendingInvitationsCard } from "./PendingInvitationsCard";
 
@@ -76,6 +90,15 @@ type InviteInput = z.infer<typeof inviteSchema>;
 function roleLabelKey(role: ApiMemberRole): string {
   return `tenancy.members.role.${role}`;
 }
+
+/*
+ * One column layout for the label row and every member row. Narrow
+ * containers keep member, role and the actions; wide ones add status and
+ * the joined date. Literal classes, so Tailwind can see them.
+ */
+const MEMBER_COLUMNS =
+  "grid-cols-[minmax(0,1fr)_6.5rem_2rem] @xl/list:grid-cols-[minmax(0,1fr)_6.5rem_6.5rem_7rem_2rem]";
+const WIDE_ONLY = "hidden @xl/list:block";
 
 function InviteForm({
   orgId,
@@ -197,8 +220,9 @@ export function MembersSettingsPage({
   initialScrollOffset,
   initialInvitationsScrollOffset,
 }: MembersSettingsPageProps = {}) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const { org, isLoading: orgLoading } = useOrg();
+  const avatarSrc = useAvatarSrc();
   const { user } = useAuth();
   const canManage = usePermission(Permission.MEMBERS_MANAGE);
   const queryClient = useQueryClient();
@@ -308,24 +332,12 @@ export function MembersSettingsPage({
     void fetchNextPage();
   }, [fetchNextPage]);
 
-  if (orgLoading || !org) {
-    return (
-      <div className="max-w-3xl space-y-6 p-6">
-        <h1 className="text-xl font-semibold" data-testid="page-title">
-          {t("tenancy.members.title")}
-        </h1>
-        <Skeleton className="h-32 w-full" />
-      </div>
-    );
-  }
-
-  return (
-    <div className="max-w-3xl space-y-6 p-6">
-      <div className="flex items-center justify-between">
-        <h1 className="text-xl font-semibold" data-testid="page-title">
-          {t("tenancy.members.title")}
-        </h1>
-        {canManage ? (
+  const header = (
+    <PageHeader
+      title={t("tenancy.members.title")}
+      description={t("tenancy.members.description")}
+      actions={
+        canManage && org ? (
           <Button
             type="button"
             onClick={() => {
@@ -335,159 +347,182 @@ export function MembersSettingsPage({
           >
             {t("tenancy.members.invite_button")}
           </Button>
-        ) : null}
-      </div>
+        ) : null
+      }
+    />
+  );
 
-      <Card>
-        <CardHeader>
-          <CardDescription>{t("tenancy.members.description")}</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          {actionError ? (
-            <Alert variant="destructive">
-              <AlertDescription>{actionError}</AlertDescription>
-            </Alert>
-          ) : null}
+  if (orgLoading || !org) {
+    return (
+      <Page>
+        {header}
+        <Skeleton className="h-32 w-full" />
+      </Page>
+    );
+  }
 
-          {membersQuery.isLoading ? (
-            <div className="space-y-2">
-              <Skeleton className="h-8 w-full" />
-              <Skeleton className="h-8 w-full" />
-            </div>
-          ) : membersQuery.isError ? (
-            <Alert variant="destructive">
-              <AlertDescription>
-                {getErrorMessage(
-                  membersQuery.error,
-                  "tenancy.members.error_load",
-                )}
-              </AlertDescription>
-            </Alert>
-          ) : members.length === 0 ? (
-            <p className="text-sm text-muted-foreground">
-              {t("tenancy.members.no_members")}
-            </p>
-          ) : (
-            <div>
-              {/* The column labels live outside the scroll container: a
-                  virtualized list has no <thead> to pin, and putting them
-                  inside would scroll them away with the rows. */}
-              <div
-                aria-hidden="true"
-                className="flex items-center gap-4 border-b px-3 pb-2 text-xs font-medium text-muted-foreground"
-              >
-                <span className="flex-1">
-                  {t("tenancy.members.member_col")}
-                </span>
-                <span className="w-28">{t("tenancy.members.role_col")}</span>
-                {canManage ? (
-                  <span className="w-24 text-end">
-                    {t("tenancy.members.action_col")}
-                  </span>
-                ) : null}
-              </div>
-              <VirtualList
-                items={members}
-                getItemKey={(member) => member.id}
-                label={t("tenancy.members.list_label")}
-                estimateSize={ESTIMATED_ROW_HEIGHT_PX}
-                maxHeight={MAX_LIST_HEIGHT_PX}
-                hasMore={membersQuery.hasNextPage}
-                isLoadingMore={membersQuery.isFetchingNextPage}
-                onLoadMore={loadMoreMembers}
-                itemTestId="member-row"
-                scrollRestorationId={MEMBERS_LIST_SCROLL_ID}
-                {...(initialScrollOffset === undefined
-                  ? {}
-                  : { initialOffset: initialScrollOffset })}
-                renderItem={(member) => (
-                  <div className="flex items-center gap-4 border-b px-3 py-3 text-sm">
-                    <span className="flex-1">
-                      {member.user_id === user?.id ? (
-                        t("tenancy.members.you")
-                      ) : (
-                        <span className="font-mono text-xs">
-                          {member.user_id.slice(0, 8)}
+  return (
+    <Page>
+      {header}
+
+      {actionError ? (
+        <Alert variant="destructive" className="mb-4">
+          <AlertDescription>{actionError}</AlertDescription>
+        </Alert>
+      ) : null}
+
+      {membersQuery.isLoading ? (
+        <div className="space-y-2">
+          <Skeleton className="h-8 w-full" />
+          <Skeleton className="h-8 w-full" />
+        </div>
+      ) : membersQuery.isError ? (
+        <Alert variant="destructive">
+          <AlertDescription>
+            {getErrorMessage(membersQuery.error, "tenancy.members.error_load")}
+          </AlertDescription>
+        </Alert>
+      ) : members.length === 0 ? (
+        <p className="text-sm text-muted-foreground">
+          {t("tenancy.members.no_members")}
+        </p>
+      ) : (
+        <div className="@container/list">
+          {/* Outside the scroll container: a virtualized list has no
+              <thead> to pin, and inside it the labels would scroll away. */}
+          <DataListColumns className={MEMBER_COLUMNS}>
+            <span>{t("tenancy.members.member_col")}</span>
+            <span>{t("tenancy.members.role_col")}</span>
+            <span className={WIDE_ONLY}>{t("tenancy.members.status_col")}</span>
+            <span className={WIDE_ONLY}>{t("tenancy.members.joined_col")}</span>
+            <span />
+          </DataListColumns>
+          <VirtualList
+            items={members}
+            getItemKey={(member) => member.id}
+            label={t("tenancy.members.list_label")}
+            estimateSize={ESTIMATED_ROW_HEIGHT_PX}
+            maxHeight={MAX_LIST_HEIGHT_PX}
+            hasMore={membersQuery.hasNextPage}
+            isLoadingMore={membersQuery.isFetchingNextPage}
+            onLoadMore={loadMoreMembers}
+            itemTestId="member-row"
+            scrollRestorationId={MEMBERS_LIST_SCROLL_ID}
+            {...(initialScrollOffset === undefined
+              ? {}
+              : { initialOffset: initialScrollOffset })}
+            renderItem={(member) => {
+              const isSelf = member.user_id === user?.id;
+              return (
+                <DataListRow className={MEMBER_COLUMNS}>
+                  <span className="flex min-w-0 items-center gap-3">
+                    <Avatar className="size-8">
+                      {isSelf && avatarSrc ? (
+                        <AvatarImage src={avatarSrc} alt="" />
+                      ) : null}
+                      <AvatarFallback>
+                        <UserRound className="size-4" aria-hidden="true" />
+                      </AvatarFallback>
+                    </Avatar>
+                    {/* The members endpoint returns ids only, so other members
+                        show as a short id until it carries names (see the
+                        overhaul's FOLLOW-UPS.md). */}
+                    {isSelf ? (
+                      <span className="min-w-0 truncate font-medium">
+                        {user.full_name ?? user.email}{" "}
+                        <span className="font-normal text-muted-foreground">
+                          {t("tenancy.members.you")}
                         </span>
-                      )}
-                    </span>
-                    <span className="w-28">
-                      {canManage ? (
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <button
-                              type="button"
-                              aria-label={t(
-                                "tenancy.members.change_role_label",
-                                {
-                                  user_id: member.user_id,
-                                },
-                              )}
-                            >
-                              <Badge variant="secondary">
-                                {t(roleLabelKey(member.role))}
-                              </Badge>
-                            </button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="start">
-                            {ROLE_OPTIONS.map((role) => (
-                              <DropdownMenuItem
-                                key={role}
-                                onSelect={() => {
-                                  void handleRoleChange(member.id, role);
+                      </span>
+                    ) : (
+                      <span className="truncate font-mono text-xs">
+                        {member.user_id.slice(0, 8)}
+                      </span>
+                    )}
+                  </span>
+                  <span>{t(roleLabelKey(member.role))}</span>
+                  <span className={WIDE_ONLY}>
+                    <StatusPill tone="active">
+                      {t("tenancy.members.status_active")}
+                    </StatusPill>
+                  </span>
+                  <DataListMuted className={WIDE_ONLY}>
+                    {formatDate(member.created_at, i18n.language)}
+                  </DataListMuted>
+                  <span className="text-end">
+                    {/* No actions on your own row: demoting or removing
+                        yourself from this list is a footgun. */}
+                    {canManage && !isSelf ? (
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <RowActionsButton
+                            aria-label={t("tenancy.members.actions_label", {
+                              user_id: member.user_id,
+                            })}
+                          />
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end" className="w-56">
+                          <DropdownMenuSub>
+                            <DropdownMenuSubTrigger>
+                              {t("tenancy.members.change_role")}
+                            </DropdownMenuSubTrigger>
+                            <DropdownMenuSubContent>
+                              <DropdownMenuRadioGroup
+                                value={member.role}
+                                onValueChange={(role) => {
+                                  void handleRoleChange(
+                                    member.id,
+                                    role as ApiMemberRole,
+                                  );
                                 }}
                               >
-                                {t(roleLabelKey(role))}
-                              </DropdownMenuItem>
-                            ))}
-                          </DropdownMenuContent>
-                        </DropdownMenu>
-                      ) : (
-                        <Badge variant="secondary">
-                          {t(roleLabelKey(member.role))}
-                        </Badge>
-                      )}
-                    </span>
-                    {canManage ? (
-                      <span className="w-24 text-end">
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          aria-label={t("tenancy.members.remove_label", {
-                            user_id: member.user_id,
-                          })}
-                          onClick={() => {
-                            void handleRemove(member.id);
-                          }}
-                        >
-                          {t("tenancy.members.remove")}
-                        </Button>
-                      </span>
+                                {ROLE_OPTIONS.map((role) => (
+                                  <DropdownMenuRadioItem
+                                    key={role}
+                                    value={role}
+                                  >
+                                    {t(roleLabelKey(role))}
+                                  </DropdownMenuRadioItem>
+                                ))}
+                              </DropdownMenuRadioGroup>
+                            </DropdownMenuSubContent>
+                          </DropdownMenuSub>
+                          <DropdownMenuSeparator />
+                          <DropdownMenuItem
+                            className="text-destructive focus:text-destructive"
+                            onSelect={() => {
+                              void handleRemove(member.id);
+                            }}
+                          >
+                            {t("tenancy.members.remove")}
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
                     ) : null}
-                  </div>
-                )}
-              />
-            </div>
-          )}
+                  </span>
+                </DataListRow>
+              );
+            }}
+          />
+        </div>
+      )}
 
-          {/* Scrolling is the pagination driver (VirtualList fetches the
-              next cursor page as the rendered range nears the loaded
-              count); this button is the non-scroll path -- keyboard users
-              tabbing past the list, and any environment where the scroll
-              container never reports a scroll event. */}
-          {membersQuery.hasNextPage ? (
-            <Button
-              type="button"
-              variant="outline"
-              onClick={loadMoreMembers}
-              disabled={membersQuery.isFetchingNextPage}
-            >
-              {t("tenancy.members.load_more")}
-            </Button>
-          ) : null}
-        </CardContent>
-      </Card>
+      {/* Scrolling is the pagination driver (VirtualList fetches the next
+          cursor page as the rendered range nears the loaded count); this
+          button is the non-scroll path -- keyboard users tabbing past the
+          list, and any environment where the scroll container never reports
+          a scroll event. */}
+      {membersQuery.hasNextPage ? (
+        <Button
+          type="button"
+          variant="outline"
+          className="mt-4"
+          onClick={loadMoreMembers}
+          disabled={membersQuery.isFetchingNextPage}
+        >
+          {t("tenancy.members.load_more")}
+        </Button>
+      ) : null}
 
       {/* MEMBERS_MANAGE only: GET /orgs/{id}/invitations is gated on it (the
           response is a list of invitee email addresses), so rendering this
@@ -515,6 +550,6 @@ export function MembersSettingsPage({
           />
         </DialogContent>
       </Dialog>
-    </div>
+    </Page>
   );
 }

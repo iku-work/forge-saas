@@ -10,14 +10,12 @@ import type { InvitationPublic } from "@forge/api-client";
 import {
   Alert,
   AlertDescription,
-  Badge,
   Button,
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
+  DataListColumns,
+  DataListRow,
+  SettingsSection,
   Skeleton,
+  StatusPill,
 } from "@forge/ui";
 import { formatDate } from "@forge/utils";
 
@@ -29,6 +27,7 @@ import { getErrorMessage } from "../auth/getErrorMessage";
 // (see MembersSettingsPage), so the two lists on this page scroll and
 // paginate identically.
 const ESTIMATED_ROW_HEIGHT_PX = 52;
+const INVITATION_COLUMNS = "grid-cols-[minmax(0,1fr)_6.5rem_minmax(0,9rem)]";
 const MAX_LIST_HEIGHT_PX = 420;
 
 function isExpired(invitation: InvitationPublic): boolean {
@@ -88,14 +87,11 @@ export function PendingInvitationsCard({
   }, [fetchNextPage]);
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="text-base">
-          {t("tenancy.invitations.title")}
-        </CardTitle>
-        <CardDescription>{t("tenancy.invitations.description")}</CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-4">
+    <SettingsSection
+      title={t("tenancy.invitations.title")}
+      description={t("tenancy.invitations.description")}
+    >
+      <div className="space-y-4">
         {invitationsQuery.isLoading ? (
           <div className="space-y-2">
             <Skeleton className="h-8 w-full" />
@@ -118,21 +114,16 @@ export function PendingInvitationsCard({
             {t("tenancy.invitations.none")}
           </p>
         ) : (
-          <div>
+          <div className="@container/list">
             {/* Outside the scroll container for the same reason as the
                 member list's: a virtualized list has no <thead> to pin. */}
-            <div
-              aria-hidden="true"
-              className="flex items-center gap-4 border-b px-3 pb-2 text-xs font-medium text-muted-foreground"
-            >
-              <span className="flex-1">
-                {t("tenancy.invitations.email_col")}
-              </span>
-              <span className="w-28">{t("tenancy.invitations.role_col")}</span>
-              <span className="w-36 text-end">
+            <DataListColumns className={INVITATION_COLUMNS}>
+              <span>{t("tenancy.invitations.email_col")}</span>
+              <span>{t("tenancy.invitations.role_col")}</span>
+              <span className="text-end">
                 {t("tenancy.invitations.expires_col")}
               </span>
-            </div>
+            </DataListColumns>
             <VirtualList
               items={invitations}
               getItemKey={(invitation) => invitation.id}
@@ -148,36 +139,35 @@ export function PendingInvitationsCard({
                 ? {}
                 : { initialOffset: initialScrollOffset })}
               renderItem={(invitation) => (
-                <div className="flex items-center gap-4 border-b px-3 py-3 text-sm">
-                  <span className="flex-1 truncate" title={invitation.email}>
+                <DataListRow className={INVITATION_COLUMNS}>
+                  <span className="truncate" title={invitation.email}>
                     {invitation.email}
                   </span>
-                  <span className="w-28">
-                    <Badge variant="secondary">
-                      {/* Reuses the member list's role labels rather than
-                          duplicating three keys under invitations.* -- an
-                          invited "admin" is the same word as a member one. */}
-                      {t(`tenancy.members.role.${invitation.role}`)}
-                    </Badge>
-                  </span>
-                  <span className="w-36 text-end">
+                  {/* Reuses the member list's role labels rather than
+                      duplicating three keys under invitations.* -- an
+                      invited "admin" is the same word as a member one. */}
+                  <span>{t(`tenancy.members.role.${invitation.role}`)}</span>
+                  <span className="text-end">
                     {/* An expired-but-unaccepted invitation stays in this
                         list by design (the backend filters on accepted_at
                         only) -- it is the row an admin needs in order to
                         re-send, so it is labelled, not hidden. */}
                     {isExpired(invitation) ? (
-                      <Badge variant="destructive">
+                      <StatusPill tone="danger">
                         {t("tenancy.invitations.expired")}
-                      </Badge>
+                      </StatusPill>
                     ) : (
-                      <span className="text-muted-foreground">
+                      <span className="whitespace-nowrap text-muted-foreground">
                         {t("tenancy.invitations.expires", {
-                          date: formatDate(invitation.expires_at, i18n.language),
+                          date: formatDate(
+                            invitation.expires_at,
+                            i18n.language,
+                          ),
                         })}
                       </span>
                     )}
                   </span>
-                </div>
+                </DataListRow>
               )}
             />
           </div>
@@ -195,7 +185,7 @@ export function PendingInvitationsCard({
             {t("tenancy.invitations.load_more")}
           </Button>
         ) : null}
-      </CardContent>
-    </Card>
+      </div>
+    </SettingsSection>
   );
 }

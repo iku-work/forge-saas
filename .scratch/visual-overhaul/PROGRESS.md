@@ -2,6 +2,7 @@
 
 Branch `visual-overhaul` (worktree `.claude/worktrees/visual-overhaul`). Nothing pushed.
 Update this file whenever a ticket or step changes state.
+Deferred work (backend gaps, untranslated keys, checks still owed) lives in `FOLLOW-UPS.md`.
 
 Legend: ✅ done · 🟡 partial · ⬜ not started
 
@@ -26,15 +27,15 @@ Legend: ✅ done · 🟡 partial · ⬜ not started
 | 05 | Collapsible sidebar | ✅ | Done 2026-10-05 (Claude). Not yet looked at in a running app. See notes. |
 | 06 | Page header + settings rows (Profile) | ✅ | Done 2026-10-05 (Claude). Not yet looked at in a running app. See notes. |
 | 07 | Other settings pages | ✅ | Done 2026-10-05 (Claude). Not yet looked at in a running app. See notes. |
-| 08 | Data list + Members | ⬜ | Unblocked. |
-| 09 | Other lists | ⬜ | Blocked by 07, 08. |
+| 08 | Data list + Members | ✅ | Done 2026-10-05 (Claude), with gaps logged in FOLLOW-UPS. Not yet looked at in a running app. |
+| 09 | Other lists | ⬜ | Unblocked. |
 | 10 | Getting started checklist | ⬜ | Unblocked. |
 | 11 | Auth pages | ⬜ | Unblocked. |
 | 12 | Admin console | ⬜ | Blocked by 04, 06, 08. |
 | 13 | Marketing hero | ⬜ | Blocked by 02, 04, 10. |
 | 14 | Integrate and verify | ⬜ | Blocked by all. |
 
-Startable now: **08**, **10**, **11** (09 waits on 08).
+Startable now: **09**, **10**, **11**.
 
 ## Ticket 01, step by step
 
@@ -72,6 +73,28 @@ Visual screenshot suite is expected to fail until ticket 14.
 - Windows-only flake found: back-to-back Astro builds in the marketing suite intermittently fail
   renaming `.astro/content-assets.mjs` (EPERM). It appeared with the webfonts; a control run without
   them did not hit it. `tests/helpers.ts` retries a build (max 3) only on that exact error on Windows.
+
+## Ticket 08 notes
+
+- New in `@forge/ui`: `DataListColumns` (aria-hidden label row), `DataListRow` (grid row with
+  hover wash), `DataListMuted`, `RowActionsButton` (the "⋯"), `StatusPill` (active / pending /
+  neutral / danger; dot *and* word). `Table` restyled the same way for non-virtual lists.
+  Stories for DataList and StatusPill.
+- **Column layout pattern:** a page defines one literal class, e.g.
+  `grid-cols-[minmax(0,1fr)_6.5rem_2rem] @xl/list:grid-cols-[...]`, and passes it to the columns
+  row and every row; wrap the list in `@container/list` and mark wide-only cells
+  `hidden @xl/list:block`. (Literal, because Tailwind cannot see a class built at runtime.)
+- Members: Member / Role / Status / Joined / ⋯. The ⋯ menu has "Change role" (submenu, radio
+  items with the current role checked) and, after a separator, "Remove from organization" in red.
+  No menu on your own row or for members without `members:manage`. Virtualization, `member-row`
+  test ids and the a11y test unchanged.
+- **Data gap:** the members endpoint returns ids only, so other members show as a short id (you
+  see your own name). Search, count, invitation actions and names are logged in FOLLOW-UPS.md.
+- Pending invitations stay a second section (their own paginated query) in the same list style;
+  "Expired" is a danger StatusPill.
+- Tests: three new (menu contents and order, remove sends DELETE, no menu on own row / for plain
+  members). The `@forge/hooks` mock in that file needed `useDirection` for the dropdown.
+  383 web tests pass.
 
 ## Ticket 07 notes
 

@@ -8,7 +8,7 @@ virtualized scrolling.
 
 **Blocked by:** 06.
 
-**Status:** ready-for-agent
+**Status:** done
 
 ## Read first
 
@@ -92,8 +92,14 @@ pnpm --filter web type-check && pnpm --filter web lint && pnpm --filter web test
 
 ## Acceptance
 
-- [ ] `table.tsx` restyled; `data-list.tsx` and `status-pill.tsx` added with stories.
-- [ ] Members page: page header, toolbar, list rows, status pills, row menus.
-- [ ] Virtualization kept (`role="list"`/`listitem`), test ids kept.
-- [ ] Status never relies on colour alone.
-- [ ] Tests pass; lint and type-check clean.
+- [x] `table.tsx` restyled; `data-list.tsx` and `status-pill.tsx` added with stories.
+- [x] Members page: page header, toolbar, list rows, status pills, row menus.
+- [x] Virtualization kept (`role="list"`/`listitem`), test ids kept.
+- [x] Status never relies on colour alone.
+- [x] Tests pass; lint and type-check clean.
+
+## Notes
+
+Completed 2026-10-05; see `PROGRESS.md`. Deviations, all logged in `FOLLOW-UPS.md`: no filter/count toolbar
+(no names to search; paginated count would mislead), members shown by short id (API has no names),
+invitations have no actions (no endpoints), removal still has no confirmation (pre-existing).

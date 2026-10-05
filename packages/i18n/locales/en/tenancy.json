@@ -23,7 +23,7 @@
   },
   "members": {
     "title": "Members",
-    "description": "People with access to this organization.",
+    "description": "People who can sign in to your organization, and what they can do.",
     "list_label": "Members list",
     "invite_button": "Invite",
     "no_members": "No members yet.",
@@ -31,7 +31,7 @@
     "role_col": "Role",
     "action_col": "Action",
     "you": "You",
-    "remove": "Remove",
+    "remove": "Remove from organization",
     "remove_label": "Remove {user_id}",
     "load_more": "Load more",
     "change_role_label": "Change role for {user_id}",
@@ -42,7 +42,12 @@
     },
     "error_load": "Unable to load members.",
     "error_role_change": "Unable to update this member's role.",
-    "error_remove": "Unable to remove this member."
+    "error_remove": "Unable to remove this member.",
+    "status_col": "Status",
+    "joined_col": "Joined",
+    "status_active": "Active",
+    "actions_label": "Actions for {user_id}",
+    "change_role": "Change role"
   },
   "invitations": {
     "title": "Pending invitations",

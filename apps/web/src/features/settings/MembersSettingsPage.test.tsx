@@ -1,6 +1,7 @@
 import { http, HttpResponse } from "msw";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { getApiBaseUrl } from "@forge/api-client";
@@ -26,6 +27,8 @@ const hooks = vi.hoisted(() => ({
   useAuth: vi.fn(),
   useOrg: vi.fn(),
   usePermission: vi.fn(),
+  // The row menu's dropdown reads the text direction to place itself.
+  useDirection: vi.fn(() => "ltr"),
 }));
 vi.mock("@forge/hooks", () => hooks);
 
@@ -115,6 +118,96 @@ describe("MembersSettingsPage", () => {
     ).not.toBeInTheDocument();
   });
 
+  describe("row actions", () => {
+    const other = makeUser(5);
+
+    beforeEach(() => {
+      server.use(
+        http.get(`${API}/api/v1/orgs/:orgId/members`, () =>
+          HttpResponse.json(
+            envelope([
+              makeMembership(user, "owner"),
+              // Its own id: makeMembership's is fixed, and the list keys rows by it.
+              {
+                ...makeMembership(other, "member"),
+                id: "44444444-4444-4444-4444-444444444444",
+              },
+            ]),
+          ),
+        ),
+      );
+    });
+
+    it("puts change-role and a separated, red remove in the other member's menu", async () => {
+      hooks.usePermission.mockReturnValue(true);
+      renderPage();
+
+      await userEvent.click(
+        await screen.findByRole("button", {
+          name: `Actions for ${other.id}`,
+        }),
+      );
+
+      const menu = await screen.findByRole("menu");
+      expect(
+        within(menu).getByRole("menuitem", { name: "Change role" }),
+      ).toBeInTheDocument();
+      expect(within(menu).getByRole("separator")).toBeInTheDocument();
+      expect(
+        within(menu).getByRole("menuitem", {
+          name: "Remove from organization",
+        }),
+      ).toHaveClass("text-destructive");
+    });
+
+    it("removes the member when Remove is chosen", async () => {
+      hooks.usePermission.mockReturnValue(true);
+      let removed: string | null = null;
+      server.use(
+        http.delete(
+          `${API}/api/v1/orgs/:orgId/members/:membershipId`,
+          ({ params }) => {
+            removed = String(params.membershipId);
+            return new HttpResponse(null, { status: 204 });
+          },
+        ),
+      );
+      renderPage();
+
+      await userEvent.click(
+        await screen.findByRole("button", {
+          name: `Actions for ${other.id}`,
+        }),
+      );
+      await userEvent.click(
+        await screen.findByRole("menuitem", {
+          name: "Remove from organization",
+        }),
+      );
+
+      await waitFor(() => {
+        expect(removed).not.toBeNull();
+      });
+    });
+
+    it("offers no actions on your own row, nor to a plain member", async () => {
+      hooks.usePermission.mockReturnValue(true);
+      const { unmount } = renderPage();
+      await screen.findByRole("button", { name: `Actions for ${other.id}` });
+      expect(
+        screen.queryByRole("button", { name: `Actions for ${user.id}` }),
+      ).not.toBeInTheDocument();
+      unmount();
+
+      hooks.usePermission.mockReturnValue(false);
+      renderPage();
+      await screen.findByText("You");
+      expect(
+        screen.queryByRole("button", { name: /^Actions for/ }),
+      ).not.toBeInTheDocument();
+    });
+  });
+
   it("shows an empty state when the org has no members", async () => {
     hooks.usePermission.mockReturnValue(true);
     server.use(
@@ -165,9 +258,9 @@ describe("MembersSettingsPage", () => {
 
     expect(await screen.findByText("You")).toBeInTheDocument();
     expect(screen.queryByText("Pending invitations")).not.toBeInTheDocument();
-    expect(
-      requestedPaths.some((path) => path.endsWith("/invitations")),
-    ).toBe(false);
+    expect(requestedPaths.some((path) => path.endsWith("/invitations"))).toBe(
+      false,
+    );
   });
 
   it("shows an error state when the members request fails", async () => {
