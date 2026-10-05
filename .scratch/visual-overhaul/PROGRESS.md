@@ -20,7 +20,7 @@ Legend: ✅ done · 🟡 partial · ⬜ not started
 | # | Ticket | Status | Notes |
 |---|---|---|---|
 | 01 | Tokens and base components | ✅ | Done 2026-10-05. Details below. |
-| 02 | Self-hosted font | ⬜ | Not started (no `packages/ui/fonts/`, no `fonts.css`). Needs internet. |
+| 02 | Self-hosted font | ✅ | Done 2026-10-05 (Claude). See notes below. |
 | 03 | Glossary copy sweep | ⬜ | |
 | 04 | App shell | ⬜ | Unblocked. |
 | 05 | Collapsible sidebar | ⬜ | Blocked by 04. |
@@ -34,7 +34,7 @@ Legend: ✅ done · 🟡 partial · ⬜ not started
 | 13 | Marketing hero | ⬜ | Blocked by 02, 04, 10. |
 | 14 | Integrate and verify | ⬜ | Blocked by all. |
 
-Startable now: **02**, **03**, **04**, **11**.
+Startable now: **03**, **04**, **11**.
 
 ## Ticket 01, step by step
 
@@ -56,6 +56,22 @@ Also fixed in 01: light `--muted-foreground` darkened to `#646b78` (the ticket's
 Checks at the 01 completion commit: `@forge/ui` and web type-check clean; web lint (one existing warning in `VirtualList`); web tests 373/373;
 marketing build passes, marketing tests 236 passed / 2 skipped; Storybook builds; prettier hook passes.
 Visual screenshot suite is expected to fail until ticket 14.
+
+## Ticket 02 notes
+
+- 7 woff2 files + 2 OFL licences in `packages/ui/fonts/`; `packages/ui/styles/fonts.css`
+  declares them with Google's own unicode-ranges. Upright Latin is 57 KB (the ADR said ~25 KB;
+  corrected), the largest file 62 KB, under the new 80 KB per-file budget.
+- Marketing preloads exactly one file (upright Latin); the web app preloads none.
+- Verified in a browser: `/en/` downloads only the Latin file; `/ar/` adds the three Plex Arabic files.
+  The footer's "العربية" had been pulling the Arabic file onto every page; Arabic snippets on
+  non-Arabic pages now use the system face (rule in `fonts.css`, noted in ADR-0008).
+- `check-budget.mjs` gained the 80 KB per-font check; `budget.test.ts` now asserts one family and one
+  preload per page (it used to assert *no* webfont) and has a failing case for the size check.
+- Lighthouse could not run locally (Windows chrome-launcher EPERM, known); left to CI.
+- Windows-only flake found: back-to-back Astro builds in the marketing suite intermittently fail
+  renaming `.astro/content-assets.mjs` (EPERM). It appeared with the webfonts; a control run without
+  them did not hit it. `tests/helpers.ts` retries a build (max 3) only on that exact error on Windows.
 
 ## Lessons for whoever continues
 

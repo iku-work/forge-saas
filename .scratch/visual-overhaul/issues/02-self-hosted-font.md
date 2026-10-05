@@ -8,7 +8,7 @@ Lighthouse budget still pass.
 **Blocked by:** None (can start immediately). If ticket 01 is done, `--font-sans`
 already names "Instrument Sans"; if not, do that one-line change here too.
 
-**Status:** ready-for-agent
+**Status:** done
 
 ## Read first
 
@@ -90,14 +90,21 @@ Windows this may fail with EPERM from chrome-launcher, in which case note it and
 
 ## Acceptance
 
-- [ ] Font files and both OFL licences are in `packages/ui/fonts/`.
-- [ ] `fonts.css` declares the faces with `font-display: swap` and correct `unicode-range`s.
-- [ ] Web and marketing render Instrument Sans; Arabic text renders Plex Sans Arabic.
-- [ ] Non-Arabic pages never request the Arabic files.
-- [ ] Marketing preloads exactly one font file; budget gate has the 80 KB per-file check.
-- [ ] All web and marketing builds and tests pass.
+- [x] Font files and both OFL licences are in `packages/ui/fonts/`.
+- [x] `fonts.css` declares the faces with `font-display: swap` and correct `unicode-range`s.
+- [x] Web and marketing render Instrument Sans; Arabic text renders Plex Sans Arabic.
+- [x] Non-Arabic pages never request the Arabic files.
+- [x] Marketing preloads exactly one font file; budget gate has the 80 KB per-file check.
+- [x] All web and marketing builds and tests pass.
 
 ## Don't
 
 - Don't use Google Fonts' CDN at runtime (privacy and CSP); files must be self-hosted.
 - Don't add a second Latin family or a monospace webfont (mono is the system stack).
+
+## Notes
+
+Completed 2026-10-05. Two deviations from the steps above: the Instrument Sans licence comes from
+`github.com/google/fonts` (`ofl/instrumentsans/OFL.txt`), not the URL in step 1; and `fonts.css` also renders
+`[lang=ar]` snippets on non-Arabic pages in the system face, or the language switcher's "العربية" loads the
+Arabic file on every page. Lighthouse not run locally (Windows EPERM). See `PROGRESS.md`.

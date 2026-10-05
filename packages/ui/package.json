@@ -11,11 +11,14 @@
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
     },
-    "./styles/tokens.css": "./styles/tokens.css"
+    "./styles/tokens.css": "./styles/tokens.css",
+    "./styles/fonts.css": "./styles/fonts.css",
+    "./fonts/*": "./fonts/*"
   },
   "files": [
     "dist",
-    "styles"
+    "styles",
+    "fonts"
   ],
   "scripts": {
     "build": "tsup",

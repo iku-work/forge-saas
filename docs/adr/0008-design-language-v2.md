@@ -43,15 +43,16 @@ own.
   400–700, width 75–100), in both `apps/web` and `apps/marketing`. Only the
   Latin subset is preloaded; `font-display: swap`. **IBM Plex Sans Arabic** is
   declared with a `unicode-range`, so it downloads only when Arabic glyphs
-  render (the `ar` locale).
+  render (the `ar` locale). Arabic snippets on a non-Arabic page (the language
+  switcher's "العربية") use the platform face, so they don't pull the file in.
 - **Machine values** (API keys, webhook secrets, IDs, code) use the
   platform's own monospace stack, which costs zero bytes. Nothing else does: no
   display serif, no monospace for ordinary labels.
 - **Every size is in rem, and the root is 112.5%** (18px), so the body
   renders at about 16px rather than 14px. Text, controls and spacing scale
   together from that one value.
-- `check-budget.mjs` gains an explicit, measured font allowance rather than
-  being switched off.
+- `check-budget.mjs` keeps its font rules (swap, same origin, a preload) and
+  gains an 80 KB per-file limit rather than being switched off.
 - lucide icons render at a 1.5px stroke.
 
 ## Consequences
@@ -60,8 +61,8 @@ own.
   only has to be re-measured for that value.
 - The type is the same on every OS and carries the identity the colour no
   longer does.
-- **Cost:** marketing gives up "zero bytes of font". Roughly 25 KB is
-  preloaded on every page, and text can repaint once on a slow first visit
+- **Cost:** marketing gives up "zero bytes of font". One 57 KB file (upright
+  Latin, variable) is preloaded on every page, and text can repaint once on a slow first visit
   (swap). LCP is still gated by T-306's Lighthouse budget.
 - **Cost:** two more files to keep updated (the font files and their
   licences, both SIL OFL 1.1), and the Arabic face must stay in step with

@@ -5,6 +5,7 @@
  * which is exactly the drift a template exists to prevent -- see
  * packages/ui/styles/tokens.css. */
 @import "@forge/ui/styles/tokens.css";
+@import "@forge/ui/styles/fonts.css";
 
 /* Tailwind v4 does not scan node_modules. A @forge/ui component mounted as an
  * island renders classes that exist only in the package's built output, and

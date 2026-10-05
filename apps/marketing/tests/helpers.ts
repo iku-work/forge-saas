@@ -72,13 +72,39 @@ function envFor(options: BuildOptions): NodeJS.ProcessEnv {
   return env;
 }
 
+/**
+ * Windows only: Astro writes `.astro/content-assets.mjs` via a temp file and a
+ * rename, and on Windows that rename intermittently fails with EPERM when
+ * another process (antivirus, an indexer) briefly holds the file. It showed
+ * up once the site shipped webfonts (ADR-0008) -- never in a single
+ * `pnpm build`, only across this suite's back-to-back builds. A rename cannot
+ * fail this way on Linux, where CI runs, so the retry never fires there.
+ */
+function isWindowsRenameFlake(error: unknown): boolean {
+  const text =
+    error instanceof Error
+      ? `${error.message}${String((error as { stderr?: unknown }).stderr ?? "")}`
+      : "";
+  return (
+    process.platform === "win32" &&
+    text.includes("EPERM") &&
+    text.includes("content-assets.mjs")
+  );
+}
+
 /** Runs the build the way package.json does -- through the guard, never around it. */
 export function build(options: BuildOptions = {}): string {
-  return execFileSync(process.execPath, [GUARD, "astro", "build"], {
-    cwd: APP_ROOT,
-    encoding: "utf-8",
-    env: envFor(options),
-  });
+  for (let attempt = 1; ; attempt += 1) {
+    try {
+      return execFileSync(process.execPath, [GUARD, "astro", "build"], {
+        cwd: APP_ROOT,
+        encoding: "utf-8",
+        env: envFor(options),
+      });
+    } catch (error) {
+      if (attempt >= 3 || !isWindowsRenameFlake(error)) throw error;
+    }
+  }
 }
 
 /**
@@ -89,21 +115,29 @@ export function build(options: BuildOptions = {}): string {
  * pricing fetch talks to a stub HTTP server running in the test process, and
  * a blocked event loop cannot serve it.
  */
-export async function buildAsync(options: BuildOptions = {}): Promise<string> {
-  return new Promise((resolve, reject) => {
-    execFile(
-      process.execPath,
-      [GUARD, "astro", "build"],
-      { cwd: APP_ROOT, encoding: "utf-8", env: envFor(options) },
-      (error, stdout, stderr) => {
-        if (error) {
-          reject(new Error(`astro build failed:${stdout}${stderr}`));
-          return;
-        }
-        resolve(`${stdout}${stderr}`);
-      },
-    );
-  });
+export async function buildAsync(
+  options: BuildOptions = {},
+  attempt = 1,
+): Promise<string> {
+  try {
+    return await new Promise((resolve, reject) => {
+      execFile(
+        process.execPath,
+        [GUARD, "astro", "build"],
+        { cwd: APP_ROOT, encoding: "utf-8", env: envFor(options) },
+        (error, stdout, stderr) => {
+          if (error) {
+            reject(new Error(`astro build failed:${stdout}${stderr}`));
+            return;
+          }
+          resolve(`${stdout}${stderr}`);
+        },
+      );
+    });
+  } catch (error) {
+    if (attempt >= 3 || !isWindowsRenameFlake(error)) throw error;
+    return buildAsync(options, attempt + 1);
+  }
 }
 
 /**
@@ -205,9 +239,10 @@ function jsonLdBlocks(html: string): string[] {
 export function jsonLdNodes(html: string): Record<string, unknown>[] {
   return jsonLdBlocks(html).flatMap((block) => {
     const parsed: unknown = JSON.parse(block);
-    return (
-      Array.isArray(parsed) ? parsed : [parsed]
-    ) as Record<string, unknown>[];
+    return (Array.isArray(parsed) ? parsed : [parsed]) as Record<
+      string,
+      unknown
+    >[];
   });
 }
 

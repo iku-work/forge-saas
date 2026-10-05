@@ -36,6 +36,9 @@ import { translator } from "../lib/i18n";
 import { defaultLocale } from "../lib/product";
 import { organizationSchema, type SchemaNode } from "../lib/structured-data";
 import "../styles/global.css";
+// The one preloaded font file (ADR-0008): Latin, upright. Italic, Latin
+// Extended and Arabic load on demand through their unicode-range.
+import fontUrl from "@forge/ui/fonts/instrument-sans-latin.woff2?url";
 
 interface Props {
   title: string;
@@ -77,6 +80,13 @@ const schemas: SchemaNode[] = [organizationSchema(Astro.site), ...pageSchema];
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link
+      rel="preload"
+      href={fontUrl}
+      as="font"
+      type="font/woff2"
+      crossorigin
+    />
     <Seo
       title={title}
       description={description}
