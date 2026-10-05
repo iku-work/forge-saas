@@ -28,8 +28,8 @@ export function scorePasswordStrength(password: string): PasswordStrengthScore {
 const _SEGMENT_COLORS: Record<PasswordStrengthScore, string> = {
   0: "bg-destructive",
   1: "bg-destructive",
-  2: "bg-amber-500",
-  3: "bg-emerald-500",
+  2: "bg-warning",
+  3: "bg-success",
 };
 
 const _LABEL_KEYS: Record<PasswordStrengthScore, string> = {
@@ -43,7 +43,9 @@ export interface PasswordStrengthMeterProps {
   password: string;
 }
 
-export function PasswordStrengthMeter({ password }: PasswordStrengthMeterProps) {
+export function PasswordStrengthMeter({
+  password,
+}: PasswordStrengthMeterProps) {
   const { t } = useTranslation();
   if (password.length === 0) return null;
 

@@ -54,7 +54,9 @@ export function AdminUsersPage() {
 
   return (
     <div className="max-w-5xl space-y-6 p-6">
-      <h1 className="text-xl font-semibold" data-testid="page-title">{t("common.admin.users.title")}</h1>
+      <h1 className="text-xl font-semibold" data-testid="page-title">
+        {t("common.admin.users.title")}
+      </h1>
 
       <div className="flex gap-3">
         <Input
@@ -72,11 +74,15 @@ export function AdminUsersPage() {
             setActive(event.target.value as ActiveFilter);
           }}
           aria-label={t("common.admin.users.filter_active_label")}
-          className="h-9 rounded-md border border-input bg-background px-3 text-sm shadow-sm"
+          className="h-9 rounded-md border border-input bg-card px-3 text-sm"
         >
           <option value="">{t("common.admin.users.filter_active_all")}</option>
-          <option value="true">{t("common.admin.users.filter_active_true")}</option>
-          <option value="false">{t("common.admin.users.filter_active_false")}</option>
+          <option value="true">
+            {t("common.admin.users.filter_active_true")}
+          </option>
+          <option value="false">
+            {t("common.admin.users.filter_active_false")}
+          </option>
         </select>
       </div>
 
@@ -90,11 +96,16 @@ export function AdminUsersPage() {
           ) : usersQuery.isError ? (
             <Alert variant="destructive" data-testid="admin-users-error">
               <AlertDescription>
-                {getErrorMessage(usersQuery.error, "common.admin.users.error_load")}
+                {getErrorMessage(
+                  usersQuery.error,
+                  "common.admin.users.error_load",
+                )}
               </AlertDescription>
             </Alert>
           ) : users.length === 0 ? (
-            <p className="text-sm text-muted-foreground">{t("common.admin.users.no_results")}</p>
+            <p className="text-sm text-muted-foreground">
+              {t("common.admin.users.no_results")}
+            </p>
           ) : (
             <Table>
               <TableHeader>
@@ -125,7 +136,9 @@ export function AdminUsersPage() {
                           : t("common.admin.users.status_inactive")}
                       </Badge>
                     </TableCell>
-                    <TableCell>{formatDate(user.created_at, i18n.language)}</TableCell>
+                    <TableCell>
+                      {formatDate(user.created_at, i18n.language)}
+                    </TableCell>
                   </TableRow>
                 ))}
               </TableBody>

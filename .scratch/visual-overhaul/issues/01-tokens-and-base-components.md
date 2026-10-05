@@ -7,7 +7,7 @@ look. Layouts do not change yet.
 
 **Blocked by:** None (can start immediately).
 
-**Status:** ready-for-agent
+**Status:** done
 
 ## Read first
 
@@ -161,13 +161,15 @@ re-measure (any WCAG contrast calculator).
 
 ## Acceptance
 
-- [ ] All colour tokens replaced; new tokens exist and work as Tailwind classes.
-- [ ] No `none` inside any shadow token.
-- [ ] Root font size 112.5%; body text renders ≈15.75px.
-- [ ] Buttons, inputs, menus, popovers, dialogs, tabs restyled; disabled primary is grey.
-- [ ] No hardcoded palette classes left in `apps/web/src` or `packages/ui/src` (excluding tests and stories).
-- [ ] Web tests, lint, type-check, marketing build and tests, Storybook build all pass.
-- [ ] Visual suite failing is expected (README).
+- [x] All colour tokens replaced; new tokens exist and work as Tailwind classes.
+- [x] No `none` inside any shadow token.
+- [x] Root font size 112.5%; body text renders ≈15.75px.
+- [x] Buttons, inputs, menus, popovers, dialogs, tabs restyled; disabled primary is grey.
+- [x] No hardcoded palette classes left in `apps/web/src` or `packages/ui/src` (excluding tests and stories).
+- [x] Web tests, lint, type-check, marketing build and tests, Storybook build all pass.
+- [x] Visual suite failing is expected (README).
+
+Completed 2026-10-05. See `PROGRESS.md` for what changed and why (including the muted-text contrast fix).
 
 ## Don't
 

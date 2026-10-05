@@ -349,7 +349,7 @@ function TypedSettingsForm({
                   onChange={(event) => {
                     setBannerType(event.target.value as BannerType);
                   }}
-                  className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm shadow-sm"
+                  className="h-9 w-full rounded-md border border-input bg-card px-3 text-sm"
                 >
                   {BANNER_TYPES.map((type) => (
                     <option key={type} value={type}>
@@ -524,7 +524,7 @@ function RawJsonEditor({
           }}
           spellCheck={false}
           rows={10}
-          className="w-full rounded-md border border-input bg-background p-3 font-mono text-xs shadow-sm"
+          className="w-full rounded-md border border-input bg-card p-3 font-mono text-xs"
         />
         {parseError ? (
           <Alert variant="destructive">

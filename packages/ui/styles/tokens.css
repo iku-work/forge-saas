@@ -52,7 +52,7 @@
   --secondary: #f1f2f5; /* Sunken */
   --secondary-foreground: #171a21;
   --muted: #f1f2f5;
-  --muted-foreground: #6b7280; /* Ink-3 */
+  --muted-foreground: #646b78; /* Ink-3: 4.79:1 on sunken, 5.00 on canvas, 5.36 on white */
   --accent: #f1f2f5;
   --accent-foreground: #171a21;
   --destructive: #c42b2b;
@@ -68,8 +68,10 @@
   --primary-soft: color-mix(in oklab, var(--primary) 9%, var(--background));
   --primary-wash: color-mix(in oklab, var(--primary) 6%, var(--card));
 
-  /* Warning */
+  /* Status colours */
   --warning: #8a5a00;
+  --warning-foreground: #ffffff;
+  --success: #1f9d6b; /* fills and icons only (3.4:1); not body text */
   --warning-soft: color-mix(in oklab, var(--warning) 12%, var(--background));
 
   /* Elevation. `@theme inline` cannot hold per-theme values, so each theme sets
@@ -121,6 +123,8 @@
   --primary-wash: color-mix(in oklab, var(--primary) 6%, var(--card));
 
   --warning: #f5c46b;
+  --warning-foreground: #0e1014;
+  --success: #4cc79a;
   --warning-soft: color-mix(in oklab, var(--warning) 12%, var(--background));
 
   /* Elevation (dark) */
@@ -157,6 +161,8 @@
   --color-primary-wash: var(--primary-wash);
   --color-warning: var(--warning);
   --color-warning-soft: var(--warning-soft);
+  --color-warning-foreground: var(--warning-foreground);
+  --color-success: var(--success);
 
   /* 6 / 8 / 10 / 14 */
   --radius-sm: 0.375rem;

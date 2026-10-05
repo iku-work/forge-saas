@@ -70,8 +70,13 @@ If a web test fails with a missing export from `@forge/ui`, `@forge/i18n` or
   (`bg-background`, `text-muted-foreground`, `bg-primary`, `border-border`, …).
   Never write a hex value or `slate-500`-style palette class in a component. New
   values go in `packages/ui/styles/tokens.css`.
-- **The accent is `primary`.** Use it only for the primary action, focus rings,
-  links and the active navigation item. Not for decoration.
+- **The brand colour is `primary`** (Iris; the ADR calls it "the accent"). Use it only for
+  the primary action, focus rings, links and the active navigation item. Not for decoration.
+- **The token named `accent` is NOT the brand colour.** It comes from shadcn and is the grey
+  hover surface (same value as `surface-sunken`). Never use `bg-accent`/`text-accent` for
+  anything that should be Iris; for hover/selected greys prefer `bg-surface-sunken`.
+- **Only token shadows and radii:** `shadow-panel`, `shadow-menu`, `shadow-control`;
+  `rounded-sm/md/lg/xl` = 6/8/10/14px. Never Tailwind's built-in `shadow`, `shadow-sm`…`shadow-2xl`.
 - **Dark mode is the `.dark` class** on `<html>` (variant `dark:`). Do not add a
   `prefers-color-scheme` media query or a `data-theme` attribute.
 - **Every user-facing string goes through translations.** Web: `useTranslation()`

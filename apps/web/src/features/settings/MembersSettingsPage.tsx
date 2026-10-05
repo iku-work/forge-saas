@@ -154,7 +154,7 @@ function InviteForm({
               <FormLabel>{t("tenancy.invite.role_label")}</FormLabel>
               <FormControl>
                 <select
-                  className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm shadow-sm"
+                  className="h-9 w-full rounded-md border border-input bg-card px-3 text-sm"
                   data-testid="invite-role-select"
                   {...field}
                 >
@@ -311,7 +311,9 @@ export function MembersSettingsPage({
   if (orgLoading || !org) {
     return (
       <div className="max-w-3xl space-y-6 p-6">
-        <h1 className="text-xl font-semibold" data-testid="page-title">{t("tenancy.members.title")}</h1>
+        <h1 className="text-xl font-semibold" data-testid="page-title">
+          {t("tenancy.members.title")}
+        </h1>
         <Skeleton className="h-32 w-full" />
       </div>
     );
@@ -320,7 +322,9 @@ export function MembersSettingsPage({
   return (
     <div className="max-w-3xl space-y-6 p-6">
       <div className="flex items-center justify-between">
-        <h1 className="text-xl font-semibold" data-testid="page-title">{t("tenancy.members.title")}</h1>
+        <h1 className="text-xl font-semibold" data-testid="page-title">
+          {t("tenancy.members.title")}
+        </h1>
         {canManage ? (
           <Button
             type="button"

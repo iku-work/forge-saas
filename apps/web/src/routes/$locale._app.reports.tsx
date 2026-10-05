@@ -14,7 +14,7 @@ function ReportsPage() {
   return (
     <div className="p-6">
       <h1 className="text-2xl font-semibold">{t("common.nav.reports")}</h1>
-      <p className="mt-2 text-sm text-slate-400">
+      <p className="mt-2 text-sm text-muted-foreground">
         {t("common.reports.description")}
       </p>
     </div>

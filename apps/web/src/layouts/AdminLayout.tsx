@@ -87,13 +87,13 @@ export function AdminLayout({ children }: { children: ReactNode }) {
   };
 
   return (
-    <div className="flex min-h-dvh flex-col bg-slate-950 text-slate-100">
+    <div className="dark flex min-h-dvh flex-col bg-background text-foreground">
       <SkipLink />
       {/* Wraps, because this bar holds a wordmark, four nav links and an
           account block -- 901px of content that used to sit in one
           unwrappable row, so every admin page scrolled sideways on a phone
           (measured: 901px document width in a 360px viewport). */}
-      <header className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 border-b border-slate-800 bg-slate-900 px-4 py-3 sm:px-6">
+      <header className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 border-b border-border bg-card px-4 py-3 sm:px-6">
         <div className="flex items-center gap-3">
           <span className="text-sm font-semibold">{t("common.app.name")}</span>
           <Badge variant="destructive">{t("common.admin.badge")}</Badge>
@@ -110,8 +110,10 @@ export function AdminLayout({ children }: { children: ReactNode }) {
                 key={item.to}
                 to={item.to}
                 params={{ locale }}
-                className={`flex items-center gap-2 rounded-md px-3 py-2 text-sm transition-colors hover:bg-slate-800 ${
-                  isActive ? "bg-slate-800 text-white" : "text-slate-300"
+                className={`flex items-center gap-2 rounded-md px-3 py-2 text-sm transition-colors hover:bg-surface-sunken ${
+                  isActive
+                    ? "bg-surface-sunken text-foreground"
+                    : "text-foreground-secondary"
                 }`}
               >
                 <Icon className="size-4" aria-hidden="true" />
@@ -124,12 +126,12 @@ export function AdminLayout({ children }: { children: ReactNode }) {
           <Link
             to="/$locale"
             params={{ locale }}
-            className="text-sm text-slate-300 underline underline-offset-4 hover:text-white"
+            className="text-sm text-foreground-secondary underline underline-offset-4 hover:text-foreground"
           >
             {t("common.admin.back_to_app")}
           </Link>
           {user ? (
-            <div className="flex items-center gap-2 text-sm text-slate-300">
+            <div className="flex items-center gap-2 text-sm text-foreground-secondary">
               <span className="truncate">{user.email}</span>
               <button
                 type="button"
@@ -137,7 +139,7 @@ export function AdminLayout({ children }: { children: ReactNode }) {
                   void handleLogout();
                 }}
                 aria-label={t("common.nav.logout")}
-                className="rounded-md p-1.5 hover:bg-slate-800 hover:text-white"
+                className="rounded-md p-1.5 hover:bg-surface-sunken hover:text-foreground"
               >
                 <LogOut className="size-4" aria-hidden="true" />
               </button>

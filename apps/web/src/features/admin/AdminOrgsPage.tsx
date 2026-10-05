@@ -26,7 +26,13 @@ import { useRouteLocale } from "../../lib/useRouteLocale";
 import { getErrorMessage } from "../auth/getErrorMessage";
 import { useDebouncedValue } from "./useDebouncedValue";
 
-const STATUS_OPTIONS = ["active", "trialing", "past_due", "canceled", "incomplete"];
+const STATUS_OPTIONS = [
+  "active",
+  "trialing",
+  "past_due",
+  "canceled",
+  "incomplete",
+];
 
 export function AdminOrgsPage() {
   const locale = useRouteLocale();
@@ -54,7 +60,9 @@ export function AdminOrgsPage() {
 
   return (
     <div className="max-w-5xl space-y-6 p-6">
-      <h1 className="text-xl font-semibold" data-testid="page-title">{t("common.admin.orgs.title")}</h1>
+      <h1 className="text-xl font-semibold" data-testid="page-title">
+        {t("common.admin.orgs.title")}
+      </h1>
 
       <div className="flex gap-3">
         <Input
@@ -72,7 +80,7 @@ export function AdminOrgsPage() {
             setStatus(event.target.value);
           }}
           aria-label={t("common.admin.orgs.filter_status_label")}
-          className="h-9 rounded-md border border-input bg-background px-3 text-sm shadow-sm"
+          className="h-9 rounded-md border border-input bg-card px-3 text-sm"
         >
           <option value="">{t("common.admin.orgs.filter_status_all")}</option>
           {STATUS_OPTIONS.map((option) => (
@@ -93,11 +101,16 @@ export function AdminOrgsPage() {
           ) : orgsQuery.isError ? (
             <Alert variant="destructive">
               <AlertDescription>
-                {getErrorMessage(orgsQuery.error, "common.admin.orgs.error_load")}
+                {getErrorMessage(
+                  orgsQuery.error,
+                  "common.admin.orgs.error_load",
+                )}
               </AlertDescription>
             </Alert>
           ) : orgs.length === 0 ? (
-            <p className="text-sm text-muted-foreground">{t("common.admin.orgs.no_results")}</p>
+            <p className="text-sm text-muted-foreground">
+              {t("common.admin.orgs.no_results")}
+            </p>
           ) : (
             <Table>
               <TableHeader>
@@ -119,17 +132,23 @@ export function AdminOrgsPage() {
                       >
                         {org.name}
                       </Link>
-                      <p className="text-xs text-muted-foreground">{org.slug}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {org.slug}
+                      </p>
                     </TableCell>
                     <TableCell>{org.plan_slug ?? "—"}</TableCell>
                     <TableCell>
                       {org.subscription_status ? (
-                        <Badge variant="secondary">{org.subscription_status}</Badge>
+                        <Badge variant="secondary">
+                          {org.subscription_status}
+                        </Badge>
                       ) : (
                         "—"
                       )}
                     </TableCell>
-                    <TableCell>{formatDate(org.created_at, i18n.language)}</TableCell>
+                    <TableCell>
+                      {formatDate(org.created_at, i18n.language)}
+                    </TableCell>
                   </TableRow>
                 ))}
               </TableBody>

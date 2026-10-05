@@ -62,7 +62,7 @@ function StatusIcon({ status }: { status: UploadStatus }) {
   if (status === "done")
     return (
       <CheckCircle
-        className="size-4 shrink-0 text-green-500"
+        className="size-4 shrink-0 text-success"
         aria-hidden="true"
       />
     );
@@ -174,7 +174,8 @@ export function FileUploader({
     // tests/load/lib/workloads.js and backend/tests/test_storage_backend.py
     // drive this same flow against a real S3-API backend and agree.
     const form = new FormData();
-    for (const [name, value] of Object.entries(fields)) form.append(name, value);
+    for (const [name, value] of Object.entries(fields))
+      form.append(name, value);
     form.append("file", file);
 
     try {
@@ -352,7 +353,7 @@ export function FileUploader({
             : t("files.uploader.drop_here")}
         </p>
         <p className="text-xs text-muted-foreground">
-          <span className="text-primary underline">
+          <span className="text-primary underline decoration-primary/35 underline-offset-[3px]">
             {t("files.uploader.browse")}
           </span>{" "}
           {t("files.uploader.hint")}

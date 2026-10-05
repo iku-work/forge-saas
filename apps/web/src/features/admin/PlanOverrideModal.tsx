@@ -34,7 +34,9 @@ export function PlanOverrideModal({
   const { t } = useTranslation();
   const queryClient = useQueryClient();
   const [planSlug, setPlanSlug] = useState("");
-  const [billingInterval, setBillingInterval] = useState<"" | "monthly" | "yearly">("");
+  const [billingInterval, setBillingInterval] = useState<
+    "" | "monthly" | "yearly"
+  >("");
   const [freeOverride, setFreeOverride] = useState(false);
   const [expiresAt, setExpiresAt] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -55,10 +57,14 @@ export function PlanOverrideModal({
     setError(null);
     try {
       await mutation.mutateAsync();
-      await queryClient.invalidateQueries({ queryKey: ["admin", "orgs", "detail", orgId] });
+      await queryClient.invalidateQueries({
+        queryKey: ["admin", "orgs", "detail", orgId],
+      });
       onDone();
     } catch (err) {
-      setError(getErrorMessage(err, "common.admin.org_detail.error_action_default"));
+      setError(
+        getErrorMessage(err, "common.admin.org_detail.error_action_default"),
+      );
     }
   };
 
@@ -66,7 +72,9 @@ export function PlanOverrideModal({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>{t("common.admin.plan_override_modal.title")}</DialogTitle>
+          <DialogTitle>
+            {t("common.admin.plan_override_modal.title")}
+          </DialogTitle>
         </DialogHeader>
         <form
           className="space-y-4"
@@ -101,9 +109,11 @@ export function PlanOverrideModal({
               id="billing-interval"
               value={billingInterval}
               onChange={(event) => {
-                setBillingInterval(event.target.value as "" | "monthly" | "yearly");
+                setBillingInterval(
+                  event.target.value as "" | "monthly" | "yearly",
+                );
               }}
-              className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm shadow-sm"
+              className="h-9 w-full rounded-md border border-input bg-card px-3 text-sm"
             >
               <option value="">
                 {t("common.admin.plan_override_modal.billing_interval_none")}

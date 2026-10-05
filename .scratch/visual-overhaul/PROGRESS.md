@@ -19,27 +19,28 @@ Legend: ✅ done · 🟡 partial · ⬜ not started
 
 | # | Ticket | Status | Notes |
 |---|---|---|---|
-| 01 | Tokens and base components | 🟡 | Steps 1–4 done, step 5 partial, step 6 not started. Details below. |
+| 01 | Tokens and base components | ✅ | Done 2026-10-05. Details below. |
 | 02 | Self-hosted font | ⬜ | Not started (no `packages/ui/fonts/`, no `fonts.css`). Needs internet. |
 | 03 | Glossary copy sweep | ⬜ | |
-| 04 | App shell | ⬜ | Blocked by 01. |
+| 04 | App shell | ⬜ | Unblocked. |
 | 05 | Collapsible sidebar | ⬜ | Blocked by 04. |
 | 06 | Page header + settings rows (Profile) | ⬜ | Blocked by 04. |
 | 07 | Other settings pages | ⬜ | Blocked by 06. |
 | 08 | Data list + Members | ⬜ | Blocked by 06. |
 | 09 | Other lists | ⬜ | Blocked by 07, 08. |
 | 10 | Getting started checklist | ⬜ | Blocked by 06. |
-| 11 | Auth pages | ⬜ | Blocked by 01. |
+| 11 | Auth pages | ⬜ | Unblocked. |
 | 12 | Admin console | ⬜ | Blocked by 04, 06, 08. |
 | 13 | Marketing hero | ⬜ | Blocked by 02, 04, 10. |
 | 14 | Integrate and verify | ⬜ | Blocked by all. |
 
-Startable now: **01** (finish it), **02**, **03**.
+Startable now: **02**, **03**, **04**, **11**.
 
 ## Ticket 01, step by step
 
-Committed in b52cea71 (2026-10-04). Gemma did a first, uncommitted pass; Claude
-reviewed it, repaired it and committed.
+Steps 1–4 committed in b52cea71 (2026-10-04), steps 5–6 on 2026-10-05. Gemma made
+uncommitted passes on steps 1–5; Claude reviewed, repaired and committed. **Gemma is no
+longer used on this overhaul** (decided 2026-10-05).
 
 | Step | Status | Who | What |
 |---|---|---|---|
@@ -47,11 +48,13 @@ reviewed it, repaired it and committed.
 | 2. New tokens | ✅ | Gemma, fixed by Claude | Gemma added everything correctly but left 5 uses of the deleted shadow classes (skip link, theme toggle, sheet, 2 command stories); Claude replaced them. |
 | 3. Type scale and root size | ✅ | Gemma, repaired by Claude | Gemma's edit broke `tokens.css` (a declaration written over a comment, which broke the marketing build; duplicated `--text-title`; `body` rule overwritten). Claude restored and cleaned it. |
 | 4. Icon stroke | ✅ | Gemma, moved by Claude | Rule moved into the base layer so utilities can still override it. |
-| 5. Restyle base components | 🟡 | Gemma, button rewritten by Claude | Done: `button` (Claude rewrote it: sizes, icon sizing, double border, disabled state were wrong), `input`, dropdown content panel. **To do:** dropdown menu items, `popover`, `command`, `tooltip`, `dialog`, `sheet` (radius/overlay), `card`, `badge`, `tabs`, `checkbox`, `password-input`, links. |
-| 6. Remove hardcoded palette classes | ⬜ | | Warning tokens it needs already exist. |
+| 5. Restyle base components | ✅ | Gemma (one item per prompt), most redone by Claude | Of Gemma's 9 component edits: card right; tabs, command, popover, dialog partly right; badge, tooltip, sheet wrong; **checkbox broken** (no visible outline, grey check fill, grey focus ring). All redone to spec. Claude also did dropdown items and submenu, links, toasts, the dialog close button (now RTL-safe), and the hand-styled `<select>`s. Command items keep `min-h-11` (F-014 touch targets). |
+| 6. Remove hardcoded palette classes | ✅ | Claude | Zero palette classes left. Added `--success` and `--warning-foreground`. Admin layout keeps its dark look via a `dark` class on its root until ticket 12. No Tailwind built-in shadows left either. |
 
-Checks at b52cea71: `@forge/ui` and web type-check clean; web tests 373/373;
-marketing build passes, marketing tests 236 passed / 2 skipped; prettier hook passes.
+Also fixed in 01: light `--muted-foreground` darkened to `#646b78` (the ticket's `#6b7280` was 4.32:1 on the sunken surface). Every text/token pairing now measures ≥ 4.5:1 in both themes; `--success` is for icons and fills only (3.45:1).
+
+Checks at the 01 completion commit: `@forge/ui` and web type-check clean; web lint (one existing warning in `VirtualList`); web tests 373/373;
+marketing build passes, marketing tests 236 passed / 2 skipped; Storybook builds; prettier hook passes.
 Visual screenshot suite is expected to fail until ticket 14.
 
 ## Lessons for whoever continues
@@ -62,4 +65,5 @@ Visual screenshot suite is expected to fail until ticket 14.
 - Web tests regenerate `apps/web/src/routeTree.gen.ts`. Revert it (`git checkout -- apps/web/src/routeTree.gen.ts`), don't commit it.
 - A fresh worktree needs its packages built first: `pnpm exec turbo run build --filter="web^..."`.
 - Always run `pnpm --filter marketing build` after touching `tokens.css`: it is the only check that parses the CSS (web tests don't).
-- Gemma handled "put these exact values here" well (steps 1–2) and broke things when editing around existing code (steps 3, 5). Give it small, table-like steps and have each one reviewed before committing.
+- Gemma handled "put these exact values here" well (steps 1–2) and broke things when editing around existing code. It also swapped in similar-sounding Tailwind classes (`shadow-xl` for `shadow-menu`) and made unrequested changes. See `LOCAL-MODEL.md`.
+- The shadcn token named `accent` is a grey hover surface, **not** the brand colour (that is `primary`). The README now says so.

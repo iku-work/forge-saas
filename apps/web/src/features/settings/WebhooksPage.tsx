@@ -417,7 +417,7 @@ function DeliveryLog({ endpoint }: { endpoint: WebhookEndpointPublic }) {
         <select
           id="delivery-status-filter"
           data-testid="delivery-status-filter"
-          className="h-9 rounded-md border border-input bg-background px-3 text-sm shadow-sm"
+          className="h-9 rounded-md border border-input bg-card px-3 text-sm"
           value={status}
           onChange={(event) => {
             setStatus(event.target.value as DeliveryStatus | "");
