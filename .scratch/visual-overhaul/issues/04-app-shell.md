@@ -9,7 +9,7 @@ Phones keep the drawer.
 
 **Blocked by:** 01.
 
-**Status:** ready-for-agent
+**Status:** done
 
 ## Read first
 
@@ -127,15 +127,21 @@ Then `pnpm --filter web dev`: check desktop (sidebar + panel), narrow the window
 
 ## Acceptance
 
-- [ ] No top header; search, bell and user menu are in the sidebar.
-- [ ] Content is in the raised panel; breadcrumb in the panel's top row.
-- [ ] Shell components live in `@forge/ui`, take no data, use container queries; story added.
-- [ ] Settings mode has "Back to app" and two sentence-case groups.
-- [ ] Phone drawer still works; RTL mirrors.
-- [ ] All test ids preserved; web tests, lint, type-check pass.
+- [x] No top header; search, bell and user menu are in the sidebar.
+- [x] Content is in the raised panel; breadcrumb in the panel's top row.
+- [x] Shell components live in `@forge/ui`, take no data, use container queries; story added.
+- [x] Settings mode has "Back to app" and two sentence-case groups.
+- [x] Phone drawer still works; RTL mirrors.
+- [x] All test ids preserved; web tests, lint, type-check pass.
 
 ## Don't
 
 - Don't implement collapsing (ticket 05).
 - Don't change page contents (tickets 06+).
 - Don't call `t()` inside `@forge/ui`; pass translated strings in as props.
+
+## Notes
+
+Completed 2026-10-05; see `PROGRESS.md`. Not yet viewed in a running app (needs the Docker backend).
+The e2e specs needed no selector changes: no spec relied on the header, and every test id is preserved
+(`sidebar-wordmark` now only exists when multi-org is off).

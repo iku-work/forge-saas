@@ -22,9 +22,9 @@ Legend: ✅ done · 🟡 partial · ⬜ not started
 | 01 | Tokens and base components | ✅ | Done 2026-10-05. Details below. |
 | 02 | Self-hosted font | ✅ | Done 2026-10-05 (Claude). See notes below. |
 | 03 | Glossary copy sweep | ⬜ | |
-| 04 | App shell | ⬜ | Unblocked. |
-| 05 | Collapsible sidebar | ⬜ | Blocked by 04. |
-| 06 | Page header + settings rows (Profile) | ⬜ | Blocked by 04. |
+| 04 | App shell | ✅ | Done 2026-10-05 (Claude). Not yet looked at in a running app. See notes. |
+| 05 | Collapsible sidebar | ⬜ | Unblocked. |
+| 06 | Page header + settings rows (Profile) | ⬜ | Unblocked. |
 | 07 | Other settings pages | ⬜ | Blocked by 06. |
 | 08 | Data list + Members | ⬜ | Blocked by 06. |
 | 09 | Other lists | ⬜ | Blocked by 07, 08. |
@@ -34,7 +34,7 @@ Legend: ✅ done · 🟡 partial · ⬜ not started
 | 13 | Marketing hero | ⬜ | Blocked by 02, 04, 10. |
 | 14 | Integrate and verify | ⬜ | Blocked by all. |
 
-Startable now: **03**, **04**, **11**.
+Startable now: **03**, **05**, **06**, **11**.
 
 ## Ticket 01, step by step
 
@@ -72,6 +72,26 @@ Visual screenshot suite is expected to fail until ticket 14.
 - Windows-only flake found: back-to-back Astro builds in the marketing suite intermittently fail
   renaming `.astro/content-assets.mjs` (EPERM). It appeared with the webfonts; a control run without
   them did not hit it. `tests/helpers.ts` retries a build (max 3) only on that exact error on Windows.
+
+## Ticket 04 notes
+
+- Shell components in `@forge/ui` (`app-shell.tsx`: AppShell, ShellSidebar, ShellNavGroup,
+  ShellNavItem, ShellSearchButton, ShellPanel), no data, container queries (`@3xl/shell`, i.e.
+  48rem of shell width). Story: Components/AppShell.
+- `AppLayout`: header removed; search, support link, user menu and bell in the sidebar; breadcrumb
+  and the phone drawer trigger in the panel's top row. `SidebarNav` renders the whole sidebar, used
+  both for the column and inside the drawer.
+- Top row: the Organization switcher (with a monogram) when multi-org is on, otherwise the product
+  wordmark. The old "wordmark links home" test became "Back to app links home" in settings.
+- Settings groups come from a new `group` field on `SETTINGS_NAV` items. `ShellNavGroup` is a
+  `role="group"` labelled by its heading, so screen readers announce "Your account, group".
+- Active nav styling is driven by the router's own `aria-current="page"`.
+- Bell and user menu open upwards (`side="top" align="start"`); unread badge is Iris.
+- Checks: web type-check/lint, 374 web tests, `@forge/i18n` lint, Storybook build; every new class
+  verified present in the built CSS. **Not checked in a running app** (needs the Docker backend):
+  look at it in `pnpm --filter web dev`, including below ~860px wide (drawer), `ar` and dark mode.
+- `NotificationFeedVirtual`'s arrow-key test failed once in a full run and passed in isolation 3/3
+  and in the next full run; it is load-sensitive (seen once in ticket 02 too).
 
 ## Lessons for whoever continues
 

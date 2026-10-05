@@ -37,7 +37,9 @@
     "webhooks": "Webhooks",
     "open_menu": "Open menu",
     "menu": "Menu",
-    "skip_to_content": "Skip to content"
+    "skip_to_content": "Skip to content",
+    "back_to_app": "Back to app",
+    "group_account": "Your account"
   },
   "support": {
     "contact": "Contact support",

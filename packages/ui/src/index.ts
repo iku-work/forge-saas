@@ -1,4 +1,5 @@
 export * from "./components/alert";
+export * from "./components/app-shell";
 export * from "./components/avatar";
 export * from "./components/FileUploader";
 export * from "./components/badge";

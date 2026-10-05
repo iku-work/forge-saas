@@ -44,6 +44,9 @@ export interface NavItem {
   // Org-plan-driven gate (T-121), orthogonal to `module` (product-config-driven)
   // -- both a disabled module and a plan without this flag hide the item.
   flag?: string;
+  /** Settings only: which sidebar group the item sits under. Personal settings
+   *  are "account"; everything shared by the Organization is "organization". */
+  group?: "account" | "organization";
 }
 
 /**
@@ -83,30 +86,35 @@ export const SETTINGS_NAV: NavItem[] = [
   {
     to: "/$locale/settings/profile",
     path: "/settings/profile",
+    group: "account",
     labelKey: "common.nav.profile",
     icon: UserIcon,
   },
   {
     to: "/$locale/settings/security",
     path: "/settings/security",
+    group: "account",
     labelKey: "common.nav.security",
     icon: Shield,
   },
   {
     to: "/$locale/settings/org",
     path: "/settings/org",
+    group: "organization",
     labelKey: "common.nav.organization",
     icon: Building2,
   },
   {
     to: "/$locale/settings/members",
     path: "/settings/members",
+    group: "organization",
     labelKey: "common.nav.members",
     icon: Users,
   },
   {
     to: "/$locale/settings/billing",
     path: "/settings/billing",
+    group: "organization",
     labelKey: "common.nav.billing",
     icon: CreditCard,
     permission: Permission.BILLING_READ,
@@ -115,6 +123,7 @@ export const SETTINGS_NAV: NavItem[] = [
   {
     to: "/$locale/settings/notifications",
     path: "/settings/notifications",
+    group: "account",
     labelKey: "common.nav.notifications",
     icon: Bell,
     module: "notifications",
@@ -126,6 +135,7 @@ export const SETTINGS_NAV: NavItem[] = [
   {
     to: "/$locale/settings/api-keys",
     path: "/settings/api-keys",
+    group: "organization",
     labelKey: "common.nav.api_keys",
     icon: KeyRound,
     permission: Permission.SETTINGS_MANAGE,
@@ -134,6 +144,7 @@ export const SETTINGS_NAV: NavItem[] = [
   {
     to: "/$locale/settings/webhooks",
     path: "/settings/webhooks",
+    group: "organization",
     labelKey: "common.nav.webhooks",
     icon: Webhook,
     permission: Permission.SETTINGS_MANAGE,
