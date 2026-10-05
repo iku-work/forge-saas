@@ -8,7 +8,7 @@ Preferences (language, appearance) apply immediately.
 
 **Blocked by:** 04.
 
-**Status:** ready-for-agent
+**Status:** done
 
 ## Read first
 
@@ -92,8 +92,13 @@ Manual: the page matches the prototype's Profile screen; rows stack on a phone; 
 
 ## Acceptance
 
-- [ ] `PageHeader`, `SettingsSection`, `SettingsRow` in `@forge/ui` with stories.
-- [ ] Profile page uses them; no card; Save enabled only when dirty.
-- [ ] Photo row is compact, drag-and-drop still works.
-- [ ] Appearance is a segmented control that applies immediately.
-- [ ] Tests pass; lint and type-check clean.
+- [x] `PageHeader`, `SettingsSection`, `SettingsRow` in `@forge/ui` with stories.
+- [x] Profile page uses them; no card; Save enabled only when dirty.
+- [x] Photo row is compact, drag-and-drop still works.
+- [x] Appearance is a segmented control that applies immediately.
+- [x] Tests pass; lint and type-check clean.
+
+## Notes
+
+Completed 2026-10-05; see `PROGRESS.md` (including the section/form pattern ticket 07 should follow).
+No "Remove" photo button: the API has no way to clear an avatar. Not yet viewed in a running app.

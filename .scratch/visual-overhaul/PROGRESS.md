@@ -24,17 +24,17 @@ Legend: ✅ done · 🟡 partial · ⬜ not started
 | 03 | Glossary copy sweep | ✅ | Done 2026-10-05 (Claude). See notes. |
 | 04 | App shell | ✅ | Done 2026-10-05 (Claude). Not yet looked at in a running app. See notes. |
 | 05 | Collapsible sidebar | ✅ | Done 2026-10-05 (Claude). Not yet looked at in a running app. See notes. |
-| 06 | Page header + settings rows (Profile) | ⬜ | Unblocked. |
-| 07 | Other settings pages | ⬜ | Blocked by 06. |
-| 08 | Data list + Members | ⬜ | Blocked by 06. |
+| 06 | Page header + settings rows (Profile) | ✅ | Done 2026-10-05 (Claude). Not yet looked at in a running app. See notes. |
+| 07 | Other settings pages | ⬜ | Unblocked. |
+| 08 | Data list + Members | ⬜ | Unblocked. |
 | 09 | Other lists | ⬜ | Blocked by 07, 08. |
-| 10 | Getting started checklist | ⬜ | Blocked by 06. |
+| 10 | Getting started checklist | ⬜ | Unblocked. |
 | 11 | Auth pages | ⬜ | Unblocked. |
 | 12 | Admin console | ⬜ | Blocked by 04, 06, 08. |
 | 13 | Marketing hero | ⬜ | Blocked by 02, 04, 10. |
 | 14 | Integrate and verify | ⬜ | Blocked by all. |
 
-Startable now: **06**, **11**.
+Startable now: **07**, **08**, **10**, **11**.
 
 ## Ticket 01, step by step
 
@@ -72,6 +72,29 @@ Visual screenshot suite is expected to fail until ticket 14.
 - Windows-only flake found: back-to-back Astro builds in the marketing suite intermittently fail
   renaming `.astro/content-assets.mjs` (EPERM). It appeared with the webfonts; a control run without
   them did not hit it. `tests/helpers.ts` retries a build (max 3) only on that exact error on Windows.
+
+## Ticket 06 notes
+
+- New in `@forge/ui`: `Page` (the content column: left aligned, max ~960px, gutters by shell
+  width), `PageHeader` (title in `.type-title`, one-line description, actions; keeps
+  `data-testid="page-title"`), `SettingsSection` (a `<section>` labelled by its h2, optional
+  footer) and `SettingsRow` (two columns at `@2xl/section`, one below). Stories for both.
+- **Pattern for the other pages:** sections must be *direct siblings* -- they space themselves
+  with `[&+&]:mt-12`. Put each section's `<form id>` *inside* the section and point the
+  footer's Save at it with `form={id}` (see ProfileSettingsPage). A react-hook-form field goes
+  `<FormItem><SettingsRow label={<FormLabel/>}>…<FormControl/>…</SettingsRow></FormItem>` so
+  the label stays tied to the input.
+- `FileUploader` has `variant="button"` + `buttonLabel`: one outline button, drag-and-drop
+  kept on its wrapper. The dropzone stays the default.
+- Profile: Personal details (photo, name, email + "Change email" link to Security) saves on its
+  own; Save is enabled only once the name changes. Preferences (language, appearance) apply
+  immediately. ThemeToggle restyled as a sunken track with a raised selected option.
+- **Deviations:** no "Remove photo" button -- the API cannot clear an avatar (no endpoint or
+  null path), so there would be nothing to call. Save stays "Save" (not "Save changes") to
+  keep its existing translations.
+- Tests: Profile page test stubs the router `Link`/`useParams` (it renders the page without a
+  router, as it already did for the locale switcher) and checks "Change email" points at
+  Security. 380 web tests pass.
 
 ## Ticket 05 notes
 
