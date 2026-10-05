@@ -6,7 +6,7 @@ each section saving on its own. (Billing's invoices list is ticket 09.)
 
 **Blocked by:** 06.
 
-**Status:** ready-for-agent
+**Status:** done
 
 ## Read first
 
@@ -51,13 +51,18 @@ At the end: `pnpm --filter web test`, and check each page by eye in light, dark,
 
 ## Acceptance
 
-- [ ] Notifications, Organization, Security, Billing use `PageHeader` + `SettingsSection`/`SettingsRow`.
-- [ ] No `Card` left on these pages (except inside the invoices list, untouched).
-- [ ] Each section saves independently; Save enabled only when that section is dirty.
-- [ ] All existing tests pass (selectors updated only where the card structure was assumed).
-- [ ] New description keys added in `en`; i18n lint passes.
+- [x] Notifications, Organization, Security, Billing use `PageHeader` + `SettingsSection`/`SettingsRow`.
+- [x] No `Card` left on these pages (except inside the invoices list, untouched).
+- [x] Each section saves independently; Save enabled only when that section is dirty.
+- [x] All existing tests pass (selectors updated only where the card structure was assumed).
+- [x] New description keys added in `en`; i18n lint passes.
 
 ## Don't
 
 - Don't change what any setting does or which API it calls.
 - Don't restyle lists (ticket 09).
+
+## Notes
+
+Completed 2026-10-05; see `PROGRESS.md`. Exception: Notifications' Save stays always enabled (it heals
+legacy rows by saving the shown defaults). Not yet viewed in a running app.

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useId, useState } from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
@@ -14,10 +14,6 @@ import {
   Avatar,
   AvatarFallback,
   Button,
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
   Form,
   FormControl,
   FormField,
@@ -25,6 +21,10 @@ import {
   FormLabel,
   FormMessage,
   Input,
+  Page,
+  PageHeader,
+  SettingsRow,
+  SettingsSection,
   Skeleton,
 } from "@forge/ui";
 
@@ -41,6 +41,7 @@ export function OrgSettingsPage() {
   const canManage = usePermission(Permission.SETTINGS_MANAGE);
   const [formError, setFormError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
+  const formId = useId();
   // Raw SDK call rather than the generated *Mutation() helper -- see
   // CreateOrgForm.tsx for why (the helper's internal call is unmockable
   // once @forge/api-client is bundled).
@@ -84,96 +85,105 @@ export function OrgSettingsPage() {
     }
   };
 
+  const header = (
+    <PageHeader
+      title={t("tenancy.org_settings.title")}
+      description={t("tenancy.org_settings.description")}
+    />
+  );
+
   if (isLoading || !org) {
     return (
-      <div className="max-w-xl space-y-6 p-6">
-        <h1 className="text-xl font-semibold" data-testid="page-title">
-          {t("tenancy.org_settings.title")}
-        </h1>
+      <Page>
+        {header}
         <Skeleton className="h-32 w-full" />
-      </div>
+      </Page>
     );
   }
 
   return (
-    <div className="max-w-xl space-y-6 p-6">
-      <h1 className="text-xl font-semibold" data-testid="page-title">
-        {t("tenancy.org_settings.title")}
-      </h1>
-      <Card>
-        <CardHeader>
-          <CardDescription>
-            {t("tenancy.org_settings.description")}
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-6">
-          <div className="flex items-center gap-4">
-            <Avatar className="size-16" data-testid="org-avatar">
-              <AvatarFallback className="text-lg">
-                {org.name.slice(0, 2).toUpperCase()}
-              </AvatarFallback>
-            </Avatar>
-            <div>
-              {/* No storage upload endpoint exists yet -- same stub as the
-                  Profile page's avatar upload. */}
-              <Button type="button" variant="outline" size="sm" disabled>
-                {t("tenancy.org_settings.logo_upload")}
-              </Button>
-              <p className="mt-1 text-xs text-muted-foreground">
-                {t("tenancy.org_settings.coming_soon")}
-              </p>
-            </div>
-          </div>
-
-          {formError ? (
-            <Alert variant="destructive">
-              <AlertDescription>{formError}</AlertDescription>
-            </Alert>
-          ) : null}
-          {saved ? (
-            <Alert>
-              <AlertDescription>
-                {t("tenancy.org_settings.saved")}
-              </AlertDescription>
-            </Alert>
-          ) : null}
-
-          <Form {...form}>
-            <form
-              className="space-y-4"
-              onSubmit={(event) => {
-                void form.handleSubmit(onSubmit)(event);
-              }}
-              noValidate
+    <Page>
+      {header}
+      <SettingsSection
+        title={t("tenancy.org_settings.section_general")}
+        footer={
+          canManage ? (
+            <Button
+              type="submit"
+              form={formId}
+              disabled={form.formState.isSubmitting || !form.formState.isDirty}
             >
-              <FormField
-                control={form.control}
-                name="name"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>
-                      {t("tenancy.org_settings.name_label")}
-                    </FormLabel>
-                    <FormControl>
-                      <Input disabled={!canManage} {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              {canManage ? (
-                <Button type="submit" disabled={form.formState.isSubmitting}>
-                  {t("tenancy.org_settings.save")}
-                </Button>
-              ) : (
-                <p className="text-xs text-muted-foreground">
-                  {t("tenancy.org_settings.permission_notice")}
-                </p>
+              {t("tenancy.org_settings.save")}
+            </Button>
+          ) : (
+            <p className="text-xs text-muted-foreground">
+              {t("tenancy.org_settings.permission_notice")}
+            </p>
+          )
+        }
+      >
+        {formError ? (
+          <Alert variant="destructive" className="mb-4">
+            <AlertDescription>{formError}</AlertDescription>
+          </Alert>
+        ) : null}
+        {saved ? (
+          <Alert className="mb-4">
+            <AlertDescription>
+              {t("tenancy.org_settings.saved")}
+            </AlertDescription>
+          </Alert>
+        ) : null}
+
+        <SettingsRow
+          label={t("tenancy.org_settings.logo_label")}
+          hint={t("tenancy.org_settings.coming_soon")}
+        >
+          <Avatar className="size-12" data-testid="org-avatar">
+            <AvatarFallback>
+              {org.name.slice(0, 2).toUpperCase()}
+            </AvatarFallback>
+          </Avatar>
+          {/* No storage upload endpoint exists yet -- same stub as before. */}
+          <Button type="button" variant="outline" disabled>
+            {t("tenancy.org_settings.logo_upload")}
+          </Button>
+        </SettingsRow>
+
+        <Form {...form}>
+          <form
+            id={formId}
+            onSubmit={(event) => {
+              void form.handleSubmit(onSubmit)(event);
+            }}
+            noValidate
+          >
+            <FormField
+              control={form.control}
+              name="name"
+              render={({ field }) => (
+                <FormItem>
+                  <SettingsRow
+                    label={
+                      <FormLabel>
+                        {t("tenancy.org_settings.name_label")}
+                      </FormLabel>
+                    }
+                    hint={t("tenancy.org_settings.name_hint")}
+                  >
+                    <div className="w-full max-w-sm space-y-2">
+                      <FormControl>
+                        <Input disabled={!canManage} {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </div>
+                  </SettingsRow>
+                </FormItem>
               )}
-            </form>
-          </Form>
-        </CardContent>
-      </Card>
-    </div>
+            />
+          </form>
+        </Form>
+      </SettingsSection>
+    </Page>
   );
 }

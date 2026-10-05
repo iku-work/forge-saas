@@ -9,6 +9,10 @@ import { cn } from "@forge/utils";
  * and no box around them. A section groups rows under a title and may carry
  * its own footer (usually that section's Save), so each section saves alone.
  *
+ * Every section carries its own top margin. Vertical margins collapse through
+ * plain wrappers (a <form>, a test-id <div>), so the spacing holds however a
+ * page nests its sections; after the page header the larger margin wins.
+ *
  * Rows go to one column when the *section* is narrow -- a container query,
  * so the same section reads correctly in the panel, in a dialog, or beside a
  * collapsed or expanded sidebar.
@@ -37,7 +41,7 @@ function SettingsSection({
   return (
     <section
       aria-labelledby={titleId}
-      className={cn("@container/section [&+&]:mt-12", className)}
+      className={cn("@container/section mt-12", className)}
       {...props}
     >
       <div className="pb-3.5">

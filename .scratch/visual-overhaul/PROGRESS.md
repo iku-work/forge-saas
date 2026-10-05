@@ -25,7 +25,7 @@ Legend: ✅ done · 🟡 partial · ⬜ not started
 | 04 | App shell | ✅ | Done 2026-10-05 (Claude). Not yet looked at in a running app. See notes. |
 | 05 | Collapsible sidebar | ✅ | Done 2026-10-05 (Claude). Not yet looked at in a running app. See notes. |
 | 06 | Page header + settings rows (Profile) | ✅ | Done 2026-10-05 (Claude). Not yet looked at in a running app. See notes. |
-| 07 | Other settings pages | ⬜ | Unblocked. |
+| 07 | Other settings pages | ✅ | Done 2026-10-05 (Claude). Not yet looked at in a running app. See notes. |
 | 08 | Data list + Members | ⬜ | Unblocked. |
 | 09 | Other lists | ⬜ | Blocked by 07, 08. |
 | 10 | Getting started checklist | ⬜ | Unblocked. |
@@ -34,7 +34,7 @@ Legend: ✅ done · 🟡 partial · ⬜ not started
 | 13 | Marketing hero | ⬜ | Blocked by 02, 04, 10. |
 | 14 | Integrate and verify | ⬜ | Blocked by all. |
 
-Startable now: **07**, **08**, **10**, **11**.
+Startable now: **08**, **10**, **11** (09 waits on 08).
 
 ## Ticket 01, step by step
 
@@ -73,14 +73,36 @@ Visual screenshot suite is expected to fail until ticket 14.
   renaming `.astro/content-assets.mjs` (EPERM). It appeared with the webfonts; a control run without
   them did not hit it. `tests/helpers.ts` retries a build (max 3) only on that exact error on Windows.
 
+## Ticket 07 notes
+
+- Notifications, Organization, Security and Billing now use `Page` + `PageHeader` + sections; no
+  cards except Billing's invoices list (ticket 09).
+- **Notifications:** the type x channel matrix stays a table inside one section; Save in the
+  footer is **always enabled** on purpose -- saving persists the shown defaults and heals a stored
+  row that switched off a required channel (two existing tests depend on that).
+- **Organization:** one "General" section, logo row (still the disabled "coming soon" upload)
+  and name row; Save only once the name changes; members without permission see the notice.
+- **Security:** six sections with titles. Password and email are rows with Save in the footer
+  (disabled until changed); sessions, two-factor, security keys and linked accounts keep their
+  inner layout (lists and a multi-step flow; ticket 09 restyles lists). The password test now
+  scopes to the "Password" region instead of the <form>, since Save is outside the form.
+- **Billing:** current plan as a row with "Manage billing" as its control; usage table in a
+  section; one row per available plan with price as the hint and Upgrade as the control.
+- New en keys: section titles and descriptions (`notifications.preferences.section_title`,
+  `tenancy.org_settings.section_general/logo_label/name_hint`, `auth.security_keys.title`,
+  `auth.change_password.title`, `auth.change_email.title`, `auth.security_page.description`,
+  `billing.description`, `billing.current_plan.plan_label`).
+- 380 web tests pass; lint and type-check clean.
+
 ## Ticket 06 notes
 
 - New in `@forge/ui`: `Page` (the content column: left aligned, max ~960px, gutters by shell
   width), `PageHeader` (title in `.type-title`, one-line description, actions; keeps
   `data-testid="page-title"`), `SettingsSection` (a `<section>` labelled by its h2, optional
   footer) and `SettingsRow` (two columns at `@2xl/section`, one below). Stories for both.
-- **Pattern for the other pages:** sections must be *direct siblings* -- they space themselves
-  with `[&+&]:mt-12`. Put each section's `<form id>` *inside* the section and point the
+- **Pattern for the other pages:** every section carries `mt-12`; margins collapse through
+  plain wrappers, so nesting is fine (changed in ticket 07 -- it was `[&+&]:mt-12`, which broke
+  under the Security page's test-id wrappers). Put each section's `<form id>` *inside* the section and point the
   footer's Save at it with `form={id}` (see ProfileSettingsPage). A react-hook-form field goes
   `<FormItem><SettingsRow label={<FormLabel/>}>…<FormControl/>…</SettingsRow></FormItem>` so
   the label stays tied to the input.

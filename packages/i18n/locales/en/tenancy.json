@@ -16,7 +16,10 @@
     "save": "Save",
     "saved": "Saved.",
     "permission_notice": "Only owners and admins can change this.",
-    "error_default": "Unable to update the organization."
+    "error_default": "Unable to update the organization.",
+    "section_general": "General",
+    "logo_label": "Logo",
+    "name_hint": "Shown to every member, and in emails and invitations."
   },
   "members": {
     "title": "Members",

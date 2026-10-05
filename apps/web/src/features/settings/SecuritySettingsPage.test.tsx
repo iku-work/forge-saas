@@ -118,15 +118,14 @@ describe("SecuritySettingsPage", () => {
 
     renderPage();
 
-    // Scoped to this card's own <form> -- ChangeEmailCard has its own
+    // Scoped to the Password section -- ChangeEmailCard has its own
     // "Current password" field on the same page (T-226), so an unscoped
-    // getByLabelText("Current password") would match both.
-    const newPasswordField = screen.getByLabelText("New password");
-    const passwordForm = newPasswordField.closest("form");
-    if (!passwordForm) {
-      throw new Error("Change password form not found");
-    }
-    const passwordFormScope = within(passwordForm);
+    // getByLabelText("Current password") would match both. The section, not
+    // the <form>: its Save sits in the section footer, outside the form.
+    const passwordFormScope = within(
+      screen.getByRole("region", { name: "Password" }),
+    );
+    const newPasswordField = passwordFormScope.getByLabelText("New password");
 
     await interaction.type(
       passwordFormScope.getByLabelText("Current password"),
@@ -219,9 +218,7 @@ describe("SecuritySettingsPage", () => {
     renderPage();
 
     expect(await screen.findByText("YubiKey")).toBeInTheDocument();
-    expect(
-      screen.getByRole("button", { name: "Remove" }),
-    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Remove" })).toBeInTheDocument();
   });
 
   it("registers a new security key", async () => {

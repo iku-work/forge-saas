@@ -8,11 +8,10 @@ import {
   Alert,
   AlertDescription,
   Button,
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
   Checkbox,
+  Page,
+  PageHeader,
+  SettingsSection,
   Table,
   TableBody,
   TableCell,
@@ -28,7 +27,10 @@ import {
 } from "@forge/types";
 import type { NotificationChannel, NotificationType } from "@forge/types";
 
-type PreferencesMatrix = Record<NotificationType, Record<NotificationChannel, boolean>>;
+type PreferencesMatrix = Record<
+  NotificationType,
+  Record<NotificationChannel, boolean>
+>;
 
 const CHANNEL_LABEL_KEYS: Record<NotificationChannel, string> = {
   email: "notifications.preferences.channel_email",
@@ -93,7 +95,10 @@ export function NotificationsSettingsPage() {
     },
   });
 
-  const toggleChannel = (type: NotificationType, channel: NotificationChannel): void => {
+  const toggleChannel = (
+    type: NotificationType,
+    channel: NotificationChannel,
+  ): void => {
     if (isNotificationChannelRequired(type, channel)) {
       return; // the checkbox is disabled; this guards a keyboard/programmatic path
     }
@@ -116,13 +121,30 @@ export function NotificationsSettingsPage() {
   };
 
   return (
-    <div className="max-w-2xl space-y-6 p-6">
-      <h1 className="text-xl font-semibold" data-testid="page-title">{t("notifications.preferences.title")}</h1>
-      <Card>
-        <CardHeader>
-          <CardDescription>{t("notifications.preferences.description")}</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
+    <Page>
+      <PageHeader
+        title={t("notifications.preferences.title")}
+        description={t("notifications.preferences.description")}
+      />
+      {/* A type x channel matrix stays a table: rows of label-and-control
+          don't fit a grid of checkboxes. Save is always enabled, unlike the
+          other settings sections: saving persists the defaults shown and
+          heals a stored row that switched off a required channel. */}
+      <SettingsSection
+        title={t("notifications.preferences.section_title")}
+        footer={
+          <Button
+            type="button"
+            disabled={savePreferences.isPending}
+            onClick={() => {
+              void handleSave();
+            }}
+          >
+            {t("notifications.preferences.save")}
+          </Button>
+        }
+      >
+        <div className="space-y-4 pb-5">
           {error ? (
             <Alert variant="destructive">
               <AlertDescription>{error}</AlertDescription>
@@ -130,7 +152,9 @@ export function NotificationsSettingsPage() {
           ) : null}
           {saved ? (
             <Alert>
-              <AlertDescription>{t("notifications.preferences.saved")}</AlertDescription>
+              <AlertDescription>
+                {t("notifications.preferences.saved")}
+              </AlertDescription>
             </Alert>
           ) : null}
 
@@ -150,7 +174,10 @@ export function NotificationsSettingsPage() {
                 <TableRow key={type}>
                   <TableCell>{t(TYPE_LABEL_KEYS[type])}</TableCell>
                   {NOTIFICATION_CHANNELS.map((channel) => {
-                    const required = isNotificationChannelRequired(type, channel);
+                    const required = isNotificationChannelRequired(
+                      type,
+                      channel,
+                    );
                     const label = `${t(TYPE_LABEL_KEYS[type])} ${t(CHANNEL_LABEL_KEYS[channel])}`;
                     return (
                       <TableCell key={channel} className="text-center">
@@ -165,7 +192,9 @@ export function NotificationsSettingsPage() {
                               ? `${label} (${t("notifications.preferences.channel_required")})`
                               : label
                           }
-                          aria-describedby={required ? REQUIRED_NOTE_ID : undefined}
+                          aria-describedby={
+                            required ? REQUIRED_NOTE_ID : undefined
+                          }
                           onCheckedChange={() => {
                             toggleChannel(type, channel);
                           }}
@@ -181,18 +210,8 @@ export function NotificationsSettingsPage() {
           <p id={REQUIRED_NOTE_ID} className="text-sm text-muted-foreground">
             {t("notifications.preferences.required_note")}
           </p>
-
-          <Button
-            type="button"
-            disabled={savePreferences.isPending}
-            onClick={() => {
-              void handleSave();
-            }}
-          >
-            {t("notifications.preferences.save")}
-          </Button>
-        </CardContent>
-      </Card>
-    </div>
+        </div>
+      </SettingsSection>
+    </Page>
   );
 }
