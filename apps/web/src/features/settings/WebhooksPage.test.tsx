@@ -16,6 +16,8 @@ import { server } from "../../test/server";
 import { installVirtualLayout } from "../../test/virtualLayout";
 
 const hooks = vi.hoisted(() => ({
+  // The row menu's dropdown reads the text direction to place itself.
+  useDirection: vi.fn(() => "ltr"),
   useOrg: vi.fn(),
   usePermission: vi.fn(),
 }));
@@ -106,9 +108,8 @@ describe("WebhooksPage", () => {
           ]),
         ),
       ),
-      http.get(
-        `${API}/api/v1/webhooks/endpoints/:endpointId/deliveries`,
-        () => HttpResponse.json(envelope([delivery])),
+      http.get(`${API}/api/v1/webhooks/endpoints/:endpointId/deliveries`, () =>
+        HttpResponse.json(envelope([delivery])),
       ),
     );
   });
@@ -135,7 +136,9 @@ describe("WebhooksPage", () => {
 
     await person.click(await screen.findByTestId("webhooks-create-button"));
 
-    expect(screen.getByTestId("webhook-event-member.invited")).toBeInTheDocument();
+    expect(
+      screen.getByTestId("webhook-event-member.invited"),
+    ).toBeInTheDocument();
     expect(screen.getByTestId("webhook-event-org.updated")).toBeInTheDocument();
   });
 
@@ -163,7 +166,9 @@ describe("WebhooksPage", () => {
     await person.click(screen.getByTestId("webhook-secret-done"));
 
     await waitFor(() => {
-      expect(screen.queryByTestId("webhook-secret-value")).not.toBeInTheDocument();
+      expect(
+        screen.queryByTestId("webhook-secret-value"),
+      ).not.toBeInTheDocument();
     });
   });
 
@@ -186,11 +191,17 @@ describe("WebhooksPage", () => {
     const person = userEvent.setup();
     renderPage();
 
-    await person.click(await screen.findByTestId(`webhook-rotate-${endpoint.id}`));
-
-    expect(await screen.findByTestId("webhook-rotated-value")).toHaveTextContent(
-      "whsec_new",
+    // In the endpoint's menu since ticket 09.
+    await person.click(
+      await screen.findByTestId(`webhook-actions-${endpoint.id}`),
     );
+    await person.click(
+      await screen.findByTestId(`webhook-rotate-${endpoint.id}`),
+    );
+
+    expect(
+      await screen.findByTestId("webhook-rotated-value"),
+    ).toHaveTextContent("whsec_new");
     expect(screen.getByTestId("webhook-rotated-warning")).toHaveTextContent(
       "Feb 2, 2026",
     );
@@ -222,7 +233,9 @@ describe("WebhooksPage", () => {
     await person.click(
       await screen.findByTestId(`webhook-deliveries-${endpoint.id}`),
     );
-    await person.click(await screen.findByTestId(`delivery-replay-${delivery.id}`));
+    await person.click(
+      await screen.findByTestId(`delivery-replay-${delivery.id}`),
+    );
 
     expect(await screen.findByTestId("delivery-replayed")).toBeInTheDocument();
     expect(replayedId).toBe(delivery.id);
@@ -239,7 +252,13 @@ describe("WebhooksPage", () => {
     const person = userEvent.setup();
     renderPage();
 
-    await person.click(await screen.findByTestId(`webhook-delete-${endpoint.id}`));
+    // In the endpoint's menu since ticket 09.
+    await person.click(
+      await screen.findByTestId(`webhook-actions-${endpoint.id}`),
+    );
+    await person.click(
+      await screen.findByTestId(`webhook-delete-${endpoint.id}`),
+    );
     const submit = screen.getByTestId("webhook-delete-confirm-submit");
     expect(submit).toBeDisabled();
 
@@ -283,7 +302,9 @@ describe("WebhooksPage", () => {
     expect(
       await screen.findByTestId("webhooks-permission-denied"),
     ).toBeInTheDocument();
-    expect(screen.queryByTestId("webhooks-create-button")).not.toBeInTheDocument();
+    expect(
+      screen.queryByTestId("webhooks-create-button"),
+    ).not.toBeInTheDocument();
   });
 
   it("has no accessibility violations", async () => {

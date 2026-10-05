@@ -28,14 +28,14 @@ Legend: ✅ done · 🟡 partial · ⬜ not started
 | 06 | Page header + settings rows (Profile) | ✅ | Done 2026-10-05 (Claude). Not yet looked at in a running app. See notes. |
 | 07 | Other settings pages | ✅ | Done 2026-10-05 (Claude). Not yet looked at in a running app. See notes. |
 | 08 | Data list + Members | ✅ | Done 2026-10-05 (Claude), with gaps logged in FOLLOW-UPS. Not yet looked at in a running app. |
-| 09 | Other lists | ⬜ | Unblocked. |
+| 09 | Other lists | ✅ | Done 2026-10-05 (Claude). Not yet looked at in a running app. |
 | 10 | Getting started checklist | ⬜ | Unblocked. |
 | 11 | Auth pages | ⬜ | Unblocked. |
-| 12 | Admin console | ⬜ | Blocked by 04, 06, 08. |
+| 12 | Admin console | ⬜ | Unblocked. |
 | 13 | Marketing hero | ⬜ | Blocked by 02, 04, 10. |
 | 14 | Integrate and verify | ⬜ | Blocked by all. |
 
-Startable now: **09**, **10**, **11**.
+Startable now: **10**, **11**, **12**.
 
 ## Ticket 01, step by step
 
@@ -73,6 +73,25 @@ Visual screenshot suite is expected to fail until ticket 14.
 - Windows-only flake found: back-to-back Astro builds in the marketing suite intermittently fail
   renaming `.astro/content-assets.mjs` (EPERM). It appeared with the webfonts; a control run without
   them did not hit it. `tests/helpers.ts` retries a build (max 3) only on that exact error on Windows.
+
+## Ticket 09 notes
+
+- Files, API keys, Webhooks, the Billing invoices list and Reports use `Page` + `PageHeader`;
+  no cards left on them. Statuses are `StatusPill`s (files: ready / scanning / infected-failed;
+  keys: active vs revoked-expired; webhooks: enabled / auto-disabled / disabled; deliveries:
+  delivered / pending / failed-dead; invoices: Stripe's five statuses, now translated).
+- **Row actions:** the destructive or rarer actions moved into a "⋯" menu (Files: Delete;
+  API keys: Revoke; Webhooks: Enable/Disable, Rotate secret, separator, Delete). Kept visible on
+  purpose: Files' Download (its disabled state explains itself), Webhooks' Deliveries (opens the
+  log in place), the delivery log's View and Replay (frequent, non-destructive). All existing
+  confirm dialogs unchanged; menu items keep the old test ids.
+- Machine values in mono: key prefixes, scopes, webhook URLs, event names, response codes.
+- Files keeps its dropzone under the header (it is the drop target and the empty state refers
+  to it) rather than an "Upload" header button.
+- Tests: four files updated to open the row menu first; the `@forge/hooks` mocks gained
+  `useDirection`. Billing's test now expects "Paid" (translated). 383 web tests pass.
+- Remaining hand-written `<h1>`s: admin pages (12), AuthCard (11), dashboard (10), maintenance
+  screen (stays), and the create-first-organization screen (in FOLLOW-UPS).
 
 ## Ticket 08 notes
 

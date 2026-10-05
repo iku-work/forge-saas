@@ -31,7 +31,14 @@
     "pdf_col": "Receipt",
     "download_pdf": "Download PDF",
     "load_more": "Load more",
-    "error_load": "Unable to load invoices."
+    "error_load": "Unable to load invoices.",
+    "status": {
+      "draft": "Draft",
+      "open": "Open",
+      "paid": "Paid",
+      "uncollectible": "Uncollectible",
+      "void": "Void"
+    }
   },
   "error": {
     "permission_denied": "You don't have permission to view billing for this organization.",

@@ -20,6 +20,9 @@ something; move an entry to the bottom section when it is resolved.
   user id. Needs a user summary on each membership (full_name, email, has_uploaded_avatar),
   fetched through the auth service in one batch (§0.1 cross-module rule; T-243's query budget
   for list endpoints), then the Members row shows avatar + name + email like the design.
+  The same gap shows on **Files** (ticket 09): the uploader column can only show two letters of
+  the uploader's user id. Whatever summary the members list gets, `StoredFilePublic` should
+  carry for `uploaded_by`.
 - **Resend and revoke invitations.** (ticket 08) The pending-invitations list has no actions
   because there are no endpoints for them. Needs `POST /orgs/{id}/invitations/{inv}/resend` and
   `DELETE /orgs/{id}/invitations/{inv}`, then a "⋯" menu on invitation rows (Resend, Copy link,
@@ -38,19 +41,26 @@ something; move an entry to the bottom section when it is resolved.
   is no other "Leave organization" path; add one deliberately (e.g. Organization settings) if
   members should be able to leave.
 
-- **Translations for new keys.** Tickets 04–07 added English keys (sidebar groups, "Back to
-  app", collapse/expand, section titles and hints, page descriptions). de, es, fr, fi and ar
+- **Translations for new keys.** Tickets 04–09 added English keys (sidebar groups, "Back to
+  app", collapse/expand, section titles and hints, page descriptions, row-menu labels, member
+  and invoice status words). de, es, fr, fi and ar
   fall back to English until translated via the translator workflow
   (`docs/runbooks/translations.md`). Ticket 03's copy changes *were* translated.
 - **Notifications Save is always enabled.** (ticket 07) Unlike other sections, on purpose:
   saving persists the shown defaults and heals legacy rows. If that healing moves to the
   backend (normalise on read), the page could adopt "Save only after a change".
+- **Create-your-first-organization screen is still a card.** (found in ticket 09) The screen a
+  signed-in user sees with no organization (`CreateFirstOrgPrompt` in `AppLayout.tsx`) has
+  its own hand-written `<h1>` and a Card. No ticket covers it; give it ticket 11's card-less
+  auth layout when that lands.
+- **Invoice statuses outside Stripe's five.** (ticket 09) draft/open/paid/uncollectible/void
+  are translated and toned; anything else shows Stripe's raw word with a neutral pill.
 - **"Save" vs "Save changes".** (ticket 06) Buttons kept "Save" so existing translations stay
   valid. Decide one wording and apply it everywhere at once.
 
 ## Verification still owed
 
-- **Look at tickets 04–07 in a running app.** None of the shell, rail, or settings pages has been
+- **Look at tickets 04–09 in a running app.** None of the shell, rail, or settings pages has been
   seen in a browser yet: login needs the backend (Docker Desktop was stopped). Check desktop,
   < ~860px wide (drawer), `ar`, dark mode, the rail's tooltips and animation.
 - **Lighthouse on marketing.** (ticket 02) Fails locally on Windows (chrome-launcher EPERM); CI

@@ -1,6 +1,8 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useTranslation } from "react-i18next";
 
+import { Page, PageHeader } from "@forge/ui";
+
 export const Route = createFileRoute("/$locale/_app/reports")({
   component: ReportsPage,
 });
@@ -12,11 +14,11 @@ export const Route = createFileRoute("/$locale/_app/reports")({
 function ReportsPage() {
   const { t } = useTranslation();
   return (
-    <div className="p-6">
-      <h1 className="text-2xl font-semibold">{t("common.nav.reports")}</h1>
-      <p className="mt-2 text-sm text-muted-foreground">
-        {t("common.reports.description")}
-      </p>
-    </div>
+    <Page>
+      <PageHeader
+        title={t("common.nav.reports")}
+        description={t("common.reports.description")}
+      />
+    </Page>
   );
 }

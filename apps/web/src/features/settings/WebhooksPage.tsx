@@ -35,10 +35,6 @@ import {
   AlertDescription,
   Badge,
   Button,
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
   Checkbox,
   Dialog,
   DialogContent,
@@ -53,7 +49,18 @@ import {
   FormMessage,
   Input,
   Skeleton,
+  DataListRow,
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+  Page,
+  PageHeader,
+  RowActionsButton,
+  StatusPill,
 } from "@forge/ui";
+import type { StatusTone } from "@forge/ui";
 import { formatDate } from "@forge/utils";
 
 import { VirtualList } from "../../components/VirtualList";
@@ -107,6 +114,17 @@ const DELIVERY_STATUS_LABEL_KEYS: Record<DeliveryStatus, string> = {
 // biggest table in the product), so the lookup is widened rather than cast:
 // a status this build has never heard of renders as "pending" instead of as
 // a raw translation key.
+function deliveryStatusTone(status: string): StatusTone {
+  if (status === "delivered") return "active";
+  if (status === "failed" || status === "dead") return "danger";
+  return "pending";
+}
+
+/* Event, status, response code, time, actions -- one literal class shared by
+   every delivery row (Tailwind only generates classes it can read). */
+const DELIVERY_COLUMNS =
+  "grid-cols-[minmax(0,1fr)_auto_3rem_minmax(0,8rem)_auto] px-2 py-2";
+
 function deliveryStatusLabelKey(status: string): string {
   const keys: Record<string, string | undefined> = DELIVERY_STATUS_LABEL_KEYS;
   return keys[status] ?? DELIVERY_STATUS_LABEL_KEYS.pending;
@@ -472,21 +490,21 @@ function DeliveryLog({ endpoint }: { endpoint: WebhookEndpointPublic }) {
           // — so there would be nothing to restore into. Half-wiring it would
           // snapshot offsets nobody ever reads.
           renderItem={(delivery) => (
-            <div className="flex items-center justify-between gap-3 border-b px-2 py-2 text-sm">
-              <span className="font-mono text-xs">{delivery.event_type}</span>
-              <Badge
-                variant={
-                  delivery.status === "delivered" ? "default" : "secondary"
-                }
-              >
+            <DataListRow className={DELIVERY_COLUMNS}>
+              <span className="truncate font-mono text-xs">
+                {delivery.event_type}
+              </span>
+              <StatusPill tone={deliveryStatusTone(delivery.status)}>
                 {t(deliveryStatusLabelKey(delivery.status))}
-              </Badge>
-              <span className="text-xs text-muted-foreground">
+              </StatusPill>
+              <span className="font-mono text-xs text-muted-foreground">
                 {delivery.response_code ?? "—"}
               </span>
-              <span className="text-xs text-muted-foreground">
+              <span className="truncate text-xs text-muted-foreground">
                 {formatDate(delivery.created_at, i18n.language)}
               </span>
+              {/* View and Replay stay visible: both are frequent and neither
+                  is destructive, which is what the "⋯" menu is for. */}
               <span className="flex gap-1">
                 <Button
                   type="button"
@@ -512,7 +530,7 @@ function DeliveryLog({ endpoint }: { endpoint: WebhookEndpointPublic }) {
                   {t("tenancy.webhooks.replay")}
                 </Button>
               </span>
-            </div>
+            </DataListRow>
           )}
         />
       )}
@@ -670,27 +688,29 @@ export function WebhooksPage() {
 
   if (orgLoading || !org) {
     return (
-      <div className="max-w-4xl space-y-6 p-6">
-        <h1 className="text-xl font-semibold" data-testid="page-title">
-          {t("tenancy.webhooks.title")}
-        </h1>
+      <Page>
+        <PageHeader
+          title={t("tenancy.webhooks.title")}
+          description={t("tenancy.webhooks.description")}
+        />
         <Skeleton className="h-32 w-full" />
-      </div>
+      </Page>
     );
   }
 
   if (!canManage) {
     return (
-      <div className="max-w-4xl space-y-6 p-6" data-testid="webhooks-page">
-        <h1 className="text-xl font-semibold" data-testid="page-title">
-          {t("tenancy.webhooks.title")}
-        </h1>
+      <Page data-testid="webhooks-page">
+        <PageHeader
+          title={t("tenancy.webhooks.title")}
+          description={t("tenancy.webhooks.description")}
+        />
         <Alert>
           <AlertDescription data-testid="webhooks-permission-denied">
             {t("common.error.permission_denied")}
           </AlertDescription>
         </Alert>
-      </div>
+      </Page>
     );
   }
 
@@ -698,152 +718,162 @@ export function WebhooksPage() {
   const eventTypes = eventTypesQuery.data?.data ?? [];
 
   return (
-    <div className="max-w-4xl space-y-6 p-6" data-testid="webhooks-page">
-      <div className="flex items-center justify-between">
-        <h1 className="text-xl font-semibold" data-testid="page-title">
-          {t("tenancy.webhooks.title")}
-        </h1>
-        <Button
-          type="button"
-          disabled={endpoints.length >= MAX_ENDPOINTS_PER_ORG}
-          onClick={() => {
-            setCreateOpen(true);
-          }}
-          data-testid="webhooks-create-button"
-        >
-          {t("tenancy.webhooks.create")}
-        </Button>
-      </div>
+    <Page data-testid="webhooks-page">
+      <PageHeader
+        title={t("tenancy.webhooks.title")}
+        description={t("tenancy.webhooks.description")}
+        actions={
+          <Button
+            type="button"
+            disabled={endpoints.length >= MAX_ENDPOINTS_PER_ORG}
+            onClick={() => {
+              setCreateOpen(true);
+            }}
+            data-testid="webhooks-create-button"
+          >
+            {t("tenancy.webhooks.create")}
+          </Button>
+        }
+      />
 
-      <Card>
-        <CardHeader>
-          <CardDescription>{t("tenancy.webhooks.description")}</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          {actionError ? (
-            <Alert variant="destructive">
-              <AlertDescription>{actionError}</AlertDescription>
-            </Alert>
-          ) : null}
-          {endpointsQuery.isError ? (
-            <Alert variant="destructive">
-              <AlertDescription>
-                {t("tenancy.webhooks.error_load")}
-              </AlertDescription>
-            </Alert>
-          ) : null}
+      <div className="space-y-4">
+        {actionError ? (
+          <Alert variant="destructive">
+            <AlertDescription>{actionError}</AlertDescription>
+          </Alert>
+        ) : null}
+        {endpointsQuery.isError ? (
+          <Alert variant="destructive">
+            <AlertDescription>
+              {t("tenancy.webhooks.error_load")}
+            </AlertDescription>
+          </Alert>
+        ) : null}
 
-          {endpointsQuery.isPending ? (
-            <Skeleton className="h-24 w-full" />
-          ) : endpoints.length === 0 ? (
-            <EmptyState
-              icon={Webhook}
-              data-testid="webhooks-empty"
-              title={t("tenancy.webhooks.empty_title")}
-              description={t("tenancy.webhooks.empty_body")}
-            />
-          ) : (
-            <ul className="space-y-4">
-              {endpoints.map((endpoint) => (
-                <li
-                  key={endpoint.id}
-                  className="space-y-3 rounded-md border p-4"
-                  data-testid={`webhook-row-${endpoint.id}`}
-                >
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <span className="break-all font-mono text-sm">
-                      {endpoint.url}
-                    </span>
-                    <Badge variant={endpoint.enabled ? "default" : "secondary"}>
-                      {endpoint.enabled
-                        ? t("tenancy.webhooks.status_enabled")
+        {endpointsQuery.isPending ? (
+          <Skeleton className="h-24 w-full" />
+        ) : endpoints.length === 0 ? (
+          <EmptyState
+            icon={Webhook}
+            data-testid="webhooks-empty"
+            title={t("tenancy.webhooks.empty_title")}
+            description={t("tenancy.webhooks.empty_body")}
+          />
+        ) : (
+          <ul className="border-t border-border">
+            {endpoints.map((endpoint) => (
+              <li
+                key={endpoint.id}
+                className="space-y-3 border-b border-border px-3 py-4"
+                data-testid={`webhook-row-${endpoint.id}`}
+              >
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <span className="break-all font-mono text-sm">
+                    {endpoint.url}
+                  </span>
+                  <StatusPill
+                    tone={
+                      endpoint.enabled
+                        ? "active"
                         : endpoint.disabled_at
-                          ? t("tenancy.webhooks.status_auto_disabled", {
-                              count: endpoint.consecutive_failures,
-                            })
-                          : t("tenancy.webhooks.status_disabled")}
+                          ? "danger"
+                          : "neutral"
+                    }
+                  >
+                    {endpoint.enabled
+                      ? t("tenancy.webhooks.status_enabled")
+                      : endpoint.disabled_at
+                        ? t("tenancy.webhooks.status_auto_disabled", {
+                            count: endpoint.consecutive_failures,
+                          })
+                        : t("tenancy.webhooks.status_disabled")}
+                  </StatusPill>
+                </div>
+                <div className="flex flex-wrap gap-1">
+                  {/* Event names are machine values, so they are mono. */}
+                  {endpoint.event_types.map((event) => (
+                    <Badge key={event} className="font-mono">
+                      {event}
                     </Badge>
-                  </div>
-                  <div className="flex flex-wrap gap-1">
-                    {endpoint.event_types.map((event) => (
-                      <Badge key={event} variant="secondary">
-                        {event}
-                      </Badge>
-                    ))}
-                  </div>
-                  {endpoint.secret_previous_expires_at ? (
-                    <p className="text-xs text-muted-foreground">
-                      {t("tenancy.webhooks.rotated_warning", {
-                        expires: formatDate(
-                          endpoint.secret_previous_expires_at,
-                          i18n.language,
-                        ),
-                      })}
-                    </p>
-                  ) : null}
-                  <div className="flex flex-wrap gap-2">
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      onClick={() => {
-                        setOpenLog(
-                          openLog === endpoint.id ? null : endpoint.id,
-                        );
-                      }}
-                      data-testid={`webhook-deliveries-${endpoint.id}`}
-                    >
-                      {t("tenancy.webhooks.deliveries")}
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      onClick={() => {
-                        void handleToggle(endpoint.id, !endpoint.enabled);
-                      }}
-                      data-testid={`webhook-toggle-${endpoint.id}`}
-                    >
-                      {endpoint.enabled
-                        ? t("tenancy.webhooks.disable")
-                        : t("tenancy.webhooks.enable")}
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      onClick={() => {
-                        void handleRotate(endpoint.id);
-                      }}
-                      data-testid={`webhook-rotate-${endpoint.id}`}
-                    >
-                      {t("tenancy.webhooks.rotate")}
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => {
-                        setDeleting(endpoint);
-                      }}
-                      data-testid={`webhook-delete-${endpoint.id}`}
-                    >
-                      {t("tenancy.webhooks.delete")}
-                    </Button>
-                  </div>
-                  {openLog === endpoint.id ? (
-                    <DeliveryLog endpoint={endpoint} />
-                  ) : null}
-                </li>
-              ))}
-            </ul>
-          )}
+                  ))}
+                </div>
+                {endpoint.secret_previous_expires_at ? (
+                  <p className="text-xs text-muted-foreground">
+                    {t("tenancy.webhooks.rotated_warning", {
+                      expires: formatDate(
+                        endpoint.secret_previous_expires_at,
+                        i18n.language,
+                      ),
+                    })}
+                  </p>
+                ) : null}
+                <div className="flex flex-wrap items-center gap-2">
+                  {/* Visible: it opens the delivery log in place. */}
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    aria-expanded={openLog === endpoint.id}
+                    onClick={() => {
+                      setOpenLog(openLog === endpoint.id ? null : endpoint.id);
+                    }}
+                    data-testid={`webhook-deliveries-${endpoint.id}`}
+                  >
+                    {t("tenancy.webhooks.deliveries")}
+                  </Button>
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <RowActionsButton
+                        aria-label={t("tenancy.webhooks.menu_label", {
+                          url: endpoint.url,
+                        })}
+                        data-testid={`webhook-actions-${endpoint.id}`}
+                      />
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="start">
+                      <DropdownMenuItem
+                        onSelect={() => {
+                          void handleToggle(endpoint.id, !endpoint.enabled);
+                        }}
+                        data-testid={`webhook-toggle-${endpoint.id}`}
+                      >
+                        {endpoint.enabled
+                          ? t("tenancy.webhooks.disable")
+                          : t("tenancy.webhooks.enable")}
+                      </DropdownMenuItem>
+                      <DropdownMenuItem
+                        onSelect={() => {
+                          void handleRotate(endpoint.id);
+                        }}
+                        data-testid={`webhook-rotate-${endpoint.id}`}
+                      >
+                        {t("tenancy.webhooks.rotate")}
+                      </DropdownMenuItem>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem
+                        className="text-destructive focus:text-destructive"
+                        onSelect={() => {
+                          setDeleting(endpoint);
+                        }}
+                        data-testid={`webhook-delete-${endpoint.id}`}
+                      >
+                        {t("tenancy.webhooks.delete")}
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                </div>
+                {openLog === endpoint.id ? (
+                  <DeliveryLog endpoint={endpoint} />
+                ) : null}
+              </li>
+            ))}
+          </ul>
+        )}
 
-          <p className="text-xs text-muted-foreground">
-            {t("tenancy.webhooks.limit_note", { limit: MAX_ENDPOINTS_PER_ORG })}
-          </p>
-        </CardContent>
-      </Card>
+        <p className="text-xs text-muted-foreground">
+          {t("tenancy.webhooks.limit_note", { limit: MAX_ENDPOINTS_PER_ORG })}
+        </p>
+      </div>
 
       <Dialog
         open={createOpen}
@@ -966,6 +996,6 @@ export function WebhooksPage() {
           }}
         />
       ) : null}
-    </div>
+    </Page>
   );
 }

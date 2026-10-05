@@ -142,7 +142,8 @@
     "error_revoke": "Couldn't revoke the key.",
     "error_no_scopes": "Choose at least one scope.",
     "empty_title": "No API keys yet",
-    "empty_body": "API keys let scripts and integrations call the API as your organization, with only the scopes you grant. Create one to get started — the key itself is shown once."
+    "empty_body": "API keys let scripts and integrations call the API as your organization, with only the scopes you grant. Create one to get started — the key itself is shown once.",
+    "menu_label": "Actions for {name}"
   },
   "webhooks": {
     "title": "Webhooks",
@@ -221,6 +222,7 @@
     "error_replay": "Couldn't replay the delivery.",
     "error_no_events": "Choose at least one event.",
     "empty_title": "No endpoints yet",
-    "empty_body": "Webhooks push events to a URL you control as they happen, so you don't have to poll for them. Add an endpoint and choose which events it should receive."
+    "empty_body": "Webhooks push events to a URL you control as they happen, so you don't have to poll for them. Add an endpoint and choose which events it should receive.",
+    "menu_label": "Actions for {url}"
   }
 }

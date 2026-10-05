@@ -20,15 +20,15 @@ import {
   AlertDescription,
   Badge,
   Button,
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
   Checkbox,
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle,
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
   EmptyState,
   Form,
   FormControl,
@@ -37,7 +37,11 @@ import {
   FormLabel,
   FormMessage,
   Input,
+  Page,
+  PageHeader,
+  RowActionsButton,
   Skeleton,
+  StatusPill,
   Table,
   TableBody,
   TableCell,
@@ -388,155 +392,165 @@ export function ApiKeysPage() {
 
   if (orgLoading || !org) {
     return (
-      <div className="max-w-4xl space-y-6 p-6">
-        <h1 className="text-xl font-semibold" data-testid="page-title">
-          {t("tenancy.api_keys.title")}
-        </h1>
+      <Page>
+        <PageHeader
+          title={t("tenancy.api_keys.title")}
+          description={t("tenancy.api_keys.description")}
+        />
         <Skeleton className="h-32 w-full" />
-      </div>
+      </Page>
     );
   }
 
   if (!canManage) {
     return (
-      <div className="max-w-4xl space-y-6 p-6" data-testid="api-keys-page">
-        <h1 className="text-xl font-semibold" data-testid="page-title">
-          {t("tenancy.api_keys.title")}
-        </h1>
+      <Page data-testid="api-keys-page">
+        <PageHeader
+          title={t("tenancy.api_keys.title")}
+          description={t("tenancy.api_keys.description")}
+        />
         <Alert>
           <AlertDescription data-testid="api-keys-permission-denied">
             {t("common.error.permission_denied")}
           </AlertDescription>
         </Alert>
-      </div>
+      </Page>
     );
   }
 
   const keys = keysQuery.data?.data ?? [];
 
   return (
-    <div className="max-w-4xl space-y-6 p-6" data-testid="api-keys-page">
-      <div className="flex items-center justify-between">
-        <h1 className="text-xl font-semibold" data-testid="page-title">
-          {t("tenancy.api_keys.title")}
-        </h1>
-        <Button
-          type="button"
-          disabled={keys.length >= MAX_KEYS_PER_ORG}
-          onClick={() => {
-            setCreateOpen(true);
-          }}
-          data-testid="api-keys-create-button"
-        >
-          {t("tenancy.api_keys.create")}
-        </Button>
-      </div>
+    <Page data-testid="api-keys-page">
+      <PageHeader
+        title={t("tenancy.api_keys.title")}
+        description={t("tenancy.api_keys.description")}
+        actions={
+          <Button
+            type="button"
+            disabled={keys.length >= MAX_KEYS_PER_ORG}
+            onClick={() => {
+              setCreateOpen(true);
+            }}
+            data-testid="api-keys-create-button"
+          >
+            {t("tenancy.api_keys.create")}
+          </Button>
+        }
+      />
 
-      <Card>
-        <CardHeader>
-          <CardDescription>{t("tenancy.api_keys.description")}</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          {actionError ? (
-            <Alert variant="destructive">
-              <AlertDescription>{actionError}</AlertDescription>
-            </Alert>
-          ) : null}
-          {keysQuery.isError ? (
-            <Alert variant="destructive">
-              <AlertDescription>
-                {t("tenancy.api_keys.error_load")}
-              </AlertDescription>
-            </Alert>
-          ) : null}
+      <div className="space-y-4">
+        {actionError ? (
+          <Alert variant="destructive">
+            <AlertDescription>{actionError}</AlertDescription>
+          </Alert>
+        ) : null}
+        {keysQuery.isError ? (
+          <Alert variant="destructive">
+            <AlertDescription>
+              {t("tenancy.api_keys.error_load")}
+            </AlertDescription>
+          </Alert>
+        ) : null}
 
-          {keysQuery.isPending ? (
-            <Skeleton className="h-24 w-full" />
-          ) : keys.length === 0 ? (
-            <EmptyState
-              icon={KeyRound}
-              data-testid="api-keys-empty"
-              title={t("tenancy.api_keys.empty_title")}
-              description={t("tenancy.api_keys.empty_body")}
-            />
-          ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>{t("tenancy.api_keys.table_name")}</TableHead>
-                  <TableHead>{t("tenancy.api_keys.table_prefix")}</TableHead>
-                  <TableHead>{t("tenancy.api_keys.table_scopes")}</TableHead>
-                  <TableHead>{t("tenancy.api_keys.table_last_used")}</TableHead>
-                  <TableHead>{t("tenancy.api_keys.table_expires")}</TableHead>
-                  <TableHead>{t("tenancy.api_keys.table_status")}</TableHead>
-                  <TableHead>{t("tenancy.api_keys.table_actions")}</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {keys.map((key) => {
-                  const status = statusOf(key);
-                  return (
-                    <TableRow
-                      key={key.id}
-                      data-testid={`api-key-row-${key.id}`}
-                    >
-                      <TableCell>{key.name}</TableCell>
-                      <TableCell className="font-mono text-xs">
-                        {key.prefix}
-                      </TableCell>
-                      <TableCell className="space-x-1">
+        {keysQuery.isPending ? (
+          <Skeleton className="h-24 w-full" />
+        ) : keys.length === 0 ? (
+          <EmptyState
+            icon={KeyRound}
+            data-testid="api-keys-empty"
+            title={t("tenancy.api_keys.empty_title")}
+            description={t("tenancy.api_keys.empty_body")}
+          />
+        ) : (
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>{t("tenancy.api_keys.table_name")}</TableHead>
+                <TableHead>{t("tenancy.api_keys.table_prefix")}</TableHead>
+                <TableHead>{t("tenancy.api_keys.table_scopes")}</TableHead>
+                <TableHead>{t("tenancy.api_keys.table_last_used")}</TableHead>
+                <TableHead>{t("tenancy.api_keys.table_expires")}</TableHead>
+                <TableHead>{t("tenancy.api_keys.table_status")}</TableHead>
+                <TableHead className="text-end">
+                  {t("tenancy.api_keys.table_actions")}
+                </TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {keys.map((key) => {
+                const status = statusOf(key);
+                return (
+                  <TableRow key={key.id} data-testid={`api-key-row-${key.id}`}>
+                    <TableCell>{key.name}</TableCell>
+                    <TableCell className="whitespace-nowrap font-mono text-xs">
+                      {key.prefix}
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex flex-wrap gap-1">
+                        {/* Scopes are machine values, so they are mono. */}
                         {key.scopes.map((scope) => (
-                          <Badge key={scope} variant="secondary">
+                          <Badge key={scope} className="font-mono">
                             {scope}
                           </Badge>
                         ))}
-                      </TableCell>
-                      <TableCell>
-                        {key.last_used_at
-                          ? formatDate(key.last_used_at, i18n.language)
-                          : t("tenancy.api_keys.not_yet")}
-                      </TableCell>
-                      <TableCell>
-                        {key.expires_at
-                          ? formatDate(key.expires_at, i18n.language)
-                          : t("tenancy.api_keys.never")}
-                      </TableCell>
-                      <TableCell>
-                        <Badge
-                          variant={
-                            status === "active" ? "default" : "secondary"
-                          }
-                        >
-                          {t(STATUS_LABEL_KEYS[status])}
-                        </Badge>
-                      </TableCell>
-                      <TableCell>
-                        {status === "revoked" ? null : (
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => {
-                              setRevoking(key);
-                            }}
-                            data-testid={`api-key-revoke-${key.id}`}
-                          >
-                            {t("tenancy.api_keys.revoke")}
-                          </Button>
-                        )}
-                      </TableCell>
-                    </TableRow>
-                  );
-                })}
-              </TableBody>
-            </Table>
-          )}
+                      </div>
+                    </TableCell>
+                    <TableCell className="whitespace-nowrap text-muted-foreground">
+                      {key.last_used_at
+                        ? formatDate(key.last_used_at, i18n.language)
+                        : t("tenancy.api_keys.not_yet")}
+                    </TableCell>
+                    <TableCell className="whitespace-nowrap text-muted-foreground">
+                      {key.expires_at
+                        ? formatDate(key.expires_at, i18n.language)
+                        : t("tenancy.api_keys.never")}
+                    </TableCell>
+                    <TableCell>
+                      <StatusPill
+                        tone={status === "active" ? "active" : "neutral"}
+                      >
+                        {t(STATUS_LABEL_KEYS[status])}
+                      </StatusPill>
+                    </TableCell>
+                    <TableCell className="text-end">
+                      {/* Revoke keeps its typed confirmation; the menu
+                            only replaces the button that opened it. */}
+                      {status === "revoked" ? null : (
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <RowActionsButton
+                              aria-label={t("tenancy.api_keys.menu_label", {
+                                name: key.name,
+                              })}
+                              data-testid={`api-key-actions-${key.id}`}
+                            />
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            <DropdownMenuItem
+                              className="text-destructive focus:text-destructive"
+                              onSelect={() => {
+                                setRevoking(key);
+                              }}
+                              data-testid={`api-key-revoke-${key.id}`}
+                            >
+                              {t("tenancy.api_keys.revoke")}
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      )}
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
+            </TableBody>
+          </Table>
+        )}
 
-          <p className="text-xs text-muted-foreground">
-            {t("tenancy.api_keys.limit_note", { limit: MAX_KEYS_PER_ORG })}
-          </p>
-        </CardContent>
-      </Card>
+        <p className="text-xs text-muted-foreground">
+          {t("tenancy.api_keys.limit_note", { limit: MAX_KEYS_PER_ORG })}
+        </p>
+      </div>
 
       <Dialog
         open={createOpen}
@@ -608,6 +622,6 @@ export function ApiKeysPage() {
           }}
         />
       ) : null}
-    </div>
+    </Page>
   );
 }

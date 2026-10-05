@@ -7,7 +7,7 @@ in a card.
 
 **Blocked by:** 07, 08.
 
-**Status:** ready-for-agent
+**Status:** done
 
 ## Read first
 
@@ -60,7 +60,12 @@ the maintenance screen and the not-found page. List any others in the ticket's N
 
 ## Acceptance
 
-- [ ] Files, API keys, Webhooks, Invoices, Reports use `PageHeader` and the shared list look.
-- [ ] `StatusPill` has a `danger` tone; statuses always carry a word.
-- [ ] Machine values in mono; nothing else.
-- [ ] No list wrapped in a card; test ids kept; web tests, lint, type-check pass.
+- [x] Files, API keys, Webhooks, Invoices, Reports use `PageHeader` and the shared list look.
+- [x] `StatusPill` has a `danger` tone; statuses always carry a word.
+- [x] Machine values in mono; nothing else.
+- [x] No list wrapped in a card; test ids kept; web tests, lint, type-check pass.
+
+## Notes
+
+Completed 2026-10-05; see `PROGRESS.md` for which actions moved into menus and which stayed visible, and why.
+No `DataListToolbar` was built: none of these lists has search today (logged with the members search in FOLLOW-UPS).

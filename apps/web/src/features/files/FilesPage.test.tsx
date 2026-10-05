@@ -16,6 +16,8 @@ import {
 import { server } from "../../test/server";
 
 const hooks = vi.hoisted(() => ({
+  // The row menu's dropdown reads the text direction to place itself.
+  useDirection: vi.fn(() => "ltr"),
   useOrg: vi.fn(),
   // Defaults to "yes" so every pre-existing test here keeps exercising the
   // owner's view of the page; the read-only cases below set it to false.
@@ -68,6 +70,16 @@ function renderPage() {
     <QueryClientProvider client={queryClient}>
       <FilesPage />
     </QueryClientProvider>,
+  );
+}
+
+/** Delete lives in the row's menu now (ticket 09): open it, choose Delete. */
+async function openDeleteFromMenu(): Promise<void> {
+  await userEvent.click(
+    await screen.findByRole("button", { name: /^Actions for/ }),
+  );
+  await userEvent.click(
+    await screen.findByRole("menuitem", { name: "Delete" }),
   );
 }
 
@@ -136,9 +148,7 @@ describe("FilesPage", () => {
     );
 
     renderPage();
-    await userEvent.click(
-      await screen.findByRole("button", { name: "Delete" }),
-    );
+    await openDeleteFromMenu();
 
     const dialog = await screen.findByTestId("confirm-dialog");
     expect(dialog).toHaveTextContent(file.filename);
@@ -158,9 +168,7 @@ describe("FilesPage", () => {
     );
 
     renderPage();
-    await userEvent.click(
-      await screen.findByRole("button", { name: "Delete" }),
-    );
+    await openDeleteFromMenu();
     await userEvent.click(await screen.findByTestId("confirm-dialog-cancel"));
 
     await waitFor(() => {
@@ -183,9 +191,7 @@ describe("FilesPage", () => {
     );
 
     renderPage();
-    await userEvent.click(
-      await screen.findByRole("button", { name: "Delete" }),
-    );
+    await openDeleteFromMenu();
     await userEvent.click(await screen.findByTestId("confirm-dialog-confirm"));
 
     await waitFor(() => {
@@ -239,7 +245,7 @@ describe("FilesPage", () => {
 
     expect(await screen.findByText(file.filename)).toBeInTheDocument();
     expect(
-      screen.queryByRole("button", { name: "Delete" }),
+      screen.queryByRole("button", { name: /^Actions for/ }),
     ).not.toBeInTheDocument();
     expect(screen.queryByText("Drop files here")).not.toBeInTheDocument();
     // Read access is real access: download stays.
@@ -399,7 +405,7 @@ describe("FilesPage", () => {
     const user = userEvent.setup();
 
     renderPage();
-    await user.click(await screen.findByRole("button", { name: "Delete" }));
+    await openDeleteFromMenu();
     await user.click(
       await screen.findByRole("button", { name: t("files.action.delete") }),
     );

@@ -22,15 +22,12 @@ import {
   AlertDescription,
   Badge,
   Button,
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
   Page,
   PageHeader,
   SettingsRow,
   SettingsSection,
   Skeleton,
+  StatusPill,
   Table,
   TableBody,
   TableCell,
@@ -38,6 +35,7 @@ import {
   TableHeader,
   TableRow,
 } from "@forge/ui";
+import type { StatusTone } from "@forge/ui";
 import { formatDate } from "@forge/utils";
 
 import { getErrorMessage } from "../auth/getErrorMessage";
@@ -92,6 +90,32 @@ function formatMicros(
 // "immutability" check (it conservatively treats values live across a
 // suspend point as frozen). Isolating the assignment in its own
 // non-component, non-hook function sidesteps that analysis entirely.
+/* Stripe's invoice statuses (https://docs.stripe.com/invoicing/overview).
+   Anything else is shown as Stripe sent it rather than dropped. */
+const INVOICE_STATUSES = [
+  "draft",
+  "open",
+  "paid",
+  "uncollectible",
+  "void",
+] as const;
+
+function invoiceStatusTone(status: string): StatusTone {
+  if (status === "paid") return "active";
+  if (status === "open" || status === "draft") return "pending";
+  if (status === "uncollectible") return "danger";
+  return "neutral";
+}
+
+function invoiceStatusLabel(
+  status: string,
+  t: (key: string) => string,
+): string {
+  return (INVOICE_STATUSES as readonly string[]).includes(status)
+    ? t(`billing.invoices.status.${status}`)
+    : status;
+}
+
 function redirectTo(url: string): void {
   window.location.href = url;
 }
@@ -467,11 +491,8 @@ export function BillingSettingsPage({
         </SettingsSection>
       ) : null}
 
-      <Card>
-        <CardHeader>
-          <CardDescription>{t("billing.invoices.title")}</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
+      <SettingsSection title={t("billing.invoices.title")}>
+        <div className="space-y-4">
           {invoicesQuery.isLoading ? (
             <Skeleton className="h-16 w-full" />
           ) : invoicesQuery.isError ? (
@@ -502,7 +523,7 @@ export function BillingSettingsPage({
               <TableBody>
                 {invoices.map((invoice) => (
                   <TableRow key={invoice.id}>
-                    <TableCell>
+                    <TableCell className="whitespace-nowrap">
                       {formatDate(invoice.created_at, i18n.language)}
                     </TableCell>
                     <TableCell>
@@ -514,7 +535,9 @@ export function BillingSettingsPage({
                     </TableCell>
                     <TableCell>
                       {invoice.status ? (
-                        <Badge variant="secondary">{invoice.status}</Badge>
+                        <StatusPill tone={invoiceStatusTone(invoice.status)}>
+                          {invoiceStatusLabel(invoice.status, t)}
+                        </StatusPill>
                       ) : null}
                     </TableCell>
                     <TableCell className="text-end">
@@ -523,7 +546,7 @@ export function BillingSettingsPage({
                           href={invoice.invoice_pdf}
                           target="_blank"
                           rel="noreferrer"
-                          className="text-sm underline underline-offset-4"
+                          className="text-sm text-primary underline decoration-primary/35 underline-offset-[3px] hover:decoration-current"
                         >
                           {t("billing.invoices.download_pdf")}
                         </a>
@@ -547,8 +570,8 @@ export function BillingSettingsPage({
               {t("billing.invoices.load_more")}
             </Button>
           ) : null}
-        </CardContent>
-      </Card>
+        </div>
+      </SettingsSection>
     </Page>
   );
 }

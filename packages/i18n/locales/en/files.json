@@ -8,7 +8,8 @@
     "error_download": "Could not start the download.",
     "error_delete": "Could not delete the file.",
     "empty_body_read_only": "No one in your organization has uploaded a file yet. Ask an admin if you need to add one.",
-    "scan_taking_long": "Some files are taking longer than usual to scan. Refresh the page to check again."
+    "scan_taking_long": "Some files are taking longer than usual to scan. Refresh the page to check again.",
+    "description": "Files shared within your organization, scanned before anyone can open them."
   },
   "uploader": {
     "drop_here": "Drop files here",
@@ -47,7 +48,8 @@
     "download_blocked_scanning": "This file is still being scanned for viruses.",
     "download_blocked_pending": "This upload has not finished yet.",
     "download_blocked_infected": "Malware was found in this file, so it cannot be downloaded.",
-    "download_blocked_failed": "This file could not be scanned, so it cannot be downloaded."
+    "download_blocked_failed": "This file could not be scanned, so it cannot be downloaded.",
+    "menu_label": "Actions for {filename}"
   },
   "picker": {
     "upload_button": "Upload",
