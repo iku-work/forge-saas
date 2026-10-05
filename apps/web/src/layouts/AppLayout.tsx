@@ -11,10 +11,17 @@ import {
   Settings,
   ShieldAlert,
   Menu,
+  PanelLeft,
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
-import { useAuth, useMaintenance, useModules, useOrg } from "@forge/hooks";
+import {
+  useAuth,
+  useDirection,
+  useMaintenance,
+  useModules,
+  useOrg,
+} from "@forge/hooks";
 import type { ActiveModules } from "@forge/hooks";
 import {
   AppShell,
@@ -40,6 +47,11 @@ import {
   SheetContent,
   SheetTitle,
   SheetTrigger,
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+  ShellLabel,
   ShellNavGroup,
   ShellNavItem,
   ShellPanel,
@@ -61,6 +73,7 @@ import { SupportLink } from "../features/support/SupportLink";
 import { stripLocale } from "../lib/locale-url";
 import { useVisibleNavItems, type NavItem } from "../lib/navigation";
 import { useAvatarSrc } from "../lib/useAvatarSrc";
+import { useSidebarCollapsed } from "../lib/useSidebarCollapsed";
 import { useRouteLocale } from "../lib/useRouteLocale";
 
 // Route paths that sit one level under "Settings" in the header breadcrumb
@@ -97,7 +110,36 @@ function navTestSlug(path: string): string {
     : path.replace(/^\//, "").replace(/\//g, "-");
 }
 
-function NavLink({ item }: { item: NavItem }) {
+/**
+ * In the collapsed rail a row is an icon alone, so its name appears as a
+ * tooltip on hover and on keyboard focus. Expanded (and in the drawer, which
+ * never collapses) the row shows its label and needs no tooltip.
+ */
+function RailTooltip({
+  label,
+  enabled,
+  children,
+}: {
+  label: string;
+  enabled: boolean;
+  children: ReactNode;
+}) {
+  const direction = useDirection();
+  if (!enabled) {
+    return children;
+  }
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>{children}</TooltipTrigger>
+      {/* Radix sides are physical; the rail is on the start edge. */}
+      <TooltipContent side={direction === "rtl" ? "left" : "right"}>
+        {label}
+      </TooltipContent>
+    </Tooltip>
+  );
+}
+
+function NavLink({ item, collapsed }: { item: NavItem; collapsed: boolean }) {
   const { t } = useTranslation();
   const locale = useRouteLocale();
   // No permission/flag check here any more: useVisibleNavItems() (lib/
@@ -107,17 +149,19 @@ function NavLink({ item }: { item: NavItem }) {
   // the active link, so the look and what is announced cannot disagree.
   const Icon = item.icon;
   return (
-    <ShellNavItem asChild>
-      <Link
-        to={item.to}
-        params={{ locale }}
-        activeOptions={{ exact: item.path === "/" }}
-        data-testid={`nav-${navTestSlug(item.path)}`}
-      >
-        <Icon aria-hidden="true" />
-        {t(item.labelKey)}
-      </Link>
-    </ShellNavItem>
+    <RailTooltip label={t(item.labelKey)} enabled={collapsed}>
+      <ShellNavItem asChild>
+        <Link
+          to={item.to}
+          params={{ locale }}
+          activeOptions={{ exact: item.path === "/" }}
+          data-testid={`nav-${navTestSlug(item.path)}`}
+        >
+          <Icon aria-hidden="true" />
+          <ShellLabel>{t(item.labelKey)}</ShellLabel>
+        </Link>
+      </ShellNavItem>
+    </RailTooltip>
   );
 }
 
@@ -148,13 +192,13 @@ function OrgSwitcher() {
             disabled={isLoading}
           >
             <Monogram name={org?.name} />
-            <span className="flex-1 truncate">
+            <ShellLabel>
               {isLoading
                 ? t("common.org_switcher.loading")
                 : (org?.name ?? t("common.org_switcher.select"))}
-            </span>
+            </ShellLabel>
             <ChevronsUpDown
-              className="text-muted-foreground"
+              className="text-muted-foreground group-data-[collapsed]/shell:hidden"
               aria-hidden="true"
             />
           </ShellNavItem>
@@ -238,7 +282,7 @@ function UserMenu() {
             {avatarSrc ? <AvatarImage src={avatarSrc} alt="" /> : null}
             <AvatarFallback>{initialsFor(user.email)}</AvatarFallback>
           </Avatar>
-          <span className="min-w-0 flex-1 leading-tight">
+          <span className="min-w-0 flex-1 leading-tight group-data-[collapsed]/shell:sr-only">
             <span className="block truncate">
               {user.full_name ?? user.email}
             </span>
@@ -351,11 +395,14 @@ function SidebarNav({
   inSettings,
   onNavigate,
   onOpenPalette,
+  collapsed = false,
 }: {
   modules: ActiveModules;
   inSettings: boolean;
   onNavigate?: () => void;
   onOpenPalette: () => void;
+  /** Rail mode: tooltips on. The drawer copy never passes it. */
+  collapsed?: boolean;
 }) {
   const { t } = useTranslation();
   const locale = useRouteLocale();
@@ -379,27 +426,30 @@ function SidebarNav({
             data-testid="sidebar-wordmark"
           >
             <Monogram name={t("common.app.name")} />
-            {t("common.app.name")}
+            <ShellLabel>{t("common.app.name")}</ShellLabel>
           </Link>
         </ShellNavItem>
       )}
       {/* F-005 discoverability: a palette nobody knows about is a palette
           nobody uses, so the hotkey is shown rather than described. Also a
           real button -- ⌘K is unreachable on a touch device. */}
-      <ShellSearchButton
-        data-testid="palette-trigger"
-        aria-keyshortcuts="Meta+K Control+K"
-        label={t("common.palette.trigger")}
-        shortcut={`${renderKey("mod", isAppleDevice())}K`}
-        onClick={onOpenPalette}
-      />
+      <RailTooltip label={t("common.palette.trigger")} enabled={collapsed}>
+        <ShellSearchButton
+          data-testid="palette-trigger"
+          aria-keyshortcuts="Meta+K Control+K"
+          label={t("common.palette.trigger")}
+          shortcut={`${renderKey("mod", isAppleDevice())}K`}
+          onClick={onOpenPalette}
+        />
+      </RailTooltip>
     </>
   );
 
   const footer = (
     <>
       <SupportLink />
-      <div className="flex items-center gap-1">
+      {/* Side by side when expanded; stacked in the rail. */}
+      <div className="flex items-center gap-1 group-data-[collapsed]/shell:flex-col">
         <UserMenu />
         {modules.notifications ? (
           <NotificationBell />
@@ -442,28 +492,35 @@ function SidebarNav({
       >
         {inSettings ? (
           <>
-            <ShellNavItem asChild>
-              <Link
-                to="/$locale"
-                params={{ locale }}
-                data-testid="nav-back-to-app"
-              >
-                <ArrowLeft aria-hidden="true" />
-                {t("common.nav.back_to_app")}
-              </Link>
-            </ShellNavItem>
+            <RailTooltip
+              label={t("common.nav.back_to_app")}
+              enabled={collapsed}
+            >
+              <ShellNavItem asChild>
+                <Link
+                  to="/$locale"
+                  params={{ locale }}
+                  data-testid="nav-back-to-app"
+                >
+                  <ArrowLeft aria-hidden="true" />
+                  <ShellLabel>{t("common.nav.back_to_app")}</ShellLabel>
+                </Link>
+              </ShellNavItem>
+            </RailTooltip>
             {settingsGroups.map(({ group, label, items }) =>
               items.length > 0 ? (
                 <ShellNavGroup key={group} label={label}>
                   {items.map((item) => (
-                    <NavLink key={item.to} item={item} />
+                    <NavLink key={item.to} item={item} collapsed={collapsed} />
                   ))}
                 </ShellNavGroup>
               ) : null,
             )}
           </>
         ) : (
-          nav.primary.map((item) => <NavLink key={item.to} item={item} />)
+          nav.primary.map((item) => (
+            <NavLink key={item.to} item={item} collapsed={collapsed} />
+          ))
         )}
       </nav>
     </ShellSidebar>
@@ -502,7 +559,10 @@ export function AppLayout({ children }: { children: ReactNode }) {
     }
   }, [activePath, nav]);
 
+  const sidebar = useSidebarCollapsed();
+
   useGlobalShortcuts({
+    onToggleSidebar: sidebar.toggle,
     onCommandPalette: () => {
       setPaletteOpen((wasOpen) => !wasOpen);
     },
@@ -545,6 +605,12 @@ export function AppLayout({ children }: { children: ReactNode }) {
 
   const pageTitle = pageTitleFor(activePath, t);
 
+  const toggleLabel = t(
+    sidebar.collapsed
+      ? "common.nav.expand_sidebar"
+      : "common.nav.collapse_sidebar",
+  );
+
   const openPalette = (): void => {
     setNavOpen(false);
     setPaletteOpen(true);
@@ -565,68 +631,88 @@ export function AppLayout({ children }: { children: ReactNode }) {
           enough, otherwise a drawer behind the panel's menu button. Both
           render the same <SidebarNav>, so the phone never gets a nav that
           quietly drifts from the desktop one. */}
-      <AppShell
-        sidebar={
-          <SidebarNav
-            modules={modules}
-            inSettings={inSettings}
-            onOpenPalette={openPalette}
-          />
-        }
-      >
-        <ShellPanel
-          top={
-            <>
-              <Sheet open={navOpen} onOpenChange={setNavOpen}>
-                <SheetTrigger
-                  data-testid="nav-drawer-trigger"
-                  className="-ms-2 rounded-md p-2 text-muted-foreground hover:bg-surface-sunken hover:text-foreground @3xl/shell:hidden"
-                  aria-label={t("common.nav.open_menu")}
-                >
-                  <Menu className="size-5" aria-hidden="true" />
-                </SheetTrigger>
-                <SheetContent
-                  side="start"
-                  className="p-0"
-                  aria-describedby={undefined}
-                >
-                  {/* Radix requires a title on every dialog for the accessible
+      {/* delayDuration 0: in the rail a tooltip is the label, not a hint. */}
+      <TooltipProvider delayDuration={0}>
+        <AppShell
+          collapsed={sidebar.collapsed}
+          sidebar={
+            <SidebarNav
+              modules={modules}
+              inSettings={inSettings}
+              onOpenPalette={openPalette}
+              collapsed={sidebar.collapsed}
+            />
+          }
+        >
+          <ShellPanel
+            top={
+              <>
+                <Sheet open={navOpen} onOpenChange={setNavOpen}>
+                  <SheetTrigger
+                    data-testid="nav-drawer-trigger"
+                    className="-ms-2 rounded-md p-2 text-muted-foreground hover:bg-surface-sunken hover:text-foreground @3xl/shell:hidden"
+                    aria-label={t("common.nav.open_menu")}
+                  >
+                    <Menu className="size-5" aria-hidden="true" />
+                  </SheetTrigger>
+                  <SheetContent
+                    side="start"
+                    className="p-0"
+                    aria-describedby={undefined}
+                  >
+                    {/* Radix requires a title on every dialog for the accessible
                       name; the drawer shows its own header, so this one is
                       visually hidden rather than duplicated on screen. */}
-                  <SheetTitle className="sr-only">
-                    {t("common.nav.menu")}
-                  </SheetTitle>
-                  <SidebarNav
-                    modules={modules}
-                    inSettings={inSettings}
-                    onOpenPalette={openPalette}
-                    onNavigate={() => {
-                      setNavOpen(false);
-                    }}
-                  />
-                </SheetContent>
-              </Sheet>
-              {/* Not a heading -- the breadcrumb duplicates the page's own <h1>
+                    <SheetTitle className="sr-only">
+                      {t("common.nav.menu")}
+                    </SheetTitle>
+                    <SidebarNav
+                      modules={modules}
+                      inSettings={inSettings}
+                      onOpenPalette={openPalette}
+                      onNavigate={() => {
+                        setNavOpen(false);
+                      }}
+                    />
+                  </SheetContent>
+                </Sheet>
+                {/* Not a heading -- the breadcrumb duplicates the page's own <h1>
                   (e.g. DashboardPage's "Dashboard"); a second <h1> with the same
                   text would be both invalid document structure and ambiguous
                   for screen-reader/role-based queries. */}
-              <p className="flex-1 truncate">{pageTitle}</p>
-            </>
-          }
-        >
-          {/* tabIndex={-1} so the skip link actually moves focus here.
+                {/* Only where the sidebar is a column; on narrow screens the
+                  drawer trigger above takes its place. */}
+                <RailTooltip label={toggleLabel} enabled>
+                  <button
+                    type="button"
+                    data-testid="sidebar-toggle"
+                    aria-expanded={!sidebar.collapsed}
+                    aria-keyshortcuts="["
+                    aria-label={toggleLabel}
+                    onClick={sidebar.toggle}
+                    className="-ms-2 hidden rounded-md p-2 text-muted-foreground hover:bg-surface-sunken hover:text-foreground @3xl/shell:inline-flex"
+                  >
+                    <PanelLeft className="size-4" aria-hidden="true" />
+                  </button>
+                </RailTooltip>
+                <p className="flex-1 truncate">{pageTitle}</p>
+              </>
+            }
+          >
+            {/* tabIndex={-1} so the skip link actually moves focus here.
               Without it the fragment jump scrolls the viewport but leaves
               focus on <body>, and the next Tab starts from the top of the
               document again -- the exact trap the link exists to avoid. */}
-          <main
-            id={MAIN_CONTENT_ID}
-            tabIndex={-1}
-            className="flex-1 focus:outline-none"
-          >
-            {children}
-          </main>
-        </ShellPanel>
-      </AppShell>
+            <main
+              id={MAIN_CONTENT_ID}
+              tabIndex={-1}
+              className="flex-1 focus:outline-none"
+            >
+              {children}
+            </main>
+          </ShellPanel>
+        </AppShell>
+      </TooltipProvider>
       <CommandPalette
         open={paletteOpen}
         onOpenChange={setPaletteOpen}

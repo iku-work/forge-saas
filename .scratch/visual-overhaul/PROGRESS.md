@@ -23,7 +23,7 @@ Legend: ✅ done · 🟡 partial · ⬜ not started
 | 02 | Self-hosted font | ✅ | Done 2026-10-05 (Claude). See notes below. |
 | 03 | Glossary copy sweep | ✅ | Done 2026-10-05 (Claude). See notes. |
 | 04 | App shell | ✅ | Done 2026-10-05 (Claude). Not yet looked at in a running app. See notes. |
-| 05 | Collapsible sidebar | ⬜ | Unblocked. |
+| 05 | Collapsible sidebar | ✅ | Done 2026-10-05 (Claude). Not yet looked at in a running app. See notes. |
 | 06 | Page header + settings rows (Profile) | ⬜ | Unblocked. |
 | 07 | Other settings pages | ⬜ | Blocked by 06. |
 | 08 | Data list + Members | ⬜ | Blocked by 06. |
@@ -34,7 +34,7 @@ Legend: ✅ done · 🟡 partial · ⬜ not started
 | 13 | Marketing hero | ⬜ | Blocked by 02, 04, 10. |
 | 14 | Integrate and verify | ⬜ | Blocked by all. |
 
-Startable now: **05**, **06**, **11**.
+Startable now: **06**, **11**.
 
 ## Ticket 01, step by step
 
@@ -72,6 +72,26 @@ Visual screenshot suite is expected to fail until ticket 14.
 - Windows-only flake found: back-to-back Astro builds in the marketing suite intermittently fail
   renaming `.astro/content-assets.mjs` (EPERM). It appeared with the webfonts; a control run without
   them did not hit it. `tests/helpers.ts` retries a build (max 3) only on that exact error on Windows.
+
+## Ticket 05 notes
+
+- `AppShell` takes `collapsed`; it sets `data-collapsed` on the root, which is also the
+  Tailwind group `shell`. Every shell piece styles itself with `group-data-[collapsed]/shell:`
+  (written out in full -- Tailwind cannot see classes assembled from a prefix). The phone drawer
+  is portaled outside the group, so it never collapses.
+- New `ShellLabel` (text that becomes sr-only in the rail) and `ShellExpandedOnly`. Group
+  labels turn into a hairline; the footer stacks.
+- `useSidebarCollapsed` (apps/web/src/lib): localStorage key `forge.sidebar`, read in the
+  state initialiser (no flash), every access in try/catch. Per device, no backend.
+- `[` is a registry shortcut in the "view" category (so the `?` sheet lists it); the hook skips
+  it inside text fields like the other bare keys. Toggle button in the panel's top row, hidden
+  where the drawer is used, with `aria-expanded` and `aria-keyshortcuts`.
+- Rail tooltips via a `RailTooltip` helper in AppLayout (Radix sides are physical, so the side
+  flips under rtl); the app now has a `TooltipProvider` around the shell.
+- Tests: `AppLayoutSidebarCollapse.test.tsx` (button, `[`, ignored in a text field, persisted,
+  names kept when collapsed, listed in the cheat sheet). 379 web tests pass.
+- **Not checked in a running app.** Look at: collapse/expand animation, tooltips on hover and on
+  Tab, rail in `ar` (should be on the right with tooltips to its left), dark mode.
 
 ## Ticket 03 notes
 

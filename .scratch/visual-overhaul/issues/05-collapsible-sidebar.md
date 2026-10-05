@@ -7,7 +7,7 @@ screen readers.
 
 **Blocked by:** 04.
 
-**Status:** ready-for-agent
+**Status:** done
 
 ## Read first
 
@@ -86,8 +86,13 @@ the rail (focus rings, tooltips on focus), `ar` locale (rail on the right), `?` 
 
 ## Acceptance
 
-- [ ] Rail collapses/expands via button and `[`; `[` ignored in text fields.
-- [ ] State persists per device in localStorage, read safely.
-- [ ] Rail items have tooltips and accessible names.
-- [ ] Shortcut listed in the `?` cheat sheet.
-- [ ] New test file passes; web tests, lint, type-check pass.
+- [x] Rail collapses/expands via button and `[`; `[` ignored in text fields.
+- [x] State persists per device in localStorage, read safely.
+- [x] Rail items have tooltips and accessible names.
+- [x] Shortcut listed in the `?` cheat sheet.
+- [x] New test file passes; web tests, lint, type-check pass.
+
+## Notes
+
+Completed 2026-10-05; see `PROGRESS.md`. Collapse uses a data attribute and a Tailwind group rather
+than a React context, so no extra prop threading was needed in `@forge/ui`. Not yet viewed in a running app.

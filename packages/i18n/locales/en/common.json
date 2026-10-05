@@ -39,7 +39,9 @@
     "menu": "Menu",
     "skip_to_content": "Skip to content",
     "back_to_app": "Back to app",
-    "group_account": "Your account"
+    "group_account": "Your account",
+    "collapse_sidebar": "Collapse sidebar",
+    "expand_sidebar": "Expand sidebar"
   },
   "support": {
     "contact": "Contact support",
@@ -360,6 +362,7 @@
     "close": "Close a dialog or menu",
     "goto_dashboard": "Go to dashboard",
     "goto_files": "Go to files",
-    "goto_settings": "Go to settings"
+    "goto_settings": "Go to settings",
+    "toggle_sidebar": "Collapse or expand the sidebar"
   }
 }

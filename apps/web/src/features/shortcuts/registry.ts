@@ -90,6 +90,12 @@ export const CHORD_SHORTCUTS: readonly Shortcut[] = [
     labelKey: "common.shortcuts.close",
     category: "actions",
   },
+  {
+    id: "toggle-sidebar",
+    keys: ["["],
+    labelKey: "common.shortcuts.toggle_sidebar",
+    category: "view",
+  },
 ];
 
 export const ALL_SHORTCUTS: readonly Shortcut[] = [

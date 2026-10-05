@@ -16,20 +16,39 @@ import { cn } from "@forge/utils";
  * breakpoint would lay it out for the page rather than for its frame. At
  * 48rem of shell width and up the sidebar is a column; below that it is
  * hidden and the panel spans the width (the app shows its own drawer there).
+ *
+ * Collapsing to an icon rail is a data attribute on the root plus the named
+ * group `shell`: every piece below styles itself with
+ * `group-data-[collapsed]/shell:`, so collapse needs no React context, and a
+ * copy of the sidebar rendered elsewhere (the app's drawer, in a portal) sits
+ * outside the group and stays expanded. The classes are written out in full,
+ * never assembled from a prefix: Tailwind only generates what it can read.
  */
 
 interface AppShellProps extends HTMLAttributes<HTMLDivElement> {
   sidebar: ReactNode;
+  /** Show the sidebar as a narrow icon rail. */
+  collapsed?: boolean;
 }
 
-function AppShell({ sidebar, children, className, ...props }: AppShellProps) {
+function AppShell({
+  sidebar,
+  collapsed = false,
+  children,
+  className,
+  ...props
+}: AppShellProps) {
   return (
     <div
-      className={cn("@container/shell flex flex-1 flex-col", className)}
+      data-collapsed={collapsed ? "" : undefined}
+      className={cn(
+        "group/shell @container/shell flex flex-1 flex-col",
+        className,
+      )}
       {...props}
     >
       <div className="flex flex-1">
-        <div className="sticky top-0 hidden h-dvh w-[15.5rem] shrink-0 @3xl/shell:block">
+        <div className="sticky top-0 hidden h-dvh w-[15.5rem] shrink-0 transition-[width] duration-[var(--duration-base)] ease-[var(--ease-out-soft)] @3xl/shell:block group-data-[collapsed]/shell:w-16">
           {sidebar}
         </div>
         {/* min-w-0: a flex item will not shrink below its content otherwise,
@@ -57,7 +76,10 @@ function ShellSidebar({
 }: ShellSidebarProps) {
   return (
     <div
-      className={cn("flex h-full flex-col gap-1 px-2.5 py-3", className)}
+      className={cn(
+        "flex h-full flex-col gap-1 px-2.5 py-3 group-data-[collapsed]/shell:items-center group-data-[collapsed]/shell:px-3",
+        className,
+      )}
       {...props}
     >
       {header ? (
@@ -93,12 +115,19 @@ function ShellNavGroup({
       {...props}
     >
       {label ? (
-        <p
-          id={labelId}
-          className="px-2.5 pb-1 pt-3 text-xs font-medium text-muted-foreground"
-        >
-          {label}
-        </p>
+        <>
+          <p
+            id={labelId}
+            className="px-2.5 pb-1 pt-3 text-xs font-medium text-muted-foreground group-data-[collapsed]/shell:sr-only"
+          >
+            {label}
+          </p>
+          {/* In the rail the label becomes a hairline between groups. */}
+          <span
+            aria-hidden="true"
+            className="mx-auto my-3 hidden h-px w-6 bg-border-strong group-data-[collapsed]/shell:block"
+          />
+        </>
       ) : null}
       {children}
     </div>
@@ -106,7 +135,37 @@ function ShellNavGroup({
 }
 
 const shellRowClass =
-  "flex min-h-8 w-full items-center gap-2.5 rounded-md px-2.5 text-start text-sm font-medium text-foreground-secondary transition-colors hover:bg-foreground/5 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring [&_svg]:size-4 [&_svg]:shrink-0";
+  "flex min-h-8 w-full items-center gap-2.5 rounded-md px-2.5 text-start text-sm font-medium text-foreground-secondary transition-colors hover:bg-foreground/5 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring [&_svg]:size-4 [&_svg]:shrink-0 group-data-[collapsed]/shell:size-10 group-data-[collapsed]/shell:min-h-10 group-data-[collapsed]/shell:justify-center group-data-[collapsed]/shell:gap-0 group-data-[collapsed]/shell:px-0";
+
+/**
+ * Text that belongs to the expanded sidebar. In the rail it stays available
+ * to assistive technology (sr-only, not display:none), so a collapsed row
+ * keeps its accessible name.
+ */
+function ShellLabel({ className, ...props }: HTMLAttributes<HTMLSpanElement>) {
+  return (
+    <span
+      className={cn(
+        "min-w-0 flex-1 truncate group-data-[collapsed]/shell:sr-only",
+        className,
+      )}
+      {...props}
+    />
+  );
+}
+
+/** Decoration shown only while expanded (a chevron, a shortcut hint). */
+function ShellExpandedOnly({
+  className,
+  ...props
+}: HTMLAttributes<HTMLSpanElement>) {
+  return (
+    <span
+      className={cn("contents group-data-[collapsed]/shell:hidden", className)}
+      {...props}
+    />
+  );
+}
 
 interface ShellNavItemProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   /** Render the child (e.g. a router link) instead of a <button>. */
@@ -152,11 +211,11 @@ const ShellSearchButton = forwardRef<HTMLButtonElement, ShellSearchButtonProps>(
       {...props}
     >
       <Search aria-hidden="true" />
-      <span className="flex-1 truncate">{label}</span>
+      <ShellLabel>{label}</ShellLabel>
       {shortcut ? (
         <kbd
           aria-hidden="true"
-          className="rounded-sm px-1.5 py-0.5 font-sans text-xs font-medium text-muted-foreground shadow-[0_0_0_1px_var(--color-border-strong)]"
+          className="rounded-sm px-1.5 py-0.5 font-sans text-xs font-medium text-muted-foreground shadow-[0_0_0_1px_var(--color-border-strong)] group-data-[collapsed]/shell:hidden"
         >
           {shortcut}
         </kbd>
@@ -195,6 +254,8 @@ export {
   ShellSidebar,
   ShellNavGroup,
   ShellNavItem,
+  ShellLabel,
+  ShellExpandedOnly,
   ShellSearchButton,
   ShellPanel,
 };

@@ -130,3 +130,30 @@ export const Settings_: Story = {
     </AppShell>
   ),
 };
+
+export const Collapsed: Story = {
+  name: "Collapsed to a rail",
+  render: () => (
+    <AppShell
+      collapsed
+      className="min-h-dvh bg-background"
+      sidebar={
+        <ShellSidebar header={<Header />} footer={<Footer />}>
+          <ShellNavGroup>
+            <ShellNavItem aria-current="page" aria-label="Dashboard">
+              <LayoutDashboard />
+            </ShellNavItem>
+            <ShellNavItem aria-label="Files">
+              <FolderOpen />
+            </ShellNavItem>
+            <ShellNavItem aria-label="Settings">
+              <Settings />
+            </ShellNavItem>
+          </ShellNavGroup>
+        </ShellSidebar>
+      }
+    >
+      <Panel crumb="Dashboard" title="Welcome to Acme" />
+    </AppShell>
+  ),
+};
