@@ -59,7 +59,7 @@ describe("dashboard empty state with file storage off (F-010)", () => {
       within(empty).queryByRole("link", { name: /upload your first file/i }),
     ).not.toBeInTheDocument();
     expect(
-      within(empty).getByRole("link", { name: /invite a teammate/i }),
+      within(empty).getByRole("link", { name: /invite a member/i }),
     ).toBeInTheDocument();
   });
 });

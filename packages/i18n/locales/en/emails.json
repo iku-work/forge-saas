@@ -6,7 +6,7 @@
     "invitation": "You've been invited to join an organization",
     "welcome": "Welcome to ForgeSaaS",
     "download_link": "Your data export is ready",
-    "member_invited": "New team member",
+    "member_invited": "New member",
     "payment_failed": "Your payment didn't go through",
     "subscription_expiring": "Your subscription is expiring soon",
     "subscription_suspended": "Your subscription has been suspended",
@@ -77,10 +77,10 @@
     "expires": "This link expires in 24 hours."
   },
   "member_invited": {
-    "title": "New team member",
+    "title": "New member",
     "greeting": "Hi",
     "body": "{member_name} has joined {org_name} as {role}.",
-    "button": "View team"
+    "button": "View members"
   },
   "payment_failed": {
     "title": "Payment failed",
@@ -103,7 +103,7 @@
   "trial_ending": {
     "title": "Your trial is ending soon",
     "greeting": "Hi",
-    "body": "{org_name}'s trial ends on {trial_end_date}. Upgrade now to keep your team's access.",
+    "body": "{org_name}'s trial ends on {trial_end_date}. Upgrade now so your members keep their access.",
     "button": "Upgrade now"
   },
   "trial_expired": {

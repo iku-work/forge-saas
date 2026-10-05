@@ -86,7 +86,7 @@ describe("the pricing page, built from committed data", () => {
 
   it("lists a plan's features from its own data, in a fixed order", () => {
     const html = readPath("/en/pricing/");
-    const seats = html.indexOf("25 team members");
+    const seats = html.indexOf("25 members");
     const storage = html.indexOf("50 GB of storage");
     const calls = html.indexOf("100,000 API calls per month");
 

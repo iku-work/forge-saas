@@ -1,7 +1,7 @@
 {
   "org_create": {
     "title": "Create your organization",
-    "description": "You need an organization before you can invite teammates or manage billing.",
+    "description": "You need an organization before you can invite members or manage billing.",
     "name_label": "Organization name",
     "submit": "Create organization",
     "submit_pending": "Creating…",
@@ -55,7 +55,7 @@
     "error_load": "Unable to load pending invitations."
   },
   "invite": {
-    "title": "Invite a teammate",
+    "title": "Invite a member",
     "email_label": "Email",
     "role_label": "Role",
     "submit": "Send invite",

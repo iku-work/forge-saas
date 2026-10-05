@@ -1,7 +1,7 @@
 {
   "org_create": {
     "title": "Organisation erstellen",
-    "description": "Sie benötigen eine Organisation, bevor Sie Teammitglieder einladen oder die Abrechnung verwalten können.",
+    "description": "Sie benötigen eine Organisation, bevor Sie Mitglieder einladen oder die Abrechnung verwalten können.",
     "name_label": "Name der Organisation",
     "submit": "Organisation erstellen",
     "submit_pending": "Wird erstellt…",
@@ -55,7 +55,7 @@
     "error_load": "Ausstehende Einladungen konnten nicht geladen werden."
   },
   "invite": {
-    "title": "Teammitglied einladen",
+    "title": "Mitglied einladen",
     "email_label": "E-Mail",
     "role_label": "Rolle",
     "submit": "Einladung senden",

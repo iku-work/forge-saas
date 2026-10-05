@@ -1,7 +1,7 @@
 {
   "org_create": {
     "title": "Crea tu organización",
-    "description": "Necesitas una organización antes de poder invitar compañeros de equipo o administrar la facturación.",
+    "description": "Necesitas una organización antes de poder invitar miembros o administrar la facturación.",
     "name_label": "Nombre de la organización",
     "submit": "Crear organización",
     "submit_pending": "Creando…",
@@ -55,7 +55,7 @@
     "error_load": "No se pudieron cargar las invitaciones pendientes."
   },
   "invite": {
-    "title": "Invitar a un compañero de equipo",
+    "title": "Invitar a un miembro",
     "email_label": "Correo electrónico",
     "role_label": "Rol",
     "submit": "Enviar invitación",

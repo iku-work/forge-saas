@@ -6,7 +6,7 @@ product and marketing copy.
 
 **Blocked by:** None (can start immediately).
 
-**Status:** ready-for-agent
+**Status:** done
 
 ## Read first
 
@@ -64,11 +64,16 @@ Update those assertions to the new text.
 
 ## Acceptance
 
-- [ ] No "workspace" or "team(s)" in `packages/i18n/locales/en/`.
-- [ ] Other locales either updated or the key removed (falls back to English).
-- [ ] i18n lint, web tests, marketing build and tests pass.
+- [x] No "workspace" or "team(s)" in `packages/i18n/locales/en/`.
+- [x] Other locales either updated or the key removed (falls back to English).
+- [x] i18n lint, web tests, marketing build and tests pass.
 
 ## Don't
 
 - Don't rename translation keys (only values), except where a test proves a key unused.
 - Don't touch backend code identifiers (`org_id`, `tenancy`): this is copy only.
+
+## Notes
+
+Completed 2026-10-05; see `PROGRESS.md`. All locales were updated rather than falling back to
+English. Three extra keys used "teammate", which the `team` search in step 1 does not match.

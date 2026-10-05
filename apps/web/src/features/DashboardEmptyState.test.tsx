@@ -42,7 +42,7 @@ describe("dashboard empty state (F-010)", () => {
     renderApp({ initialPath: "/", user });
 
     const empty = await screen.findByTestId("dashboard-empty");
-    expect(empty).toHaveTextContent(/your workspace is ready/i);
+    expect(empty).toHaveTextContent(/your organization is ready/i);
     expect(empty).toHaveTextContent(/because you've just started/i);
     expect(
       within(empty).getByRole("link", { name: /upload your first file/i }),

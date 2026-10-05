@@ -13,13 +13,13 @@
   },
   "hero": {
     "title": "Lanza el producto, no la fontanería",
-    "subtitle": "Las cuentas, los equipos, la facturación y una consola de administración ya están construidas y probadas. Empieza donde está el trabajo interesante.",
+    "subtitle": "Las cuentas, las organizaciones, la facturación y una consola de administración ya están construidas y probadas. Empieza donde está el trabajo interesante.",
     "cta_primary": "Empezar",
     "cta_secondary": "Iniciar sesión"
   },
   "highlights": {
     "heading": "Con lo que empiezas",
-    "accounts_title": "Cuentas y equipos",
+    "accounts_title": "Cuentas y organizaciones",
     "accounts_body": "Registro, sesiones, autenticación en dos pasos, invitaciones y roles por organización, aislados por inquilino desde la primera consulta.",
     "billing_title": "Suscripciones que cuadran",
     "billing_body": "Planes, pruebas, mejoras de plan y reclamación de pagos, con un manejo de webhooks que sigue siendo correcto cuando el mismo evento llega dos veces.",
@@ -57,7 +57,7 @@
     "empty": "Todavía no hay planes configurados.",
     "committed_notice": "Estos precios se publicaron junto con el sitio y cambian en el siguiente despliegue, no en la siguiente actualización de la base de datos.",
     "feature_labels": {
-      "seats": "{count, number} miembros del equipo",
+      "seats": "{count, number} miembros",
       "storage_gb": "{count, number} GB de almacenamiento",
       "api_calls": "{count, number} llamadas a la API al mes"
     },

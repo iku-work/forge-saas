@@ -21,7 +21,7 @@ Legend: ✅ done · 🟡 partial · ⬜ not started
 |---|---|---|---|
 | 01 | Tokens and base components | ✅ | Done 2026-10-05. Details below. |
 | 02 | Self-hosted font | ✅ | Done 2026-10-05 (Claude). See notes below. |
-| 03 | Glossary copy sweep | ⬜ | |
+| 03 | Glossary copy sweep | ✅ | Done 2026-10-05 (Claude). See notes. |
 | 04 | App shell | ✅ | Done 2026-10-05 (Claude). Not yet looked at in a running app. See notes. |
 | 05 | Collapsible sidebar | ⬜ | Unblocked. |
 | 06 | Page header + settings rows (Profile) | ⬜ | Unblocked. |
@@ -34,7 +34,7 @@ Legend: ✅ done · 🟡 partial · ⬜ not started
 | 13 | Marketing hero | ⬜ | Blocked by 02, 04, 10. |
 | 14 | Integrate and verify | ⬜ | Blocked by all. |
 
-Startable now: **03**, **05**, **06**, **11**.
+Startable now: **05**, **06**, **11**.
 
 ## Ticket 01, step by step
 
@@ -72,6 +72,19 @@ Visual screenshot suite is expected to fail until ticket 14.
 - Windows-only flake found: back-to-back Astro builds in the marketing suite intermittently fail
   renaming `.astro/content-assets.mjs` (EPERM). It appeared with the webfonts; a control run without
   them did not hit it. `tests/helpers.ts` retries a build (max 3) only on that exact error on Windows.
+
+## Ticket 03 notes
+
+- 11 keys reworded in all six locales (with each locale's existing word for Organization and
+  Member): the dashboard welcome ("workspace"), the member-invited email (title, subject, button),
+  the trial-ending email ("your team's access" → "so your members keep their access"), the
+  marketing hero subtitle, the accounts highlight, the seats label, and three "teammate" keys
+  (dashboard invite action, invite dialog title, create-organization description), which the
+  ticket's `team` search had missed.
+- Left alone on purpose: the blog author "The ForgeSaaS team" (the company), "a team writes late"
+  (a development team), "pnpm workspace" (the tool), developer comments, and `teams_*` key names.
+- Five tests asserted the old copy and were updated. The backend reads the same locale files; the
+  Docker image bakes a copy at build time, so emails change on the next image build.
 
 ## Ticket 04 notes
 

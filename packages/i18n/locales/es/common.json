@@ -63,10 +63,10 @@
   },
   "dashboard": {
     "empty": "Aún no hay nada aquí.",
-    "empty_title": "Bienvenido: tu espacio está listo",
+    "empty_title": "Bienvenido: tu organización está lista",
     "empty_body": "Aquí no hay nada todavía porque acabas de empezar. Elige uno de los pasos de abajo o usa el botón de búsqueda de la cabecera (o pulsa Ctrl/Cmd + K) para ir a cualquier parte.",
     "empty_action_files": "Sube tu primer archivo",
-    "empty_action_invite": "Invita a un compañero",
+    "empty_action_invite": "Invita a un miembro",
     "empty_action_profile": "Completa tu perfil"
   },
   "not_found": {

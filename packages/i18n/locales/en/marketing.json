@@ -13,13 +13,13 @@
   },
   "hero": {
     "title": "Ship the product, not the plumbing",
-    "subtitle": "Accounts, teams, billing and an admin console are already built and already tested. Start where the interesting work is.",
+    "subtitle": "Accounts, organizations, billing and an admin console are already built and already tested. Start where the interesting work is.",
     "cta_primary": "Get started",
     "cta_secondary": "Sign in"
   },
   "highlights": {
     "heading": "What you start with",
-    "accounts_title": "Accounts and teams",
+    "accounts_title": "Accounts and organizations",
     "accounts_body": "Sign-up, sessions, two-factor authentication, invitations and per-organization roles, isolated by tenant from the first query.",
     "billing_title": "Subscriptions that reconcile",
     "billing_body": "Plans, trials, upgrades and dunning, with webhook handling that stays correct when the same event arrives twice.",
@@ -57,7 +57,7 @@
     "empty": "No plans are configured yet.",
     "committed_notice": "These prices were published with the site and change on the next deploy, not the next database update.",
     "feature_labels": {
-      "seats": "{count, number} team members",
+      "seats": "{count, number} members",
       "storage_gb": "{count, number} GB of storage",
       "api_calls": "{count, number} API calls per month"
     },

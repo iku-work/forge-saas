@@ -13,13 +13,13 @@
   },
   "hero": {
     "title": "Bauen Sie das Produkt, nicht das Fundament",
-    "subtitle": "Konten, Teams, Abrechnung und eine Admin-Konsole sind bereits gebaut und getestet. Fangen Sie dort an, wo die interessante Arbeit beginnt.",
+    "subtitle": "Konten, Organisationen, Abrechnung und eine Admin-Konsole sind bereits gebaut und getestet. Fangen Sie dort an, wo die interessante Arbeit beginnt.",
     "cta_primary": "Loslegen",
     "cta_secondary": "Anmelden"
   },
   "highlights": {
     "heading": "Womit Sie starten",
-    "accounts_title": "Konten und Teams",
+    "accounts_title": "Konten und Organisationen",
     "accounts_body": "Registrierung, Sitzungen, Zwei-Faktor-Authentifizierung, Einladungen und Rollen pro Organisation – ab der ersten Abfrage nach Mandanten getrennt.",
     "billing_title": "Abonnements, die aufgehen",
     "billing_body": "Tarife, Testphasen, Upgrades und Mahnläufe – samt Webhook-Verarbeitung, die auch beim doppelten Eintreffen desselben Ereignisses korrekt bleibt.",
@@ -57,7 +57,7 @@
     "empty": "Es sind noch keine Tarife konfiguriert.",
     "committed_notice": "Diese Preise wurden mit der Website veröffentlicht und ändern sich beim nächsten Deployment, nicht beim nächsten Datenbank-Update.",
     "feature_labels": {
-      "seats": "{count, number} Teammitglieder",
+      "seats": "{count, number} Mitglieder",
       "storage_gb": "{count, number} GB Speicher",
       "api_calls": "{count, number} API-Aufrufe pro Monat"
     },
