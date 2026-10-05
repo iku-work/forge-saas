@@ -29,13 +29,13 @@ Legend: ✅ done · 🟡 partial · ⬜ not started
 | 07 | Other settings pages | ✅ | Done 2026-10-05 (Claude). Not yet looked at in a running app. See notes. |
 | 08 | Data list + Members | ✅ | Done 2026-10-05 (Claude), with gaps logged in FOLLOW-UPS. Not yet looked at in a running app. |
 | 09 | Other lists | ✅ | Done 2026-10-05 (Claude). Not yet looked at in a running app. |
-| 10 | Getting started checklist | ⬜ | Unblocked. |
+| 10 | Getting started checklist | ✅ | Done 2026-10-05 (Claude). Not yet looked at in a running app. See notes. |
 | 11 | Auth pages | ⬜ | Unblocked. |
 | 12 | Admin console | ⬜ | Unblocked. |
-| 13 | Marketing hero | ⬜ | Blocked by 02, 04, 10. |
+| 13 | Marketing hero | ⬜ | Unblocked. |
 | 14 | Integrate and verify | ⬜ | Blocked by all. |
 
-Startable now: **10**, **11**, **12**.
+Startable now: **11**, **12**, **13**.
 
 ## Ticket 01, step by step
 
@@ -73,6 +73,27 @@ Visual screenshot suite is expected to fail until ticket 14.
 - Windows-only flake found: back-to-back Astro builds in the marketing suite intermittently fail
   renaming `.astro/content-assets.mjs` (EPERM). It appeared with the webfonts; a control run without
   them did not hit it. `tests/helpers.ts` retries a build (max 3) only on that exact error on Windows.
+
+## Ticket 10 notes
+
+- New in `@forge/ui`: `Checklist` (title, progress text, a `role="progressbar"` bar, `<ol>`)
+  and `ChecklistStep` (tick, title, hint, "Done" or the action). Story with three states.
+- The dashboard (`$locale._app.index.tsx`) shows "Welcome to {org}" and the checklist, a
+  skeleton while loading, and only "Your organization is set up." once every step is done.
+  The hook lives in `features/dashboard/useGettingStarted.ts` (its own file for react-refresh),
+  the component in `GettingStarted.tsx`.
+- "Done" comes from the queries the real pages already run, with the same query keys, so a step
+  ticks as soon as its page changes the cache. No backend change, no dismissed state.
+  Profile: a name, plus a photo when file storage is on. Files: one file. Invite: a second
+  member *or* a pending invitation. Plan: subscription `active` (a trial is not done).
+  Invite needs `members:manage`, plan needs billing on and `billing:manage`.
+- The first open step's button is primary, the rest outline.
+- **Tests:** four files, not two. `@forge/hooks` caches the signed-in user and their role per
+  module as well as the config, so each user/role/config is its own file: `DashboardChecklist`
+  (new owner), `...Member`, `...AllDone`, `...NoFiles`. Eight shell tests that waited for a
+  "Dashboard" heading now wait for "Welcome to Acme Inc". 387 web tests pass.
+- Old `dashboard.empty*` keys removed from all six locales; the new keys are English-only
+  elsewhere for now (FOLLOW-UPS, translations).
 
 ## Ticket 09 notes
 

@@ -39,7 +39,7 @@ describe("AppLayout (owner, one org)", () => {
     renderApp({ initialPath: "/", user });
 
     expect(
-      await screen.findByRole("heading", { name: "Dashboard" }),
+      await screen.findByRole("heading", { name: "Welcome to Acme Inc" }),
     ).toBeInTheDocument();
     expect(screen.getByText("Acme Inc")).toBeInTheDocument();
     expect(screen.getByTestId("sidebar-primary-nav")).toBeInTheDocument();

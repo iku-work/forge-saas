@@ -1,66 +1,55 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
-import { LayoutDashboard } from "lucide-react";
+import { createFileRoute } from "@tanstack/react-router";
 import { useTranslation } from "react-i18next";
 
-import { useModules } from "@forge/hooks";
-import { Button, EmptyState } from "@forge/ui";
+import { useOrg } from "@forge/hooks";
+import { Page, PageHeader } from "@forge/ui";
 
-import { useRouteLocale } from "../lib/useRouteLocale";
+import { GettingStarted } from "../features/dashboard/GettingStarted";
+import { useGettingStarted } from "../features/dashboard/useGettingStarted";
+import { isAppleDevice, renderKey } from "../features/shortcuts/registry";
 
 export const Route = createFileRoute("/$locale/_app/")({
   component: DashboardPage,
 });
 
 /**
- * The dashboard is the first authenticated screen a new account sees, which
- * makes its empty state the single highest-leverage one in the product
- * (F-010, and §1.5's halo effect). It used to read "Nothing here yet." --
- * true, and of no use to anyone.
- *
- * The primary action points at whichever surface the product actually has:
- * uploading a file if file storage is on, inviting a teammate otherwise.
- * Offering a link to a module that has been turned off would be worse than
- * offering nothing.
+ * The first authenticated screen a new account sees, which makes it the
+ * single highest-leverage empty state in the product (F-010, §1.5's halo
+ * effect). It shows a Getting started checklist built from what the
+ * organization has actually done, and goes quiet once everything is done.
  */
 function DashboardPage() {
   const { t } = useTranslation();
-  const locale = useRouteLocale();
-  const modules = useModules();
+  const { org } = useOrg();
+  const gettingStarted = useGettingStarted();
+  const allDone =
+    !gettingStarted.isLoading &&
+    gettingStarted.steps.every((step) => step.done);
 
   return (
-    <div className="p-6">
-      <h1 className="text-2xl font-semibold" data-testid="page-title">
-        {t("common.nav.dashboard")}
-      </h1>
-      <EmptyState
-        className="py-16"
-        icon={LayoutDashboard}
-        data-testid="dashboard-empty"
-        title={t("common.dashboard.empty_title")}
-        description={t("common.dashboard.empty_body")}
-        action={
-          modules.fileStorage ? (
-            <Button asChild>
-              <Link to="/$locale/files" params={{ locale }}>
-                {t("common.dashboard.empty_action_files")}
-              </Link>
-            </Button>
-          ) : (
-            <Button asChild>
-              <Link to="/$locale/settings/members" params={{ locale }}>
-                {t("common.dashboard.empty_action_invite")}
-              </Link>
-            </Button>
-          )
+    <Page>
+      <PageHeader
+        title={
+          org
+            ? t("common.dashboard.welcome_title", { org: org.name })
+            : t("common.nav.dashboard")
         }
-        secondaryAction={
-          <Button asChild variant="outline">
-            <Link to="/$locale/settings/profile" params={{ locale }}>
-              {t("common.dashboard.empty_action_profile")}
-            </Link>
-          </Button>
+        description={
+          allDone
+            ? t("common.dashboard.ready_body")
+            : t("common.dashboard.welcome_body")
         }
       />
-    </div>
+      <GettingStarted
+        state={gettingStarted}
+        footer={
+          <p className="mt-7 text-[0.8125rem] text-muted-foreground">
+            {t("common.dashboard.shortcut_note", {
+              shortcut: `${renderKey("mod", isAppleDevice())}K`,
+            })}
+          </p>
+        }
+      />
+    </Page>
   );
 }

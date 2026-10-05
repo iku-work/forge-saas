@@ -8,7 +8,7 @@ checklist is gone.
 
 **Blocked by:** 06.
 
-**Status:** ready-for-agent
+**Status:** done
 
 ## Read first
 
@@ -84,12 +84,18 @@ pnpm --filter web type-check && pnpm --filter web lint && pnpm --filter web test
 
 ## Acceptance
 
-- [ ] `Checklist`/`ChecklistStep` in `@forge/ui` with a story.
-- [ ] Dashboard shows the checklist with real "done" signals and module/permission gating.
-- [ ] Loading shows a skeleton; all-done hides the checklist.
-- [ ] Tests per module configuration pass; lint and type-check clean.
+- [x] `Checklist`/`ChecklistStep` in `@forge/ui` with a story.
+- [x] Dashboard shows the checklist with real "done" signals and module/permission gating.
+- [x] Loading shows a skeleton; all-done hides the checklist.
+- [x] Tests per module configuration pass; lint and type-check clean.
 
 ## Don't
 
 - Don't add a backend field or endpoint; everything comes from existing queries.
 - Don't store "dismissed" state.
+
+## Notes
+
+Completed 2026-10-05; see `PROGRESS.md`. The tests are four files rather than two: the
+signed-in user and role are cached per module too, so a member and an all-done user each need
+their own file.

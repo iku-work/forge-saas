@@ -66,12 +66,26 @@
     "select_hint": "Sets this as your app language"
   },
   "dashboard": {
-    "empty": "Nothing here yet.",
-    "empty_title": "Welcome — your organization is ready",
-    "empty_body": "There's nothing here yet because you've just started. Pick one of the steps below, or use the search button in the header (or press Ctrl/Cmd + K) to jump anywhere in the app.",
-    "empty_action_files": "Upload your first file",
-    "empty_action_invite": "Invite a member",
-    "empty_action_profile": "Finish your profile"
+    "welcome_title": "Welcome to {org}",
+    "welcome_body": "A few things to finish before your organization is ready.",
+    "ready_body": "Your organization is set up.",
+    "checklist_title": "Get started",
+    "progress": "{done} of {total} done",
+    "step_done": "Done",
+    "step_profile_title": "Complete your profile",
+    "step_profile_hint": "Add your name and a photo so members recognise you.",
+    "step_profile_hint_no_photo": "Add your name so members recognise you.",
+    "step_profile_action": "Edit profile",
+    "step_files_title": "Upload your first file",
+    "step_files_hint": "Files are private to your organization and scanned before anyone can open them.",
+    "step_files_action": "Upload file",
+    "step_invite_title": "Invite a member",
+    "step_invite_hint": "Members get their own sign-in and a role you choose.",
+    "step_invite_action": "Invite member",
+    "step_plan_title": "Choose a plan",
+    "step_plan_hint": "Pick the plan that fits your organization.",
+    "step_plan_action": "See plans",
+    "shortcut_note": "Press {shortcut} to jump to any page or action."
   },
   "not_found": {
     "title": "Page not found",

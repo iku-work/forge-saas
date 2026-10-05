@@ -41,9 +41,9 @@ something; move an entry to the bottom section when it is resolved.
   is no other "Leave organization" path; add one deliberately (e.g. Organization settings) if
   members should be able to leave.
 
-- **Translations for new keys.** Tickets 04–09 added English keys (sidebar groups, "Back to
+- **Translations for new keys.** Tickets 04–10 added English keys (sidebar groups, "Back to
   app", collapse/expand, section titles and hints, page descriptions, row-menu labels, member
-  and invoice status words). de, es, fr, fi and ar
+  and invoice status words, the dashboard welcome and checklist). de, es, fr, fi and ar
   fall back to English until translated via the translator workflow
   (`docs/runbooks/translations.md`). Ticket 03's copy changes *were* translated.
 - **Notifications Save is always enabled.** (ticket 07) Unlike other sections, on purpose:
@@ -55,12 +55,18 @@ something; move an entry to the bottom section when it is resolved.
   auth layout when that lands.
 - **Invoice statuses outside Stripe's five.** (ticket 09) draft/open/paid/uncollectible/void
   are translated and toned; anything else shows Stripe's raw word with a neutral pill.
+- **Dashboard after setup is empty.** (ticket 10) Once every checklist step is done the dashboard
+  shows only its header and "Your organization is set up." By design for now; real dashboard
+  content (recent activity, usage) is product work.
+- **"Choose a plan" stays open during a trial.** (ticket 10) Done means `status === "active"`.
+  If a product has a free plan that is also "active", it ticks immediately; if trials should
+  count, change the rule in `useGettingStarted.ts`.
 - **"Save" vs "Save changes".** (ticket 06) Buttons kept "Save" so existing translations stay
   valid. Decide one wording and apply it everywhere at once.
 
 ## Verification still owed
 
-- **Look at tickets 04–09 in a running app.** None of the shell, rail, or settings pages has been
+- **Look at tickets 04–10 in a running app.** None of the shell, rail, or settings pages has been
   seen in a browser yet: login needs the backend (Docker Desktop was stopped). Check desktop,
   < ~860px wide (drawer), `ar`, dark mode, the rail's tooltips and animation.
 - **Lighthouse on marketing.** (ticket 02) Fails locally on Windows (chrome-launcher EPERM); CI

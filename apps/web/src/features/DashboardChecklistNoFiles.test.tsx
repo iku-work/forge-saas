@@ -18,11 +18,11 @@ import { server } from "../test/server";
 // first /config fetch for the lifetime of the module, and vitest isolates
 // modules per *file* -- so a `server.use` override inside the other file
 // would be ignored and this would silently assert against the default
-// configuration. Same reason GlobalBanner's three shapes are three files.
+// configuration.
 const API = getApiBaseUrl();
 const user = makeUser(1);
 
-describe("dashboard empty state with file storage off (F-010)", () => {
+describe("dashboard checklist with file storage off (ticket 10)", () => {
   beforeEach(() => {
     server.use(
       http.post(`${API}/api/v1/auth/refresh`, () =>
@@ -48,18 +48,29 @@ describe("dashboard empty state with file storage off (F-010)", () => {
     );
   });
 
-  it("offers a reachable action rather than a link into a disabled module", async () => {
-    // With file storage off, pointing at /files would send the user to a
-    // route the shell does not render -- the worst possible first action on
+  it("never sends anyone to a module that is off", async () => {
+    // With file storage off, a step pointing at /files would send the user to
+    // a route the shell does not render -- the worst possible first action on
     // the first screen of a new account.
     renderApp({ initialPath: "/", user });
 
-    const empty = await screen.findByTestId("dashboard-empty");
+    const list = await screen.findByTestId("getting-started");
     expect(
-      within(empty).queryByRole("link", { name: /upload your first file/i }),
+      within(list).queryByText("Upload your first file"),
     ).not.toBeInTheDocument();
+    expect(within(list).getByText("Invite a member")).toBeInTheDocument();
+  });
+
+  it("counts a profile with a name as complete, since there is no photo to add", async () => {
+    renderApp({ initialPath: "/", user });
+
+    const list = await screen.findByTestId("getting-started");
+    const profile = within(list)
+      .getByText("Complete your profile")
+      .closest("li");
+    expect(profile).not.toBeNull();
     expect(
-      within(empty).getByRole("link", { name: /invite a member/i }),
+      within(profile as HTMLElement).getByText("Done"),
     ).toBeInTheDocument();
   });
 });

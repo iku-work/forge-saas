@@ -53,14 +53,6 @@
   "locale_switcher": {
     "label": "Kieli"
   },
-  "dashboard": {
-    "empty": "Ei sisältöä vielä.",
-    "empty_title": "Tervetuloa — organisaatiosi on valmis",
-    "empty_body": "Täällä ei ole vielä mitään, koska olet juuri aloittanut. Valitse jokin alla olevista vaiheista tai käytä yläpalkin hakua (tai paina Ctrl/Cmd + K) siirtyäksesi minne tahansa.",
-    "empty_action_files": "Lataa ensimmäinen tiedostosi",
-    "empty_action_invite": "Kutsu jäsen",
-    "empty_action_profile": "Viimeistele profiilisi"
-  },
   "not_found": {
     "title": "Sivua ei löytynyt",
     "back": "Takaisin etusivulle"

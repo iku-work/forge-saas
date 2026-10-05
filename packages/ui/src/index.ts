@@ -6,6 +6,7 @@ export * from "./components/badge";
 export * from "./components/button";
 export * from "./components/card";
 export * from "./components/checkbox";
+export * from "./components/checklist";
 export * from "./components/command";
 export * from "./components/confirm-dialog";
 export * from "./components/data-list";
