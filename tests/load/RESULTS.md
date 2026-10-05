@@ -227,3 +227,7 @@ instead of per-PR.
 | 2026-10-04 | e8ffd61 | browse | - | - | PASS |
 | 2026-10-04 | e8ffd61 | presign | - | - | PASS |
 | 2026-10-04 | e8ffd61 | mixed | - | - | FAIL |
+| 2026-10-05 | d7c8f44 | login-burst | - | - | FAIL |
+| 2026-10-05 | d7c8f44 | browse | - | - | PASS |
+| 2026-10-05 | d7c8f44 | presign | - | - | PASS |
+| 2026-10-05 | d7c8f44 | mixed | - | - | FAIL |
