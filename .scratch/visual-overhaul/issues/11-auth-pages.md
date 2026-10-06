@@ -8,7 +8,7 @@ then alternatives, then the link to the other flow.
 
 **Blocked by:** 01.
 
-**Status:** ready-for-agent
+**Status:** done
 
 ## Read first
 
@@ -58,7 +58,12 @@ form fits), and a short window (form taller than the screen still scrolls to its
 
 ## Acceptance
 
-- [ ] No card on any auth page; layout matches the design.
-- [ ] OAuth/SSO/magic-link options still appear only when enabled.
-- [ ] All auth tests and `a11y.test.tsx` pass; test ids unchanged.
-- [ ] Lint and type-check clean.
+- [x] No card on any auth page; layout matches the design.
+- [x] OAuth/SSO/magic-link options still appear only when enabled.
+- [x] All auth tests and `a11y.test.tsx` pass; test ids unchanged.
+- [x] Lint and type-check clean.
+
+## Notes
+
+Completed 2026-10-06; see `PROGRESS.md`. Renamed to `AuthLayout` with no alias. The magic
+link is now an alternative under "or" rather than a footer link.

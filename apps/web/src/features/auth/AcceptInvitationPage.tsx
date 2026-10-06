@@ -12,7 +12,7 @@ import { Alert, AlertDescription, Button, Skeleton } from "@forge/ui";
 
 import { useRouteLocale } from "../../lib/useRouteLocale";
 
-import { AuthCard } from "./AuthCard";
+import { AuthLayout } from "./AuthLayout";
 import { getErrorMessage } from "./getErrorMessage";
 
 interface AcceptInvitationPageProps {
@@ -75,11 +75,11 @@ export function AcceptInvitationPage({ token }: AcceptInvitationPageProps) {
 
   if (previewError) {
     return (
-      <AuthCard title={t("tenancy.invitation_accept.unavailable_title")}>
+      <AuthLayout title={t("tenancy.invitation_accept.unavailable_title")}>
         <Alert variant="destructive">
           <AlertDescription>{previewError}</AlertDescription>
         </Alert>
-        <p className="text-center text-sm text-muted-foreground">
+        <p className="text-sm text-foreground-secondary">
           <Link
             to="/$locale/login"
             params={{ locale }}
@@ -88,21 +88,21 @@ export function AcceptInvitationPage({ token }: AcceptInvitationPageProps) {
             {t("tenancy.invitation_accept.back_to_login")}
           </Link>
         </p>
-      </AuthCard>
+      </AuthLayout>
     );
   }
 
   if (!preview || authLoading) {
     return (
-      <AuthCard title={t("tenancy.invitation_accept.loading_title")}>
+      <AuthLayout title={t("tenancy.invitation_accept.loading_title")}>
         <Skeleton className="h-4 w-full" />
         <Skeleton className="h-4 w-3/4" />
-      </AuthCard>
+      </AuthLayout>
     );
   }
 
   return (
-    <AuthCard
+    <AuthLayout
       title={t("tenancy.invitation_accept.title")}
       description={t("tenancy.invitation_accept.join_description", {
         org_name: preview.org_name,
@@ -117,6 +117,7 @@ export function AcceptInvitationPage({ token }: AcceptInvitationPageProps) {
 
       {user ? (
         <Button
+          size="lg"
           className="w-full"
           onClick={() => {
             void handleAccept();
@@ -130,12 +131,12 @@ export function AcceptInvitationPage({ token }: AcceptInvitationPageProps) {
         </Button>
       ) : (
         <div className="space-y-2">
-          <p className="text-center text-sm text-muted-foreground">
+          <p className="text-sm text-foreground-secondary">
             {t("tenancy.invitation_accept.not_logged_in", {
               email: preview.email,
             })}
           </p>
-          <Button asChild className="w-full">
+          <Button asChild size="lg" className="w-full">
             <Link
               to="/$locale/login"
               params={{ locale }}
@@ -144,7 +145,7 @@ export function AcceptInvitationPage({ token }: AcceptInvitationPageProps) {
               {t("tenancy.invitation_accept.login")}
             </Link>
           </Button>
-          <Button asChild variant="outline" className="w-full">
+          <Button asChild variant="outline" size="lg" className="w-full">
             <Link
               to="/$locale/register"
               params={{ locale }}
@@ -155,6 +156,6 @@ export function AcceptInvitationPage({ token }: AcceptInvitationPageProps) {
           </Button>
         </div>
       )}
-    </AuthCard>
+    </AuthLayout>
   );
 }

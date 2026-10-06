@@ -43,16 +43,15 @@ something; move an entry to the bottom section when it is resolved.
 
 - **Translations for new keys.** Tickets 04–10 added English keys (sidebar groups, "Back to
   app", collapse/expand, section titles and hints, page descriptions, row-menu labels, member
-  and invoice status words, the dashboard welcome and checklist). de, es, fr, fi and ar
+  and invoice status words, the dashboard welcome and checklist, the auth pages' Terms/Privacy). de, es, fr, fi and ar
   fall back to English until translated via the translator workflow
   (`docs/runbooks/translations.md`). Ticket 03's copy changes *were* translated.
 - **Notifications Save is always enabled.** (ticket 07) Unlike other sections, on purpose:
   saving persists the shown defaults and heals legacy rows. If that healing moves to the
   backend (normalise on read), the page could adopt "Save only after a change".
-- **Create-your-first-organization screen is still a card.** (found in ticket 09) The screen a
-  signed-in user sees with no organization (`CreateFirstOrgPrompt` in `AppLayout.tsx`) has
-  its own hand-written `<h1>` and a Card. No ticket covers it; give it ticket 11's card-less
-  auth layout when that lands.
+- **Create-organization button is h-9 on the first-organization screen.** (ticket 11)
+  `CreateOrgForm` is shared with the switcher's dialog, so its button kept the default size
+  while the auth pages' buttons are h-10. Give the form a size prop if the 4px matters.
 - **Invoice statuses outside Stripe's five.** (ticket 09) draft/open/paid/uncollectible/void
   are translated and toned; anything else shows Stripe's raw word with a neutral pill.
 - **Dashboard after setup is empty.** (ticket 10) Once every checklist step is done the dashboard
@@ -91,4 +90,4 @@ something; move an entry to the bottom section when it is resolved.
 
 ## Resolved
 
-(nothing yet)
+- **Create-your-first-organization screen was still a card.** Uses `AuthLayout` since ticket 11.

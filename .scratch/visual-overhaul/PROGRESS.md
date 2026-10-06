@@ -30,12 +30,12 @@ Legend: ✅ done · 🟡 partial · ⬜ not started
 | 08 | Data list + Members | ✅ | Done 2026-10-05 (Claude), with gaps logged in FOLLOW-UPS. Not yet looked at in a running app. |
 | 09 | Other lists | ✅ | Done 2026-10-05 (Claude). Not yet looked at in a running app. |
 | 10 | Getting started checklist | ✅ | Done 2026-10-05 (Claude). Not yet looked at in a running app. See notes. |
-| 11 | Auth pages | ⬜ | Unblocked. |
+| 11 | Auth pages | ✅ | Done 2026-10-06 (Claude). Seen in a browser (login, register, `ar`, dark, 375px, short window). See notes. |
 | 12 | Admin console | ⬜ | Unblocked. |
 | 13 | Marketing hero | ⬜ | Unblocked. |
 | 14 | Integrate and verify | ⬜ | Blocked by all. |
 
-Startable now: **11**, **12**, **13**.
+Startable now: **12**, **13**.
 
 ## Ticket 01, step by step
 
@@ -73,6 +73,26 @@ Visual screenshot suite is expected to fail until ticket 14.
 - Windows-only flake found: back-to-back Astro builds in the marketing suite intermittently fail
   renaming `.astro/content-assets.mjs` (EPERM). It appeared with the webfonts; a control run without
   them did not hit it. `tests/helpers.ts` retries a build (max 3) only on that exact error on Windows.
+
+## Ticket 11 notes
+
+- `AuthCard` is now `AuthLayout` (`features/auth/AuthLayout.tsx`; renamed, every import
+  updated, no alias). Same props. Brand row (monogram + `common.app.name`), condensed title,
+  description, content, the switch-flow link, and Terms/Privacy at the page bottom when the
+  marketing module gives a URL (new keys `auth.legal.terms/privacy`). Margin-based centring kept.
+- Inputs inside it are `h-10` through one descendant class on the layout (no Input size prop
+  added); full-width buttons on the auth pages got `size="lg"` (h-10).
+- **Login:** "Forgot password?" sits at the end of the password label row; the magic link moved
+  from the footer into the alternatives as a ghost button under "or", after any OAuth buttons.
+  Since the magic link is always there, "or" now always shows (except under an SSO hint), so
+  `LoginPageOAuthUnconfigured` asserts the opposite of before.
+- Status paragraphs on the other pages lost `text-center` (the layout is start-aligned).
+- The create-first-organization screen (`CreateFirstOrgPrompt` in `AppLayout.tsx`) uses
+  `AuthLayout` too, which closes that FOLLOW-UP.
+- Tests: Terms/Privacy links asserted on login and absent with marketing off. 388 web tests pass.
+- Looked at in the browser pane without a backend: login (light, desktop), register and
+  `ar` login (dark, 375px, no horizontal scroll), a 375×420 window (heading reachable).
+  Not seen: Terms/Privacy (no config without the backend), the other auth routes.
 
 ## Ticket 10 notes
 

@@ -28,10 +28,6 @@ import {
   Avatar,
   AvatarFallback,
   AvatarImage,
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
   Dialog,
   DialogContent,
   DialogHeader,
@@ -67,6 +63,7 @@ import { ShortcutsDialog } from "../features/shortcuts/ShortcutsDialog";
 import { useGlobalShortcuts } from "../features/shortcuts/useGlobalShortcuts";
 import { MAIN_CONTENT_ID, SkipLink } from "../components/SkipLink";
 import { MaintenanceScreen } from "../components/MaintenanceScreen";
+import { AuthLayout } from "../features/auth/AuthLayout";
 import { CreateOrgForm } from "../features/settings/CreateOrgForm";
 import { NotificationBell } from "../features/notifications/NotificationBell";
 import { SupportLink } from "../features/support/SupportLink";
@@ -348,26 +345,13 @@ function UserMenu() {
 function CreateFirstOrgPrompt() {
   const { t } = useTranslation();
   return (
-    <div
-      className="flex min-h-dvh items-center justify-center p-4"
-      data-testid="create-first-org-prompt"
-    >
-      <Card className="w-full max-w-sm">
-        <CardHeader>
-          {/* CardTitle renders a <div>, not a heading -- this page needs a
-              real <h1> for a11y and the document outline (same pattern as
-              features/auth/AuthCard.tsx). */}
-          <h1 className="text-xl font-semibold leading-none tracking-tight">
-            {t("tenancy.org_create.title")}
-          </h1>
-          <CardDescription>
-            {t("tenancy.org_create.description")}
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <CreateOrgForm />
-        </CardContent>
-      </Card>
+    <div data-testid="create-first-org-prompt">
+      <AuthLayout
+        title={t("tenancy.org_create.title")}
+        description={t("tenancy.org_create.description")}
+      >
+        <CreateOrgForm />
+      </AuthLayout>
     </div>
   );
 }
