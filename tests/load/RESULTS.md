@@ -235,3 +235,7 @@ instead of per-PR.
 | 2026-10-06 | 157bdf7 | browse | - | - | PASS |
 | 2026-10-06 | 157bdf7 | presign | - | - | PASS |
 | 2026-10-06 | 157bdf7 | mixed | - | - | FAIL |
+| 2026-10-07 | 445dd26 | login-burst | - | - | FAIL |
+| 2026-10-07 | 445dd26 | browse | - | - | PASS |
+| 2026-10-07 | 445dd26 | presign | - | - | PASS |
+| 2026-10-07 | 445dd26 | mixed | - | - | FAIL |
