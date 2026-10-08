@@ -239,3 +239,7 @@ instead of per-PR.
 | 2026-10-07 | 445dd26 | browse | - | - | PASS |
 | 2026-10-07 | 445dd26 | presign | - | - | PASS |
 | 2026-10-07 | 445dd26 | mixed | - | - | FAIL |
+| 2026-10-08 | 16b60ca | login-burst | - | - | FAIL |
+| 2026-10-08 | 16b60ca | browse | - | - | PASS |
+| 2026-10-08 | 16b60ca | presign | - | - | PASS |
+| 2026-10-08 | 16b60ca | mixed | - | - | FAIL |
