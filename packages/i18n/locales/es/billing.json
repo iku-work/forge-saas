@@ -4,7 +4,8 @@
     "title": "Plan actual",
     "status": "Estado: {status}",
     "badge": "Plan actual",
-    "free_label": "Gratis"
+    "free_label": "Gratis",
+    "plan_label": "Plan"
   },
   "available_plans": {
     "title": "Planes disponibles",
@@ -30,7 +31,14 @@
     "pdf_col": "Recibo",
     "download_pdf": "Descargar PDF",
     "load_more": "Cargar más",
-    "error_load": "No se pudieron cargar las facturas."
+    "error_load": "No se pudieron cargar las facturas.",
+    "status": {
+      "draft": "Borrador",
+      "open": "Pendiente",
+      "paid": "Pagada",
+      "uncollectible": "Incobrable",
+      "void": "Anulada"
+    }
   },
   "error": {
     "permission_denied": "No tienes permiso para ver la facturación de esta organización.",
@@ -42,5 +50,6 @@
   },
   "checkout": {
     "canceled": "Se cancelo el pago. No se te ha cobrado nada."
-  }
+  },
+  "description": "Tu plan, lo que has usado y tus facturas."
 }

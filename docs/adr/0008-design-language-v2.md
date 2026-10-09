@@ -71,6 +71,14 @@ own.
   lifted mechanically for dark mode, which is why the token carries an
   explicit dark value rather than deriving one.
 - Every Playwright visual baseline regenerates.
+- Found during the build (2026-10): the admin console no longer forces the
+  dark theme to look different from the app (T-143). It shares the app's
+  shell, and a persistent "Admin" marker in the warning colours (a word and
+  an icon, never the accent) does that job, so the console follows the
+  user's theme.
+- Found during the build: the neutral muted text is `#646b78`, not the
+  first-draft `#6b7280`, which measured 4.32:1 on the sunken surface. The
+  neutrals are fixed and already measured; only the accent is a rebrand knob.
 
 ## Alternatives considered
 

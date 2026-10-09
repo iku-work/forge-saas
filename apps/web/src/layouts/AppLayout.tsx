@@ -58,7 +58,7 @@ import {
 import { GlobalBanner } from "../components/GlobalBanner";
 import { CommandPalette } from "../features/command-palette/CommandPalette";
 import { recordRecentPath } from "../features/command-palette/recent";
-import { isAppleDevice, renderKey } from "../features/shortcuts/registry";
+import { isAppleDevice, renderChord } from "../features/shortcuts/registry";
 import { ShortcutsDialog } from "../features/shortcuts/ShortcutsDialog";
 import { useGlobalShortcuts } from "../features/shortcuts/useGlobalShortcuts";
 import { MAIN_CONTENT_ID, SkipLink } from "../components/SkipLink";
@@ -422,7 +422,7 @@ function SidebarNav({
           data-testid="palette-trigger"
           aria-keyshortcuts="Meta+K Control+K"
           label={t("common.palette.trigger")}
-          shortcut={`${renderKey("mod", isAppleDevice())}K`}
+          shortcut={renderChord(["mod", "K"], isAppleDevice())}
           onClick={onOpenPalette}
         />
       </RailTooltip>

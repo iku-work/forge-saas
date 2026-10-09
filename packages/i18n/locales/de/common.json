@@ -37,7 +37,11 @@
     "webhooks": "Webhooks",
     "open_menu": "Menü öffnen",
     "menu": "Menü",
-    "skip_to_content": "Zum Inhalt springen"
+    "skip_to_content": "Zum Inhalt springen",
+    "back_to_app": "Zurück zur App",
+    "collapse_sidebar": "Seitenleiste einklappen",
+    "expand_sidebar": "Seitenleiste ausklappen",
+    "group_account": "Ihr Konto"
   },
   "support": {
     "contact": "Support kontaktieren",
@@ -305,7 +309,8 @@
       "raw_save": "Einstellungen ersetzen",
       "raw_invalid_json": "Das ist kein gültiges JSON.",
       "raw_not_an_object": "Einstellungen müssen ein JSON-Objekt sein."
-    }
+    },
+    "console": "Admin-Konsole"
   },
   "banner": {
     "dismiss": "Hinweis schließen",
@@ -349,6 +354,29 @@
     "close": "Dialog oder Menü schließen",
     "goto_dashboard": "Zum Dashboard",
     "goto_files": "Zu den Dateien",
-    "goto_settings": "Zu den Einstellungen"
+    "goto_settings": "Zu den Einstellungen",
+    "toggle_sidebar": "Seitenleiste ein- oder ausklappen"
+  },
+  "dashboard": {
+    "checklist_title": "Erste Schritte",
+    "progress": "{done} von {total} erledigt",
+    "ready_body": "Ihre Organisation ist eingerichtet.",
+    "shortcut_note": "Drücken Sie {shortcut}, um zu jeder Seite oder Aktion zu springen.",
+    "step_done": "Erledigt",
+    "step_files_action": "Datei hochladen",
+    "step_files_hint": "Dateien sind für Ihre Organisation privat und werden geprüft, bevor jemand sie öffnen kann.",
+    "step_files_title": "Erste Datei hochladen",
+    "step_invite_action": "Mitglied einladen",
+    "step_invite_hint": "Mitglieder erhalten eine eigene Anmeldung und eine Rolle, die Sie wählen.",
+    "step_invite_title": "Ein Mitglied einladen",
+    "step_plan_action": "Tarife ansehen",
+    "step_plan_hint": "Wählen Sie den Tarif, der zu Ihrer Organisation passt.",
+    "step_plan_title": "Tarif wählen",
+    "step_profile_action": "Profil bearbeiten",
+    "step_profile_hint": "Fügen Sie Ihren Namen und ein Foto hinzu, damit Mitglieder Sie erkennen.",
+    "step_profile_hint_no_photo": "Fügen Sie Ihren Namen hinzu, damit Mitglieder Sie erkennen.",
+    "step_profile_title": "Profil vervollständigen",
+    "welcome_body": "Noch ein paar Schritte, bis Ihre Organisation bereit ist.",
+    "welcome_title": "Willkommen bei {org}"
   }
 }

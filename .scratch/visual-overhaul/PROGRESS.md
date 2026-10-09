@@ -33,9 +33,9 @@ Legend: ✅ done · 🟡 partial · ⬜ not started
 | 11 | Auth pages | ✅ | Done 2026-10-06 (Claude). Seen in a browser (login, register, `ar`, dark, 375px, short window). See notes. |
 | 12 | Admin console | ✅ | Done 2026-10-09 (Claude). Not yet looked at in a running app (needs a superadmin login). See notes. |
 | 13 | Marketing hero | ✅ | Done 2026-10-09 (Claude). Screenshotted at 1440 and 375px (Playwright). See notes. |
-| 14 | Integrate and verify | ⬜ | Unblocked. |
+| 14 | Integrate and verify | ✅ | Done 2026-10-09 (Claude). Everything green locally, incl. the full Playwright suite in Docker. See notes. |
 
-Startable now: **14**.
+All tickets done. Nothing pushed; the branch is ready for review.
 
 ## Ticket 01, step by step
 
@@ -73,6 +73,46 @@ Visual screenshot suite is expected to fail until ticket 14.
 - Windows-only flake found: back-to-back Astro builds in the marketing suite intermittently fail
   renaming `.astro/content-assets.mjs` (EPERM). It appeared with the webfonts; a control run without
   them did not hit it. `tests/helpers.ts` retries a build (max 3) only on that exact error on Windows.
+
+## Ticket 14 notes
+
+- **Static and unit:** `pnpm lint`, `pnpm type-check` (18/18) and `pnpm test --concurrency=2`
+  (13/13: web 392, marketing 237, mobile 113, i18n 53, email 53, utils 11) green; Storybook builds
+  and its 77 story tests (axe errors fail them) pass.
+- **Translations were a real CI failure.** Tickets 04–13 left 84 English-only keys, which put
+  ar/de/es/fr over check-locales' 5% gate. All 84 are now translated in the four locales
+  (Sie / tú / vous, existing terms reused) and every one is listed in that locale's
+  `__review.json` (the repo's "machine first pass, human review pending" marker; es got one).
+- **Visual baselines:** all 16 regenerated in `mcr.microsoft.com/playwright:v1.61.1-noble` against
+  the compose stack, looked at, and passing without the update flag (12/12 over three repeats,
+  no retries). Recipe as in the memory note, with one change: `--network
+  container:visual-overhaul-caddy-1`, `E2E_BASE_URL=https://localhost` and
+  `E2E_MAILHOG_URL=http://mailhog:8025` make the email-verifying specs runnable too (the
+  verify link says `https://localhost`, which is Caddy inside its namespace).
+- **Full Playwright suite in Docker:** 26 passed, 2 skipped (prod-smoke needs a deployed target).
+  That includes a11y (light, `ar`, dark), touch targets, mobile layout, acceptance, journey,
+  modules and visual, on chromium and webkit.
+- **Defects found and fixed on the way:**
+  - The palette hint and dashboard note read "CtrlK" off Apple. New `renderChord()` in the
+    shortcuts registry: "Ctrl+K" / "⌘K" (test added). Pre-existing (F-005), but the overhaul
+    put it on every screen.
+  - Touch targets: "Forgot password?", Terms and Privacy (ticket 11) were 18–22px tall; now
+    `min-h-6`.
+  - The theme toggle overflowed a 320px screen by 1px in webkit; segments use `px-2` below `sm`.
+  - Visual spec shot the dashboard before the checklist loaded (skeleton); it now waits for
+    `getting-started`.
+  - a11y spec scanned the command palette mid open-animation (dark theme, chromium, every run);
+    it now waits for finite animations to settle (same fix T-221 made for the bell panel).
+  - The worker could not render email: `packages/email-templates/dist` was never built in the
+    worktree. Built it (environment, not code).
+  - `mobile` type-check failed only because the earlier `pnpm add --filter marketing` had left
+    mobile's `.bin` unlinked; `pnpm install --offline --frozen-lockfile` relinked it.
+- **Diff review** (`origin/main...HEAD`, 177 files): no hex colours added in TSX, no
+  `console.log`, no Card left on converted pages.
+- ADR-0008 Consequences gained two "found during the build" bullets (admin console not forced
+  dark; muted text `#646b78`).
+- Not run here: Lighthouse (Windows EPERM, CI does it); the CI module-matrix legs (the
+  per-configuration test files cover the new code; main's `b-minimal` leg is already red).
 
 ## Ticket 13 notes
 

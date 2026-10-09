@@ -16,7 +16,10 @@
     "save": "Speichern",
     "saved": "Gespeichert.",
     "permission_notice": "Nur Owner und Admins können dies ändern.",
-    "error_default": "Die Organisation konnte nicht aktualisiert werden."
+    "error_default": "Die Organisation konnte nicht aktualisiert werden.",
+    "logo_label": "Logo",
+    "name_hint": "Wird jedem Mitglied sowie in E-Mails und Einladungen angezeigt.",
+    "section_general": "Allgemein"
   },
   "members": {
     "title": "Mitglieder",
@@ -39,7 +42,12 @@
     },
     "error_load": "Mitglieder konnten nicht geladen werden.",
     "error_role_change": "Die Rolle dieses Mitglieds konnte nicht aktualisiert werden.",
-    "error_remove": "Dieses Mitglied konnte nicht entfernt werden."
+    "error_remove": "Dieses Mitglied konnte nicht entfernt werden.",
+    "actions_label": "Aktionen für {user_id}",
+    "change_role": "Rolle ändern",
+    "joined_col": "Beigetreten",
+    "status_active": "Aktiv",
+    "status_col": "Status"
   },
   "invitations": {
     "title": "Ausstehende Einladungen",
@@ -134,7 +142,8 @@
     "error_revoke": "Der Schlüssel konnte nicht widerrufen werden.",
     "error_no_scopes": "Wählen Sie mindestens eine Berechtigung.",
     "empty_title": "Noch keine API-Schlüssel",
-    "empty_body": "Mit API-Schlüsseln können Skripte und Integrationen die API im Namen deiner Organisation aufrufen — nur mit den Berechtigungen, die du vergibst. Erstelle einen, um zu starten; der Schlüssel wird nur einmal angezeigt."
+    "empty_body": "Mit API-Schlüsseln können Skripte und Integrationen die API im Namen deiner Organisation aufrufen — nur mit den Berechtigungen, die du vergibst. Erstelle einen, um zu starten; der Schlüssel wird nur einmal angezeigt.",
+    "menu_label": "Aktionen für {name}"
   },
   "webhooks": {
     "title": "Webhooks",
@@ -213,6 +222,7 @@
     "error_replay": "Die Zustellung konnte nicht erneut gesendet werden.",
     "error_no_events": "Wählen Sie mindestens ein Ereignis.",
     "empty_title": "Noch keine Endpunkte",
-    "empty_body": "Webhooks senden Ereignisse direkt an eine URL, die du kontrollierst, sobald sie eintreten — du musst also nicht abfragen. Füge einen Endpunkt hinzu und wähle die gewünschten Ereignisse."
+    "empty_body": "Webhooks senden Ereignisse direkt an eine URL, die du kontrollierst, sobald sie eintreten — du musst also nicht abfragen. Füge einen Endpunkt hinzu und wähle die gewünschten Ereignisse.",
+    "menu_label": "Aktionen für {url}"
   }
 }

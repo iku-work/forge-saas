@@ -128,6 +128,11 @@ export function renderKey(key: string, apple: boolean): string {
   return key;
 }
 
+/** A chord as one string: "⌘K" on Apple, "Ctrl+K" elsewhere ("CtrlK" is a word). */
+export function renderChord(keys: readonly string[], apple: boolean): string {
+  return keys.map((key) => renderKey(key, apple)).join(apple ? "" : "+");
+}
+
 /**
  * Whether a keydown should be left alone because the user is typing into
  * something.

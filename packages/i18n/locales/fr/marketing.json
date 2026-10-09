@@ -14,7 +14,8 @@
   "hero": {
     "title": "Livrez le produit, pas la tuyauterie",
     "subtitle": "Comptes, organisations, facturation et console d'administration sont déjà construits et testés. Commencez là où le travail devient intéressant.",
-    "cta_primary": "Commencer"
+    "cta_primary": "Commencer",
+    "cta_guides": "Lire les guides"
   },
   "highlights": {
     "heading": "Ce dont vous héritez",
@@ -158,5 +159,30 @@
     "endpoints_title": "Points de terminaison",
     "endpoints_empty": "Ce déploiement ne publie aucun point de terminaison public.",
     "scope_required": "Nécessite la portée {scope}"
+  },
+  "hero_product": {
+    "checklist_title": "Pour commencer",
+    "description": "Encore quelques étapes avant que votre organisation soit prête.",
+    "nav_dashboard": "Tableau de bord",
+    "nav_files": "Fichiers",
+    "nav_reports": "Rapports",
+    "nav_settings": "Paramètres",
+    "org": "Acme",
+    "progress": "1 sur 4 terminées",
+    "search": "Rechercher",
+    "step_done": "Terminé",
+    "step_files_action": "Importer un fichier",
+    "step_files_hint": "Les fichiers sont privés à votre organisation et analysés avant que quiconque puisse les ouvrir.",
+    "step_files_title": "Importez votre premier fichier",
+    "step_invite_action": "Inviter un membre",
+    "step_invite_hint": "Les membres ont leur propre connexion et le rôle que vous choisissez.",
+    "step_invite_title": "Invitez un membre",
+    "step_plan_action": "Voir les formules",
+    "step_plan_hint": "Choisissez la formule adaptée à votre organisation.",
+    "step_plan_title": "Choisissez une formule",
+    "step_profile_action": "Modifier le profil",
+    "step_profile_hint": "Ajoutez votre nom et une photo pour que les membres vous reconnaissent.",
+    "step_profile_title": "Complétez votre profil",
+    "title": "Bienvenue dans {org}"
   }
 }

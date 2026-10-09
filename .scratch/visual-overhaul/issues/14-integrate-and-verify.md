@@ -6,7 +6,7 @@ type-check and test suite is green.
 
 **Blocked by:** 01–13.
 
-**Status:** ready-for-agent
+**Status:** done
 
 ## Read first
 
@@ -70,11 +70,18 @@ type-check and test suite is green.
 
 ## Acceptance
 
-- [ ] `pnpm lint && pnpm type-check && pnpm test` green; Storybook builds.
-- [ ] 16 visual baselines regenerated, reviewed by eye, and passing without the update flag.
-- [ ] Accessibility checks pass (or the CI-only remainder is written in Notes).
-- [ ] No hardcoded colours or raw strings; diff reviewed.
+- [x] `pnpm lint && pnpm type-check && pnpm test` green; Storybook builds.
+- [x] 16 visual baselines regenerated, reviewed by eye, and passing without the update flag.
+- [x] Accessibility checks pass (or the CI-only remainder is written in Notes).
+- [x] No hardcoded colours or raw strings; diff reviewed.
 
 ## Don't
 
 - Don't push or open a PR unless the user asks. Report what's done and what needs CI.
+
+## Notes
+
+Completed 2026-10-09; see `PROGRESS.md`. The full Playwright a11y spec *was* run locally (the
+container joins Caddy's network namespace so the emailed `https://localhost` link works), in
+both themes and `ar`, on chromium and webkit. Still for CI: Lighthouse, and the module-matrix
+legs.

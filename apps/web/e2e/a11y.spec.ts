@@ -306,6 +306,21 @@ test("dark theme has no serious/critical WCAG A/AA violations", async ({
   await test.step("command palette (dark)", async () => {
     await page.getByTestId("palette-trigger").click();
     await expect(page.getByTestId("palette-nav-/")).toBeVisible();
+    // Same false positive as the notification panel above: the dialog fades
+    // and zooms in, and a scan mid-animation reads its text at partial
+    // opacity. The animation is on the dialog, not the item, so wait for
+    // every finite animation or transition on the page (an infinite one, a
+    // skeleton's pulse, would never settle). A cancelled one rejects
+    // `finished` (WebKit cancels a transition that another replaces); it has
+    // stopped either way.
+    await page.evaluate(() =>
+      Promise.all(
+        document
+          .getAnimations()
+          .filter((a) => a.effect?.getTiming().iterations !== Infinity)
+          .map((a) => a.finished.catch(() => undefined)),
+      ),
+    );
     await checkA11y(page, testInfo, "command-palette-dark");
     await page.keyboard.press("Escape");
   });

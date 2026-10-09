@@ -41,12 +41,6 @@ something; move an entry to the bottom section when it is resolved.
   is no other "Leave organization" path; add one deliberately (e.g. Organization settings) if
   members should be able to leave.
 
-- **Translations for new keys.** Tickets 04–10 added English keys (sidebar groups, "Back to
-  app", collapse/expand, section titles and hints, page descriptions, row-menu labels, member
-  and invoice status words, the dashboard welcome and checklist, the auth pages' Terms/Privacy, "Admin console", the marketing hero's sample content and
-  "Read the guides"). de, es, fr, fi and ar
-  fall back to English until translated via the translator workflow
-  (`docs/runbooks/translations.md`). Ticket 03's copy changes *were* translated.
 - **Notifications Save is always enabled.** (ticket 07) Unlike other sections, on purpose:
   saving persists the shown defaults and heals legacy rows. If that healing moves to the
   backend (normalise on read), the page could adopt "Save only after a change".
@@ -80,12 +74,24 @@ something; move an entry to the bottom section when it is resolved.
 - **Look at the admin console (ticket 12) in a running app.** Needs Docker and a superadmin
   (`make seed` creates one). Check the marker in light and dark, the drawer at phone width,
   the impersonation banner above the shell, and the product settings rows.
-- **Look at tickets 04–10 in a running app.** None of the shell, rail, or settings pages has been
-  seen in a browser yet: login needs the backend (Docker Desktop was stopped). Check desktop,
-  < ~860px wide (drawer), `ar`, dark mode, the rail's tooltips and animation.
+- **Look at the rail and the other settings pages by hand.** Ticket 14's screenshots cover the
+  dashboard, Profile and Organization (desktop, phone, `ar`) and the e2e suites walk the rest,
+  but nobody has looked at the collapsed rail's tooltips and animation, dark mode by eye, or
+  Members/Billing/Files/API keys/Webhooks in a browser.
 - **Lighthouse on marketing.** (ticket 02) Fails locally on Windows (chrome-launcher EPERM); CI
   must confirm LCP with the self-hosted font.
-- **Visual baselines.** Expected red until ticket 14 regenerates them.
+- **Review the machine translations.** Ticket 14 translated 84 keys into ar, de, es and fr and
+  listed each in that locale's `__review.json`. A native speaker should review and empty those.
+
+## Product questions
+
+- **Signing in replaces a device's theme with the account's.** (pre-existing, F-003/F-004)
+  `useServerThemeSync` adopts `user.theme` after sign-in, and a new account's value is
+  `"system"`. So someone who picked dark before signing up gets the system theme back. The
+  a11y spec's dark run only stays dark because the check finishes first. Decide whether a
+  never-chosen server value should override an explicit local choice.
+- **Checklist on phones.** Hints wrap to three or four lines beside the button at 375px. Consider
+  putting the button under the text below ~30rem.
 
 ## Tooling and tests
 
@@ -95,6 +101,15 @@ something; move an entry to the bottom section when it is resolved.
   `C:\Users\IK\Documents\saas-template\backend\.venv\Scripts\pre-commit.exe run --files <files>`
   by hand, or install hooks in the worktree.
 - **Web tests regenerate `apps/web/src/routeTree.gen.ts`.** Revert it before committing.
+- **`apps/web/e2e` does not type-check.** `tsc -p apps/web/e2e/tsconfig.json` reports six
+  `reducedMotion` errors in `test.use()` (pre-existing; Playwright 1.61 types). CI never runs it.
+- **Mobile tests time out under a full parallel `pnpm test`.** Use `--concurrency=2`
+  (already in the memory notes; load, not a bug).
+- **Storybook's test runner finds no stories in this worktree.** Jest searches from the main
+  checkout and skips the hidden `.claude/` folder. Run it with `--index-json` against the built
+  Storybook instead (77 tests pass that way).
+- **`pnpm add --filter <pkg>` can leave other packages' `.bin` unlinked.** Run
+  `pnpm install --offline --frozen-lockfile` afterwards.
 - **The `dev` launch entry (main checkout's `.claude/launch.json`) fails:** `turbo run dev`
   starts 11 persistent tasks against turbo's default concurrency of 10. Use the
   `web-visual-overhaul` entry instead, or add `"concurrency": 12` (or more) to `turbo.json` if
@@ -105,4 +120,6 @@ something; move an entry to the bottom section when it is resolved.
 
 ## Resolved
 
+- **Translations for new keys.** Machine-translated in ticket 14 and flagged for review (above).
+- **Visual baselines.** Regenerated and passing since ticket 14.
 - **Create-your-first-organization screen was still a card.** Uses `AuthLayout` since ticket 11.

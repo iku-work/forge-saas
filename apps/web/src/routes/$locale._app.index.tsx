@@ -6,7 +6,7 @@ import { Page, PageHeader } from "@forge/ui";
 
 import { GettingStarted } from "../features/dashboard/GettingStarted";
 import { useGettingStarted } from "../features/dashboard/useGettingStarted";
-import { isAppleDevice, renderKey } from "../features/shortcuts/registry";
+import { isAppleDevice, renderChord } from "../features/shortcuts/registry";
 
 export const Route = createFileRoute("/$locale/_app/")({
   component: DashboardPage,
@@ -45,7 +45,7 @@ function DashboardPage() {
         footer={
           <p className="mt-7 text-[0.8125rem] text-muted-foreground">
             {t("common.dashboard.shortcut_note", {
-              shortcut: `${renderKey("mod", isAppleDevice())}K`,
+              shortcut: renderChord(["mod", "K"], isAppleDevice()),
             })}
           </p>
         }

@@ -14,7 +14,8 @@
   "hero": {
     "title": "Lanza el producto, no la fontanería",
     "subtitle": "Las cuentas, las organizaciones, la facturación y una consola de administración ya están construidas y probadas. Empieza donde está el trabajo interesante.",
-    "cta_primary": "Empezar"
+    "cta_primary": "Empezar",
+    "cta_guides": "Leer las guías"
   },
   "highlights": {
     "heading": "Con lo que empiezas",
@@ -158,5 +159,30 @@
     "endpoints_title": "Endpoints",
     "endpoints_empty": "Este despliegue no publica endpoints públicos.",
     "scope_required": "Requiere el permiso {scope}"
+  },
+  "hero_product": {
+    "checklist_title": "Primeros pasos",
+    "description": "Unos pocos pasos antes de que tu organización esté lista.",
+    "nav_dashboard": "Panel",
+    "nav_files": "Archivos",
+    "nav_reports": "Informes",
+    "nav_settings": "Configuración",
+    "org": "Acme",
+    "progress": "1 de 4 completados",
+    "search": "Buscar",
+    "step_done": "Hecho",
+    "step_files_action": "Subir archivo",
+    "step_files_hint": "Los archivos son privados de tu organización y se analizan antes de que nadie pueda abrirlos.",
+    "step_files_title": "Sube tu primer archivo",
+    "step_invite_action": "Invitar miembro",
+    "step_invite_hint": "Los miembros tienen su propio acceso y el rol que elijas.",
+    "step_invite_title": "Invita a un miembro",
+    "step_plan_action": "Ver planes",
+    "step_plan_hint": "Elige el plan que se adapte a tu organización.",
+    "step_plan_title": "Elige un plan",
+    "step_profile_action": "Editar perfil",
+    "step_profile_hint": "Añade tu nombre y una foto para que los miembros te reconozcan.",
+    "step_profile_title": "Completa tu perfil",
+    "title": "Te damos la bienvenida a {org}"
   }
 }

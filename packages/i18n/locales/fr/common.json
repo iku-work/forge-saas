@@ -37,7 +37,11 @@
     "webhooks": "Webhooks",
     "open_menu": "Ouvrir le menu",
     "menu": "Menu",
-    "skip_to_content": "Aller au contenu"
+    "skip_to_content": "Aller au contenu",
+    "back_to_app": "Retour à l'application",
+    "collapse_sidebar": "Réduire la barre latérale",
+    "expand_sidebar": "Développer la barre latérale",
+    "group_account": "Votre compte"
   },
   "support": {
     "contact": "Contacter le support",
@@ -305,7 +309,8 @@
       "raw_save": "Remplacer les paramètres",
       "raw_invalid_json": "Ce n'est pas du JSON valide.",
       "raw_not_an_object": "Les paramètres doivent être un objet JSON."
-    }
+    },
+    "console": "Console d'administration"
   },
   "banner": {
     "dismiss": "Fermer l'annonce",
@@ -349,6 +354,29 @@
     "close": "Fermer une boîte de dialogue ou un menu",
     "goto_dashboard": "Aller au tableau de bord",
     "goto_files": "Aller aux fichiers",
-    "goto_settings": "Aller aux paramètres"
+    "goto_settings": "Aller aux paramètres",
+    "toggle_sidebar": "Réduire ou développer la barre latérale"
+  },
+  "dashboard": {
+    "checklist_title": "Pour commencer",
+    "progress": "{done} sur {total} terminées",
+    "ready_body": "Votre organisation est configurée.",
+    "shortcut_note": "Appuyez sur {shortcut} pour accéder à n'importe quelle page ou action.",
+    "step_done": "Terminé",
+    "step_files_action": "Importer un fichier",
+    "step_files_hint": "Les fichiers sont privés à votre organisation et analysés avant que quiconque puisse les ouvrir.",
+    "step_files_title": "Importez votre premier fichier",
+    "step_invite_action": "Inviter un membre",
+    "step_invite_hint": "Les membres ont leur propre connexion et le rôle que vous choisissez.",
+    "step_invite_title": "Invitez un membre",
+    "step_plan_action": "Voir les formules",
+    "step_plan_hint": "Choisissez la formule adaptée à votre organisation.",
+    "step_plan_title": "Choisissez une formule",
+    "step_profile_action": "Modifier le profil",
+    "step_profile_hint": "Ajoutez votre nom et une photo pour que les membres vous reconnaissent.",
+    "step_profile_hint_no_photo": "Ajoutez votre nom pour que les membres vous reconnaissent.",
+    "step_profile_title": "Complétez votre profil",
+    "welcome_body": "Encore quelques étapes avant que votre organisation soit prête.",
+    "welcome_title": "Bienvenue dans {org}"
   }
 }

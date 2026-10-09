@@ -85,7 +85,7 @@ export function AuthLayout({
             href={`${marketingUrl}/${locale}/terms`}
             target="_blank"
             rel="noreferrer"
-            className="hover:text-foreground"
+            className="inline-flex min-h-6 items-center hover:text-foreground"
           >
             {t("auth.legal.terms")}
           </a>
@@ -93,7 +93,7 @@ export function AuthLayout({
             href={`${marketingUrl}/${locale}/privacy`}
             target="_blank"
             rel="noreferrer"
-            className="hover:text-foreground"
+            className="inline-flex min-h-6 items-center hover:text-foreground"
           >
             {t("auth.legal.privacy")}
           </a>

@@ -14,7 +14,8 @@
   "hero": {
     "title": "أطلق المنتج، لا البنية التحتية",
     "subtitle": "الحسابات والمؤسسات والفوترة ولوحة الإدارة جاهزة ومختبَرة بالفعل. ابدأ من حيث يبدأ العمل المثير للاهتمام.",
-    "cta_primary": "ابدأ الآن"
+    "cta_primary": "ابدأ الآن",
+    "cta_guides": "اقرأ الأدلة"
   },
   "highlights": {
     "heading": "ما الذي تبدأ به",
@@ -158,5 +159,30 @@
     "endpoints_title": "نقاط النهاية",
     "endpoints_empty": "لا ينشر هذا النشر أي نقاط نهاية عامة.",
     "scope_required": "يتطلب النطاق {scope}"
+  },
+  "hero_product": {
+    "checklist_title": "البداية",
+    "description": "بضع خطوات قبل أن تصبح مؤسستك جاهزة.",
+    "nav_dashboard": "لوحة التحكم",
+    "nav_files": "الملفات",
+    "nav_reports": "التقارير",
+    "nav_settings": "الإعدادات",
+    "org": "Acme",
+    "progress": "تم 1 من 4",
+    "search": "بحث",
+    "step_done": "تم",
+    "step_files_action": "رفع ملف",
+    "step_files_hint": "الملفات خاصة بمؤسستك ويتم فحصها قبل أن يتمكن أي أحد من فتحها.",
+    "step_files_title": "ارفع ملفك الأول",
+    "step_invite_action": "دعوة عضو",
+    "step_invite_hint": "يحصل الأعضاء على تسجيل دخول خاص بهم ودور تختاره أنت.",
+    "step_invite_title": "ادعُ عضوًا",
+    "step_plan_action": "عرض الخطط",
+    "step_plan_hint": "اختر الخطة المناسبة لمؤسستك.",
+    "step_plan_title": "اختر خطة",
+    "step_profile_action": "تعديل الملف الشخصي",
+    "step_profile_hint": "أضف اسمك وصورة ليتعرّف عليك الأعضاء.",
+    "step_profile_title": "أكمل ملفك الشخصي",
+    "title": "مرحبًا بك في {org}"
   }
 }

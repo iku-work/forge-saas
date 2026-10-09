@@ -276,7 +276,7 @@ export function LoginPage() {
                       <Link
                         to="/$locale/forgot-password"
                         params={{ locale }}
-                        className="text-[0.8125rem] text-primary underline underline-offset-4"
+                        className="inline-flex min-h-6 items-center text-[0.8125rem] text-primary underline underline-offset-4"
                       >
                         {t("auth.login.forgot_password")}
                       </Link>

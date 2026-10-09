@@ -16,7 +16,10 @@
     "save": "Guardar",
     "saved": "Guardado.",
     "permission_notice": "Solo los propietarios y administradores pueden cambiar esto.",
-    "error_default": "No se pudo actualizar la organización."
+    "error_default": "No se pudo actualizar la organización.",
+    "logo_label": "Logotipo",
+    "name_hint": "Se muestra a todos los miembros y en los correos e invitaciones.",
+    "section_general": "General"
   },
   "members": {
     "title": "Miembros",
@@ -39,7 +42,12 @@
     },
     "error_load": "No se pudieron cargar los miembros.",
     "error_role_change": "No se pudo actualizar el rol de este miembro.",
-    "error_remove": "No se pudo eliminar a este miembro."
+    "error_remove": "No se pudo eliminar a este miembro.",
+    "actions_label": "Acciones para {user_id}",
+    "change_role": "Cambiar rol",
+    "joined_col": "Se unió",
+    "status_active": "Activo",
+    "status_col": "Estado"
   },
   "invitations": {
     "title": "Invitaciones pendientes",
@@ -134,7 +142,8 @@
     "error_revoke": "No se pudo revocar la clave.",
     "error_no_scopes": "Elige al menos un permiso.",
     "empty_title": "Aún no hay claves de API",
-    "empty_body": "Las claves de API permiten que scripts e integraciones llamen a la API en nombre de tu organización, solo con los permisos que concedas. Crea una para empezar; la clave se muestra una sola vez."
+    "empty_body": "Las claves de API permiten que scripts e integraciones llamen a la API en nombre de tu organización, solo con los permisos que concedas. Crea una para empezar; la clave se muestra una sola vez.",
+    "menu_label": "Acciones para {name}"
   },
   "webhooks": {
     "title": "Webhooks",
@@ -213,6 +222,7 @@
     "error_replay": "No se pudo reenviar la entrega.",
     "error_no_events": "Elige al menos un evento.",
     "empty_title": "Aún no hay endpoints",
-    "empty_body": "Los webhooks envían los eventos a una URL que controlas en cuanto ocurren, así no tienes que consultarlos. Añade un endpoint y elige qué eventos debe recibir."
+    "empty_body": "Los webhooks envían los eventos a una URL que controlas en cuanto ocurren, así no tienes que consultarlos. Añade un endpoint y elige qué eventos debe recibir.",
+    "menu_label": "Acciones para {url}"
   }
 }
