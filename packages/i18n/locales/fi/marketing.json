@@ -14,8 +14,7 @@
   "hero": {
     "title": "Julkaise tuote, älä putkitusta",
     "subtitle": "Tilit, organisaatiot, laskutus ja hallintakonsoli ovat jo valmiina ja testattuina. Aloita siitä, missä työ on kiinnostavaa.",
-    "cta_primary": "Aloita",
-    "cta_secondary": "Kirjaudu sisään"
+    "cta_primary": "Aloita"
   },
   "highlights": {
     "heading": "Mistä aloitat",

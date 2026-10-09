@@ -52,6 +52,8 @@ interface Props {
   alternateLocales?: string[] | undefined;
   /** JSON-LD describing this page. The Organization node is added below. */
   schema?: SchemaNode | SchemaNode[] | undefined;
+  /** The landing page's wider column; the header widens to line up with it. */
+  wide?: boolean;
 }
 
 const {
@@ -64,6 +66,7 @@ const {
   publishedAt,
   alternateLocales,
   schema,
+  wide = false,
 } = Astro.props;
 const t = translator(locale);
 const dir = localeMeta(locale)?.dir ?? "ltr";
@@ -106,7 +109,7 @@ const schemas: SchemaNode[] = [organizationSchema(Astro.site), ...pageSchema];
     >
       {t("marketing.nav.skip_to_content")}
     </a>
-    <SiteHeader locale={locale} />
+    <SiteHeader locale={locale} wide={wide} />
     <main id="main">
       <slot />
     </main>

@@ -43,7 +43,8 @@ something; move an entry to the bottom section when it is resolved.
 
 - **Translations for new keys.** Tickets 04–10 added English keys (sidebar groups, "Back to
   app", collapse/expand, section titles and hints, page descriptions, row-menu labels, member
-  and invoice status words, the dashboard welcome and checklist, the auth pages' Terms/Privacy, "Admin console"). de, es, fr, fi and ar
+  and invoice status words, the dashboard welcome and checklist, the auth pages' Terms/Privacy, "Admin console", the marketing hero's sample content and
+  "Read the guides"). de, es, fr, fi and ar
   fall back to English until translated via the translator workflow
   (`docs/runbooks/translations.md`). Ticket 03's copy changes *were* translated.
 - **Notifications Save is always enabled.** (ticket 07) Unlike other sections, on purpose:
@@ -67,6 +68,10 @@ something; move an entry to the bottom section when it is resolved.
   palette is app-only. Add both if superadmins spend long sessions there.
 - **Admin: native selects.** (pre-existing) The users/organizations filters and the banner type
   are plain `<select>`s styled by hand; there is no Select primitive in `@forge/ui` yet.
+- **Marketing headings on other pages.** (ticket 13) Only the landing page uses the condensed
+  display type; the features/pricing/guides/blog/legal titles and prose headings still use the
+  plain weight. Bring them onto `type-title` if they should match.
+- **Marketing dark mode.** (pre-existing) The site has none; the tokens support it.
 - **"Save" vs "Save changes".** (ticket 06) Buttons kept "Save" so existing translations stay
   valid. Decide one wording and apply it everywhere at once.
 

@@ -15,7 +15,32 @@
     "title": "Ship the product, not the plumbing",
     "subtitle": "Accounts, organizations, billing and an admin console are already built and already tested. Start where the interesting work is.",
     "cta_primary": "Get started",
-    "cta_secondary": "Sign in"
+    "cta_guides": "Read the guides"
+  },
+  "hero_product": {
+    "org": "Acme",
+    "search": "Search",
+    "nav_dashboard": "Dashboard",
+    "nav_files": "Files",
+    "nav_reports": "Reports",
+    "nav_settings": "Settings",
+    "title": "Welcome to {org}",
+    "description": "A few things to finish before your organization is ready.",
+    "checklist_title": "Get started",
+    "progress": "1 of 4 done",
+    "step_done": "Done",
+    "step_profile_title": "Complete your profile",
+    "step_profile_hint": "Add your name and a photo so members recognise you.",
+    "step_profile_action": "Edit profile",
+    "step_files_title": "Upload your first file",
+    "step_files_hint": "Files are private to your organization and scanned before anyone can open them.",
+    "step_files_action": "Upload file",
+    "step_invite_title": "Invite a member",
+    "step_invite_hint": "Members get their own sign-in and a role you choose.",
+    "step_invite_action": "Invite member",
+    "step_plan_title": "Choose a plan",
+    "step_plan_hint": "Pick the plan that fits your organization.",
+    "step_plan_action": "See plans"
   },
   "highlights": {
     "heading": "What you start with",

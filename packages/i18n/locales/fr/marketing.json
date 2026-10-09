@@ -14,8 +14,7 @@
   "hero": {
     "title": "Livrez le produit, pas la tuyauterie",
     "subtitle": "Comptes, organisations, facturation et console d'administration sont déjà construits et testés. Commencez là où le travail devient intéressant.",
-    "cta_primary": "Commencer",
-    "cta_secondary": "Se connecter"
+    "cta_primary": "Commencer"
   },
   "highlights": {
     "heading": "Ce dont vous héritez",

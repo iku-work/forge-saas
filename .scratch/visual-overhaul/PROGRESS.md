@@ -32,10 +32,10 @@ Legend: ✅ done · 🟡 partial · ⬜ not started
 | 10 | Getting started checklist | ✅ | Done 2026-10-05 (Claude). Not yet looked at in a running app. See notes. |
 | 11 | Auth pages | ✅ | Done 2026-10-06 (Claude). Seen in a browser (login, register, `ar`, dark, 375px, short window). See notes. |
 | 12 | Admin console | ✅ | Done 2026-10-09 (Claude). Not yet looked at in a running app (needs a superadmin login). See notes. |
-| 13 | Marketing hero | ⬜ | Unblocked. |
-| 14 | Integrate and verify | ⬜ | Blocked by all. |
+| 13 | Marketing hero | ✅ | Done 2026-10-09 (Claude). Screenshotted at 1440 and 375px (Playwright). See notes. |
+| 14 | Integrate and verify | ⬜ | Unblocked. |
 
-Startable now: **13**.
+Startable now: **14**.
 
 ## Ticket 01, step by step
 
@@ -73,6 +73,35 @@ Visual screenshot suite is expected to fail until ticket 14.
 - Windows-only flake found: back-to-back Astro builds in the marketing suite intermittently fail
   renaming `.astro/content-assets.mjs` (EPERM). It appeared with the webfonts; a control run without
   them did not hit it. `tests/helpers.ts` retries a build (max 3) only on that exact error on Windows.
+
+## Ticket 13 notes
+
+- New `apps/marketing/src/components/HeroProduct.tsx`: the real `AppShell` / `ShellSidebar` /
+  `ShellPanel` / `PageHeader` / `Checklist` with sample content (Acme; Dashboard active;
+  1 of 4 done), every string from `marketing.hero_product.*`. Rendered with no `client:*`
+  directive, so it is static HTML: the landing page still has no executable script (only
+  the two JSON-LD blocks it already had). Because it is never hydrated it takes `t` directly.
+  Sample hints and the description are copied from the app's own dashboard copy.
+- `lucide-react` added to `apps/marketing` (same `^1.21.0` @forge/ui already uses; the
+  lockfile gained three lines and no new package) because pnpm will not let marketing import
+  @forge/ui's dependency.
+- Landing: condensed headline, subtitle, one "Get started" button and a "Read the guides" text
+  link (new key `hero.cta_guides`; `hero.cta_secondary` "Sign in" removed everywhere since
+  the header already has it). The frame is `aria-hidden` + `inert`; inside, the shell at
+  `zoom: .8` (phones `.72`), so at 1440px the shell is ~1296 CSS px wide and lays out with
+  its sidebar; at 375px it is narrower than the sidebar breakpoint and shows the panel only,
+  with no extra CSS. `rise` and `settle` animations play once on load; reduced motion turns
+  them off (checked in Playwright: `animation-name: none`).
+- Facts: three plain columns with a strong hairline above each `h2`; the old
+  "What you start with" heading is now the section's `aria-label` (the build test still
+  finds the string). Billing's column still follows the module.
+- The header gets a `wide` prop (via `BaseLayout`) so it lines up with the 75rem landing
+  column; every other page keeps `max-w-5xl`. The brand-colour rule above the old headline is gone.
+- Other pages (features, pricing, guides, blog, terms) looked fine with the new tokens and font
+  at 1280px, no horizontal overflow at 375px; nothing changed there.
+- Marketing has no dark mode (nothing sets `.dark`), so dark was not a thing to check.
+- Checks: marketing build (budget, SEO, hreflang, indexing gates) and 237 tests pass,
+  `astro check` clean. Lighthouse not run (Windows EPERM; CI).
 
 ## Ticket 12 notes
 

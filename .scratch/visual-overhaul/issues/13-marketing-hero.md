@@ -10,7 +10,7 @@ the new tokens and type with no layout change.
 
 **Blocked by:** 02, 04, 10.
 
-**Status:** ready-for-agent
+**Status:** done
 
 ## Read first
 
@@ -78,8 +78,14 @@ with EPERM; then note it and leave it to ticket 14 / CI).
 
 ## Acceptance
 
-- [ ] Hero matches the design; one primary CTA.
-- [ ] The product frame is real `@forge/ui` components rendered statically (no client JS), hidden from assistive tech and inert.
-- [ ] Panel-only on phones; animation plays once and respects reduced motion.
-- [ ] Facts as columns, not cards.
-- [ ] Marketing build gates (budget, SEO, hreflang, indexing) and tests pass.
+- [x] Hero matches the design; one primary CTA.
+- [x] The product frame is real `@forge/ui` components rendered statically (no client JS), hidden from assistive tech and inert.
+- [x] Panel-only on phones; animation plays once and respects reduced motion.
+- [x] Facts as columns, not cards.
+- [x] Marketing build gates (budget, SEO, hreflang, indexing) and tests pass.
+
+## Notes
+
+Completed 2026-10-09; see `PROGRESS.md`. Added `lucide-react` to marketing (already in the
+lockfile). The secondary CTA "Sign in" became "Read the guides" with a new key. Lighthouse
+left to CI.
