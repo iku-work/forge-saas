@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
+import { ArrowLeft } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
 import {
@@ -13,11 +14,14 @@ import {
 import {
   Alert,
   AlertDescription,
-  Badge,
   Button,
-  Card,
-  CardContent,
+  DataListMuted,
+  DataListRow,
+  Page,
+  PageHeader,
+  SettingsRow,
   Skeleton,
+  StatusPill,
   Tabs,
   TabsContent,
   TabsList,
@@ -33,10 +37,9 @@ import { PlanOverrideModal } from "./PlanOverrideModal";
 
 function DetailRow({ label, value }: { label: string; value: string }) {
   return (
-    <div className="flex items-center justify-between border-b py-2 text-sm last:border-b-0">
-      <span className="text-muted-foreground">{label}</span>
-      <span>{value}</span>
-    </div>
+    <SettingsRow label={label}>
+      <span className="text-foreground-secondary">{value}</span>
+    </SettingsRow>
   );
 }
 
@@ -58,7 +61,7 @@ function SubscriptionTab({ orgId }: { orgId: string }) {
 
   return (
     <div className="space-y-4">
-      <div className="flex gap-2">
+      <div className="flex flex-wrap gap-2">
         <Button
           type="button"
           variant="outline"
@@ -93,32 +96,43 @@ function SubscriptionTab({ orgId }: { orgId: string }) {
       {detailQuery.isLoading ? (
         <Skeleton className="h-32 w-full" />
       ) : subscription ? (
-        <Card>
-          <CardContent className="pt-6">
-            <DetailRow label={t("common.admin.org_detail.plan_label")} value={subscription.plan_slug} />
-            <DetailRow label={t("common.admin.org_detail.status_label")} value={subscription.status} />
-            <DetailRow
-              label={t("common.admin.org_detail.billing_interval_label")}
-              value={subscription.billing_interval ?? t("common.admin.org_detail.not_available")}
-            />
-            <DetailRow
-              label={t("common.admin.org_detail.trial_end_label")}
-              value={
-                subscription.trial_end
-                  ? formatDate(subscription.trial_end, i18n.language)
-                  : t("common.admin.org_detail.not_available")
-              }
-            />
-            <DetailRow
-              label={t("common.admin.org_detail.period_end_label")}
-              value={formatDate(subscription.current_period_end, i18n.language)}
-            />
-            <DetailRow
-              label={t("common.admin.org_detail.free_override_label")}
-              value={subscription.free_override ? t("common.admin.org_detail.yes") : t("common.admin.org_detail.no")}
-            />
-          </CardContent>
-        </Card>
+        <div className="@container/section">
+          <DetailRow
+            label={t("common.admin.org_detail.plan_label")}
+            value={subscription.plan_slug}
+          />
+          <DetailRow
+            label={t("common.admin.org_detail.status_label")}
+            value={subscription.status}
+          />
+          <DetailRow
+            label={t("common.admin.org_detail.billing_interval_label")}
+            value={
+              subscription.billing_interval ??
+              t("common.admin.org_detail.not_available")
+            }
+          />
+          <DetailRow
+            label={t("common.admin.org_detail.trial_end_label")}
+            value={
+              subscription.trial_end
+                ? formatDate(subscription.trial_end, i18n.language)
+                : t("common.admin.org_detail.not_available")
+            }
+          />
+          <DetailRow
+            label={t("common.admin.org_detail.period_end_label")}
+            value={formatDate(subscription.current_period_end, i18n.language)}
+          />
+          <DetailRow
+            label={t("common.admin.org_detail.free_override_label")}
+            value={
+              subscription.free_override
+                ? t("common.admin.org_detail.yes")
+                : t("common.admin.org_detail.no")
+            }
+          />
+        </div>
       ) : (
         <p className="text-sm text-muted-foreground">
           {t("common.admin.org_detail.no_subscription")}
@@ -167,18 +181,16 @@ function MembersTab({
 }) {
   const { t } = useTranslation();
   return (
-    <Card>
-      <CardContent className="pt-6">
-        {isLoading ? (
-          <Skeleton className="h-8 w-24" />
-        ) : (
-          <DetailRow
-            label={t("common.admin.org_detail.members_label")}
-            value={String(memberCount ?? 0)}
-          />
-        )}
-      </CardContent>
-    </Card>
+    <div className="@container/section">
+      {isLoading ? (
+        <Skeleton className="h-8 w-24" />
+      ) : (
+        <DetailRow
+          label={t("common.admin.org_detail.members_label")}
+          value={String(memberCount ?? 0)}
+        />
+      )}
+    </div>
   );
 }
 
@@ -191,18 +203,20 @@ function FilesTab({
 }) {
   const { t } = useTranslation();
   return (
-    <Card>
-      <CardContent className="pt-6">
-        {isLoading ? (
-          <Skeleton className="h-8 w-24" />
-        ) : (
-          <DetailRow
-            label={t("common.admin.org_detail.files_label")}
-            value={fileCount === null || fileCount === undefined ? "—" : String(fileCount)}
-          />
-        )}
-      </CardContent>
-    </Card>
+    <div className="@container/section">
+      {isLoading ? (
+        <Skeleton className="h-8 w-24" />
+      ) : (
+        <DetailRow
+          label={t("common.admin.org_detail.files_label")}
+          value={
+            fileCount === null || fileCount === undefined
+              ? "—"
+              : String(fileCount)
+          }
+        />
+      )}
+    </div>
   );
 }
 
@@ -221,20 +235,26 @@ function AuditTab({ orgId }: { orgId: string }) {
     return <Skeleton className="h-32 w-full" />;
   }
   if (events.length === 0) {
-    return <p className="text-sm text-muted-foreground">{t("common.admin.audit.no_results")}</p>;
+    return (
+      <p className="text-sm text-muted-foreground">
+        {t("common.admin.audit.no_results")}
+      </p>
+    );
   }
   return (
-    <div className="space-y-2">
+    <div className="border-t border-border">
       {events.map((event) => (
-        <div key={event.id} className="flex items-center justify-between border-b py-2 text-sm">
-          <div>
-            <p className="font-medium">{event.action}</p>
-            <p className="text-xs text-muted-foreground">
+        <DataListRow key={event.id} className="grid-cols-[minmax(0,1fr)_auto]">
+          <div className="min-w-0">
+            <p className="truncate font-mono text-[0.8125rem]">
+              {event.action}
+            </p>
+            <p className="truncate text-xs text-muted-foreground">
               {event.actor_email ?? t("common.admin.audit.system_actor")}
             </p>
           </div>
-          <span className="text-muted-foreground">{formatDate(event.ts, i18n.language)}</span>
-        </div>
+          <DataListMuted>{formatDate(event.ts, i18n.language)}</DataListMuted>
+        </DataListRow>
       ))}
     </div>
   );
@@ -261,7 +281,13 @@ function FeatureFlagsTab({ orgId }: { orgId: string }) {
   };
 
   const setFlag = useMutation({
-    mutationFn: async ({ flag, enabled }: { flag: string; enabled: boolean }) => {
+    mutationFn: async ({
+      flag,
+      enabled,
+    }: {
+      flag: string;
+      enabled: boolean;
+    }) => {
       await setAdminOrgFeatureFlag(orgId, flag, enabled);
     },
     onSuccess: () => void invalidate(),
@@ -287,25 +313,30 @@ function FeatureFlagsTab({ orgId }: { orgId: string }) {
         </Alert>
       ) : null}
       {entries.length === 0 ? (
-        <p className="text-sm text-muted-foreground">{t("common.admin.orgs.no_results")}</p>
+        <p className="text-sm text-muted-foreground">
+          {t("common.admin.orgs.no_results")}
+        </p>
       ) : (
         entries.map(([flag, state]) => (
-          <div key={flag} className="flex items-center justify-between border-b py-2 text-sm">
-            <div className="flex items-center gap-2">
-              <span>{flag}</span>
-              <Badge variant={state.resolved ? "secondary" : "outline"}>
+          <div
+            key={flag}
+            className="flex flex-wrap items-center justify-between gap-3 border-b border-border py-3 text-sm"
+          >
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="font-mono text-[0.8125rem]">{flag}</span>
+              <StatusPill tone={state.resolved ? "active" : "neutral"}>
                 {state.resolved
                   ? t("common.admin.org_detail.flag_resolved_on")
                   : t("common.admin.org_detail.flag_resolved_off")}
-              </Badge>
+              </StatusPill>
               {state.override !== null ? (
-                <Badge variant="destructive">
+                <StatusPill tone="pending">
                   {t("common.admin.org_detail.flag_override_prefix", {
                     value: state.override
                       ? t("common.admin.org_detail.flag_resolved_on")
                       : t("common.admin.org_detail.flag_resolved_off"),
                   })}
-                </Badge>
+                </StatusPill>
               ) : null}
             </div>
             <div className="flex gap-2">
@@ -320,7 +351,12 @@ function FeatureFlagsTab({ orgId }: { orgId: string }) {
                     { flag, enabled: true },
                     {
                       onError: (err) => {
-                        setError(getErrorMessage(err, "common.admin.org_detail.error_action_default"));
+                        setError(
+                          getErrorMessage(
+                            err,
+                            "common.admin.org_detail.error_action_default",
+                          ),
+                        );
                       },
                     },
                   );
@@ -339,7 +375,12 @@ function FeatureFlagsTab({ orgId }: { orgId: string }) {
                     { flag, enabled: false },
                     {
                       onError: (err) => {
-                        setError(getErrorMessage(err, "common.admin.org_detail.error_action_default"));
+                        setError(
+                          getErrorMessage(
+                            err,
+                            "common.admin.org_detail.error_action_default",
+                          ),
+                        );
                       },
                     },
                   );
@@ -357,7 +398,12 @@ function FeatureFlagsTab({ orgId }: { orgId: string }) {
                     setError(null);
                     clearFlag.mutate(flag, {
                       onError: (err) => {
-                        setError(getErrorMessage(err, "common.admin.org_detail.error_action_default"));
+                        setError(
+                          getErrorMessage(
+                            err,
+                            "common.admin.org_detail.error_action_default",
+                          ),
+                        );
                       },
                     });
                   }}
@@ -387,12 +433,13 @@ export function AdminOrgDetailPage({ orgId }: { orgId: string }) {
   const detail = detailQuery.data?.data ?? null;
 
   return (
-    <div className="max-w-4xl space-y-6 p-6">
+    <Page>
       <Link
         to="/$locale/admin/orgs"
         params={{ locale }}
-        className="text-sm text-muted-foreground underline underline-offset-4"
+        className="mb-3 inline-flex items-center gap-1.5 text-[0.8125rem] text-muted-foreground hover:text-foreground"
       >
+        <ArrowLeft className="size-3.5" aria-hidden="true" />
         {t("common.admin.org_detail.back_to_orgs")}
       </Link>
 
@@ -401,38 +448,51 @@ export function AdminOrgDetailPage({ orgId }: { orgId: string }) {
       ) : detailQuery.isError ? (
         <Alert variant="destructive">
           <AlertDescription>
-            {getErrorMessage(detailQuery.error, "common.admin.org_detail.error_load")}
+            {getErrorMessage(
+              detailQuery.error,
+              "common.admin.org_detail.error_load",
+            )}
           </AlertDescription>
         </Alert>
       ) : detail ? (
         <>
-          <div>
-            <h1 className="text-xl font-semibold" data-testid="page-title">{detail.name}</h1>
-            <p className="text-sm text-muted-foreground">{detail.slug}</p>
-          </div>
-          <div className="flex gap-6 text-sm text-muted-foreground">
-            <span>
-              {t("common.admin.org_detail.created_line", {
-                date: formatDate(detail.created_at, i18n.language),
-              })}
-            </span>
-            <span>
-              {t("common.admin.org_detail.last_activity_line", {
-                date: detail.last_activity_at
-                  ? formatDate(detail.last_activity_at, i18n.language)
-                  : t("common.admin.org_detail.never"),
-              })}
-            </span>
-          </div>
+          <PageHeader
+            title={detail.name}
+            description={
+              <span className="flex flex-wrap gap-x-4 gap-y-1">
+                <span className="font-mono text-[0.8125rem]">
+                  {detail.slug}
+                </span>
+                <span>
+                  {t("common.admin.org_detail.created_line", {
+                    date: formatDate(detail.created_at, i18n.language),
+                  })}
+                </span>
+                <span>
+                  {t("common.admin.org_detail.last_activity_line", {
+                    date: detail.last_activity_at
+                      ? formatDate(detail.last_activity_at, i18n.language)
+                      : t("common.admin.org_detail.never"),
+                  })}
+                </span>
+              </span>
+            }
+          />
 
           <Tabs defaultValue="subscription">
             <TabsList>
               <TabsTrigger value="subscription">
                 {t("common.admin.org_detail.tab_subscription")}
               </TabsTrigger>
-              <TabsTrigger value="members">{t("common.admin.org_detail.tab_members")}</TabsTrigger>
-              <TabsTrigger value="files">{t("common.admin.org_detail.tab_files")}</TabsTrigger>
-              <TabsTrigger value="audit">{t("common.admin.org_detail.tab_audit")}</TabsTrigger>
+              <TabsTrigger value="members">
+                {t("common.admin.org_detail.tab_members")}
+              </TabsTrigger>
+              <TabsTrigger value="files">
+                {t("common.admin.org_detail.tab_files")}
+              </TabsTrigger>
+              <TabsTrigger value="audit">
+                {t("common.admin.org_detail.tab_audit")}
+              </TabsTrigger>
               <TabsTrigger value="feature-flags">
                 {t("common.admin.org_detail.tab_feature_flags")}
               </TabsTrigger>
@@ -447,7 +507,10 @@ export function AdminOrgDetailPage({ orgId }: { orgId: string }) {
               />
             </TabsContent>
             <TabsContent value="files">
-              <FilesTab fileCount={detail.file_count} isLoading={detailQuery.isLoading} />
+              <FilesTab
+                fileCount={detail.file_count}
+                isLoading={detailQuery.isLoading}
+              />
             </TabsContent>
             <TabsContent value="audit">
               <AuditTab orgId={orgId} />
@@ -458,6 +521,6 @@ export function AdminOrgDetailPage({ orgId }: { orgId: string }) {
           </Tabs>
         </>
       ) : null}
-    </div>
+    </Page>
   );
 }

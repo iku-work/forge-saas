@@ -96,7 +96,6 @@
   },
   "admin": {
     "badge": "Admin",
-    "back_to_app": "Retour à l'application",
     "nav": {
       "dashboard": "Tableau de bord",
       "orgs": "Organisations",

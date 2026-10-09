@@ -1,35 +1,43 @@
-import type { ReactNode } from "react";
-import { Link, useLocation, useNavigate } from "@tanstack/react-router";
+import { useState, type ReactNode } from "react";
+import { Link, useNavigate } from "@tanstack/react-router";
 import {
+  ArrowLeft,
   LayoutDashboard,
   ListChecks,
   LogOut,
+  Menu,
   ScrollText,
+  ShieldAlert,
   SlidersHorizontal,
   Users,
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
 import { useAuth } from "@forge/hooks";
-import { Badge, Toaster } from "@forge/ui";
+import {
+  AppShell,
+  ShellLabel,
+  ShellNavItem,
+  ShellPanel,
+  ShellSidebar,
+  Sheet,
+  SheetContent,
+  SheetTitle,
+  SheetTrigger,
+  Toaster,
+} from "@forge/ui";
 
 import { GlobalBanner } from "../components/GlobalBanner";
 import { MAIN_CONTENT_ID, SkipLink } from "../components/SkipLink";
-import { stripLocale } from "../lib/locale-url";
 import { useRouteLocale } from "../lib/useRouteLocale";
 
 interface AdminNavItem {
-  // T-233: the router path (locale-prefixed) and the locale-less path the
-  // active-state check compares against are deliberately separate fields --
-  // deriving the second by string-surgery on the first is the kind of thing
-  // that silently stops matching when a route is renamed.
   to:
     | "/$locale/admin"
     | "/$locale/admin/orgs"
     | "/$locale/admin/users"
     | "/$locale/admin/audit"
     | "/$locale/admin/settings";
-  path: string;
   labelKey: string;
   icon: typeof LayoutDashboard;
 }
@@ -37,25 +45,21 @@ interface AdminNavItem {
 const ADMIN_NAV: AdminNavItem[] = [
   {
     to: "/$locale/admin",
-    path: "/admin",
     labelKey: "common.admin.nav.dashboard",
     icon: LayoutDashboard,
   },
   {
     to: "/$locale/admin/orgs",
-    path: "/admin/orgs",
     labelKey: "common.admin.nav.orgs",
     icon: ListChecks,
   },
   {
     to: "/$locale/admin/users",
-    path: "/admin/users",
     labelKey: "common.admin.nav.users",
     icon: Users,
   },
   {
     to: "/$locale/admin/audit",
-    path: "/admin/audit",
     labelKey: "common.admin.nav.audit",
     icon: ScrollText,
   },
@@ -63,101 +67,152 @@ const ADMIN_NAV: AdminNavItem[] = [
   // *changes* the running product rather than reporting on it.
   {
     to: "/$locale/admin/settings",
-    path: "/admin/settings",
     labelKey: "common.admin.nav.settings",
     icon: SlidersHorizontal,
   },
 ];
 
-// T-143: a deliberately distinct shell (dark header, red "Admin" badge, no
-// org switcher) from AppLayout.tsx -- support staff must never mistake this
-// surface for the ordinary user-facing app while acting on someone else's
-// data.
-export function AdminLayout({ children }: { children: ReactNode }) {
+function AdminSidebar({ onNavigate }: { onNavigate?: () => void }) {
   const { t } = useTranslation();
   const { user, logout } = useAuth();
   const navigate = useNavigate();
-  const location = useLocation();
   const locale = useRouteLocale();
-  const activePath = stripLocale(location.pathname);
 
   const handleLogout = async (): Promise<void> => {
     await logout();
     await navigate({ to: "/$locale/login", params: { locale } });
   };
 
+  const header = (
+    <div className="flex flex-col items-start gap-2 px-2.5 pb-2 pt-1.5">
+      <div className="flex items-center gap-2.5 text-sm font-semibold">
+        <span
+          aria-hidden="true"
+          className="grid size-[1.375rem] shrink-0 place-items-center rounded-sm bg-primary text-xs font-bold text-primary-foreground"
+        >
+          {t("common.app.name").trim().charAt(0).toUpperCase()}
+        </span>
+        {t("common.admin.console")}
+      </div>
+      {/* T-143 / ticket 12: support staff must never mistake this surface
+          for the ordinary app while acting on someone else's data. A word
+          and an icon, in the warning colours -- never the accent, and never
+          colour alone. */}
+      <span
+        data-testid="admin-marker"
+        className="inline-flex items-center gap-1 rounded-full bg-warning-soft px-2 py-0.5 text-xs font-semibold text-warning"
+      >
+        <ShieldAlert className="size-3.5" aria-hidden="true" />
+        {t("common.admin.badge")}
+      </span>
+    </div>
+  );
+
+  const footer = (
+    <>
+      <ShellNavItem asChild>
+        <Link to="/$locale" params={{ locale }} data-testid="admin-back-to-app">
+          <ArrowLeft aria-hidden="true" />
+          <ShellLabel>{t("common.nav.back_to_app")}</ShellLabel>
+        </Link>
+      </ShellNavItem>
+      {user ? (
+        <>
+          <p className="truncate px-2.5 pt-2 text-xs text-muted-foreground">
+            {user.email}
+          </p>
+          <ShellNavItem
+            type="button"
+            onClick={() => {
+              void handleLogout();
+            }}
+          >
+            <LogOut aria-hidden="true" />
+            <ShellLabel>{t("common.nav.logout")}</ShellLabel>
+          </ShellNavItem>
+        </>
+      ) : null}
+    </>
+  );
+
   return (
-    <div className="dark flex min-h-dvh flex-col bg-background text-foreground">
-      <SkipLink />
-      {/* Wraps, because this bar holds a wordmark, four nav links and an
-          account block -- 901px of content that used to sit in one
-          unwrappable row, so every admin page scrolled sideways on a phone
-          (measured: 901px document width in a 360px viewport). */}
-      <header className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 border-b border-border bg-card px-4 py-3 sm:px-6">
-        <div className="flex items-center gap-3">
-          <span className="text-sm font-semibold">{t("common.app.name")}</span>
-          <Badge variant="destructive">{t("common.admin.badge")}</Badge>
-        </div>
-        <nav className="flex flex-wrap items-center gap-1">
-          {ADMIN_NAV.map((item) => {
-            const Icon = item.icon;
-            const isActive =
-              item.path === "/admin"
-                ? activePath === "/admin"
-                : activePath.startsWith(item.path);
-            return (
+    <ShellSidebar header={header} footer={footer}>
+      <nav className="flex flex-col gap-0.5" onClick={onNavigate}>
+        {ADMIN_NAV.map((item) => {
+          const Icon = item.icon;
+          return (
+            <ShellNavItem key={item.to} asChild>
               <Link
-                key={item.to}
                 to={item.to}
                 params={{ locale }}
-                className={`flex items-center gap-2 rounded-md px-3 py-2 text-sm transition-colors hover:bg-surface-sunken ${
-                  isActive
-                    ? "bg-surface-sunken text-foreground"
-                    : "text-foreground-secondary"
-                }`}
+                activeOptions={{ exact: item.to === "/$locale/admin" }}
               >
-                <Icon className="size-4" aria-hidden="true" />
-                {t(item.labelKey)}
+                <Icon aria-hidden="true" />
+                <ShellLabel>{t(item.labelKey)}</ShellLabel>
               </Link>
-            );
-          })}
-        </nav>
-        <div className="flex min-w-0 items-center gap-4">
-          <Link
-            to="/$locale"
-            params={{ locale }}
-            className="text-sm text-foreground-secondary underline underline-offset-4 hover:text-foreground"
-          >
-            {t("common.admin.back_to_app")}
-          </Link>
-          {user ? (
-            <div className="flex items-center gap-2 text-sm text-foreground-secondary">
-              <span className="truncate">{user.email}</span>
-              <button
-                type="button"
-                onClick={() => {
-                  void handleLogout();
-                }}
-                aria-label={t("common.nav.logout")}
-                className="rounded-md p-1.5 hover:bg-surface-sunken hover:text-foreground"
-              >
-                <LogOut className="size-4" aria-hidden="true" />
-              </button>
-            </div>
-          ) : null}
-        </div>
-      </header>
+            </ShellNavItem>
+          );
+        })}
+      </nav>
+    </ShellSidebar>
+  );
+}
+
+/**
+ * The superadmin console in the same sidebar-and-panel shell as the app
+ * (visual overhaul, ticket 12), told apart by the Admin marker at the top of
+ * the sidebar rather than by a second interface to learn.
+ */
+export function AdminLayout({ children }: { children: ReactNode }) {
+  const { t } = useTranslation();
+  const [navOpen, setNavOpen] = useState(false);
+
+  return (
+    <div className="flex min-h-dvh flex-col bg-background text-foreground">
+      <SkipLink />
       {/* T-263: the operator sees the banner their users see -- a banner that
           is only visible outside the admin surface is one nobody notices they
           left up. */}
       <GlobalBanner />
-      <main
-        id={MAIN_CONTENT_ID}
-        tabIndex={-1}
-        className="flex-1 overflow-auto bg-background text-foreground focus:outline-none"
-      >
-        {children}
-      </main>
+      <AppShell sidebar={<AdminSidebar />}>
+        <ShellPanel
+          top={
+            <>
+              <Sheet open={navOpen} onOpenChange={setNavOpen}>
+                <SheetTrigger
+                  className="-ms-2 rounded-md p-2 text-muted-foreground hover:bg-surface-sunken hover:text-foreground @3xl/shell:hidden"
+                  aria-label={t("common.nav.open_menu")}
+                >
+                  <Menu className="size-5" aria-hidden="true" />
+                </SheetTrigger>
+                <SheetContent
+                  side="start"
+                  className="p-0"
+                  aria-describedby={undefined}
+                >
+                  <SheetTitle className="sr-only">
+                    {t("common.nav.menu")}
+                  </SheetTitle>
+                  <AdminSidebar
+                    onNavigate={() => {
+                      setNavOpen(false);
+                    }}
+                  />
+                </SheetContent>
+              </Sheet>
+              <p className="flex-1 truncate">{t("common.admin.console")}</p>
+            </>
+          }
+        >
+          <main
+            id={MAIN_CONTENT_ID}
+            tabIndex={-1}
+            className="flex-1 focus:outline-none"
+          >
+            {children}
+          </main>
+        </ShellPanel>
+      </AppShell>
       <Toaster />
     </div>
   );

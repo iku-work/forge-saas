@@ -6,7 +6,7 @@ marker in the sidebar makes it impossible to mistake admin mode for the ordinary
 
 **Blocked by:** 04, 06, 08.
 
-**Status:** ready-for-agent
+**Status:** done
 
 ## Read first
 
@@ -53,7 +53,12 @@ pnpm --filter web type-check && pnpm --filter web lint && pnpm --filter web test
 
 ## Acceptance
 
-- [ ] Admin console uses the shared shell; "Back to app" present.
-- [ ] Persistent Admin marker (word + icon, warning colours) on every admin page; test added.
-- [ ] All admin pages use the page header and the shared list/settings components.
-- [ ] Impersonation banner unaffected; tests, lint, type-check pass.
+- [x] Admin console uses the shared shell; "Back to app" present.
+- [x] Persistent Admin marker (word + icon, warning colours) on every admin page; test added.
+- [x] All admin pages use the page header and the shared list/settings components.
+- [x] Impersonation banner unaffected; tests, lint, type-check pass.
+
+## Notes
+
+Completed 2026-10-09; see `PROGRESS.md`. The admin console no longer forces dark mode (the
+marker distinguishes it now). No collapsible rail in admin. Not yet seen in a browser.

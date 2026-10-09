@@ -43,7 +43,7 @@ something; move an entry to the bottom section when it is resolved.
 
 - **Translations for new keys.** Tickets 04–10 added English keys (sidebar groups, "Back to
   app", collapse/expand, section titles and hints, page descriptions, row-menu labels, member
-  and invoice status words, the dashboard welcome and checklist, the auth pages' Terms/Privacy). de, es, fr, fi and ar
+  and invoice status words, the dashboard welcome and checklist, the auth pages' Terms/Privacy, "Admin console"). de, es, fr, fi and ar
   fall back to English until translated via the translator workflow
   (`docs/runbooks/translations.md`). Ticket 03's copy changes *were* translated.
 - **Notifications Save is always enabled.** (ticket 07) Unlike other sections, on purpose:
@@ -60,11 +60,21 @@ something; move an entry to the bottom section when it is resolved.
 - **"Choose a plan" stays open during a trial.** (ticket 10) Done means `status === "active"`.
   If a product has a free plan that is also "active", it ticks immediately; if trials should
   count, change the rule in `useGettingStarted.ts`.
+- **Admin: raw status words.** (pre-existing, kept in ticket 12) Subscription statuses,
+  audit severities and member roles on admin pages show the API's word (`past_due`,
+  `elevated`, `owner`) inside the new pills. Translate them like the invoice statuses.
+- **Admin: no rail, no ⌘K.** (ticket 12) The admin sidebar does not collapse and the command
+  palette is app-only. Add both if superadmins spend long sessions there.
+- **Admin: native selects.** (pre-existing) The users/organizations filters and the banner type
+  are plain `<select>`s styled by hand; there is no Select primitive in `@forge/ui` yet.
 - **"Save" vs "Save changes".** (ticket 06) Buttons kept "Save" so existing translations stay
   valid. Decide one wording and apply it everywhere at once.
 
 ## Verification still owed
 
+- **Look at the admin console (ticket 12) in a running app.** Needs Docker and a superadmin
+  (`make seed` creates one). Check the marker in light and dark, the drawer at phone width,
+  the impersonation banner above the shell, and the product settings rows.
 - **Look at tickets 04–10 in a running app.** None of the shell, rail, or settings pages has been
   seen in a browser yet: login needs the backend (Docker Desktop was stopped). Check desktop,
   < ~860px wide (drawer), `ar`, dark mode, the rail's tooltips and animation.

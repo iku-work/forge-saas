@@ -122,7 +122,7 @@
   },
   "admin": {
     "badge": "Admin",
-    "back_to_app": "Back to app",
+    "console": "Admin console",
     "nav": {
       "dashboard": "Dashboard",
       "orgs": "Organizations",

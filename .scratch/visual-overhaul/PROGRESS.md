@@ -31,11 +31,11 @@ Legend: ✅ done · 🟡 partial · ⬜ not started
 | 09 | Other lists | ✅ | Done 2026-10-05 (Claude). Not yet looked at in a running app. |
 | 10 | Getting started checklist | ✅ | Done 2026-10-05 (Claude). Not yet looked at in a running app. See notes. |
 | 11 | Auth pages | ✅ | Done 2026-10-06 (Claude). Seen in a browser (login, register, `ar`, dark, 375px, short window). See notes. |
-| 12 | Admin console | ⬜ | Unblocked. |
+| 12 | Admin console | ✅ | Done 2026-10-09 (Claude). Not yet looked at in a running app (needs a superadmin login). See notes. |
 | 13 | Marketing hero | ⬜ | Unblocked. |
 | 14 | Integrate and verify | ⬜ | Blocked by all. |
 
-Startable now: **12**, **13**.
+Startable now: **13**.
 
 ## Ticket 01, step by step
 
@@ -73,6 +73,38 @@ Visual screenshot suite is expected to fail until ticket 14.
 - Windows-only flake found: back-to-back Astro builds in the marketing suite intermittently fail
   renaming `.astro/content-assets.mjs` (EPERM). It appeared with the webfonts; a control run without
   them did not hit it. `tests/helpers.ts` retries a build (max 3) only on that exact error on Windows.
+
+## Ticket 12 notes
+
+- `AdminLayout` now uses `AppShell` / `ShellSidebar` / `ShellPanel`. Sidebar: monogram +
+  "Admin console", the **Admin marker** (`data-testid="admin-marker"`: shield icon + "Admin",
+  `bg-warning-soft text-warning`, rounded-full), the five admin links, and at the bottom
+  "Back to app" (`admin-back-to-app`, reusing `common.nav.back_to_app`), the email and
+  "Log out". On narrow screens the same sidebar opens as a drawer from the panel's top row.
+  Not done here: the collapsible rail, ⌘K and shortcuts (optional per the ticket; the
+  admin console has no palette today either).
+- **The forced `dark` class is gone.** T-143 made the admin surface dark to tell it apart;
+  the marker now does that job and the console follows the user's theme like the app.
+- `common.admin.back_to_app` removed from every locale; `common.admin.console` added (en).
+- Pages: all seven on `Page` + `PageHeader`, no cards.
+  - Dashboard: the three numbers as a `<dl>` row of figures under a hairline; recent sign-ups
+    and payment failures as `SettingsSection`s of `DataListRow`s.
+  - Users / Organizations / Audit: filters above a bare `Table`; status as `StatusPill`
+    (users active/inactive; subscription status by tone: active, trialing = pending,
+    past_due/unpaid/incomplete_expired = danger, else neutral; audit severity elevated =
+    danger). Plan slugs and audit actions in mono.
+  - User detail: back link with an arrow, `PageHeader` (email; superadmin pill, name,
+    created date as the description; Mobile handoff and Impersonate as actions), then
+    memberships, sessions and recent actions as sections.
+  - Organization detail: tabs kept; key/value pairs are `SettingsRow`s inside an
+    `@container/section`; audit rows are `DataListRow`s; flag states are pills
+    (on = active, off = neutral, override = pending), flag names in mono.
+  - Product settings: two `SettingsSection`s. The typed switches are one `SettingsRow`
+    each (label + documented hint on the left, control on the right; banner options appear
+    as rows when the banner is on) with Save in the footer; the raw JSON editor keeps its
+    "Advanced" badge in the title and Save in the footer. All ids, labels and test ids kept.
+- Tests: new `layouts/AdminLayout.test.tsx` (marker + Back to app on `/admin` and
+  `/admin/users`). 390 web tests pass.
 
 ## Ticket 11 notes
 
