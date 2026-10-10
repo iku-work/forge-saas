@@ -6,11 +6,9 @@ something; move an entry to the bottom section when it is resolved.
 
 ## Backend
 
-- **Remove a profile photo.** (ticket 06) The Profile page has "Upload photo" but no "Remove":
-  `PATCH /api/v1/auth/me` accepts a new `avatar_file_id` but there is no way to clear it.
-  Needs: an explicit clear (e.g. `avatar_file_id: null` allowed and handled, or
-  `DELETE /api/v1/auth/me/avatar`), what happens to the stored file, and a web "Remove" button
-  in the Photo row.
+- **Replaced and removed avatars stay in storage.** (found after the PR) Choosing a new photo or
+  removing one only rewrites `user.avatar_object_key`; the old `stored_file` row and object remain
+  (and count towards the org's storage). A cleanup job for avatars no user points at would fix it.
 - **Organization logo upload.** (pre-existing, kept in ticket 07) The Organization page's logo
   row shows a disabled "Upload logo" with "coming soon". Needs a storage path for org logos
   (same shape as avatars) and the button wired up.
@@ -104,6 +102,7 @@ something; move an entry to the bottom section when it is resolved.
 
 ## Resolved
 
+- **Remove a profile photo.** The API already cleared on `avatar_file_id: null`; Profile now has a Remove button.
 - **Members list names, emails, photos; search and count; Files uploader names.** Done after the PR: `user` on each membership, `q` (email only, since names are encrypted), `meta.total`, a session-only member avatar route, `uploader` on each file.
 - **Signing in replaced a device's theme with the account's.** A device's explicit choice now wins over an account still on the default, and is saved to it.
 - **Translations for new keys.** Machine-translated in ticket 14 and flagged for review (above).

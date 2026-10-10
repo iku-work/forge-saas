@@ -232,6 +232,51 @@ describe("ProfileSettingsPage", () => {
     expect(screen.getByRole("button", { name: "Save" })).toBeEnabled();
   });
 
+  it("removes an uploaded photo by clearing avatar_file_id", async () => {
+    const applyUpdatedUser = vi.fn();
+    hooks.useAuth.mockReturnValue({
+      user: { ...user, has_uploaded_avatar: true },
+      isLoading: false,
+      applyUpdatedUser,
+    });
+    let sent: unknown = null;
+    server.use(
+      http.patch(`${API}/api/v1/auth/me`, async ({ request }) => {
+        sent = await request.json();
+        return HttpResponse.json({
+          data: { ...user, has_uploaded_avatar: false },
+          error: null,
+          meta: { request_id: "r1" },
+        });
+      }),
+    );
+
+    renderPage();
+    await userEvent.click(await screen.findByTestId("profile-avatar-remove"));
+
+    await waitFor(() => {
+      expect(sent).toEqual({ avatar_file_id: null });
+    });
+    expect(applyUpdatedUser).toHaveBeenCalledWith(
+      expect.objectContaining({ has_uploaded_avatar: false }),
+    );
+  });
+
+  it("offers no Remove without an uploaded photo", async () => {
+    hooks.useAuth.mockReturnValue({
+      user: { ...user, has_uploaded_avatar: false },
+      isLoading: false,
+      applyUpdatedUser: vi.fn(),
+    });
+
+    renderPage();
+
+    await screen.findByTestId("profile-avatar");
+    expect(
+      screen.queryByTestId("profile-avatar-remove"),
+    ).not.toBeInTheDocument();
+  });
+
   it("fetches a signed URL for the avatar rather than using a public one", async () => {
     // The point of a private bucket: there is nothing renderable on the user
     // object, so the page has to ask for a short-lived signed link. Asserted

@@ -73,7 +73,9 @@ export function ProfileSettingsPage() {
   const queryClient = useQueryClient();
 
   const setAvatar = useMutation({
-    mutationFn: async (fileId: string) => {
+    // null clears the photo: a write to the user row and nothing else, so
+    // it works with file storage off too.
+    mutationFn: async (fileId: string | null) => {
       const { data } = await updateMeApiV1AuthMePatch({
         // The id, never the storage key: the server resolves it and checks
         // the file is this user's, which is what keeps a private bucket
@@ -97,7 +99,7 @@ export function ProfileSettingsPage() {
     },
   });
 
-  const onAvatarUploaded = async (fileId: string): Promise<void> => {
+  const onAvatarChanged = async (fileId: string | null): Promise<void> => {
     try {
       const envelope = await setAvatar.mutateAsync(fileId);
       const updated = envelope.data;
@@ -110,7 +112,13 @@ export function ProfileSettingsPage() {
       // the picture in the corner at the same moment as the one on this
       // page.
       await queryClient.invalidateQueries({ queryKey: AVATAR_QUERY_KEY });
-      toast.success(t("auth.profile.avatar_saved"));
+      toast.success(
+        t(
+          fileId === null
+            ? "auth.profile.avatar_removed"
+            : "auth.profile.avatar_saved",
+        ),
+      );
     } catch (error) {
       toast.error(getErrorMessage(error, "auth.profile.error_avatar"));
     }
@@ -182,9 +190,22 @@ export function ProfileSettingsPage() {
                   // Storing the file was never the point -- until now
                   // nothing recorded *which* file was the avatar, so this
                   // handler showed a toast and the upload vanished.
-                  void onAvatarUploaded(file.id);
+                  void onAvatarChanged(file.id);
                 }}
               />
+              {user.has_uploaded_avatar ? (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  disabled={setAvatar.isPending}
+                  onClick={() => {
+                    void onAvatarChanged(null);
+                  }}
+                  data-testid="profile-avatar-remove"
+                >
+                  {t("auth.profile.remove_avatar")}
+                </Button>
+              ) : null}
             </SettingsRow>
 
             <Form {...form}>
