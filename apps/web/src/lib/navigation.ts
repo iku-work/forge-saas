@@ -6,7 +6,10 @@ import {
   FolderOpen,
   KeyRound,
   LayoutDashboard,
+  ListChecks,
+  ScrollText,
   Shield,
+  SlidersHorizontal,
   User as UserIcon,
   Users,
   Webhook,
@@ -32,7 +35,12 @@ export type NavTo =
   | "/$locale/settings/billing"
   | "/$locale/settings/notifications"
   | "/$locale/settings/api-keys"
-  | "/$locale/settings/webhooks";
+  | "/$locale/settings/webhooks"
+  | "/$locale/admin"
+  | "/$locale/admin/orgs"
+  | "/$locale/admin/users"
+  | "/$locale/admin/audit"
+  | "/$locale/admin/settings";
 
 export interface NavItem {
   to: NavTo;
@@ -198,3 +206,43 @@ export function useVisibleNavItems(): VisibleNav {
   const settings = SETTINGS_NAV.filter(isVisible);
   return { primary, settings, all: [...primary, ...settings] };
 }
+
+/**
+ * The admin console's pages (T-143), for its sidebar and its command
+ * palette. Not gated here: the whole console is behind the superadmin route
+ * guard, and every page in it is open to anyone who got past it.
+ */
+export const ADMIN_NAV_ITEMS: NavItem[] = [
+  {
+    to: "/$locale/admin",
+    path: "/admin",
+    labelKey: "common.admin.nav.dashboard",
+    icon: LayoutDashboard,
+  },
+  {
+    to: "/$locale/admin/orgs",
+    path: "/admin/orgs",
+    labelKey: "common.admin.nav.orgs",
+    icon: ListChecks,
+  },
+  {
+    to: "/$locale/admin/users",
+    path: "/admin/users",
+    labelKey: "common.admin.nav.users",
+    icon: Users,
+  },
+  {
+    to: "/$locale/admin/audit",
+    path: "/admin/audit",
+    labelKey: "common.admin.nav.audit",
+    icon: ScrollText,
+  },
+  // T-263: last on purpose -- the only page here that *changes* the running
+  // product rather than reporting on it.
+  {
+    to: "/$locale/admin/settings",
+    path: "/admin/settings",
+    labelKey: "common.admin.nav.settings",
+    icon: SlidersHorizontal,
+  },
+];

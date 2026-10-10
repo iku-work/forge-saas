@@ -1,4 +1,5 @@
-import { screen } from "@testing-library/react";
+import { screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { describe, expect, it } from "vitest";
 
 import { makeUser } from "../test/appShellFixtures";
@@ -23,4 +24,31 @@ describe("AdminLayout", () => {
       );
     },
   );
+
+  it("collapses to a rail with [ like the app", async () => {
+    window.localStorage.clear();
+    renderApp({ initialPath: "/admin", user: superadmin });
+    const toggle = await screen.findByTestId("admin-sidebar-toggle");
+    expect(toggle).toHaveAttribute("aria-expanded", "true");
+
+    await userEvent.keyboard("[[");
+
+    await waitFor(() => {
+      expect(toggle).toHaveAttribute("aria-expanded", "false");
+    });
+  });
+
+  it("opens the palette over the admin pages with Ctrl+K", async () => {
+    renderApp({ initialPath: "/admin", user: superadmin });
+    await screen.findByTestId("admin-marker");
+
+    await userEvent.keyboard("{Control>}k{/Control}");
+
+    expect(
+      await screen.findByTestId("palette-nav-/admin/users"),
+    ).toBeInTheDocument();
+    // The app's pages are not offered here; the way back to it is.
+    expect(screen.queryByTestId("palette-nav-/files")).not.toBeInTheDocument();
+    expect(screen.getByTestId("palette-nav-/")).toBeInTheDocument();
+  });
 });

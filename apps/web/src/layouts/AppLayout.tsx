@@ -15,13 +15,7 @@ import {
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
-import {
-  useAuth,
-  useDirection,
-  useMaintenance,
-  useModules,
-  useOrg,
-} from "@forge/hooks";
+import { useAuth, useMaintenance, useModules, useOrg } from "@forge/hooks";
 import type { ActiveModules } from "@forge/hooks";
 import {
   AppShell,
@@ -43,10 +37,7 @@ import {
   SheetContent,
   SheetTitle,
   SheetTrigger,
-  Tooltip,
-  TooltipContent,
   TooltipProvider,
-  TooltipTrigger,
   ShellLabel,
   ShellNavGroup,
   ShellNavItem,
@@ -69,6 +60,7 @@ import { NotificationBell } from "../features/notifications/NotificationBell";
 import { SupportLink } from "../features/support/SupportLink";
 import { stripLocale } from "../lib/locale-url";
 import { useVisibleNavItems, type NavItem } from "../lib/navigation";
+import { RailTooltip } from "../components/RailTooltip";
 import { useAvatarSrc } from "../lib/useAvatarSrc";
 import { useOrgLogoSrc } from "../lib/useOrgLogoSrc";
 import { useSidebarCollapsed } from "../lib/useSidebarCollapsed";
@@ -106,35 +98,6 @@ function navTestSlug(path: string): string {
   return path === "/"
     ? "dashboard"
     : path.replace(/^\//, "").replace(/\//g, "-");
-}
-
-/**
- * In the collapsed rail a row is an icon alone, so its name appears as a
- * tooltip on hover and on keyboard focus. Expanded (and in the drawer, which
- * never collapses) the row shows its label and needs no tooltip.
- */
-function RailTooltip({
-  label,
-  enabled,
-  children,
-}: {
-  label: string;
-  enabled: boolean;
-  children: ReactNode;
-}) {
-  const direction = useDirection();
-  if (!enabled) {
-    return children;
-  }
-  return (
-    <Tooltip>
-      <TooltipTrigger asChild>{children}</TooltipTrigger>
-      {/* Radix sides are physical; the rail is on the start edge. */}
-      <TooltipContent side={direction === "rtl" ? "left" : "right"}>
-        {label}
-      </TooltipContent>
-    </Tooltip>
-  );
 }
 
 function NavLink({ item, collapsed }: { item: NavItem; collapsed: boolean }) {
