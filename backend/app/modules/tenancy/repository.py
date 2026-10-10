@@ -314,6 +314,29 @@ class InvitationRepository:
         next_cursor = page[-1].id if page and len(items) > capped_limit else None
         return page, next_cursor
 
+    async def get_pending_in_org(self, org_id: UUID, invitation_id: UUID) -> Invitation | None:
+        """A not-yet-accepted invitation, only if it belongs to `org_id`."""
+        m = cast("Any", Invitation)
+        stmt = select(Invitation).where(
+            m.id == invitation_id, m.org_id == org_id, m.accepted_at.is_(None)
+        )
+        result = await self.session.execute(stmt)
+        return result.scalar_one_or_none()
+
+    async def replace_token(
+        self, invitation: Invitation, *, token_hash: str, expires_at: datetime
+    ) -> Invitation:
+        invitation.token_hash = token_hash
+        invitation.expires_at = expires_at
+        await self.session.flush()
+        return invitation
+
+    async def delete(self, invitation: Invitation) -> None:
+        # Invitation has no SoftDeleteMixin (T-025), like Membership: a
+        # revoked invitation is gone, and its link with it.
+        await self.session.delete(invitation)
+        await self.session.flush()
+
     async def get_by_token_hash(self, token_hash: str) -> Invitation | None:
         m = cast("Any", Invitation)
         stmt = select(Invitation).where(

@@ -699,3 +699,89 @@ async def test_member_avatar_does_not_reach_another_orgs_membership(
     )
 
     assert response.status_code == 404
+
+
+# --- resend / revoke an invitation (visual overhaul follow-up) -----------------
+
+
+async def test_resend_invitation_issues_a_fresh_link_and_emails_it(
+    client: httpx.AsyncClient,
+    session: AsyncSession,
+    user_a: User,
+    org_a: Organization,
+    enqueued_jobs: list[tuple[str, dict[str, Any]]],
+) -> None:
+    """An expired invitation is the usual reason to resend: it comes back
+    with a new expiry, and the old link stops working (one hash per row)."""
+    invitation = await _add_invitation(
+        session, org_a, user_a, email="late@example.com", expires_in=timedelta(days=-1)
+    )
+    old_hash = invitation.token_hash
+
+    response = await client.post(
+        f"/api/v1/orgs/{org_a.id}/invitations/{invitation.id}/resend",
+        headers=_auth_header(user_a),
+    )
+
+    assert response.status_code == 200
+    assert "token_hash" not in response.json()["data"]
+    await session.refresh(invitation)
+    assert invitation.token_hash != old_hash
+    assert invitation.expires_at > datetime.now(UTC)
+    assert [kwargs["to"] for name, kwargs in enqueued_jobs if name == "send_email"] == [
+        "late@example.com"
+    ]
+
+
+async def test_resend_invitation_member_without_permission_returns_403(
+    client: httpx.AsyncClient, session: AsyncSession, user_a: User, org_a: Organization
+) -> None:
+    invitation = await _add_invitation(session, org_a, user_a)
+    member, _ = await _add_member(session, org_a)
+
+    response = await client.post(
+        f"/api/v1/orgs/{org_a.id}/invitations/{invitation.id}/resend",
+        headers=_auth_header(member),
+    )
+
+    assert response.status_code == 403
+
+
+async def test_resend_an_accepted_invitation_returns_404(
+    client: httpx.AsyncClient, session: AsyncSession, user_a: User, org_a: Organization
+) -> None:
+    invitation = await _add_invitation(session, org_a, user_a, accepted=True)
+
+    response = await client.post(
+        f"/api/v1/orgs/{org_a.id}/invitations/{invitation.id}/resend",
+        headers=_auth_header(user_a),
+    )
+
+    assert response.status_code == 404
+
+
+async def test_revoke_invitation_removes_it_from_the_list(
+    client: httpx.AsyncClient, session: AsyncSession, user_a: User, org_a: Organization
+) -> None:
+    invitation = await _add_invitation(session, org_a, user_a)
+
+    response = await client.delete(
+        f"/api/v1/orgs/{org_a.id}/invitations/{invitation.id}", headers=_auth_header(user_a)
+    )
+
+    assert response.status_code == 200
+    listed = await client.get(f"/api/v1/orgs/{org_a.id}/invitations", headers=_auth_header(user_a))
+    assert listed.json()["data"] == []
+
+
+async def test_revoke_invitation_member_without_permission_returns_403(
+    client: httpx.AsyncClient, session: AsyncSession, user_a: User, org_a: Organization
+) -> None:
+    invitation = await _add_invitation(session, org_a, user_a)
+    member, _ = await _add_member(session, org_a)
+
+    response = await client.delete(
+        f"/api/v1/orgs/{org_a.id}/invitations/{invitation.id}", headers=_auth_header(member)
+    )
+
+    assert response.status_code == 403

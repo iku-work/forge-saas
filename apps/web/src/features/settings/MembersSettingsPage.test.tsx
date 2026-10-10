@@ -247,6 +247,15 @@ describe("MembersSettingsPage", () => {
           name: "Remove from organization",
         }),
       );
+      // F-009: named, and nothing sent until it is confirmed.
+      const dialog = await screen.findByTestId("confirm-dialog");
+      expect(dialog).toHaveTextContent("Remove Sam Rivera?");
+      expect(removed).toBeNull();
+      await userEvent.click(
+        within(dialog).getByRole("button", {
+          name: "Remove from organization",
+        }),
+      );
 
       await waitFor(() => {
         expect(removed).not.toBeNull();

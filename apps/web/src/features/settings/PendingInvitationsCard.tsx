@@ -1,21 +1,35 @@
-import { useCallback } from "react";
-import { useInfiniteQuery } from "@tanstack/react-query";
+import { useCallback, useState } from "react";
+import {
+  useInfiniteQuery,
+  useMutation,
+  useQueryClient,
+} from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 
 import {
   listInvitationsApiV1OrgsOrgIdInvitationsGet,
   listInvitationsApiV1OrgsOrgIdInvitationsGetInfiniteQueryKey,
+  resendInvitationApiV1OrgsOrgIdInvitationsInvitationIdResendPost,
+  revokeInvitationApiV1OrgsOrgIdInvitationsInvitationIdDelete,
 } from "@forge/api-client";
 import type { InvitationPublic } from "@forge/api-client";
 import {
   Alert,
   AlertDescription,
   Button,
+  ConfirmDialog,
   DataListColumns,
   DataListRow,
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+  RowActionsButton,
   SettingsSection,
   Skeleton,
   StatusPill,
+  toast,
 } from "@forge/ui";
 import { formatDate } from "@forge/utils";
 
@@ -27,7 +41,8 @@ import { getErrorMessage } from "../auth/getErrorMessage";
 // (see MembersSettingsPage), so the two lists on this page scroll and
 // paginate identically.
 const ESTIMATED_ROW_HEIGHT_PX = 52;
-const INVITATION_COLUMNS = "grid-cols-[minmax(0,1fr)_6.5rem_minmax(0,9rem)]";
+const INVITATION_COLUMNS =
+  "grid-cols-[minmax(0,1fr)_6.5rem_minmax(0,9rem)_2rem]";
 const MAX_LIST_HEIGHT_PX = 420;
 
 function isExpired(invitation: InvitationPublic): boolean {
@@ -55,6 +70,47 @@ export function PendingInvitationsCard({
   initialScrollOffset,
 }: PendingInvitationsCardProps) {
   const { t, i18n } = useTranslation();
+  const queryClient = useQueryClient();
+  const [pendingRevoke, setPendingRevoke] = useState<InvitationPublic | null>(
+    null,
+  );
+  const listKey = listInvitationsApiV1OrgsOrgIdInvitationsGetInfiniteQueryKey({
+    path: { org_id: orgId },
+  });
+
+  const resend = useMutation({
+    mutationFn: async (invitation: InvitationPublic) => {
+      await resendInvitationApiV1OrgsOrgIdInvitationsInvitationIdResendPost({
+        path: { org_id: orgId, invitation_id: invitation.id },
+        throwOnError: true,
+      });
+    },
+    onSuccess: async (_data, invitation) => {
+      // The row's expiry moved: a resent invitation is good for another week.
+      await queryClient.invalidateQueries({ queryKey: listKey });
+      toast.success(
+        t("tenancy.invitations.resent", { email: invitation.email }),
+      );
+    },
+    onError: (error) => {
+      toast.error(getErrorMessage(error, "tenancy.invitations.error_resend"));
+    },
+  });
+
+  const revoke = useMutation({
+    mutationFn: async (invitation: InvitationPublic) => {
+      await revokeInvitationApiV1OrgsOrgIdInvitationsInvitationIdDelete({
+        path: { org_id: orgId, invitation_id: invitation.id },
+        throwOnError: true,
+      });
+    },
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: listKey });
+    },
+    onError: (error) => {
+      toast.error(getErrorMessage(error, "tenancy.invitations.error_revoke"));
+    },
+  });
 
   // Raw SDK call rather than the generated *GetInfiniteOptions() helper --
   // see CreateOrgForm.tsx for why. The query key function alone is fine to
@@ -123,6 +179,7 @@ export function PendingInvitationsCard({
               <span className="text-end">
                 {t("tenancy.invitations.expires_col")}
               </span>
+              <span />
             </DataListColumns>
             <VirtualList
               items={invitations}
@@ -167,6 +224,37 @@ export function PendingInvitationsCard({
                       </span>
                     )}
                   </span>
+                  <span className="text-end">
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <RowActionsButton
+                          aria-label={t("tenancy.invitations.actions_label", {
+                            email: invitation.email,
+                          })}
+                          data-testid="invitation-actions"
+                        />
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end" className="w-48">
+                        <DropdownMenuItem
+                          disabled={resend.isPending}
+                          onSelect={() => {
+                            resend.mutate(invitation);
+                          }}
+                        >
+                          {t("tenancy.invitations.resend")}
+                        </DropdownMenuItem>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem
+                          className="text-destructive focus:text-destructive"
+                          onSelect={() => {
+                            setPendingRevoke(invitation);
+                          }}
+                        >
+                          {t("tenancy.invitations.revoke")}
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </span>
                 </DataListRow>
               )}
             />
@@ -186,6 +274,31 @@ export function PendingInvitationsCard({
           </Button>
         ) : null}
       </div>
+
+      <ConfirmDialog
+        open={pendingRevoke !== null}
+        onOpenChange={(open) => {
+          if (!open) {
+            setPendingRevoke(null);
+          }
+        }}
+        title={t("tenancy.invitations.revoke_confirm_title")}
+        description={t("tenancy.invitations.revoke_confirm_body", {
+          email: pendingRevoke?.email ?? "",
+        })}
+        confirmLabel={t("tenancy.invitations.revoke")}
+        destructive
+        isPending={revoke.isPending}
+        onConfirm={() => {
+          const invitation = pendingRevoke;
+          if (!invitation) {
+            return;
+          }
+          // Closed before the request, as FilesPage does: the answer is given.
+          setPendingRevoke(null);
+          revoke.mutate(invitation);
+        }}
+      />
     </SettingsSection>
   );
 }

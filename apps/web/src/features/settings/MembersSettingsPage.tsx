@@ -33,6 +33,7 @@ import {
   AvatarFallback,
   AvatarImage,
   Button,
+  ConfirmDialog,
   DataListColumns,
   DataListMuted,
   DataListRow,
@@ -296,6 +297,11 @@ export function MembersSettingsPage({
   const [inviteOpen, setInviteOpen] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
+  // F-009: removing someone takes their access away at once, so it is
+  // confirmed first, naming them.
+  const [pendingRemoval, setPendingRemoval] = useState<MembershipPublic | null>(
+    null,
+  );
   const emailQuery = useDebouncedValue(search.trim());
 
   // Raw SDK call rather than the generated *GetInfiniteOptions() helper --
@@ -601,7 +607,7 @@ export function MembersSettingsPage({
                           <DropdownMenuItem
                             className="text-destructive focus:text-destructive"
                             onSelect={() => {
-                              void handleRemove(member.id);
+                              setPendingRemoval(member);
                             }}
                           >
                             {t("tenancy.members.remove")}
@@ -637,6 +643,32 @@ export function MembersSettingsPage({
       {/* MEMBERS_MANAGE only: GET /orgs/{id}/invitations is gated on it (the
           response is a list of invitee email addresses), so rendering this
           for a plain member would produce a 403 error box, not a feature. */}
+      <ConfirmDialog
+        open={pendingRemoval !== null}
+        onOpenChange={(open) => {
+          if (!open) {
+            setPendingRemoval(null);
+          }
+        }}
+        title={t("tenancy.members.remove_confirm_title", {
+          name: pendingRemoval ? memberName(pendingRemoval) : "",
+        })}
+        description={t("tenancy.members.remove_confirm_body", {
+          org: org.name,
+        })}
+        confirmLabel={t("tenancy.members.remove")}
+        destructive
+        isPending={removeMember.isPending}
+        onConfirm={() => {
+          const member = pendingRemoval;
+          if (!member) {
+            return;
+          }
+          setPendingRemoval(null);
+          void handleRemove(member.id);
+        }}
+      />
+
       {canManage ? (
         <PendingInvitationsCard
           orgId={org.id}

@@ -42,7 +42,7 @@ from app.modules.api_keys.scopes import Scope
 from app.modules.auth.models import User
 from app.modules.auth.permissions import ROLE_PERMISSIONS, Permission
 from app.modules.auth.schemas import AvatarUrlResponse
-from app.modules.tenancy.models import Membership, Organization
+from app.modules.tenancy.models import Invitation, Membership, Organization
 from app.modules.tenancy.schemas import (
     CreateOrgRequest,
     InvitationPreview,
@@ -353,30 +353,70 @@ async def list_invitations(  # noqa: PLR0913 — cursor pagination (§0.3) needs
     after: Annotated[UUID | None, Query()] = None,
     limit: Annotated[int, Query(ge=1, le=100)] = 20,
 ) -> Envelope[list[InvitationPublic]]:
-    # MEMBERS_MANAGE, not the MEMBERS_READ that gates the member list: this
-    # response is keyed on the invitee's *email address*, which MembershipPublic
-    # deliberately never exposes, and it is the management view of a flow only
-    # MEMBERS_MANAGE can start (see create_invitation above).
+    # MEMBERS_MANAGE, not the MEMBERS_READ that gates the member list: an
+    # invitee is not a member yet, so their email address is the inviter's
+    # business rather than the whole organization's (members do see each
+    # other's, on MembershipPublic.user), and this is the management view of
+    # a flow only MEMBERS_MANAGE can start (see create_invitation above).
     invitations, next_cursor = await TenancyService(session).list_pending_invitations(
         org_id, after, limit
     )
-    data = [
-        InvitationPublic(
-            id=invitation.id,
-            org_id=invitation.org_id,
-            email=invitation.email,
-            role=invitation.role,
-            invited_by=invitation.invited_by,
-            expires_at=invitation.expires_at,
-            created_at=invitation.created_at,
-        )
-        for invitation in invitations
-    ]
+    data = [_invitation_public(invitation) for invitation in invitations]
     meta = Meta(
         request_id=_request_id(request),
         next_cursor=str(next_cursor) if next_cursor is not None else None,
     )
     return Envelope(data=data, meta=meta)
+
+
+def _invitation_public(invitation: Invitation) -> InvitationPublic:
+    # Field by field, never from_attributes: Invitation.token_hash must not
+    # reach a client (T-243).
+    return InvitationPublic(
+        id=invitation.id,
+        org_id=invitation.org_id,
+        email=invitation.email,
+        role=invitation.role,
+        invited_by=invitation.invited_by,
+        expires_at=invitation.expires_at,
+        created_at=invitation.created_at,
+    )
+
+
+@router.post(
+    "/orgs/{org_id}/invitations/{invitation_id}/resend",
+    dependencies=[Depends(reject_during_impersonation("notifying"))],
+)
+@api_limit
+async def resend_invitation(
+    request: Request,
+    org_id: UUID,
+    invitation_id: UUID,
+    actor: Annotated[Membership, Depends(require_org_permission(Permission.MEMBERS_MANAGE))],
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> Envelope[InvitationPublic]:
+    invitation = await TenancyService(session).resend_invitation(org_id, invitation_id, actor)
+    await session.commit()
+    return Envelope(data=_invitation_public(invitation), meta=Meta(request_id=_request_id(request)))
+
+
+@router.delete(
+    "/orgs/{org_id}/invitations/{invitation_id}",
+    dependencies=[Depends(reject_during_impersonation("data_mutation"))],
+)
+@api_limit
+async def revoke_invitation(
+    request: Request,
+    org_id: UUID,
+    invitation_id: UUID,
+    actor: Annotated[  # noqa: ARG001 -- gates the route on MEMBERS_MANAGE; org comes from path
+        Membership, Depends(require_org_permission(Permission.MEMBERS_MANAGE))
+    ],
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> Envelope[None]:
+    await TenancyService(session).revoke_invitation(org_id, invitation_id)
+    await session.commit()
+    return Envelope(data=None, meta=Meta(request_id=_request_id(request)))
 
 
 @router.get("/invitations/{token}")

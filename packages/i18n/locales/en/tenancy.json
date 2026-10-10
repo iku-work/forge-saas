@@ -50,7 +50,9 @@
     "change_role": "Change role",
     "search_placeholder": "Search by email",
     "count": "{count, plural, one {# member} other {# members}}",
-    "no_match": "No members match “{query}”."
+    "no_match": "No members match “{query}”.",
+    "remove_confirm_title": "Remove {name}?",
+    "remove_confirm_body": "They lose access to {org} straight away. You can invite them again later."
   },
   "invitations": {
     "title": "Pending invitations",
@@ -63,7 +65,15 @@
     "expires": "Expires {date}",
     "expired": "Expired",
     "load_more": "Load more",
-    "error_load": "Unable to load pending invitations."
+    "error_load": "Unable to load pending invitations.",
+    "actions_label": "Actions for {email}",
+    "resend": "Resend invitation",
+    "resent": "Invitation sent again to {email}.",
+    "revoke": "Revoke invitation",
+    "revoke_confirm_title": "Revoke this invitation?",
+    "revoke_confirm_body": "The link sent to {email} will stop working. You can invite them again later.",
+    "error_resend": "Couldn’t resend the invitation. Please try again.",
+    "error_revoke": "Couldn’t revoke the invitation. Please try again."
   },
   "invite": {
     "title": "Invite a member",

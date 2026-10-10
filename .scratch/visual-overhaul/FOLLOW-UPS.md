@@ -13,16 +13,8 @@ something; move an entry to the bottom section when it is resolved.
   row shows a disabled "Upload logo" with "coming soon". Needs a storage path for org logos
   (same shape as avatars) and the button wired up.
 
-- **Resend and revoke invitations.** (ticket 08) The pending-invitations list has no actions
-  because there are no endpoints for them. Needs `POST /orgs/{id}/invitations/{inv}/resend` and
-  `DELETE /orgs/{id}/invitations/{inv}`, then a "⋯" menu on invitation rows (Resend, Copy link,
-  separator, Revoke).
-
 ## Frontend
 
-- **Removing a member has no confirmation.** (pre-existing, kept in ticket 08) It acts at once.
-  The design rules (F-009) ask for a confirm on actions that affect other users. Wrap it in the
-  existing `ConfirmDialog`.
 - **Leaving an organization.** (ticket 08) The old list showed Remove on your own row; the new one
   shows no actions on your own row (so you can't demote or remove yourself by accident). There
   is no other "Leave organization" path; add one deliberately (e.g. Organization settings) if
@@ -102,6 +94,8 @@ something; move an entry to the bottom section when it is resolved.
 
 ## Resolved
 
+- **Resend and revoke invitations.** New endpoints (resend issues a fresh link and expiry; revoke deletes); a "⋯" menu on each pending invitation, revoke confirmed. "Copy link" skipped: only a hash of the token is stored.
+- **Removing a member had no confirmation.** It is confirmed now, naming the member.
 - **Remove a profile photo.** The API already cleared on `avatar_file_id: null`; Profile now has a Remove button.
 - **Members list names, emails, photos; search and count; Files uploader names.** Done after the PR: `user` on each membership, `q` (email only, since names are encrypted), `meta.total`, a session-only member avatar route, `uploader` on each file.
 - **Signing in replaced a device's theme with the account's.** A device's explicit choice now wins over an account still on the default, and is saved to it.

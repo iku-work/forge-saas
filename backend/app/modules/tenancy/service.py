@@ -97,9 +97,7 @@ class TenancyService:
             invited_by=inviter.user_id,
             expires_at=utcnow() + _INVITATION_TTL,
         )
-        org = await self._orgs.get_by_id(org_id)
-        if org is None:
-            raise NotFoundError("errors.org_not_found", fallback="Organization not found")
+        org = await self._org_or_raise(org_id)
         await self._enqueue_invitation_email(
             org.name, email, plain_token, await self._invitee_locale(email, inviter.user_id)
         )
@@ -119,6 +117,46 @@ class TenancyService:
             EventType.MEMBER_INVITED,
             MemberPayload(email=email, role=role.value),
         )
+
+    async def resend_invitation(
+        self, org_id: UUID, invitation_id: UUID, sender: Membership
+    ) -> Invitation:
+        """Send a pending invitation again, with a fresh link and expiry.
+
+        Works on an expired invitation too -- that is the usual reason to
+        resend. The old link stops working: the row keeps one token hash.
+        """
+        invitation = await self._pending_invitation_or_raise(org_id, invitation_id)
+        plain_token = sign_url_token({"invitation_id": str(invitation.id)}, _INVITATION_TTL_SECONDS)
+        await self._invitations.replace_token(
+            invitation, token_hash=hash_token(plain_token), expires_at=utcnow() + _INVITATION_TTL
+        )
+        org = await self._org_or_raise(org_id)
+        await self._enqueue_invitation_email(
+            org.name,
+            invitation.email,
+            plain_token,
+            await self._invitee_locale(invitation.email, sender.user_id),
+        )
+        return invitation
+
+    async def revoke_invitation(self, org_id: UUID, invitation_id: UUID) -> None:
+        """Withdraw a pending invitation; its link stops working at once."""
+        invitation = await self._pending_invitation_or_raise(org_id, invitation_id)
+        await self._invitations.delete(invitation)
+
+    async def _pending_invitation_or_raise(self, org_id: UUID, invitation_id: UUID) -> Invitation:
+        # 404 for another org's invitation too, so its id reveals nothing.
+        invitation = await self._invitations.get_pending_in_org(org_id, invitation_id)
+        if invitation is None:
+            raise NotFoundError("errors.invitation_not_found", fallback="Invitation not found")
+        return invitation
+
+    async def _org_or_raise(self, org_id: UUID) -> Organization:
+        org = await self._orgs.get_by_id(org_id)
+        if org is None:
+            raise NotFoundError("errors.org_not_found", fallback="Organization not found")
+        return org
 
     async def accept_invitation(self, token: str, user: User) -> Membership:
         # Two independent checks: the itsdangerous signature + embedded TTL
