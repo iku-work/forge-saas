@@ -29,7 +29,12 @@ function Checklist({
 }: ChecklistProps) {
   const percent = total === 0 ? 0 : Math.round((done / total) * 100);
   return (
-    <section className={cn("w-full", className)} {...props}>
+    // A container, so each step can put its button under its text when the
+    // list itself is narrow (a phone, or the marketing hero's small frame).
+    <section
+      className={cn("@container/checklist w-full", className)}
+      {...props}
+    >
       <div className="flex flex-wrap items-baseline justify-between gap-4 pb-3.5">
         <h2 className="text-[0.9375rem] font-semibold">{title}</h2>
         <div className="flex items-center gap-3 text-[0.8125rem] text-muted-foreground">
@@ -80,7 +85,7 @@ function ChecklistStep({
     <li
       data-done={done ? "" : undefined}
       className={cn(
-        "grid grid-cols-[1.5rem_minmax(0,1fr)_auto] items-center gap-4 border-b border-border py-4.5",
+        "grid grid-cols-[1.5rem_minmax(0,1fr)] items-start gap-x-4 gap-y-3 border-b border-border py-4.5 @md/checklist:grid-cols-[1.5rem_minmax(0,1fr)_auto] @md/checklist:items-center",
         className,
       )}
       {...props}
@@ -88,7 +93,7 @@ function ChecklistStep({
       <span
         aria-hidden="true"
         className={cn(
-          "grid size-[1.375rem] place-items-center rounded-full",
+          "mt-0.5 grid size-[1.375rem] place-items-center rounded-full @md/checklist:mt-0",
           done
             ? "bg-primary text-primary-foreground"
             : "ring-[1.5px] ring-inset ring-border-strong",
@@ -110,7 +115,7 @@ function ChecklistStep({
           <p className="text-[0.8125rem] text-muted-foreground">{hint}</p>
         ) : null}
       </div>
-      <div className="justify-self-end">
+      <div className="col-start-2 justify-self-start @md/checklist:col-start-auto @md/checklist:justify-self-end">
         {done ? (
           <span className="text-[0.8125rem] text-muted-foreground">
             {doneLabel}

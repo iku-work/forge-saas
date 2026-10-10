@@ -24,6 +24,7 @@ import {
 import { formatDate } from "@forge/utils";
 
 import { useRouteLocale } from "../../lib/useRouteLocale";
+import { auditSeverityLabel } from "./statusLabels";
 import { getErrorMessage } from "../auth/getErrorMessage";
 import { useDebouncedValue } from "../../lib/useDebouncedValue";
 
@@ -171,7 +172,7 @@ export function AdminAuditPage() {
                         event.severity === "elevated" ? "danger" : "neutral"
                       }
                     >
-                      {event.severity}
+                      {auditSeverityLabel(t, event.severity)}
                     </StatusPill>
                   </TableCell>
                 </TableRow>

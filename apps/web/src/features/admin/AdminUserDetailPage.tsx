@@ -143,7 +143,7 @@ export function AdminUserDetailPage({ userId }: { userId: string }) {
                         </Link>
                       </TableCell>
                       <TableCell className="text-foreground-secondary">
-                        {membership.role}
+                        {t(`tenancy.members.role.${membership.role}`)}
                       </TableCell>
                     </TableRow>
                   ))}

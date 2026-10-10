@@ -30,6 +30,7 @@ import {
 import { formatDate } from "@forge/utils";
 
 import { useRouteLocale } from "../../lib/useRouteLocale";
+import { subscriptionStatusLabel } from "./statusLabels";
 import { getErrorMessage } from "../auth/getErrorMessage";
 import { CompCreditModal } from "./CompCreditModal";
 import { ExtendTrialModal } from "./ExtendTrialModal";
@@ -103,7 +104,7 @@ function SubscriptionTab({ orgId }: { orgId: string }) {
           />
           <DetailRow
             label={t("common.admin.org_detail.status_label")}
-            value={subscription.status}
+            value={subscriptionStatusLabel(t, subscription.status)}
           />
           <DetailRow
             label={t("common.admin.org_detail.billing_interval_label")}

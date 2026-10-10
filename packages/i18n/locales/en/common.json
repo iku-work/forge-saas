@@ -277,7 +277,9 @@
       "system_actor": "System",
       "no_results": "No matching audit events.",
       "error_load": "Couldn't load the audit log.",
-      "load_more": "Load more"
+      "load_more": "Load more",
+      "severity_info": "Info",
+      "severity_elevated": "Elevated"
     },
     "guard": {
       "denied": "You don't have access to the admin area."
@@ -332,6 +334,16 @@
       "raw_save": "Replace settings",
       "raw_invalid_json": "That isn't valid JSON.",
       "raw_not_an_object": "Settings must be a JSON object."
+    },
+    "subscription_status": {
+      "active": "Active",
+      "trialing": "Trial",
+      "past_due": "Past due",
+      "canceled": "Canceled",
+      "unpaid": "Unpaid",
+      "incomplete": "Incomplete",
+      "incomplete_expired": "Expired",
+      "paused": "Paused"
     }
   },
   "banner": {

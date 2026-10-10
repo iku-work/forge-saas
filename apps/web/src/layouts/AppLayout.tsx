@@ -369,7 +369,7 @@ function CreateFirstOrgPrompt() {
         title={t("tenancy.org_create.title")}
         description={t("tenancy.org_create.description")}
       >
-        <CreateOrgForm />
+        <CreateOrgForm buttonSize="lg" />
       </AuthLayout>
     </div>
   );

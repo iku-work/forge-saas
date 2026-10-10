@@ -9,15 +9,9 @@ something; move an entry to the bottom section when it is resolved.
 - **Replaced and removed avatars stay in storage.** (found after the PR) Choosing a new photo or
   removing one only rewrites `user.avatar_object_key`; the old `stored_file` row and object remain
   (and count towards the org's storage). A cleanup job for avatars no user points at would fix it.
-- **Create-organization button is h-9 on the first-organization screen.** (ticket 11)
-  `CreateOrgForm` is shared with the switcher's dialog, so its button kept the default size
-  while the auth pages' buttons are h-10. Give the form a size prop if the 4px matters.
 - **Dashboard after setup is empty.** (ticket 10) Once every checklist step is done the dashboard
   shows only its header and "Your organization is set up." By design for now; real dashboard
   content (recent activity, usage) is product work.
-- **Admin: raw status words.** (pre-existing, kept in ticket 12) Subscription statuses,
-  audit severities and member roles on admin pages show the API's word (`past_due`,
-  `elevated`, `owner`) inside the new pills. Translate them like the invoice statuses.
 - **Admin: no rail, no ⌘K.** (ticket 12) The admin sidebar does not collapse and the command
   palette is app-only. Add both if superadmins spend long sessions there.
 - **Admin: native selects.** (pre-existing) The users/organizations filters and the banner type
@@ -41,9 +35,6 @@ something; move an entry to the bottom section when it is resolved.
   listed each in that locale's `__review.json`. A native speaker should review and empty those.
 
 ## Product questions
-
-- **Checklist on phones.** Hints wrap to three or four lines beside the button at 375px. Consider
-  putting the button under the text below ~30rem.
 
 ## Tooling and tests
 
@@ -72,6 +63,9 @@ something; move an entry to the bottom section when it is resolved.
 
 ## Resolved
 
+- **Create-organization button height.** `CreateOrgForm` takes `buttonSize`; the first-organization screen passes `lg`.
+- **Admin raw status words.** Subscription states and audit severities translated (`features/admin/statusLabels.ts`, raw word only for an unknown value); member roles reuse the members page's labels.
+- **Checklist on phones.** `Checklist` is a container; below 28rem each step's button sits under its text.
 - **Notifications Save was always enabled.** The API now returns the resolved matrix (`preferences.effective`: defaults filled, required channels on), so nothing needs saving to heal, and Save waits for a change.
 - **"Save" vs "Save changes".** Decided 2026-10-10: keep "Save".
 - **"Choose a plan" during a trial.** Decided 2026-10-10: only a paid, active plan ticks it.

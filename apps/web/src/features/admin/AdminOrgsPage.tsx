@@ -13,7 +13,6 @@ import {
   PageHeader,
   Skeleton,
   StatusPill,
-  type StatusTone,
   Table,
   TableBody,
   TableCell,
@@ -24,6 +23,7 @@ import {
 import { formatDate } from "@forge/utils";
 
 import { useRouteLocale } from "../../lib/useRouteLocale";
+import { subscriptionStatusLabel, subscriptionTone } from "./statusLabels";
 import { getErrorMessage } from "../auth/getErrorMessage";
 import { useDebouncedValue } from "../../lib/useDebouncedValue";
 
@@ -34,16 +34,6 @@ const STATUS_OPTIONS = [
   "canceled",
   "incomplete",
 ];
-
-// Stripe's subscription states, by how much attention they need.
-function subscriptionTone(status: string): StatusTone {
-  if (status === "active") return "active";
-  if (status === "trialing") return "pending";
-  if (["past_due", "unpaid", "incomplete_expired"].includes(status)) {
-    return "danger";
-  }
-  return "neutral";
-}
 
 export function AdminOrgsPage() {
   const locale = useRouteLocale();
@@ -147,7 +137,7 @@ export function AdminOrgsPage() {
                       <StatusPill
                         tone={subscriptionTone(org.subscription_status)}
                       >
-                        {org.subscription_status}
+                        {subscriptionStatusLabel(t, org.subscription_status)}
                       </StatusPill>
                     ) : (
                       "—"
