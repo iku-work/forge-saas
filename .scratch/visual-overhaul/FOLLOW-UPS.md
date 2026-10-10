@@ -15,11 +15,6 @@ something; move an entry to the bottom section when it is resolved.
 
 ## Frontend
 
-- **Leaving an organization.** (ticket 08) The old list showed Remove on your own row; the new one
-  shows no actions on your own row (so you can't demote or remove yourself by accident). There
-  is no other "Leave organization" path; add one deliberately (e.g. Organization settings) if
-  members should be able to leave.
-
 - **Notifications Save is always enabled.** (ticket 07) Unlike other sections, on purpose:
   saving persists the shown defaults and heals legacy rows. If that healing moves to the
   backend (normalise on read), the page could adopt "Save only after a change".
@@ -94,6 +89,7 @@ something; move an entry to the bottom section when it is resolved.
 
 ## Resolved
 
+- **Leaving an organization.** `POST /orgs/{id}/leave` (any member; the last owner is told to hand ownership on) and a Leave section, confirmed, at the bottom of Organization settings.
 - **Resend and revoke invitations.** New endpoints (resend issues a fresh link and expiry; revoke deletes); a "⋯" menu on each pending invitation, revoke confirmed. "Copy link" skipped: only a hash of the token is stored.
 - **Removing a member had no confirmation.** It is confirmed now, naming the member.
 - **Remove a profile photo.** The API already cleared on `avatar_file_id: null`; Profile now has a Remove button.

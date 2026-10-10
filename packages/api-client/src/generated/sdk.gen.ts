@@ -114,6 +114,9 @@ import type {
   HealthLiveHealthLiveGetResponses,
   HealthReadyHealthReadyGetData,
   HealthReadyHealthReadyGetResponses,
+  LeaveOrgApiV1OrgsOrgIdLeavePostData,
+  LeaveOrgApiV1OrgsOrgIdLeavePostErrors,
+  LeaveOrgApiV1OrgsOrgIdLeavePostResponses,
   ListApiKeysApiV1ApiKeysGetData,
   ListApiKeysApiV1ApiKeysGetErrors,
   ListApiKeysApiV1ApiKeysGetResponses,
@@ -2315,6 +2318,28 @@ export const resendInvitationApiV1OrgsOrgIdInvitationsInvitationIdResendPost = <
   >({
     security: [{ scheme: "bearer", type: "http" }],
     url: "/api/v1/orgs/{org_id}/invitations/{invitation_id}/resend",
+    ...options,
+  });
+
+/**
+ * Leave Org
+ */
+export const leaveOrgApiV1OrgsOrgIdLeavePost = <
+  ThrowOnError extends boolean = false,
+>(
+  options: Options<LeaveOrgApiV1OrgsOrgIdLeavePostData, ThrowOnError>,
+): RequestResult<
+  LeaveOrgApiV1OrgsOrgIdLeavePostResponses,
+  LeaveOrgApiV1OrgsOrgIdLeavePostErrors,
+  ThrowOnError
+> =>
+  (options.client ?? client).post<
+    LeaveOrgApiV1OrgsOrgIdLeavePostResponses,
+    LeaveOrgApiV1OrgsOrgIdLeavePostErrors,
+    ThrowOnError
+  >({
+    security: [{ scheme: "bearer", type: "http" }],
+    url: "/api/v1/orgs/{org_id}/leave",
     ...options,
   });
 

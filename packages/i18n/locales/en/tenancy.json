@@ -19,7 +19,14 @@
     "error_default": "Unable to update the organization.",
     "section_general": "General",
     "logo_label": "Logo",
-    "name_hint": "Shown to every member, and in emails and invitations."
+    "name_hint": "Shown to every member, and in emails and invitations.",
+    "section_leave": "Leave organization",
+    "leave_label": "Leave {org}",
+    "leave_hint": "You lose access straight away. Someone who manages members can invite you back.",
+    "leave_button": "Leave organization",
+    "leave_confirm_title": "Leave {org}?",
+    "left": "You left {org}.",
+    "error_leave": "Couldn’t leave the organization. Please try again."
   },
   "members": {
     "title": "Members",

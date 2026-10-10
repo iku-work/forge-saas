@@ -210,6 +210,10 @@ async def _revoke_invitation(ctx: TenantIsolationContext) -> httpx.Response:
     )
 
 
+async def _leave_org(ctx: TenantIsolationContext) -> httpx.Response:
+    return await ctx.client.post(f"/api/v1/orgs/{ctx.org_b.id}/leave", headers=ctx.user_a_headers)
+
+
 async def _list_invitations(ctx: TenantIsolationContext) -> httpx.Response:
     return await ctx.client.get(
         f"/api/v1/orgs/{ctx.org_b.id}/invitations", headers=ctx.user_a_headers
@@ -287,6 +291,7 @@ _CASES: list[tuple[str, RequestFn, tuple[int, ...], str | None]] = [
     ("GET /orgs/{org_id}/members/{membership_id}/avatar", _member_avatar, (404,), None),
     ("POST /orgs/{org_id}/invitations/{invitation_id}/resend", _resend_invitation, (404,), None),
     ("DELETE /orgs/{org_id}/invitations/{invitation_id}", _revoke_invitation, (404,), None),
+    ("POST /orgs/{org_id}/leave", _leave_org, (403,), None),
     ("GET /orgs/{org_id}/invitations", _list_invitations, (403,), None),
     ("POST /orgs/{org_id}/invitations", _create_invitation, (403,), None),
     ("POST /billing/checkout-session", _checkout_session, (403,), "billing"),

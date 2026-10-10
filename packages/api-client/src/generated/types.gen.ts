@@ -5018,6 +5018,38 @@ export type ResendInvitationApiV1OrgsOrgIdInvitationsInvitationIdResendPostRespo
 export type ResendInvitationApiV1OrgsOrgIdInvitationsInvitationIdResendPostResponse =
   ResendInvitationApiV1OrgsOrgIdInvitationsInvitationIdResendPostResponses[keyof ResendInvitationApiV1OrgsOrgIdInvitationsInvitationIdResendPostResponses];
 
+export type LeaveOrgApiV1OrgsOrgIdLeavePostData = {
+  body?: never;
+  path: {
+    /**
+     * Org Id
+     */
+    org_id: string;
+  };
+  query?: never;
+  url: "/api/v1/orgs/{org_id}/leave";
+};
+
+export type LeaveOrgApiV1OrgsOrgIdLeavePostErrors = {
+  /**
+   * Validation Error
+   */
+  422: EnvelopeNoneType;
+};
+
+export type LeaveOrgApiV1OrgsOrgIdLeavePostError =
+  LeaveOrgApiV1OrgsOrgIdLeavePostErrors[keyof LeaveOrgApiV1OrgsOrgIdLeavePostErrors];
+
+export type LeaveOrgApiV1OrgsOrgIdLeavePostResponses = {
+  /**
+   * Successful Response
+   */
+  200: EnvelopeNoneType;
+};
+
+export type LeaveOrgApiV1OrgsOrgIdLeavePostResponse =
+  LeaveOrgApiV1OrgsOrgIdLeavePostResponses[keyof LeaveOrgApiV1OrgsOrgIdLeavePostResponses];
+
 export type ListMembersApiV1OrgsOrgIdMembersGetData = {
   body?: never;
   path: {

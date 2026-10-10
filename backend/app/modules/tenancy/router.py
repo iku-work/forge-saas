@@ -325,6 +325,27 @@ async def remove_member(
 
 
 @router.post(
+    "/orgs/{org_id}/leave",
+    dependencies=[Depends(reject_during_impersonation("data_mutation"))],
+)
+@api_limit
+async def leave_org(
+    request: Request,
+    org_id: UUID,  # noqa: ARG001 -- the org the membership below was resolved for
+    membership: Annotated[Membership, Depends(require_org_permission(Permission.MEMBERS_READ))],
+    session: Annotated[AsyncSession, Depends(get_session)],
+    redis: Annotated[Redis, Depends(get_redis)],
+) -> Envelope[None]:
+    # MEMBERS_READ because every role has it: any member may leave. No
+    # step-up, unlike removing someone else -- leaving only takes your own
+    # access away.
+    await TenancyService(session).leave_org(membership)
+    await session.commit()
+    await invalidate_user_cache(redis, membership.user_id)  # T-240, as remove_member
+    return Envelope(data=None, meta=Meta(request_id=_request_id(request)))
+
+
+@router.post(
     "/orgs/{org_id}/invitations", dependencies=[Depends(reject_during_impersonation("notifying"))]
 )
 @api_limit

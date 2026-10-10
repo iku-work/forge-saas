@@ -8620,6 +8620,52 @@
         "tags": ["tenancy"]
       }
     },
+    "/api/v1/orgs/{org_id}/leave": {
+      "post": {
+        "operationId": "leave_org_api_v1_orgs__org_id__leave_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "org_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Org Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_NoneType_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_NoneType_"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Leave Org",
+        "tags": ["tenancy"]
+      }
+    },
     "/api/v1/orgs/{org_id}/members": {
       "get": {
         "description": "The organization's members, cursor-paginated. Callable with an API key holding the `members:read` scope, or with a session belonging to the organization.",

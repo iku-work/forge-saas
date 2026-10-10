@@ -47,6 +47,7 @@ import {
   healthHealthGet,
   healthLiveHealthLiveGet,
   healthReadyHealthReadyGet,
+  leaveOrgApiV1OrgsOrgIdLeavePost,
   listApiKeysApiV1ApiKeysGet,
   listConsentsApiV1MeConsentsGet,
   listCredentialsApiV1AuthWebauthnCredentialsGet,
@@ -217,6 +218,9 @@ import type {
   HealthLiveHealthLiveGetData,
   HealthLiveHealthLiveGetResponse,
   HealthReadyHealthReadyGetData,
+  LeaveOrgApiV1OrgsOrgIdLeavePostData,
+  LeaveOrgApiV1OrgsOrgIdLeavePostError,
+  LeaveOrgApiV1OrgsOrgIdLeavePostResponse,
   ListApiKeysApiV1ApiKeysGetData,
   ListApiKeysApiV1ApiKeysGetError,
   ListApiKeysApiV1ApiKeysGetResponse,
@@ -3088,6 +3092,33 @@ export const resendInvitationApiV1OrgsOrgIdInvitationsInvitationIdResendPostMuta
     };
     return mutationOptions;
   };
+
+/**
+ * Leave Org
+ */
+export const leaveOrgApiV1OrgsOrgIdLeavePostMutation = (
+  options?: Partial<Options<LeaveOrgApiV1OrgsOrgIdLeavePostData>>,
+): UseMutationOptions<
+  LeaveOrgApiV1OrgsOrgIdLeavePostResponse,
+  LeaveOrgApiV1OrgsOrgIdLeavePostError,
+  Options<LeaveOrgApiV1OrgsOrgIdLeavePostData>
+> => {
+  const mutationOptions: UseMutationOptions<
+    LeaveOrgApiV1OrgsOrgIdLeavePostResponse,
+    LeaveOrgApiV1OrgsOrgIdLeavePostError,
+    Options<LeaveOrgApiV1OrgsOrgIdLeavePostData>
+  > = {
+    mutationFn: async (fnOptions) => {
+      const { data } = await leaveOrgApiV1OrgsOrgIdLeavePost({
+        ...options,
+        ...fnOptions,
+        throwOnError: true,
+      });
+      return data;
+    },
+  };
+  return mutationOptions;
+};
 
 export const listMembersApiV1OrgsOrgIdMembersGetQueryKey = (
   options: Options<ListMembersApiV1OrgsOrgIdMembersGetData>,

@@ -53,6 +53,7 @@
   "invalid_invitation": "This invitation is invalid or has expired.",
   "cannot_demote_last_owner": "Cannot demote the last owner of an organization.",
   "cannot_remove_last_owner": "Cannot remove the last owner of an organization.",
+  "cannot_leave_last_owner": "You're the only owner. Make someone else an owner before you leave.",
   "notification_not_found": "Notification not found.",
   "unprocessable_entity": "The request could not be processed.",
   "invalid_cursor": "This page of results is no longer available. Refresh to start from the beginning.",

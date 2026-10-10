@@ -785,3 +785,47 @@ async def test_revoke_invitation_member_without_permission_returns_403(
     )
 
     assert response.status_code == 403
+
+
+# --- POST /orgs/{org_id}/leave (visual overhaul follow-up) ------------------------
+
+
+async def test_a_member_can_leave_an_organization(
+    client: httpx.AsyncClient, session: AsyncSession, org_a: Organization
+) -> None:
+    member, membership = await _add_member(session, org_a)
+
+    response = await client.post(f"/api/v1/orgs/{org_a.id}/leave", headers=_auth_header(member))
+
+    assert response.status_code == 200
+    session.expunge(membership)
+    gone = await session.get(Membership, membership.id)
+    assert gone is None
+
+
+async def test_the_last_owner_cannot_leave(
+    client: httpx.AsyncClient, user_a: User, org_a: Organization
+) -> None:
+    """An organization nobody can manage is stranded."""
+    response = await client.post(f"/api/v1/orgs/{org_a.id}/leave", headers=_auth_header(user_a))
+
+    assert response.status_code == 409
+    assert response.json()["error"]["message_key"] == "errors.cannot_leave_last_owner"
+
+
+async def test_an_owner_can_leave_while_another_owner_remains(
+    client: httpx.AsyncClient, session: AsyncSession, user_a: User, org_a: Organization
+) -> None:
+    await _add_member(session, org_a, role=MemberRole.OWNER)
+
+    response = await client.post(f"/api/v1/orgs/{org_a.id}/leave", headers=_auth_header(user_a))
+
+    assert response.status_code == 200
+
+
+async def test_leaving_an_organization_you_are_not_in_returns_403(
+    client: httpx.AsyncClient, user_a: User, org_b: Organization
+) -> None:
+    response = await client.post(f"/api/v1/orgs/{org_b.id}/leave", headers=_auth_header(user_a))
+
+    assert response.status_code == 403

@@ -269,8 +269,32 @@ class TenancyService:
                     fallback="Cannot remove the last owner of an organization",
                 )
 
+        await self._delete_membership(target)
+        # The removed member's user id, so the router can bust that user's
+        # cache (T-240) -- the membership row is gone by the time it returns.
+        return target.user_id
+
+    async def leave_org(self, membership: Membership) -> None:
+        """A member leaves an organization themselves.
+
+        Any role may leave, but not the last owner: an organization nobody
+        can manage is stranded. They are told to hand ownership on first.
+        """
+        if membership.role == MemberRole.OWNER:
+            owner_count = await self._memberships.count_by_org_and_role(
+                membership.org_id, MemberRole.OWNER
+            )
+            if owner_count <= 1:
+                raise ConflictError(
+                    "errors.cannot_leave_last_owner",
+                    fallback="Make someone else an owner before you leave.",
+                )
+        await self._delete_membership(membership)
+
+    async def _delete_membership(self, target: Membership) -> None:
         # Emitted before the row is removed, and guarded for the same reason
-        # as change_role's: the email is an extra read.
+        # as change_role's: the email is an extra read. A member leaving is
+        # the same event to a subscriber as one being removed.
         if is_enabled("outbound_webhooks"):
             member = await UserRepository(self._session).get_by_id(target.user_id)
             await webhooks.emit(
@@ -285,9 +309,6 @@ class TenancyService:
                 ),
             )
         await self._memberships.remove(target.id)
-        # The removed member's user id, so the router can bust that user's
-        # cache (T-240) -- the membership row is gone by the time it returns.
-        return target.user_id
 
     async def get_membership_or_raise(
         self, org_id: UUID, user_id: UUID

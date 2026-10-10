@@ -1,11 +1,15 @@
 import { useEffect, useId, useState } from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation } from "@tanstack/react-query";
+import { useNavigate } from "@tanstack/react-router";
 import { useForm } from "react-hook-form";
 import { useTranslation } from "react-i18next";
 import { z } from "zod";
 
-import { updateOrgApiV1OrgsOrgIdPatch } from "@forge/api-client";
+import {
+  leaveOrgApiV1OrgsOrgIdLeavePost,
+  updateOrgApiV1OrgsOrgIdPatch,
+} from "@forge/api-client";
 import { useOrg, usePermission } from "@forge/hooks";
 import { Permission } from "@forge/types";
 import {
@@ -14,6 +18,7 @@ import {
   Avatar,
   AvatarFallback,
   Button,
+  ConfirmDialog,
   Form,
   FormControl,
   FormField,
@@ -26,8 +31,10 @@ import {
   SettingsRow,
   SettingsSection,
   Skeleton,
+  toast,
 } from "@forge/ui";
 
+import { useRouteLocale } from "../../lib/useRouteLocale";
 import { getErrorMessage } from "../auth/getErrorMessage";
 
 const updateOrgSchema = z.object({
@@ -42,6 +49,17 @@ export function OrgSettingsPage() {
   const [formError, setFormError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
   const formId = useId();
+  const navigate = useNavigate();
+  const locale = useRouteLocale();
+  const [confirmLeave, setConfirmLeave] = useState(false);
+  const leaveOrg = useMutation({
+    mutationFn: async (orgId: string) => {
+      await leaveOrgApiV1OrgsOrgIdLeavePost({
+        path: { org_id: orgId },
+        throwOnError: true,
+      });
+    },
+  });
   // Raw SDK call rather than the generated *Mutation() helper -- see
   // CreateOrgForm.tsx for why (the helper's internal call is unmockable
   // once @forge/api-client is bundled).
@@ -82,6 +100,22 @@ export function OrgSettingsPage() {
       setFormError(
         getErrorMessage(error, "tenancy.org_settings.error_default"),
       );
+    }
+  };
+
+  const onLeave = async (): Promise<void> => {
+    if (!org) return;
+    const name = org.name;
+    try {
+      await leaveOrg.mutateAsync(org.id);
+      toast.success(t("tenancy.org_settings.left", { org: name }));
+      // The switcher picks the next organization (or the create-your-first
+      // screen if there is none); the dashboard is where to land either way.
+      await refreshOrgs();
+      await navigate({ to: "/$locale", params: { locale } });
+    } catch (error) {
+      // The last owner is refused with a message that says what to do.
+      toast.error(getErrorMessage(error, "tenancy.org_settings.error_leave"));
     }
   };
 
@@ -184,6 +218,40 @@ export function OrgSettingsPage() {
           </form>
         </Form>
       </SettingsSection>
+
+      <SettingsSection title={t("tenancy.org_settings.section_leave")}>
+        <SettingsRow
+          label={t("tenancy.org_settings.leave_label", { org: org.name })}
+          hint={t("tenancy.org_settings.leave_hint")}
+        >
+          <Button
+            type="button"
+            variant="outline"
+            className="text-destructive hover:text-destructive"
+            disabled={leaveOrg.isPending}
+            onClick={() => {
+              setConfirmLeave(true);
+            }}
+            data-testid="org-leave"
+          >
+            {t("tenancy.org_settings.leave_button")}
+          </Button>
+        </SettingsRow>
+      </SettingsSection>
+
+      <ConfirmDialog
+        open={confirmLeave}
+        onOpenChange={setConfirmLeave}
+        title={t("tenancy.org_settings.leave_confirm_title", { org: org.name })}
+        description={t("tenancy.org_settings.leave_hint")}
+        confirmLabel={t("tenancy.org_settings.leave_button")}
+        destructive
+        isPending={leaveOrg.isPending}
+        onConfirm={() => {
+          setConfirmLeave(false);
+          void onLeave();
+        }}
+      />
     </Page>
   );
 }
