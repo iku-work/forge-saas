@@ -27,7 +27,7 @@ const SUPERADMIN_PASSWORD = "DevPassword123!";
 // 320 is the narrowest width still worth supporting (iPhone SE 1st gen, and
 // the floor Tailwind's own docs assume); 390 is a current iPhone. Anything
 // that fits both fits everything between.
-const WIDTHS = [320, 390];
+const WIDTHS = [320, 390] as const;
 
 // `readyTestId` is what proves the route actually rendered rather than
 // bouncing to /login -- measuring an unmounted page would pass trivially.
@@ -95,7 +95,7 @@ async function offenders(
 }
 
 test.describe("no horizontal overflow at phone widths", () => {
-  test.use({ reducedMotion: "reduce" });
+  test.use({ contextOptions: { reducedMotion: "reduce" } });
 
   test("every in-app route fits the screen", async ({ page }) => {
     await page.setViewportSize({ width: WIDTHS[0], height: 844 });

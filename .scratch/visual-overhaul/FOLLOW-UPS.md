@@ -24,31 +24,13 @@ something; move an entry to the bottom section when it is resolved.
 
 ## Tooling and tests
 
-- **`NotificationFeedVirtual` arrow-key test is load-sensitive.** Failed twice in full runs while
-  other work ran, passed alone and on rerun. Pre-existing timing weak spot.
-- **Pre-commit hooks are not installed in the worktree.** Run
-  `C:\Users\IK\Documents\saas-template\backend\.venv\Scripts\pre-commit.exe run --files <files>`
-  by hand, or install hooks in the worktree.
-- **Web tests regenerate `apps/web/src/routeTree.gen.ts`.** Revert it before committing.
-- **`apps/web/e2e` does not type-check.** `tsc -p apps/web/e2e/tsconfig.json` reports six
-  `reducedMotion` errors in `test.use()` (pre-existing; Playwright 1.61 types). CI never runs it.
-- **Mobile tests time out under a full parallel `pnpm test`.** Use `--concurrency=2`
-  (already in the memory notes; load, not a bug).
-- **Storybook's test runner finds no stories in this worktree.** Jest searches from the main
-  checkout and skips the hidden `.claude/` folder. Run it with `--index-json` against the built
-  Storybook instead (77 tests pass that way).
-- **`pnpm add --filter <pkg>` can leave other packages' `.bin` unlinked.** Run
-  `pnpm install --offline --frozen-lockfile` afterwards.
-- **The `dev` launch entry (main checkout's `.claude/launch.json`) fails:** `turbo run dev`
-  starts 11 persistent tasks against turbo's default concurrency of 10. Use the
-  `web-visual-overhaul` entry instead, or add `"concurrency": 12` (or more) to `turbo.json` if
-  the whole monorepo should start together.
 - **Windows-only Astro build flake.** Back-to-back builds sometimes fail renaming
   `.astro/content-assets.mjs` (EPERM); `apps/marketing/tests/helpers.ts` retries that exact error
   on Windows. Revisit if Astro fixes the rename.
 
 ## Resolved
 
+- **Tooling (after the PR).** `routeTree.gen.ts` pinned to LF in .gitattributes (tests no longer leave it modified); `apps/web/e2e` type-checks (reducedMotion moved under `contextOptions`, where Playwright 1.61 reads it -- top-level it was likely ignored -- and `WIDTHS` is a const tuple); mobile's `hookTimeout` is 30s, so a full parallel `pnpm test` passes without `--concurrency=2`; `storybook:test` always uses `--index-json` (works from any checkout); `pnpm dev` runs with `--concurrency=16` for its 11 persistent tasks. The NotificationFeedVirtual flake was already mitigated on main (3405a36c, 45s budget) and has not recurred. Environment-only notes (pre-commit hooks not installed in a worktree; `pnpm add --filter` leaving `.bin` unlinked) live in the memory notes instead.
 - **Replaced and removed avatars (and logos) stayed in storage.** A daily `retire_unused_images` job (05:00 UTC) soft-deletes avatar/logo files nothing points at after a day's grace and hands them to `hard_delete_stored_file`.
 - **Dashboard after setup was empty.** It now shows Members (count) and Plan (status, renewal) figures and the five newest files, from the checklist's own queries. More (recent activity, usage) is product work.
 - **Admin: no rail, no ⌘K.** The admin sidebar collapses with `[` (same per-device setting as the app), has the search button, and ⌘K opens the palette over the admin pages plus Back to app. `RailTooltip` moved to `components/`, `ADMIN_NAV_ITEMS` to `lib/navigation.ts`, and `CommandPalette` takes an optional page list.

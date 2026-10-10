@@ -85,7 +85,7 @@ const VIEWPORTS = [
 ];
 
 test.describe("visual regression: dashboard + settings", () => {
-  test.use({ reducedMotion: "reduce" });
+  test.use({ contextOptions: { reducedMotion: "reduce" } });
 
   test("app shell, dashboard, and settings pages at desktop + mobile widths", async ({
     page,

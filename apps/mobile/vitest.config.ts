@@ -22,5 +22,10 @@ export default defineConfig({
   test: {
     environment: "jsdom",
     setupFiles: ["./src/test/setup.ts"],
+    // setup.ts's beforeAll imports the whole i18n bundle (every locale). Alone
+    // that takes a second or two; under a full parallel `pnpm test`, with
+    // every package's suite competing for the CPU, it overran vitest's 10s
+    // default and four files failed before a single test ran.
+    hookTimeout: 30000,
   },
 });
