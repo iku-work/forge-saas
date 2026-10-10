@@ -43,6 +43,7 @@ from app.workers.jobs.storage import (
     expire_abandoned_uploads,
     hard_delete_stored_file,
     rescan_unscanned_files,
+    retire_unused_images,
     sweep_orphaned_objects,
 )
 
@@ -541,3 +542,96 @@ async def test_it_drains_a_backlog_in_batches(
     await expire_abandoned_uploads(ctx)
 
     assert len(enqueued_jobs) == 2
+
+
+# --- retire_unused_images (visual overhaul follow-up) -------------------------
+
+
+async def _make_image(
+    session: AsyncSession, *, bucket: str, age: timedelta = timedelta(days=2)
+) -> StoredFile:
+    stored = await _make_file(session)
+    stored.bucket = bucket
+    stored.key = f"{stored.org_id}/{bucket}/{uuid4()}/picture.png"
+    stored.created_at = utcnow() - age
+    session.add(stored)
+    await session.commit()
+    return stored
+
+
+async def test_a_replaced_avatar_and_logo_are_retired(
+    session: AsyncSession,
+    session_factory: async_sessionmaker[AsyncSession],
+    ctx: dict[str, Any],
+    enqueued_jobs: list[tuple[str, dict[str, Any]]],
+) -> None:
+    """Choosing a new photo only rewrote the key: the old file stayed, and
+    kept counting towards the org's storage."""
+    old_avatar = await _make_image(session, bucket="avatars")
+    old_logo = await _make_image(session, bucket="logos")
+
+    await retire_unused_images(ctx)
+
+    async with session_factory() as verify:
+        for stored in (old_avatar, old_logo):
+            refreshed = await verify.get(StoredFile, stored.id)
+            assert refreshed is not None
+            assert refreshed.deleted_at is not None
+            assert ("hard_delete_stored_file", {"file_id": stored.id}) in enqueued_jobs
+
+
+async def test_an_avatar_or_logo_in_use_is_kept(
+    session: AsyncSession,
+    session_factory: async_sessionmaker[AsyncSession],
+    ctx: dict[str, Any],
+) -> None:
+    avatar = await _make_image(session, bucket="avatars")
+    logo = await _make_image(session, bucket="logos")
+    owner = await session.get(User, avatar.uploaded_by)
+    org = await session.get(Organization, logo.org_id)
+    assert owner is not None
+    assert org is not None
+    owner.avatar_object_key = avatar.key
+    org.logo_object_key = logo.key
+    await session.commit()
+
+    await retire_unused_images(ctx)
+
+    async with session_factory() as verify:
+        for stored in (avatar, logo):
+            refreshed = await verify.get(StoredFile, stored.id)
+            assert refreshed is not None
+            assert refreshed.deleted_at is None
+
+
+async def test_a_fresh_upload_and_an_ordinary_file_are_left_alone(
+    session: AsyncSession,
+    session_factory: async_sessionmaker[AsyncSession],
+    ctx: dict[str, Any],
+) -> None:
+    """A photo uploaded a moment ago has not been chosen *yet*; a document is
+    never an image this job owns."""
+    fresh = await _make_image(session, bucket="avatars", age=timedelta(minutes=5))
+    document = await _make_file(session)
+
+    await retire_unused_images(ctx)
+
+    async with session_factory() as verify:
+        for stored in (fresh, document):
+            refreshed = await verify.get(StoredFile, stored.id)
+            assert refreshed is not None
+            assert refreshed.deleted_at is None
+
+
+async def test_retire_unused_images_no_ops_when_file_storage_is_off(
+    ctx: dict[str, Any],
+    monkeypatch: pytest.MonkeyPatch,
+    enqueued_jobs: list[tuple[str, dict[str, Any]]],
+) -> None:
+    monkeypatch.setattr(
+        storage_job_module, "is_enabled", lambda name: name != "file_storage", raising=True
+    )
+
+    await retire_unused_images(ctx)
+
+    assert enqueued_jobs == []

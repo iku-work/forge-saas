@@ -6,9 +6,6 @@ something; move an entry to the bottom section when it is resolved.
 
 ## Backend
 
-- **Replaced and removed avatars stay in storage.** (found after the PR) Choosing a new photo or
-  removing one only rewrites `user.avatar_object_key`; the old `stored_file` row and object remain
-  (and count towards the org's storage). A cleanup job for avatars no user points at would fix it.
 ## Verification still owed
 
 - **Look at the admin console (ticket 12) in a running app.** Needs Docker and a superadmin
@@ -52,6 +49,7 @@ something; move an entry to the bottom section when it is resolved.
 
 ## Resolved
 
+- **Replaced and removed avatars (and logos) stayed in storage.** A daily `retire_unused_images` job (05:00 UTC) soft-deletes avatar/logo files nothing points at after a day's grace and hands them to `hard_delete_stored_file`.
 - **Dashboard after setup was empty.** It now shows Members (count) and Plan (status, renewal) figures and the five newest files, from the checklist's own queries. More (recent activity, usage) is product work.
 - **Admin: no rail, no ⌘K.** The admin sidebar collapses with `[` (same per-device setting as the app), has the search button, and ⌘K opens the palette over the admin pages plus Back to app. `RailTooltip` moved to `components/`, `ADMIN_NAV_ITEMS` to `lib/navigation.ts`, and `CommandPalette` takes an optional page list.
 - **Hand-styled native selects.** A `Select` in `@forge/ui` (a native `<select>` styled like Input, with a chevron; no new dependency) replaces all six; the organizations status filter now uses the translated labels too.
