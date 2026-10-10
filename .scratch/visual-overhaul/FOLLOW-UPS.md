@@ -8,13 +8,12 @@ something; move an entry to the bottom section when it is resolved.
 
 ## Verification still owed
 
-- **Look at the admin console (ticket 12) in a running app.** Needs Docker and a superadmin
-  (`make seed` creates one). Check the marker in light and dark, the drawer at phone width,
-  the impersonation banner above the shell, and the product settings rows.
-- **Look at the rail and the other settings pages by hand.** Ticket 14's screenshots cover the
-  dashboard, Profile and Organization (desktop, phone, `ar`) and the e2e suites walk the rest,
-  but nobody has looked at the collapsed rail's tooltips and animation, dark mode by eye, or
-  Members/Billing/Files/API keys/Webhooks in a browser.
+- **Admin console, partly seen (2026-10-10).** Desktop light screenshots from the Docker stack
+  show the shell, marker, expanded sidebar, collapsed rail and the admin palette working. Every
+  admin page body stops at the mandatory-2FA notice for the seeded superadmin, so the product
+  settings rows, the impersonation banner, dark mode and the phone drawer are still unseen:
+  enrol TOTP on the seeded admin first. Members/Billing/Files/API keys/Webhooks are walked by the
+  e2e suites (26 passed) but not looked at by eye.
 - **Lighthouse on marketing.** (ticket 02) Fails locally on Windows (chrome-launcher EPERM); CI
   must confirm LCP with the self-hosted font.
 - **Review the machine translations.** Ticket 14 translated 84 keys into ar, de, es and fr and
