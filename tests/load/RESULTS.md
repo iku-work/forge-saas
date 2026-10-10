@@ -247,3 +247,7 @@ instead of per-PR.
 | 2026-10-09 | 4841c78 | browse | - | - | PASS |
 | 2026-10-09 | 4841c78 | presign | - | - | PASS |
 | 2026-10-09 | 4841c78 | mixed | - | - | FAIL |
+| 2026-10-10 | 859d24e | login-burst | - | - | FAIL |
+| 2026-10-10 | 859d24e | browse | - | - | PASS |
+| 2026-10-10 | 859d24e | presign | - | - | PASS |
+| 2026-10-10 | 859d24e | mixed | - | - | FAIL |
