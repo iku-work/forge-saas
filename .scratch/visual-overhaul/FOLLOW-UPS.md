@@ -9,9 +9,6 @@ something; move an entry to the bottom section when it is resolved.
 - **Replaced and removed avatars stay in storage.** (found after the PR) Choosing a new photo or
   removing one only rewrites `user.avatar_object_key`; the old `stored_file` row and object remain
   (and count towards the org's storage). A cleanup job for avatars no user points at would fix it.
-- **Dashboard after setup is empty.** (ticket 10) Once every checklist step is done the dashboard
-  shows only its header and "Your organization is set up." By design for now; real dashboard
-  content (recent activity, usage) is product work.
 ## Verification still owed
 
 - **Look at the admin console (ticket 12) in a running app.** Needs Docker and a superadmin
@@ -55,6 +52,7 @@ something; move an entry to the bottom section when it is resolved.
 
 ## Resolved
 
+- **Dashboard after setup was empty.** It now shows Members (count) and Plan (status, renewal) figures and the five newest files, from the checklist's own queries. More (recent activity, usage) is product work.
 - **Admin: no rail, no ⌘K.** The admin sidebar collapses with `[` (same per-device setting as the app), has the search button, and ⌘K opens the palette over the admin pages plus Back to app. `RailTooltip` moved to `components/`, `ADMIN_NAV_ITEMS` to `lib/navigation.ts`, and `CommandPalette` takes an optional page list.
 - **Hand-styled native selects.** A `Select` in `@forge/ui` (a native `<select>` styled like Input, with a chevron; no new dependency) replaces all six; the organizations status filter now uses the translated labels too.
 - **Marketing headings.** One `type-display` class (condensed, the landing's treatment at page-title size) on every page title; prose headings share the width.

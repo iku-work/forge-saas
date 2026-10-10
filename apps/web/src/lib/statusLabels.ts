@@ -17,7 +17,7 @@ const SUBSCRIPTION_STATUSES = new Set([
 
 export function subscriptionStatusLabel(t: Translate, status: string): string {
   return SUBSCRIPTION_STATUSES.has(status)
-    ? t(`common.admin.subscription_status.${status}`)
+    ? t(`common.subscription_status.${status}`)
     : status;
 }
 

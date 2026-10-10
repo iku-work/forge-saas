@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next";
 import { useOrg } from "@forge/hooks";
 import { Page, PageHeader } from "@forge/ui";
 
+import { DashboardOverview } from "../features/dashboard/DashboardOverview";
 import { GettingStarted } from "../features/dashboard/GettingStarted";
 import { useGettingStarted } from "../features/dashboard/useGettingStarted";
 import { isAppleDevice, renderChord } from "../features/shortcuts/registry";
@@ -50,6 +51,9 @@ function DashboardPage() {
           </p>
         }
       />
+      {allDone ? (
+        <DashboardOverview overview={gettingStarted.overview} />
+      ) : null}
     </Page>
   );
 }

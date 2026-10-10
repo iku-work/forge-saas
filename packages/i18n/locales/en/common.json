@@ -85,7 +85,12 @@
     "step_plan_title": "Choose a plan",
     "step_plan_hint": "Pick the plan that fits your organization.",
     "step_plan_action": "See plans",
-    "shortcut_note": "Press {shortcut} to jump to any page or action."
+    "shortcut_note": "Press {shortcut} to jump to any page or action.",
+    "overview_members": "Members",
+    "overview_plan": "Plan",
+    "renews": "Renews {date}",
+    "recent_files": "Recent files",
+    "view_all_files": "View all files"
   },
   "not_found": {
     "title": "Page not found",
@@ -334,17 +339,17 @@
       "raw_save": "Replace settings",
       "raw_invalid_json": "That isn't valid JSON.",
       "raw_not_an_object": "Settings must be a JSON object."
-    },
-    "subscription_status": {
-      "active": "Active",
-      "trialing": "Trial",
-      "past_due": "Past due",
-      "canceled": "Canceled",
-      "unpaid": "Unpaid",
-      "incomplete": "Incomplete",
-      "incomplete_expired": "Expired",
-      "paused": "Paused"
     }
+  },
+  "subscription_status": {
+    "active": "Active",
+    "trialing": "Trial",
+    "past_due": "Past due",
+    "canceled": "Canceled",
+    "unpaid": "Unpaid",
+    "incomplete": "Incomplete",
+    "incomplete_expired": "Expired",
+    "paused": "Paused"
   },
   "banner": {
     "dismiss": "Dismiss announcement",

@@ -24,7 +24,10 @@ import {
 import { formatDate } from "@forge/utils";
 
 import { useRouteLocale } from "../../lib/useRouteLocale";
-import { subscriptionStatusLabel, subscriptionTone } from "./statusLabels";
+import {
+  subscriptionStatusLabel,
+  subscriptionTone,
+} from "../../lib/statusLabels";
 import { getErrorMessage } from "../auth/getErrorMessage";
 import { useDebouncedValue } from "../../lib/useDebouncedValue";
 

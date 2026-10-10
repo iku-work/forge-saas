@@ -30,7 +30,7 @@ import {
 import { formatDate } from "@forge/utils";
 
 import { useRouteLocale } from "../../lib/useRouteLocale";
-import { subscriptionStatusLabel } from "./statusLabels";
+import { subscriptionStatusLabel } from "../../lib/statusLabels";
 import { getErrorMessage } from "../auth/getErrorMessage";
 import { CompCreditModal } from "./CompCreditModal";
 import { ExtendTrialModal } from "./ExtendTrialModal";

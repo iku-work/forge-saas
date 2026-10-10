@@ -1,5 +1,5 @@
 import { http, HttpResponse } from "msw";
-import { screen } from "@testing-library/react";
+import { screen, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it } from "vitest";
 
 import { getApiBaseUrl } from "@forge/api-client";
@@ -48,7 +48,10 @@ function given({
       HttpResponse.json(envelope([fixtureOrg])),
     ),
     http.get(`${API}/api/v1/orgs/:orgId/members`, () =>
-      HttpResponse.json(envelope([makeMembership(user, role), ...others])),
+      HttpResponse.json({
+        ...envelope([makeMembership(user, role), ...others]),
+        meta: { request_id: "req-1", total: others.length + 1 },
+      }),
     ),
     http.get(`${API}/api/v1/files`, () =>
       HttpResponse.json(
@@ -97,5 +100,15 @@ describe("dashboard Getting started checklist (ticket 10)", () => {
       await screen.findByText("Your organization is set up."),
     ).toBeInTheDocument();
     expect(screen.queryByTestId("getting-started")).not.toBeInTheDocument();
+
+    // What replaces it: figures and the newest files, from the same data.
+    const overview = await screen.findByTestId("dashboard-overview");
+    expect(within(overview).getByRole("link", { name: "2" })).toHaveAttribute(
+      "href",
+      "/en/settings/members",
+    );
+    expect(within(overview).getByText("Active")).toBeInTheDocument();
+    expect(within(overview).getByText("Recent files")).toBeInTheDocument();
+    expect(within(overview).getByText("file-1.txt")).toBeInTheDocument();
   });
 });

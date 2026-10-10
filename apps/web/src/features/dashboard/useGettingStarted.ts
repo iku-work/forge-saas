@@ -11,6 +11,7 @@ import {
   listMembersApiV1OrgsOrgIdMembersGet,
   listMembersApiV1OrgsOrgIdMembersGetInfiniteQueryKey,
 } from "@forge/api-client";
+import type { StoredFilePublic, SubscriptionPublic } from "@forge/api-client";
 import { useAuth, useModules, useOrg, usePermission } from "@forge/hooks";
 import { Permission } from "@forge/types";
 
@@ -37,9 +38,18 @@ export interface Step {
     | "/$locale/settings/billing";
 }
 
+/** What the dashboard shows once setup is done, from the same queries --
+ *  each part null/empty when its module is off or the member cannot see it. */
+export interface DashboardOverviewData {
+  membersTotal: number | null;
+  recentFiles: StoredFilePublic[];
+  subscription: SubscriptionPublic | null;
+}
+
 export interface GettingStartedState {
   isLoading: boolean;
   steps: Step[];
+  overview: DashboardOverviewData;
 }
 
 /** Which steps apply to this member, and which are done. */
@@ -169,5 +179,13 @@ export function useGettingStarted(): GettingStartedState {
     (canInvite && (membersQuery.isLoading || invitationsQuery.isLoading)) ||
     (modules.billing && canChoosePlan && subscriptionQuery.isLoading);
 
-  return { isLoading, steps };
+  return {
+    isLoading,
+    steps,
+    overview: {
+      membersTotal: membersQuery.data?.pages[0]?.meta.total ?? null,
+      recentFiles: (filesQuery.data?.pages[0]?.data ?? []).slice(0, 5),
+      subscription: subscriptionQuery.data?.data ?? null,
+    },
+  };
 }

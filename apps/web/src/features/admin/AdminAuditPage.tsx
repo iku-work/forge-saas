@@ -24,7 +24,7 @@ import {
 import { formatDate } from "@forge/utils";
 
 import { useRouteLocale } from "../../lib/useRouteLocale";
-import { auditSeverityLabel } from "./statusLabels";
+import { auditSeverityLabel } from "../../lib/statusLabels";
 import { getErrorMessage } from "../auth/getErrorMessage";
 import { useDebouncedValue } from "../../lib/useDebouncedValue";
 
