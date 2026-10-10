@@ -109,18 +109,20 @@ BUDGETS: dict[str, int] = {
     # membership (the isolation check) but *not* the Organization row -- which
     # the endpoint never used. Opening a route to API keys made it cheaper for
     # sessions too, which is the sort of thing worth noticing rather than
-    # absorbing.
-    "list_members": 4,
+    # absorbing. +2 since the visual overhaul: the page's users in one batched
+    # `IN` (names, emails, photos on each row) and the COUNT behind meta.total.
+    "list_members": 6,
     "list_notifications": 5,
     # + the org's subscription/plan behind the feature-flag map.
     "list_feature_flags": 6,
     # Measured: product_settings (the maintenance check), "user"
     # (get_current_user), organization + membership (get_current_org and
-    # require_permission), and the page of stored_file. One more than
-    # list_members because this route declares get_current_org and so does
-    # read the Organization row. It was 7 while require_feature("storage_gb")
+    # require_permission), and the page of stored_file. Unlike list_members,
+    # this route declares get_current_org and so does read the Organization
+    # row. It was 7 while require_feature("storage_gb")
     # gated the route -- two statements spent on a question it no longer asks.
-    "list_files": 5,
+    # +1 since the visual overhaul: the page's uploaders in one batched `IN`.
+    "list_files": 6,
     # Stripe-backed (T-133): only the maintenance check and the auth/org
     # dependencies touch the DB.
     "list_invoices": 4,

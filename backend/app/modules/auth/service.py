@@ -12,7 +12,7 @@ import hmac
 import json
 import logging
 import secrets
-from collections.abc import Mapping, Sequence
+from collections.abc import Collection, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import timedelta
 from typing import Any
@@ -199,6 +199,13 @@ class AuthService:
         self._webauthn_credentials = WebAuthnCredentialRepository(session)
         self._email_change_tokens = EmailChangeTokenRepository(session)
         self._audit = AuditService(session)
+
+    async def users_by_ids(self, user_ids: Collection[UUID]) -> dict[UUID, User]:
+        """Live users by id, in one query: for a page of rows that each name a
+        person (members, file uploaders). Other modules go through this rather
+        than this module's repository (§0.1)."""
+        users = await self._users.list_by_ids(user_ids)
+        return {user.id: user for user in users}
 
     async def register(self, req: RegisterRequest) -> None:
         existing = await self._users.get_by_email(req.email)

@@ -965,6 +965,22 @@ export type FeatureFlagsResponse = {
 };
 
 /**
+ * FileUploaderSummary
+ *
+ * Who uploaded a file, for the Files list's uploader column.
+ */
+export type FileUploaderSummary = {
+    /**
+     * Email
+     */
+    email: string;
+    /**
+     * Full Name
+     */
+    full_name: string | null;
+};
+
+/**
  * GlobalBannerResponse
  *
  * T-263's `global_banner` setting, rendered above the app shell on web
@@ -1200,6 +1216,35 @@ export type MarkAllReadResponse = {
 export type MemberRole = 'owner' | 'admin' | 'member';
 
 /**
+ * MemberUserSummary
+ *
+ * Who a membership belongs to, as fellow members see them.
+ *
+ * Enough to draw a row (a name, an email, a picture) and no more. Never the
+ * uploaded avatar's object key: `has_uploaded_avatar` only says one exists
+ * (the web app fetches a short-lived URL for it with a member's session).
+ * `avatar_url` is an OAuth provider's picture, already an absolute URL.
+ */
+export type MemberUserSummary = {
+    /**
+     * Avatar Url
+     */
+    avatar_url: string | null;
+    /**
+     * Email
+     */
+    email: string;
+    /**
+     * Full Name
+     */
+    full_name: string | null;
+    /**
+     * Has Uploaded Avatar
+     */
+    has_uploaded_avatar: boolean;
+};
+
+/**
  * MembershipPublic
  */
 export type MembershipPublic = {
@@ -1220,6 +1265,7 @@ export type MembershipPublic = {
      */
     org_id: string;
     role: MemberRole;
+    user?: MemberUserSummary | null;
     /**
      * User Id
      */
@@ -1238,6 +1284,10 @@ export type Meta = {
      * Request Id
      */
     request_id: string;
+    /**
+     * Total
+     */
+    total?: number | null;
     /**
      * Version
      */
@@ -1859,6 +1909,7 @@ export type StoredFilePublic = {
      * Uploaded By
      */
     uploaded_by: string;
+    uploader?: FileUploaderSummary | null;
     /**
      * Virus Scan Result
      */
@@ -4737,6 +4788,12 @@ export type ListMembersApiV1OrgsOrgIdMembersGetData = {
          * Limit
          */
         limit?: number;
+        /**
+         * Q
+         *
+         * Only members whose email contains this, in any case.
+         */
+        q?: string | null;
     };
     url: '/api/v1/orgs/{org_id}/members';
 };
@@ -4826,6 +4883,40 @@ export type UpdateMemberRoleApiV1OrgsOrgIdMembersMembershipIdPatchResponses = {
 };
 
 export type UpdateMemberRoleApiV1OrgsOrgIdMembersMembershipIdPatchResponse = UpdateMemberRoleApiV1OrgsOrgIdMembersMembershipIdPatchResponses[keyof UpdateMemberRoleApiV1OrgsOrgIdMembersMembershipIdPatchResponses];
+
+export type GetMemberAvatarApiV1OrgsOrgIdMembersMembershipIdAvatarGetData = {
+    body?: never;
+    path: {
+        /**
+         * Org Id
+         */
+        org_id: string;
+        /**
+         * Membership Id
+         */
+        membership_id: string;
+    };
+    query?: never;
+    url: '/api/v1/orgs/{org_id}/members/{membership_id}/avatar';
+};
+
+export type GetMemberAvatarApiV1OrgsOrgIdMembersMembershipIdAvatarGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: EnvelopeNoneType;
+};
+
+export type GetMemberAvatarApiV1OrgsOrgIdMembersMembershipIdAvatarGetError = GetMemberAvatarApiV1OrgsOrgIdMembersMembershipIdAvatarGetErrors[keyof GetMemberAvatarApiV1OrgsOrgIdMembersMembershipIdAvatarGetErrors];
+
+export type GetMemberAvatarApiV1OrgsOrgIdMembersMembershipIdAvatarGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: EnvelopeAvatarUrlResponse;
+};
+
+export type GetMemberAvatarApiV1OrgsOrgIdMembersMembershipIdAvatarGetResponse = GetMemberAvatarApiV1OrgsOrgIdMembersMembershipIdAvatarGetResponses[keyof GetMemberAvatarApiV1OrgsOrgIdMembersMembershipIdAvatarGetResponses];
 
 export type GetDeliveryApiV1WebhooksDeliveriesDeliveryIdGetData = {
     body?: never;

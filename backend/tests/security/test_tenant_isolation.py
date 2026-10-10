@@ -174,6 +174,15 @@ async def _remove_member(ctx: TenantIsolationContext) -> httpx.Response:
     )
 
 
+async def _member_avatar(ctx: TenantIsolationContext) -> httpx.Response:
+    # Same shape as _update_member_role: user_a's own org in the path, another
+    # org's membership as the target.
+    return await ctx.client.get(
+        f"/api/v1/orgs/{ctx.org_a.id}/members/{ctx.org_b_owner_membership.id}/avatar",
+        headers=ctx.user_a_headers,
+    )
+
+
 async def _list_invitations(ctx: TenantIsolationContext) -> httpx.Response:
     return await ctx.client.get(
         f"/api/v1/orgs/{ctx.org_b.id}/invitations", headers=ctx.user_a_headers
@@ -248,6 +257,7 @@ _CASES: list[tuple[str, RequestFn, tuple[int, ...], str | None]] = [
     ("GET /orgs/{org_id}/members", _list_members, (403,), None),
     ("PATCH /orgs/{org_id}/members/{membership_id}", _update_member_role, (404,), None),
     ("DELETE /orgs/{org_id}/members/{membership_id}", _remove_member, (404,), None),
+    ("GET /orgs/{org_id}/members/{membership_id}/avatar", _member_avatar, (404,), None),
     ("GET /orgs/{org_id}/invitations", _list_invitations, (403,), None),
     ("POST /orgs/{org_id}/invitations", _create_invitation, (403,), None),
     ("POST /billing/checkout-session", _checkout_session, (403,), "billing"),

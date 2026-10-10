@@ -622,3 +622,80 @@ async def test_invitation_full_round_trip_via_http(
         f"/api/v1/invitations/{token}/accept", headers=_auth_header(user_b)
     )
     assert second_accept.status_code == 401
+
+
+# --- member summaries, email search, total (visual overhaul follow-up) ----------
+
+
+async def test_list_members_carries_each_members_name_and_email(
+    client: httpx.AsyncClient, session: AsyncSession, user_a: User, org_a: Organization
+) -> None:
+    member, _ = await _add_member(session, org_a)
+
+    response = await client.get(f"/api/v1/orgs/{org_a.id}/members", headers=_auth_header(user_a))
+
+    assert response.status_code == 200
+    summaries = {row["user"]["email"]: row["user"] for row in response.json()["data"]}
+    assert summaries[member.email] == {
+        "full_name": None,
+        "email": member.email,
+        "avatar_url": None,
+        "has_uploaded_avatar": False,
+    }
+    assert response.json()["meta"]["total"] == 2
+
+
+async def test_list_members_filters_by_email_in_any_case_and_counts_the_match(
+    client: httpx.AsyncClient, session: AsyncSession, user_a: User, org_a: Organization
+) -> None:
+    member, _ = await _add_member(session, org_a)
+
+    response = await client.get(
+        f"/api/v1/orgs/{org_a.id}/members",
+        params={"q": member.email[:12].upper()},
+        headers=_auth_header(user_a),
+    )
+
+    assert [row["user"]["email"] for row in response.json()["data"]] == [member.email]
+    assert response.json()["meta"]["total"] == 1
+
+
+async def test_list_members_treats_like_wildcards_in_the_query_literally(
+    client: httpx.AsyncClient, session: AsyncSession, user_a: User, org_a: Organization
+) -> None:
+    await _add_member(session, org_a)
+
+    response = await client.get(
+        f"/api/v1/orgs/{org_a.id}/members", params={"q": "%"}, headers=_auth_header(user_a)
+    )
+
+    assert response.json()["data"] == []
+    assert response.json()["meta"]["total"] == 0
+
+
+async def test_member_avatar_is_404_without_an_uploaded_one(
+    client: httpx.AsyncClient, session: AsyncSession, user_a: User, org_a: Organization
+) -> None:
+    _, membership = await _add_member(session, org_a)
+
+    response = await client.get(
+        f"/api/v1/orgs/{org_a.id}/members/{membership.id}/avatar", headers=_auth_header(user_a)
+    )
+
+    assert response.status_code == 404
+
+
+async def test_member_avatar_does_not_reach_another_orgs_membership(
+    client: httpx.AsyncClient,
+    session: AsyncSession,
+    user_a: User,
+    org_a: Organization,
+    org_b: Organization,
+) -> None:
+    _, other = await _add_member(session, org_b)
+
+    response = await client.get(
+        f"/api/v1/orgs/{org_a.id}/members/{other.id}/avatar", headers=_auth_header(user_a)
+    )
+
+    assert response.status_code == 404

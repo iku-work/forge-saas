@@ -27,6 +27,7 @@ from app.modules.audit.service import AuditService
 from app.modules.auth.models import User
 from app.modules.auth.permissions import ROLE_PERMISSIONS, MemberRole, Permission
 from app.modules.auth.repository import UserRepository
+from app.modules.auth.service import AuthService
 from app.modules.auth.utils import hash_token, sign_url_token, verify_url_token
 from app.modules.notifications.service import NotificationService
 from app.modules.tenancy.models import Invitation, Membership, Organization
@@ -290,9 +291,37 @@ class TenancyService:
         return org
 
     async def list_members(
-        self, org_id: UUID, after: UUID | None, limit: int
+        self, org_id: UUID, after: UUID | None, limit: int, email_query: str | None = None
     ) -> tuple[list[Membership], UUID | None]:
-        return await self._memberships.list_for_org(org_id, after=after, limit=limit)
+        return await self._memberships.list_for_org(
+            org_id, after=after, limit=limit, email_query=email_query
+        )
+
+    async def count_members(self, org_id: UUID, email_query: str | None = None) -> int:
+        return await self._memberships.count_by_org(org_id, email_query=email_query)
+
+    async def users_for_memberships(self, memberships: list[Membership]) -> dict[UUID, User]:
+        """The users behind a page of memberships, in one query (T-243)."""
+        return await AuthService(self._session).users_by_ids(
+            {membership.user_id for membership in memberships}
+        )
+
+    async def member_avatar_key(self, org_id: UUID, membership_id: UUID) -> str:
+        """The object key of a fellow member's uploaded avatar.
+
+        404 for a membership outside `org_id` (the same answer as one that
+        does not exist, so another org's ids reveal nothing), for a deleted
+        user, and for a member with no uploaded avatar.
+        """
+        membership = await self._memberships.get_by_id(membership_id)
+        if membership is None or membership.org_id != org_id:
+            raise NotFoundError("errors.membership_not_found", fallback="Membership not found")
+        user = (await AuthService(self._session).users_by_ids({membership.user_id})).get(
+            membership.user_id
+        )
+        if user is None or user.avatar_object_key is None:
+            raise NotFoundError("errors.avatar_not_found", fallback="No uploaded avatar.")
+        return user.avatar_object_key
 
     async def list_pending_invitations(
         self, org_id: UUID, after: UUID | None, limit: int

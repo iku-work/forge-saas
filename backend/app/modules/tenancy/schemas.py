@@ -32,6 +32,21 @@ class OrganizationPublic(AppBaseModel):
     created_at: datetime
 
 
+class MemberUserSummary(AppBaseModel):
+    """Who a membership belongs to, as fellow members see them.
+
+    Enough to draw a row (a name, an email, a picture) and no more. Never the
+    uploaded avatar's object key: `has_uploaded_avatar` only says one exists
+    (the web app fetches a short-lived URL for it with a member's session).
+    `avatar_url` is an OAuth provider's picture, already an absolute URL.
+    """
+
+    full_name: str | None
+    email: str
+    avatar_url: str | None
+    has_uploaded_avatar: bool
+
+
 class MembershipPublic(AppBaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -41,6 +56,9 @@ class MembershipPublic(AppBaseModel):
     role: MemberRole
     invited_by: UUID | None
     created_at: datetime
+    # Null only when the user row is gone (soft-deleted) and the membership
+    # is not yet: the GDPR purge removes both, but not in one statement.
+    user: MemberUserSummary | None = None
 
 
 class UpdateMembershipRequest(AppBaseModel):

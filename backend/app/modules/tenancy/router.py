@@ -15,6 +15,7 @@ than the repositories directly so it still respects §0.1's router/dependency
 """
 
 from collections.abc import Awaitable, Callable
+from datetime import timedelta
 from typing import Annotated
 from uuid import UUID, uuid4
 
@@ -36,9 +37,11 @@ from app.core.exceptions import NotFoundError, PermissionDeniedError
 from app.core.principal import CurrentPrincipal, require_scope
 from app.middleware.budgets import charge_org
 from app.middleware.rate_limit import api_limit
+from app.models._mixins import utcnow
 from app.modules.api_keys.scopes import Scope
 from app.modules.auth.models import User
 from app.modules.auth.permissions import ROLE_PERMISSIONS, Permission
+from app.modules.auth.schemas import AvatarUrlResponse
 from app.modules.tenancy.models import Membership, Organization
 from app.modules.tenancy.schemas import (
     CreateOrgRequest,
@@ -46,6 +49,7 @@ from app.modules.tenancy.schemas import (
     InvitationPublic,
     InviteRequest,
     MembershipPublic,
+    MemberUserSummary,
     OrganizationPublic,
     UpdateMembershipRequest,
     UpdateOrgRequest,
@@ -203,14 +207,75 @@ async def list_members(  # noqa: PLR0913 — cursor pagination (§0.3) needs aft
     session: Annotated[AsyncSession, Depends(get_session)],
     after: Annotated[UUID | None, Query()] = None,
     limit: Annotated[int, Query(ge=1, le=100)] = 20,
+    q: Annotated[
+        str | None,
+        Query(
+            max_length=254,
+            description="Only members whose email contains this, in any case.",
+        ),
+    ] = None,
 ) -> Envelope[list[MembershipPublic]]:
-    members, next_cursor = await TenancyService(session).list_members(org_id, after, limit)
-    data = [MembershipPublic.model_validate(m) for m in members]
+    service = TenancyService(session)
+    email_query = q.strip() if q else None
+    members, next_cursor = await service.list_members(org_id, after, limit, email_query)
+    users = await service.users_for_memberships(members)
+    data = [_membership_public(m, users.get(m.user_id)) for m in members]
     meta = Meta(
         request_id=_request_id(request),
         next_cursor=str(next_cursor) if next_cursor is not None else None,
+        total=await service.count_members(org_id, email_query),
     )
     return Envelope(data=data, meta=meta)
+
+
+def _membership_public(membership: Membership, user: User | None) -> MembershipPublic:
+    public = MembershipPublic.model_validate(membership)
+    if user is not None:
+        public.user = MemberUserSummary(
+            full_name=user.full_name,
+            email=user.email,
+            avatar_url=user.avatar_url,
+            has_uploaded_avatar=user.has_uploaded_avatar,
+        )
+    return public
+
+
+@router.get(
+    "/orgs/{org_id}/members/{membership_id}/avatar",
+    description=(
+        "A short-lived URL for a fellow member's uploaded avatar. 404 when they "
+        "have none (an OAuth picture is already `user.avatar_url` on the member), "
+        "409 while its malware scan is pending."
+    ),
+)
+@api_limit
+async def get_member_avatar(
+    request: Request,
+    org_id: UUID,
+    membership_id: UUID,
+    # A member's session, not an API-key scope: a photo URL serves the web
+    # UI, and the public API contract (test_public_openapi) is deliberate.
+    viewer: Annotated[  # noqa: ARG001 -- gates the route and proves org membership; org comes from path
+        Membership, Depends(require_org_permission(Permission.MEMBERS_READ))
+    ],
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> Envelope[AvatarUrlResponse]:
+    key = await TenancyService(session).member_avatar_key(org_id, membership_id)
+    # Lazy: storage is an optional module, and this one must import without
+    # it. With file_storage off nobody has an uploaded avatar, so the 404
+    # above is raised before this line is reached.
+    from app.modules.storage.avatars import (  # noqa: PLC0415
+        AVATAR_URL_EXPIRES_IN_SECONDS,
+        presign_own_avatar,
+    )
+
+    url = await presign_own_avatar(session, key)
+    return Envelope(
+        data=AvatarUrlResponse(
+            url=url, expires_at=utcnow() + timedelta(seconds=AVATAR_URL_EXPIRES_IN_SECONDS)
+        ),
+        meta=Meta(request_id=_request_id(request)),
+    )
 
 
 @router.patch(

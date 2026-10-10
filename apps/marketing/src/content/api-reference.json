@@ -126,6 +126,49 @@
         "title": "MemberRole",
         "type": "string"
       },
+      "MemberUserSummary": {
+        "description": "Who a membership belongs to, as fellow members see them.\n\nEnough to draw a row (a name, an email, a picture) and no more. Never the\nuploaded avatar's object key: `has_uploaded_avatar` only says one exists\n(the web app fetches a short-lived URL for it with a member's session).\n`avatar_url` is an OAuth provider's picture, already an absolute URL.",
+        "properties": {
+          "avatar_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Avatar Url"
+          },
+          "email": {
+            "title": "Email",
+            "type": "string"
+          },
+          "full_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Full Name"
+          },
+          "has_uploaded_avatar": {
+            "title": "Has Uploaded Avatar",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "full_name",
+          "email",
+          "avatar_url",
+          "has_uploaded_avatar"
+        ],
+        "title": "MemberUserSummary",
+        "type": "object"
+      },
       "MembershipPublic": {
         "properties": {
           "created_at": {
@@ -157,6 +200,16 @@
           },
           "role": {
             "$ref": "#/components/schemas/MemberRole"
+          },
+          "user": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/MemberUserSummary"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "user_id": {
             "format": "uuid",
@@ -191,6 +244,17 @@
           "request_id": {
             "title": "Request Id",
             "type": "string"
+          },
+          "total": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Total"
           },
           "version": {
             "default": "1.0.0",
@@ -395,6 +459,25 @@
               "minimum": 1,
               "title": "Limit",
               "type": "integer"
+            }
+          },
+          {
+            "description": "Only members whose email contains this, in any case.",
+            "in": "query",
+            "name": "q",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 254,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Only members whose email contains this, in any case.",
+              "title": "Q"
             }
           }
         ],

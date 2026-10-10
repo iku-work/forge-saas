@@ -2511,6 +2511,32 @@
         "title": "FeatureFlagsResponse",
         "type": "object"
       },
+      "FileUploaderSummary": {
+        "description": "Who uploaded a file, for the Files list's uploader column.",
+        "properties": {
+          "email": {
+            "title": "Email",
+            "type": "string"
+          },
+          "full_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Full Name"
+          }
+        },
+        "required": [
+          "full_name",
+          "email"
+        ],
+        "title": "FileUploaderSummary",
+        "type": "object"
+      },
       "GlobalBannerResponse": {
         "description": "T-263's `global_banner` setting, rendered above the app shell on web\nand mobile. Absent (null) whenever no banner is set.",
         "properties": {
@@ -2858,6 +2884,49 @@
         "title": "MemberRole",
         "type": "string"
       },
+      "MemberUserSummary": {
+        "description": "Who a membership belongs to, as fellow members see them.\n\nEnough to draw a row (a name, an email, a picture) and no more. Never the\nuploaded avatar's object key: `has_uploaded_avatar` only says one exists\n(the web app fetches a short-lived URL for it with a member's session).\n`avatar_url` is an OAuth provider's picture, already an absolute URL.",
+        "properties": {
+          "avatar_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Avatar Url"
+          },
+          "email": {
+            "title": "Email",
+            "type": "string"
+          },
+          "full_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Full Name"
+          },
+          "has_uploaded_avatar": {
+            "title": "Has Uploaded Avatar",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "full_name",
+          "email",
+          "avatar_url",
+          "has_uploaded_avatar"
+        ],
+        "title": "MemberUserSummary",
+        "type": "object"
+      },
       "MembershipPublic": {
         "properties": {
           "created_at": {
@@ -2889,6 +2958,16 @@
           },
           "role": {
             "$ref": "#/components/schemas/MemberRole"
+          },
+          "user": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/MemberUserSummary"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "user_id": {
             "format": "uuid",
@@ -2923,6 +3002,17 @@
           "request_id": {
             "title": "Request Id",
             "type": "string"
+          },
+          "total": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Total"
           },
           "version": {
             "default": "1.0.0",
@@ -3852,6 +3942,16 @@
             "format": "uuid",
             "title": "Uploaded By",
             "type": "string"
+          },
+          "uploader": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/FileUploaderSummary"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "virus_scan_result": {
             "anyOf": [
@@ -8905,6 +9005,25 @@
               "title": "Limit",
               "type": "integer"
             }
+          },
+          {
+            "description": "Only members whose email contains this, in any case.",
+            "in": "query",
+            "name": "q",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 254,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Only members whose email contains this, in any case.",
+              "title": "Q"
+            }
           }
         ],
         "responses": {
@@ -9059,6 +9178,65 @@
           }
         ],
         "summary": "Update Member Role",
+        "tags": [
+          "tenancy"
+        ]
+      }
+    },
+    "/api/v1/orgs/{org_id}/members/{membership_id}/avatar": {
+      "get": {
+        "description": "A short-lived URL for a fellow member's uploaded avatar. 404 when they have none (an OAuth picture is already `user.avatar_url` on the member), 409 while its malware scan is pending.",
+        "operationId": "get_member_avatar_api_v1_orgs__org_id__members__membership_id__avatar_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "org_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Org Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "membership_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Membership Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_AvatarUrlResponse_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_NoneType_"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Get Member Avatar",
         "tags": [
           "tenancy"
         ]
