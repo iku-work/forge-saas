@@ -80,8 +80,14 @@ function downloadBlockedKey(status: DisplayStatus): string {
   return "files.action.download_blocked_pending";
 }
 
-function uploaderInitials(uploaderId: string): string {
-  return uploaderId.slice(0, 2).toUpperCase();
+/** Who uploaded a file: their name, else their email, else (an account
+ *  already gone) the start of their id. */
+function uploaderName(file: StoredFilePublic): string {
+  return (
+    file.uploader?.full_name ??
+    file.uploader?.email ??
+    file.uploaded_by.slice(0, 8)
+  );
 }
 
 export function FilesPage() {
@@ -243,11 +249,17 @@ export function FilesPage() {
                     {formatBytes(file.size_bytes)}
                   </TableCell>
                   <TableCell>
-                    <Avatar className="size-6">
-                      <AvatarFallback className="text-xs">
-                        {uploaderInitials(file.uploaded_by)}
-                      </AvatarFallback>
-                    </Avatar>
+                    <span
+                      className="flex min-w-0 items-center gap-2"
+                      title={file.uploader?.email}
+                    >
+                      <Avatar className="size-6">
+                        <AvatarFallback className="text-xs">
+                          {uploaderName(file).charAt(0).toUpperCase()}
+                        </AvatarFallback>
+                      </Avatar>
+                      <span className="truncate">{uploaderName(file)}</span>
+                    </span>
                   </TableCell>
                   <TableCell>
                     <StatusPill tone={statusTone(displayStatus(file))}>

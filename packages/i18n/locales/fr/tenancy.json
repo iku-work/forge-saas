@@ -43,7 +43,7 @@
     "error_load": "Impossible de charger les membres.",
     "error_role_change": "Impossible de mettre à jour le rôle de ce membre.",
     "error_remove": "Impossible de supprimer ce membre.",
-    "actions_label": "Actions pour {user_id}",
+    "actions_label": "Actions pour {name}",
     "change_role": "Modifier le rôle",
     "joined_col": "Arrivée",
     "status_active": "Actif",

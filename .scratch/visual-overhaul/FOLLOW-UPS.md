@@ -15,14 +15,6 @@ something; move an entry to the bottom section when it is resolved.
   row shows a disabled "Upload logo" with "coming soon". Needs a storage path for org logos
   (same shape as avatars) and the button wired up.
 
-- **Members list has no names, emails or photos.** (ticket 08) `GET /orgs/{id}/members` returns
-  `MembershipPublic` (ids, role, invited_by, created_at) only, so other members show as a short
-  user id. Needs a user summary on each membership (full_name, email, has_uploaded_avatar),
-  fetched through the auth service in one batch (§0.1 cross-module rule; T-243's query budget
-  for list endpoints), then the Members row shows avatar + name + email like the design.
-  The same gap shows on **Files** (ticket 09): the uploader column can only show two letters of
-  the uploader's user id. Whatever summary the members list gets, `StoredFilePublic` should
-  carry for `uploaded_by`.
 - **Resend and revoke invitations.** (ticket 08) The pending-invitations list has no actions
   because there are no endpoints for them. Needs `POST /orgs/{id}/invitations/{inv}/resend` and
   `DELETE /orgs/{id}/invitations/{inv}`, then a "⋯" menu on invitation rows (Resend, Copy link,
@@ -30,9 +22,6 @@ something; move an entry to the bottom section when it is resolved.
 
 ## Frontend
 
-- **Member search and count.** (ticket 08) Skipped: with no names to search and a paginated list,
-  a client-side filter or a "N members" count would mislead. Add both once the backend gap above
-  is closed (a server-side `q` parameter for search, a total in the list meta for the count).
 - **Removing a member has no confirmation.** (pre-existing, kept in ticket 08) It acts at once.
   The design rules (F-009) ask for a confirm on actions that affect other users. Wrap it in the
   existing `ConfirmDialog`.
@@ -85,11 +74,6 @@ something; move an entry to the bottom section when it is resolved.
 
 ## Product questions
 
-- **Signing in replaces a device's theme with the account's.** (pre-existing, F-003/F-004)
-  `useServerThemeSync` adopts `user.theme` after sign-in, and a new account's value is
-  `"system"`. So someone who picked dark before signing up gets the system theme back. The
-  a11y spec's dark run only stays dark because the check finishes first. Decide whether a
-  never-chosen server value should override an explicit local choice.
 - **Checklist on phones.** Hints wrap to three or four lines beside the button at 375px. Consider
   putting the button under the text below ~30rem.
 
@@ -120,6 +104,8 @@ something; move an entry to the bottom section when it is resolved.
 
 ## Resolved
 
+- **Members list names, emails, photos; search and count; Files uploader names.** Done after the PR: `user` on each membership, `q` (email only, since names are encrypted), `meta.total`, a session-only member avatar route, `uploader` on each file.
+- **Signing in replaced a device's theme with the account's.** A device's explicit choice now wins over an account still on the default, and is saved to it.
 - **Translations for new keys.** Machine-translated in ticket 14 and flagged for review (above).
 - **Visual baselines.** Regenerated and passing since ticket 14.
 - **Create-your-first-organization screen was still a card.** Uses `AuthLayout` since ticket 11.

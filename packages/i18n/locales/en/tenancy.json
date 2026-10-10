@@ -46,8 +46,11 @@
     "status_col": "Status",
     "joined_col": "Joined",
     "status_active": "Active",
-    "actions_label": "Actions for {user_id}",
-    "change_role": "Change role"
+    "actions_label": "Actions for {name}",
+    "change_role": "Change role",
+    "search_placeholder": "Search by email",
+    "count": "{count, plural, one {# member} other {# members}}",
+    "no_match": "No members match “{query}”."
   },
   "invitations": {
     "title": "Pending invitations",

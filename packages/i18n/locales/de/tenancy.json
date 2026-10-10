@@ -43,7 +43,7 @@
     "error_load": "Mitglieder konnten nicht geladen werden.",
     "error_role_change": "Die Rolle dieses Mitglieds konnte nicht aktualisiert werden.",
     "error_remove": "Dieses Mitglied konnte nicht entfernt werden.",
-    "actions_label": "Aktionen für {user_id}",
+    "actions_label": "Aktionen für {name}",
     "change_role": "Rolle ändern",
     "joined_col": "Beigetreten",
     "status_active": "Aktiv",

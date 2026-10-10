@@ -3,22 +3,27 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import {
   useInfiniteQuery,
   useMutation,
+  useQuery,
   useQueryClient,
 } from "@tanstack/react-query";
-import { UserRound } from "lucide-react";
+import { Search, UserRound } from "lucide-react";
 import { useForm } from "react-hook-form";
 import { useTranslation } from "react-i18next";
 import { z } from "zod";
 
 import {
   createInvitationApiV1OrgsOrgIdInvitationsPost,
+  getMemberAvatarApiV1OrgsOrgIdMembersMembershipIdAvatarGet,
   listInvitationsApiV1OrgsOrgIdInvitationsGetInfiniteQueryKey,
   listMembersApiV1OrgsOrgIdMembersGet,
   listMembersApiV1OrgsOrgIdMembersGetInfiniteQueryKey,
   removeMemberApiV1OrgsOrgIdMembersMembershipIdDelete,
   updateMemberRoleApiV1OrgsOrgIdMembersMembershipIdPatch,
 } from "@forge/api-client";
-import type { MemberRole as ApiMemberRole } from "@forge/api-client";
+import type {
+  MemberRole as ApiMemberRole,
+  MembershipPublic,
+} from "@forge/api-client";
 import { useAuth, useOrg, usePermission } from "@forge/hooks";
 import { MemberRole, Permission } from "@forge/types";
 import {
@@ -63,14 +68,18 @@ import { formatDate } from "@forge/utils";
 import { VirtualList } from "../../components/VirtualList";
 import { MEMBERS_LIST_SCROLL_ID } from "../../lib/scrollRestorationIds";
 import { useAvatarSrc } from "../../lib/useAvatarSrc";
+import { useDebouncedValue } from "../../lib/useDebouncedValue";
 import { getErrorMessage } from "../auth/getErrorMessage";
 import { PendingInvitationsCard } from "./PendingInvitationsCard";
 
-// The member row is a fixed-height flex row, so one estimate covers every
-// row and the virtualizer never has to re-measure after mount. MAX_HEIGHT
-// is what makes the container a scroll port at all -- without it the list
+// The member row is fixed-height (`h-16`: two lines of text beside a
+// photo), so one estimate covers every row and the virtualizer never has to
+// re-measure after mount. 4rem at the 112.5% root is 72px. MAX_HEIGHT is
+// what makes the container a scroll port at all -- without it the list
 // grows to its full height and there is nothing to virtualize against.
-const ESTIMATED_ROW_HEIGHT_PX = 52;
+const ESTIMATED_ROW_HEIGHT_PX = 72;
+// A presigned avatar URL lives five minutes; refetch a little before that.
+const AVATAR_URL_STALE_MS = 4 * 60 * 1000;
 const MAX_LIST_HEIGHT_PX = 420;
 
 const ROLE_OPTIONS: ApiMemberRole[] = [
@@ -87,6 +96,14 @@ const inviteSchema = z.object({
 });
 type InviteInput = z.infer<typeof inviteSchema>;
 
+/** What a member is called on the page: their name, else their email, else
+ *  (a user row already gone) the start of their id. */
+function memberName(member: MembershipPublic): string {
+  return (
+    member.user?.full_name ?? member.user?.email ?? member.user_id.slice(0, 8)
+  );
+}
+
 function roleLabelKey(role: ApiMemberRole): string {
   return `tenancy.members.role.${role}`;
 }
@@ -99,6 +116,56 @@ function roleLabelKey(role: ApiMemberRole): string {
 const MEMBER_COLUMNS =
   "grid-cols-[minmax(0,1fr)_6.5rem_2rem] @xl/list:grid-cols-[minmax(0,1fr)_6.5rem_6.5rem_7rem_2rem]";
 const WIDE_ONLY = "hidden @xl/list:block";
+// Rows are a fixed 4rem (see ESTIMATED_ROW_HEIGHT_PX); a literal string so
+// Tailwind sees every class.
+const MEMBER_ROW =
+  "h-16 py-0 grid-cols-[minmax(0,1fr)_6.5rem_2rem] @xl/list:grid-cols-[minmax(0,1fr)_6.5rem_6.5rem_7rem_2rem]";
+
+/**
+ * A member's photo: your own from the user menu's query, an uploaded one
+ * through the members avatar endpoint (a short-lived URL, fetched only for
+ * members who have one), else an OAuth picture, else an initial.
+ */
+function MemberAvatar({
+  orgId,
+  member,
+  selfSrc,
+}: {
+  orgId: string;
+  member: MembershipPublic;
+  selfSrc: string | null;
+}) {
+  const summary = member.user ?? null;
+  const uploaded = useQuery({
+    queryKey: ["members", orgId, member.id, "avatar"],
+    queryFn: async () => {
+      const { data } =
+        await getMemberAvatarApiV1OrgsOrgIdMembersMembershipIdAvatarGet({
+          path: { org_id: orgId, membership_id: member.id },
+          throwOnError: true,
+        });
+      return data.data?.url ?? null;
+    },
+    enabled: selfSrc === null && summary?.has_uploaded_avatar === true,
+    staleTime: AVATAR_URL_STALE_MS,
+    // 409 while a new photo's scan is pending: the initial is fine until the
+    // list is next opened.
+    retry: false,
+  });
+  const src = selfSrc ?? uploaded.data ?? summary?.avatar_url ?? null;
+  const initial = (summary?.full_name ?? summary?.email ?? "")
+    .trim()
+    .charAt(0)
+    .toUpperCase();
+  return (
+    <Avatar className="size-8">
+      {src ? <AvatarImage src={src} alt="" /> : null}
+      <AvatarFallback>
+        {initial || <UserRound className="size-4" aria-hidden="true" />}
+      </AvatarFallback>
+    </Avatar>
+  );
+}
 
 function InviteForm({
   orgId,
@@ -228,18 +295,30 @@ export function MembersSettingsPage({
   const queryClient = useQueryClient();
   const [inviteOpen, setInviteOpen] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [search, setSearch] = useState("");
+  const emailQuery = useDebouncedValue(search.trim());
 
   // Raw SDK call rather than the generated *GetInfiniteOptions() helper --
   // see CreateOrgForm.tsx for why. The query key function alone is fine to
   // reuse since it doesn't make a network call.
+  //
+  // Without a search the key is exactly the one the dashboard checklist
+  // reads, so the two share a cache entry; with one, `query.q` makes a
+  // separate entry that the invalidations below still match (they compare
+  // a partial key).
   const membersQuery = useInfiniteQuery({
     queryKey: listMembersApiV1OrgsOrgIdMembersGetInfiniteQueryKey({
       path: { org_id: org?.id ?? "" },
+      ...(emailQuery ? { query: { q: emailQuery } } : {}),
     }),
     queryFn: async ({ pageParam }) => {
       const { data } = await listMembersApiV1OrgsOrgIdMembersGet({
         path: { org_id: org?.id ?? "" },
-        query: { after: pageParam, limit: 20 },
+        query: {
+          after: pageParam,
+          limit: 20,
+          ...(emailQuery ? { q: emailQuery } : {}),
+        },
         throwOnError: true,
       });
       return data;
@@ -323,6 +402,7 @@ export function MembersSettingsPage({
 
   const members =
     membersQuery.data?.pages.flatMap((page) => page.data ?? []) ?? [];
+  const total = membersQuery.data?.pages[0]?.meta.total ?? null;
 
   // fetchNextPage is referentially stable in react-query v5, so pulling it
   // out keeps this callback stable too -- VirtualList takes onLoadMore as
@@ -371,6 +451,34 @@ export function MembersSettingsPage({
         </Alert>
       ) : null}
 
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+        <div className="relative w-full max-w-xs">
+          <Search
+            className="pointer-events-none absolute start-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
+            aria-hidden="true"
+          />
+          <Input
+            type="search"
+            value={search}
+            onChange={(event) => {
+              setSearch(event.target.value);
+            }}
+            placeholder={t("tenancy.members.search_placeholder")}
+            aria-label={t("tenancy.members.search_placeholder")}
+            className="ps-9"
+            data-testid="members-search"
+          />
+        </div>
+        {total !== null ? (
+          <p
+            className="text-[0.8125rem] text-muted-foreground"
+            data-testid="members-count"
+          >
+            {t("tenancy.members.count", { count: total })}
+          </p>
+        ) : null}
+      </div>
+
       {membersQuery.isLoading ? (
         <div className="space-y-2">
           <Skeleton className="h-8 w-full" />
@@ -384,7 +492,9 @@ export function MembersSettingsPage({
         </Alert>
       ) : members.length === 0 ? (
         <p className="text-sm text-muted-foreground">
-          {t("tenancy.members.no_members")}
+          {emailQuery
+            ? t("tenancy.members.no_match", { query: emailQuery })
+            : t("tenancy.members.no_members")}
         </p>
       ) : (
         <div className="@container/list">
@@ -413,32 +523,32 @@ export function MembersSettingsPage({
               : { initialOffset: initialScrollOffset })}
             renderItem={(member) => {
               const isSelf = member.user_id === user?.id;
+              const name = memberName(member);
+              const email = member.user?.email ?? null;
               return (
-                <DataListRow className={MEMBER_COLUMNS}>
+                <DataListRow className={MEMBER_ROW}>
                   <span className="flex min-w-0 items-center gap-3">
-                    <Avatar className="size-8">
-                      {isSelf && avatarSrc ? (
-                        <AvatarImage src={avatarSrc} alt="" />
-                      ) : null}
-                      <AvatarFallback>
-                        <UserRound className="size-4" aria-hidden="true" />
-                      </AvatarFallback>
-                    </Avatar>
-                    {/* The members endpoint returns ids only, so other members
-                        show as a short id until it carries names (see the
-                        overhaul's FOLLOW-UPS.md). */}
-                    {isSelf ? (
-                      <span className="min-w-0 truncate font-medium">
-                        {user.full_name ?? user.email}{" "}
-                        <span className="font-normal text-muted-foreground">
-                          {t("tenancy.members.you")}
+                    <MemberAvatar
+                      orgId={org.id}
+                      member={member}
+                      selfSrc={isSelf ? avatarSrc : null}
+                    />
+                    <span className="min-w-0 leading-tight">
+                      <span className="block truncate font-medium">
+                        {name}
+                        {isSelf ? (
+                          <span className="font-normal text-muted-foreground">
+                            {" "}
+                            {t("tenancy.members.you")}
+                          </span>
+                        ) : null}
+                      </span>
+                      {email && email !== name ? (
+                        <span className="block truncate text-[0.8125rem] text-muted-foreground">
+                          {email}
                         </span>
-                      </span>
-                    ) : (
-                      <span className="truncate font-mono text-xs">
-                        {member.user_id.slice(0, 8)}
-                      </span>
-                    )}
+                      ) : null}
+                    </span>
                   </span>
                   <span>{t(roleLabelKey(member.role))}</span>
                   <span className={WIDE_ONLY}>
@@ -457,7 +567,7 @@ export function MembersSettingsPage({
                         <DropdownMenuTrigger asChild>
                           <RowActionsButton
                             aria-label={t("tenancy.members.actions_label", {
-                              user_id: member.user_id,
+                              name,
                             })}
                           />
                         </DropdownMenuTrigger>

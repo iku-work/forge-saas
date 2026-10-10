@@ -62,7 +62,7 @@ describe("MembersSettingsPage", () => {
 
   beforeEach(() => {
     restoreLayout = installVirtualLayout({
-      rowHeight: 52,
+      rowHeight: 72,
       viewportHeight: 420,
     });
     vi.clearAllMocks();
@@ -118,8 +118,71 @@ describe("MembersSettingsPage", () => {
     ).not.toBeInTheDocument();
   });
 
+  describe("who each member is (visual overhaul follow-up)", () => {
+    const other = makeUser(6, {
+      full_name: "Sam Rivera",
+      email: "sam@example.com",
+    });
+    const members = [
+      makeMembership(user, "owner"),
+      {
+        ...makeMembership(other, "member"),
+        id: "44444444-4444-4444-4444-444444444444",
+      },
+    ];
+
+    it("shows another member's name and email, and the count", async () => {
+      hooks.usePermission.mockReturnValue(true);
+      server.use(
+        http.get(`${API}/api/v1/orgs/:orgId/members`, () =>
+          HttpResponse.json({
+            ...envelope(members),
+            meta: { request_id: "req-1", total: 2 },
+          }),
+        ),
+      );
+      renderPage();
+
+      expect(await screen.findByText("Sam Rivera")).toBeInTheDocument();
+      expect(screen.getByText("sam@example.com")).toBeInTheDocument();
+      expect(screen.getByTestId("members-count")).toHaveTextContent(
+        "2 members",
+      );
+    });
+
+    it("searches by email on the server, not by filtering the loaded page", async () => {
+      hooks.usePermission.mockReturnValue(true);
+      const queries: (string | null)[] = [];
+      server.use(
+        http.get(`${API}/api/v1/orgs/:orgId/members`, ({ request }) => {
+          const q = new URL(request.url).searchParams.get("q");
+          queries.push(q);
+          const rows = q ? members.slice(1) : members;
+          return HttpResponse.json({
+            ...envelope(rows),
+            meta: { request_id: "req-1", total: rows.length },
+          });
+        }),
+      );
+      renderPage();
+      await screen.findByText("Sam Rivera");
+
+      await userEvent.type(screen.getByTestId("members-search"), "sam");
+
+      await waitFor(() => {
+        expect(queries).toContain("sam");
+      });
+      expect(await screen.findByTestId("members-count")).toHaveTextContent(
+        "1 member",
+      );
+    });
+  });
+
   describe("row actions", () => {
-    const other = makeUser(5);
+    const other = makeUser(5, {
+      full_name: "Sam Rivera",
+      email: "sam@example.com",
+    });
 
     beforeEach(() => {
       server.use(
@@ -144,7 +207,7 @@ describe("MembersSettingsPage", () => {
 
       await userEvent.click(
         await screen.findByRole("button", {
-          name: `Actions for ${other.id}`,
+          name: "Actions for Sam Rivera",
         }),
       );
 
@@ -176,7 +239,7 @@ describe("MembersSettingsPage", () => {
 
       await userEvent.click(
         await screen.findByRole("button", {
-          name: `Actions for ${other.id}`,
+          name: "Actions for Sam Rivera",
         }),
       );
       await userEvent.click(
@@ -193,9 +256,9 @@ describe("MembersSettingsPage", () => {
     it("offers no actions on your own row, nor to a plain member", async () => {
       hooks.usePermission.mockReturnValue(true);
       const { unmount } = renderPage();
-      await screen.findByRole("button", { name: `Actions for ${other.id}` });
+      await screen.findByRole("button", { name: "Actions for Sam Rivera" });
       expect(
-        screen.queryByRole("button", { name: `Actions for ${user.id}` }),
+        screen.queryByRole("button", { name: "Actions for Jane Doe" }),
       ).not.toBeInTheDocument();
       unmount();
 

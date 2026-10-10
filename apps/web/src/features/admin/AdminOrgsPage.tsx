@@ -25,7 +25,7 @@ import { formatDate } from "@forge/utils";
 
 import { useRouteLocale } from "../../lib/useRouteLocale";
 import { getErrorMessage } from "../auth/getErrorMessage";
-import { useDebouncedValue } from "./useDebouncedValue";
+import { useDebouncedValue } from "../../lib/useDebouncedValue";
 
 const STATUS_OPTIONS = [
   "active",

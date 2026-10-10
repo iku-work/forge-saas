@@ -43,7 +43,7 @@
     "error_load": "تعذّر تحميل الأعضاء.",
     "error_role_change": "تعذّر تحديث دور هذا العضو.",
     "error_remove": "تعذّر إزالة هذا العضو.",
-    "actions_label": "إجراءات {user_id}",
+    "actions_label": "إجراءات {name}",
     "change_role": "تغيير الدور",
     "joined_col": "تاريخ الانضمام",
     "status_active": "نشط",

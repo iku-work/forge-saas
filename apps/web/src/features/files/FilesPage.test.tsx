@@ -136,6 +136,25 @@ describe("FilesPage", () => {
     expect(await screen.findByText(file.filename)).toBeInTheDocument();
   });
 
+  it("names who uploaded each file", async () => {
+    // Not two letters of a user id, as it was before the API carried one.
+    server.use(
+      http.get(`${API}/api/v1/files`, () =>
+        HttpResponse.json(
+          envelope([
+            makeStoredFile(1, {
+              uploader: { full_name: "Sam Rivera", email: "sam@example.com" },
+            }),
+          ]),
+        ),
+      ),
+    );
+
+    renderPage();
+
+    expect(await screen.findByText("Sam Rivera")).toBeInTheDocument();
+  });
+
   it("asks before deleting, naming the file (F-009)", async () => {
     // Replaces a window.confirm() that said only "Delete this file?" -- and
     // that jsdom stubs as always-false, so the old path could not be
