@@ -1446,6 +1446,10 @@ export type OrganizationPublic = {
    */
   created_at: string;
   /**
+   * Has Uploaded Logo
+   */
+  has_uploaded_logo?: boolean;
+  /**
    * Id
    */
   id: string;
@@ -2095,6 +2099,10 @@ export type UpdateMembershipRequest = {
  * UpdateOrgRequest
  */
 export type UpdateOrgRequest = {
+  /**
+   * Logo File Id
+   */
+  logo_file_id?: string | null;
   /**
    * Logo Url
    */
@@ -5049,6 +5057,38 @@ export type LeaveOrgApiV1OrgsOrgIdLeavePostResponses = {
 
 export type LeaveOrgApiV1OrgsOrgIdLeavePostResponse =
   LeaveOrgApiV1OrgsOrgIdLeavePostResponses[keyof LeaveOrgApiV1OrgsOrgIdLeavePostResponses];
+
+export type GetOrgLogoApiV1OrgsOrgIdLogoGetData = {
+  body?: never;
+  path: {
+    /**
+     * Org Id
+     */
+    org_id: string;
+  };
+  query?: never;
+  url: "/api/v1/orgs/{org_id}/logo";
+};
+
+export type GetOrgLogoApiV1OrgsOrgIdLogoGetErrors = {
+  /**
+   * Validation Error
+   */
+  422: EnvelopeNoneType;
+};
+
+export type GetOrgLogoApiV1OrgsOrgIdLogoGetError =
+  GetOrgLogoApiV1OrgsOrgIdLogoGetErrors[keyof GetOrgLogoApiV1OrgsOrgIdLogoGetErrors];
+
+export type GetOrgLogoApiV1OrgsOrgIdLogoGetResponses = {
+  /**
+   * Successful Response
+   */
+  200: EnvelopeAvatarUrlResponse;
+};
+
+export type GetOrgLogoApiV1OrgsOrgIdLogoGetResponse =
+  GetOrgLogoApiV1OrgsOrgIdLogoGetResponses[keyof GetOrgLogoApiV1OrgsOrgIdLogoGetResponses];
 
 export type ListMembersApiV1OrgsOrgIdMembersGetData = {
   body?: never;

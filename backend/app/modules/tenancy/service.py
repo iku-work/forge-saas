@@ -19,6 +19,7 @@ from app.core.exceptions import (
     ConflictError,
     NotFoundError,
     PermissionDeniedError,
+    UnprocessableEntityError,
 )
 from app.core.module_loader import is_enabled
 from app.core.urls import frontend_url
@@ -273,6 +274,35 @@ class TenancyService:
         # The removed member's user id, so the router can bust that user's
         # cache (T-240) -- the membership row is gone by the time it returns.
         return target.user_id
+
+    async def resolve_logo_change(self, org_id: UUID, file_id: UUID | None) -> str | None:
+        """Translate a client-supplied file id into the logo key to store.
+
+        None clears the logo and needs no lookup. Anything else must be a
+        file in this org's logos bucket; otherwise one undifferentiated 422.
+        """
+        if file_id is None:
+            return None
+        # file_storage is optional: without it nothing can have been uploaded,
+        # and stored_file may not exist to query.
+        if not is_enabled("file_storage"):
+            raise UnprocessableEntityError(
+                "errors.logo_file_invalid", fallback="That file cannot be used as a logo."
+            )
+        from app.modules.storage.logos import resolve_org_logo_key  # noqa: PLC0415 -- see above
+
+        key = await resolve_org_logo_key(self._session, org_id=org_id, file_id=file_id)
+        if key is None:
+            raise UnprocessableEntityError(
+                "errors.logo_file_invalid", fallback="That file cannot be used as a logo."
+            )
+        return key
+
+    async def org_logo_key(self, org_id: UUID) -> str:
+        org = await self._org_or_raise(org_id)
+        if org.logo_object_key is None:
+            raise NotFoundError("errors.logo_not_found", fallback="No uploaded logo.")
+        return org.logo_object_key
 
     async def leave_org(self, membership: Membership) -> None:
         """A member leaves an organization themselves.

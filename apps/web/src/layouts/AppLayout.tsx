@@ -70,6 +70,7 @@ import { SupportLink } from "../features/support/SupportLink";
 import { stripLocale } from "../lib/locale-url";
 import { useVisibleNavItems, type NavItem } from "../lib/navigation";
 import { useAvatarSrc } from "../lib/useAvatarSrc";
+import { useOrgLogoSrc } from "../lib/useOrgLogoSrc";
 import { useSidebarCollapsed } from "../lib/useSidebarCollapsed";
 import { useRouteLocale } from "../lib/useRouteLocale";
 
@@ -163,7 +164,24 @@ function NavLink({ item, collapsed }: { item: NavItem; collapsed: boolean }) {
 }
 
 /** The square initial that stands for the Organization (or the product). */
-function Monogram({ name }: { name: string | undefined }) {
+function Monogram({
+  name,
+  src = null,
+}: {
+  name: string | undefined;
+  /** An uploaded logo, shown in place of the initial. */
+  src?: string | null;
+}) {
+  if (src) {
+    return (
+      <img
+        src={src}
+        alt=""
+        aria-hidden="true"
+        className="size-[1.375rem] shrink-0 rounded-sm object-cover"
+      />
+    );
+  }
   return (
     <span
       aria-hidden="true"
@@ -177,6 +195,7 @@ function Monogram({ name }: { name: string | undefined }) {
 function OrgSwitcher() {
   const { t } = useTranslation();
   const { orgs, org, isLoading, switchOrg } = useOrg();
+  const logoSrc = useOrgLogoSrc(org);
   const [createOpen, setCreateOpen] = useState(false);
 
   return (
@@ -188,7 +207,7 @@ function OrgSwitcher() {
             className="min-h-10 font-semibold text-foreground"
             disabled={isLoading}
           >
-            <Monogram name={org?.name} />
+            <Monogram name={org?.name} src={logoSrc} />
             <ShellLabel>
               {isLoading
                 ? t("common.org_switcher.loading")

@@ -20,6 +20,10 @@ class CreateOrgRequest(AppBaseModel):
 class UpdateOrgRequest(AppBaseModel):
     name: str | None = Field(default=None, min_length=1, max_length=255)
     logo_url: str | None = None
+    # The id of a file uploaded to this org's "logos" bucket; null clears the
+    # logo. The server resolves it to a storage key -- a client-supplied key
+    # would be a request to presign any object in the bucket.
+    logo_file_id: UUID | None = None
 
 
 class OrganizationPublic(AppBaseModel):
@@ -29,6 +33,8 @@ class OrganizationPublic(AppBaseModel):
     name: str
     slug: str
     logo_url: str | None
+    # Whether an uploaded logo exists; GET /orgs/{id}/logo serves it.
+    has_uploaded_logo: bool = False
     created_at: datetime
 
 

@@ -93,6 +93,9 @@ import type {
   GetOrgApiV1OrgsOrgIdGetData,
   GetOrgApiV1OrgsOrgIdGetErrors,
   GetOrgApiV1OrgsOrgIdGetResponses,
+  GetOrgLogoApiV1OrgsOrgIdLogoGetData,
+  GetOrgLogoApiV1OrgsOrgIdLogoGetErrors,
+  GetOrgLogoApiV1OrgsOrgIdLogoGetResponses,
   GetSsoConnectionApiV1AuthSsoConnectionGetData,
   GetSsoConnectionApiV1AuthSsoConnectionGetErrors,
   GetSsoConnectionApiV1AuthSsoConnectionGetResponses,
@@ -2340,6 +2343,30 @@ export const leaveOrgApiV1OrgsOrgIdLeavePost = <
   >({
     security: [{ scheme: "bearer", type: "http" }],
     url: "/api/v1/orgs/{org_id}/leave",
+    ...options,
+  });
+
+/**
+ * Get Org Logo
+ *
+ * A short-lived URL for the organization's uploaded logo. 404 when it has none, 409 while its malware scan is pending.
+ */
+export const getOrgLogoApiV1OrgsOrgIdLogoGet = <
+  ThrowOnError extends boolean = false,
+>(
+  options: Options<GetOrgLogoApiV1OrgsOrgIdLogoGetData, ThrowOnError>,
+): RequestResult<
+  GetOrgLogoApiV1OrgsOrgIdLogoGetResponses,
+  GetOrgLogoApiV1OrgsOrgIdLogoGetErrors,
+  ThrowOnError
+> =>
+  (options.client ?? client).get<
+    GetOrgLogoApiV1OrgsOrgIdLogoGetResponses,
+    GetOrgLogoApiV1OrgsOrgIdLogoGetErrors,
+    ThrowOnError
+  >({
+    security: [{ scheme: "bearer", type: "http" }],
+    url: "/api/v1/orgs/{org_id}/logo",
     ...options,
   });
 

@@ -124,6 +124,8 @@
   "payment_provider_error": "The payment provider could not complete this request. If it keeps happening, contact support.",
   "avatar_file_invalid": "That file cannot be used as an avatar.",
   "avatar_not_found": "No uploaded avatar.",
+  "logo_not_found": "No uploaded logo.",
+  "logo_file_invalid": "That file cannot be used as a logo.",
   "file_not_ready": "This file has not finished uploading yet.",
   "file_scan_pending": "This file is still being scanned for malware. Try again shortly.",
   "file_scan_failed": "This file could not be scanned for malware, so it cannot be downloaded.",

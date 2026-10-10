@@ -39,6 +39,7 @@ import {
   getMemberAvatarApiV1OrgsOrgIdMembersMembershipIdAvatarGet,
   getMyAvatarApiV1AuthMeAvatarGet,
   getOrgApiV1OrgsOrgIdGet,
+  getOrgLogoApiV1OrgsOrgIdLogoGet,
   getSsoConnectionApiV1AuthSsoConnectionGet,
   getSubscriptionApiV1BillingSubscriptionGet,
   getSupportContextApiV1MeSupportContextGet,
@@ -198,6 +199,9 @@ import type {
   GetOrgApiV1OrgsOrgIdGetData,
   GetOrgApiV1OrgsOrgIdGetError,
   GetOrgApiV1OrgsOrgIdGetResponse,
+  GetOrgLogoApiV1OrgsOrgIdLogoGetData,
+  GetOrgLogoApiV1OrgsOrgIdLogoGetError,
+  GetOrgLogoApiV1OrgsOrgIdLogoGetResponse,
   GetSsoConnectionApiV1AuthSsoConnectionGetData,
   GetSsoConnectionApiV1AuthSsoConnectionGetError,
   GetSsoConnectionApiV1AuthSsoConnectionGetResponse,
@@ -3119,6 +3123,36 @@ export const leaveOrgApiV1OrgsOrgIdLeavePostMutation = (
   };
   return mutationOptions;
 };
+
+export const getOrgLogoApiV1OrgsOrgIdLogoGetQueryKey = (
+  options: Options<GetOrgLogoApiV1OrgsOrgIdLogoGetData>,
+) => createQueryKey("getOrgLogoApiV1OrgsOrgIdLogoGet", options);
+
+/**
+ * Get Org Logo
+ *
+ * A short-lived URL for the organization's uploaded logo. 404 when it has none, 409 while its malware scan is pending.
+ */
+export const getOrgLogoApiV1OrgsOrgIdLogoGetOptions = (
+  options: Options<GetOrgLogoApiV1OrgsOrgIdLogoGetData>,
+) =>
+  queryOptions<
+    GetOrgLogoApiV1OrgsOrgIdLogoGetResponse,
+    GetOrgLogoApiV1OrgsOrgIdLogoGetError,
+    GetOrgLogoApiV1OrgsOrgIdLogoGetResponse,
+    ReturnType<typeof getOrgLogoApiV1OrgsOrgIdLogoGetQueryKey>
+  >({
+    queryFn: async ({ queryKey, signal }) => {
+      const { data } = await getOrgLogoApiV1OrgsOrgIdLogoGet({
+        ...options,
+        ...queryKey[0],
+        signal,
+        throwOnError: true,
+      });
+      return data;
+    },
+    queryKey: getOrgLogoApiV1OrgsOrgIdLogoGetQueryKey(options),
+  });
 
 export const listMembersApiV1OrgsOrgIdMembersGetQueryKey = (
   options: Options<ListMembersApiV1OrgsOrgIdMembersGetData>,

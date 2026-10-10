@@ -1,6 +1,6 @@
 import { useEffect, useId, useState } from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import { useForm } from "react-hook-form";
 import { useTranslation } from "react-i18next";
@@ -10,15 +10,17 @@ import {
   leaveOrgApiV1OrgsOrgIdLeavePost,
   updateOrgApiV1OrgsOrgIdPatch,
 } from "@forge/api-client";
-import { useOrg, usePermission } from "@forge/hooks";
+import { useModules, useOrg, usePermission } from "@forge/hooks";
 import { Permission } from "@forge/types";
 import {
   Alert,
   AlertDescription,
   Avatar,
   AvatarFallback,
+  AvatarImage,
   Button,
   ConfirmDialog,
+  FileUploader,
   Form,
   FormControl,
   FormField,
@@ -34,6 +36,7 @@ import {
   toast,
 } from "@forge/ui";
 
+import { orgLogoQueryKey, useOrgLogoSrc } from "../../lib/useOrgLogoSrc";
 import { useRouteLocale } from "../../lib/useRouteLocale";
 import { getErrorMessage } from "../auth/getErrorMessage";
 
@@ -49,6 +52,20 @@ export function OrgSettingsPage() {
   const [formError, setFormError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
   const formId = useId();
+  const modules = useModules();
+  const queryClient = useQueryClient();
+  const logoSrc = useOrgLogoSrc(org);
+  const setLogo = useMutation({
+    // null clears the logo. The id, never a storage key: the server checks
+    // the file is in this org's logos bucket.
+    mutationFn: async (input: { orgId: string; fileId: string | null }) => {
+      await updateOrgApiV1OrgsOrgIdPatch({
+        path: { org_id: input.orgId },
+        body: { logo_file_id: input.fileId },
+        throwOnError: true,
+      });
+    },
+  });
   const navigate = useNavigate();
   const locale = useRouteLocale();
   const [confirmLeave, setConfirmLeave] = useState(false);
@@ -100,6 +117,28 @@ export function OrgSettingsPage() {
       setFormError(
         getErrorMessage(error, "tenancy.org_settings.error_default"),
       );
+    }
+  };
+
+  const onLogoChanged = async (fileId: string | null): Promise<void> => {
+    if (!org) return;
+    try {
+      await setLogo.mutateAsync({ orgId: org.id, fileId });
+      // has_uploaded_logo lives on the org, so the switcher learns about it
+      // from a refresh; the image itself from the shared logo query.
+      await refreshOrgs();
+      await queryClient.invalidateQueries({
+        queryKey: orgLogoQueryKey(org.id),
+      });
+      toast.success(
+        t(
+          fileId === null
+            ? "tenancy.org_settings.logo_removed"
+            : "tenancy.org_settings.logo_saved",
+        ),
+      );
+    } catch (error) {
+      toast.error(getErrorMessage(error, "tenancy.org_settings.error_logo"));
     }
   };
 
@@ -171,17 +210,45 @@ export function OrgSettingsPage() {
 
         <SettingsRow
           label={t("tenancy.org_settings.logo_label")}
-          hint={t("tenancy.org_settings.coming_soon")}
+          {...(modules.fileStorage
+            ? { hint: t("tenancy.org_settings.logo_hint") }
+            : {})}
         >
-          <Avatar className="size-12" data-testid="org-avatar">
-            <AvatarFallback>
+          <Avatar className="size-12 rounded-lg" data-testid="org-avatar">
+            {logoSrc ? <AvatarImage src={logoSrc} alt="" /> : null}
+            <AvatarFallback className="rounded-lg">
               {org.name.slice(0, 2).toUpperCase()}
             </AvatarFallback>
           </Avatar>
-          {/* No storage upload endpoint exists yet -- same stub as before. */}
-          <Button type="button" variant="outline" disabled>
-            {t("tenancy.org_settings.logo_upload")}
-          </Button>
+          {/* Uploading needs somewhere to put the file: with file storage off
+              the initials are the logo, and there is nothing to offer. */}
+          {canManage && modules.fileStorage ? (
+            <>
+              <FileUploader
+                variant="button"
+                buttonLabel={t("tenancy.org_settings.logo_upload")}
+                bucket="logos"
+                accept="image/png,image/jpeg,image/webp"
+                maxSize={2 * 1024 * 1024}
+                onUploaded={(file) => {
+                  void onLogoChanged(file.id);
+                }}
+              />
+              {org.has_uploaded_logo ? (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  disabled={setLogo.isPending}
+                  onClick={() => {
+                    void onLogoChanged(null);
+                  }}
+                  data-testid="org-logo-remove"
+                >
+                  {t("tenancy.org_settings.logo_remove")}
+                </Button>
+              ) : null}
+            </>
+          ) : null}
         </SettingsRow>
 
         <Form {...form}>

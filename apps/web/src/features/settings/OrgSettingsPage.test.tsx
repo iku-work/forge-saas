@@ -145,4 +145,44 @@ describe("OrgSettingsPage", () => {
     expect(left).toBe(true);
     expect(refreshOrgs).toHaveBeenCalled();
   });
+
+  it("removes an uploaded logo by clearing logo_file_id", async () => {
+    hooks.useOrg.mockReturnValue({
+      org: { ...org, has_uploaded_logo: true },
+      orgs: [org],
+      role: "owner",
+      isLoading: false,
+      switchOrg: vi.fn(),
+      refreshOrgs: vi.fn().mockResolvedValue(undefined),
+    });
+    hooks.usePermission.mockReturnValue(true);
+    let sent: unknown = null;
+    server.use(
+      http.get(`${API}/api/v1/orgs/:orgId/logo`, () =>
+        HttpResponse.json({
+          data: {
+            url: "https://storage.example.test/logo.png",
+            expires_at: "2026-12-31T00:00:00Z",
+          },
+          error: null,
+          meta: { request_id: "r1" },
+        }),
+      ),
+      http.patch(`${API}/api/v1/orgs/:orgId`, async ({ request }) => {
+        sent = await request.json();
+        return HttpResponse.json({
+          data: { ...org, has_uploaded_logo: false },
+          error: null,
+          meta: { request_id: "r1" },
+        });
+      }),
+    );
+    renderPage();
+
+    await userEvent.click(await screen.findByTestId("org-logo-remove"));
+
+    await waitFor(() => {
+      expect(sent).toEqual({ logo_file_id: null });
+    });
+  });
 });

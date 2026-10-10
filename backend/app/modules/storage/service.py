@@ -85,6 +85,8 @@ _DEFAULT_ALLOWED_CONTENT_TYPES = frozenset(
 # "configurable per bucket").
 _BUCKET_ALLOWED_CONTENT_TYPES: dict[str, frozenset[str]] = {
     "avatars": frozenset({"image/jpeg", "image/png", "image/webp"}),
+    # No SVG: it can carry script, and a logo is shown on every page.
+    "logos": frozenset({"image/jpeg", "image/png", "image/webp"}),
 }
 
 _SLUG_DISALLOWED = re.compile(r"[^a-z0-9]+")

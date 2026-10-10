@@ -181,11 +181,52 @@ async def update_org(  # noqa: PLR0913 — redis (cache invalidation, T-240) on 
     session: Annotated[AsyncSession, Depends(get_session)],
     redis: Annotated[Redis, Depends(get_redis)],
 ) -> Envelope[OrganizationPublic]:
-    org = await TenancyService(session).update_org(org_id, **body.model_dump(exclude_unset=True))
+    service = TenancyService(session)
+    # exclude_unset: an omitted field is left alone, an explicit null clears it.
+    changes = body.model_dump(exclude_unset=True)
+    if "logo_file_id" in changes:
+        changes["logo_object_key"] = await service.resolve_logo_change(
+            org_id, changes.pop("logo_file_id")
+        )
+    org = await service.update_org(org_id, **changes)
     await session.commit()
     await invalidate_org_cache(redis, org_id)  # T-240: get_current_org caches this row
     return Envelope(
         data=OrganizationPublic.model_validate(org), meta=Meta(request_id=_request_id(request))
+    )
+
+
+@router.get(
+    "/orgs/{org_id}/logo",
+    description=(
+        "A short-lived URL for the organization's uploaded logo. 404 when it has "
+        "none, 409 while its malware scan is pending."
+    ),
+)
+@api_limit
+async def get_org_logo(
+    request: Request,
+    org_id: UUID,
+    # A member's session: the logo serves the web UI, not the public API.
+    viewer: Annotated[  # noqa: ARG001 -- gates the route and proves org membership; org comes from path
+        Membership, Depends(require_org_permission(Permission.MEMBERS_READ))
+    ],
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> Envelope[AvatarUrlResponse]:
+    key = await TenancyService(session).org_logo_key(org_id)
+    # Lazy, as for member avatars: with file_storage off no logo exists, so
+    # the 404 above comes first.
+    from app.modules.storage.logos import (  # noqa: PLC0415
+        LOGO_URL_EXPIRES_IN_SECONDS,
+        presign_org_logo,
+    )
+
+    url = await presign_org_logo(session, org_id=org_id, key=key)
+    return Envelope(
+        data=AvatarUrlResponse(
+            url=url, expires_at=utcnow() + timedelta(seconds=LOGO_URL_EXPIRES_IN_SECONDS)
+        ),
+        meta=Meta(request_id=_request_id(request)),
     )
 
 

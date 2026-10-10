@@ -12,7 +12,6 @@
     "description": "Manage your organization's profile.",
     "name_label": "Organization name",
     "logo_upload": "Upload logo",
-    "coming_soon": "Coming soon.",
     "save": "Save",
     "saved": "Saved.",
     "permission_notice": "Only owners and admins can change this.",
@@ -26,7 +25,12 @@
     "leave_button": "Leave organization",
     "leave_confirm_title": "Leave {org}?",
     "left": "You left {org}.",
-    "error_leave": "Couldn’t leave the organization. Please try again."
+    "error_leave": "Couldn’t leave the organization. Please try again.",
+    "logo_hint": "PNG, JPG or WebP, up to 2 MB. Shown in the organization switcher.",
+    "logo_remove": "Remove",
+    "logo_saved": "Logo updated.",
+    "logo_removed": "Logo removed.",
+    "error_logo": "Couldn’t update the logo. Please try again."
   },
   "members": {
     "title": "Members",

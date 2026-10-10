@@ -3031,6 +3031,11 @@
             "title": "Created At",
             "type": "string"
           },
+          "has_uploaded_logo": {
+            "default": false,
+            "title": "Has Uploaded Logo",
+            "type": "boolean"
+          },
           "id": {
             "format": "uuid",
             "title": "Id",
@@ -3982,6 +3987,18 @@
       },
       "UpdateOrgRequest": {
         "properties": {
+          "logo_file_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Logo File Id"
+          },
           "logo_url": {
             "anyOf": [
               {
@@ -8663,6 +8680,53 @@
           }
         ],
         "summary": "Leave Org",
+        "tags": ["tenancy"]
+      }
+    },
+    "/api/v1/orgs/{org_id}/logo": {
+      "get": {
+        "description": "A short-lived URL for the organization's uploaded logo. 404 when it has none, 409 while its malware scan is pending.",
+        "operationId": "get_org_logo_api_v1_orgs__org_id__logo_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "org_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Org Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_AvatarUrlResponse_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_NoneType_"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Get Org Logo",
         "tags": ["tenancy"]
       }
     },

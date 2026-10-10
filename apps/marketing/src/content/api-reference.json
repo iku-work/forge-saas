@@ -27,9 +27,7 @@
             "$ref": "#/components/schemas/Meta"
           }
         },
-        "required": [
-          "meta"
-        ],
+        "required": ["meta"],
         "title": "Envelope[OrganizationPublic]",
         "type": "object"
       },
@@ -63,9 +61,7 @@
             "$ref": "#/components/schemas/Meta"
           }
         },
-        "required": [
-          "meta"
-        ],
+        "required": ["meta"],
         "title": "Envelope[list[MembershipPublic]]",
         "type": "object"
       },
@@ -96,11 +92,7 @@
             "type": "string"
           }
         },
-        "required": [
-          "code",
-          "message_key",
-          "message"
-        ],
+        "required": ["code", "message_key", "message"],
         "title": "ErrorBody",
         "type": "object"
       },
@@ -118,11 +110,7 @@
         "type": "object"
       },
       "MemberRole": {
-        "enum": [
-          "owner",
-          "admin",
-          "member"
-        ],
+        "enum": ["owner", "admin", "member"],
         "title": "MemberRole",
         "type": "string"
       },
@@ -160,12 +148,7 @@
             "type": "boolean"
           }
         },
-        "required": [
-          "full_name",
-          "email",
-          "avatar_url",
-          "has_uploaded_avatar"
-        ],
+        "required": ["full_name", "email", "avatar_url", "has_uploaded_avatar"],
         "title": "MemberUserSummary",
         "type": "object"
       },
@@ -262,9 +245,7 @@
             "type": "string"
           }
         },
-        "required": [
-          "request_id"
-        ],
+        "required": ["request_id"],
         "title": "Meta",
         "type": "object"
       },
@@ -274,6 +255,11 @@
             "format": "date-time",
             "title": "Created At",
             "type": "string"
+          },
+          "has_uploaded_logo": {
+            "default": false,
+            "title": "Has Uploaded Logo",
+            "type": "boolean"
           },
           "id": {
             "format": "uuid",
@@ -300,13 +286,7 @@
             "type": "string"
           }
         },
-        "required": [
-          "id",
-          "name",
-          "slug",
-          "logo_url",
-          "created_at"
-        ],
+        "required": ["id", "name", "slug", "logo_url", "created_at"],
         "title": "OrganizationPublic",
         "type": "object"
       },
@@ -342,11 +322,7 @@
             "type": "string"
           }
         },
-        "required": [
-          "loc",
-          "msg",
-          "type"
-        ],
+        "required": ["loc", "msg", "type"],
         "title": "ValidationError",
         "type": "object"
       }
@@ -411,9 +387,7 @@
           }
         ],
         "summary": "Get Org",
-        "tags": [
-          "tenancy"
-        ],
+        "tags": ["tenancy"],
         "x-forge-scope": "orgs:read"
       }
     },
@@ -509,9 +483,7 @@
           }
         ],
         "summary": "List Members",
-        "tags": [
-          "tenancy"
-        ],
+        "tags": ["tenancy"],
         "x-forge-scope": "members:read"
       }
     }

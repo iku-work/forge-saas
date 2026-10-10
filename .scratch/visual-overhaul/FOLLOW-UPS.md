@@ -9,12 +9,6 @@ something; move an entry to the bottom section when it is resolved.
 - **Replaced and removed avatars stay in storage.** (found after the PR) Choosing a new photo or
   removing one only rewrites `user.avatar_object_key`; the old `stored_file` row and object remain
   (and count towards the org's storage). A cleanup job for avatars no user points at would fix it.
-- **Organization logo upload.** (pre-existing, kept in ticket 07) The Organization page's logo
-  row shows a disabled "Upload logo" with "coming soon". Needs a storage path for org logos
-  (same shape as avatars) and the button wired up.
-
-## Frontend
-
 - **Notifications Save is always enabled.** (ticket 07) Unlike other sections, on purpose:
   saving persists the shown defaults and heals legacy rows. If that healing moves to the
   backend (normalise on read), the page could adopt "Save only after a change".
@@ -89,6 +83,7 @@ something; move an entry to the bottom section when it is resolved.
 
 ## Resolved
 
+- **Organization logo upload.** `organization.logo_object_key` (core migration b7c3e9a1d4f2), a `logos` bucket (JPEG/PNG/WebP), `logo_file_id` on PATCH /orgs/{id}, scan-gated GET /orgs/{id}/logo; the Organization page uploads and removes it and the switcher shows it.
 - **Leaving an organization.** `POST /orgs/{id}/leave` (any member; the last owner is told to hand ownership on) and a Leave section, confirmed, at the bottom of Organization settings.
 - **Resend and revoke invitations.** New endpoints (resend issues a fresh link and expiry; revoke deletes); a "⋯" menu on each pending invitation, revoke confirmed. "Copy link" skipped: only a hash of the token is stored.
 - **Removing a member had no confirmation.** It is confirmed now, naming the member.
