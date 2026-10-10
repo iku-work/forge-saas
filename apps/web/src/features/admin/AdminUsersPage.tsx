@@ -11,6 +11,7 @@ import {
   Input,
   Page,
   PageHeader,
+  Select,
   Skeleton,
   StatusPill,
   Table,
@@ -66,13 +67,13 @@ export function AdminUsersPage() {
           className="max-w-sm"
           aria-label={t("common.admin.users.search_placeholder")}
         />
-        <select
+        <Select
           value={active}
           onChange={(event) => {
             setActive(event.target.value as ActiveFilter);
           }}
           aria-label={t("common.admin.users.filter_active_label")}
-          className="h-9 rounded-md border border-input bg-card px-3 text-sm"
+          className="w-auto"
         >
           <option value="">{t("common.admin.users.filter_active_all")}</option>
           <option value="true">
@@ -81,7 +82,7 @@ export function AdminUsersPage() {
           <option value="false">
             {t("common.admin.users.filter_active_false")}
           </option>
-        </select>
+        </Select>
       </div>
 
       <div className="space-y-4">

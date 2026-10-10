@@ -14,8 +14,6 @@ something; move an entry to the bottom section when it is resolved.
   content (recent activity, usage) is product work.
 - **Admin: no rail, no ⌘K.** (ticket 12) The admin sidebar does not collapse and the command
   palette is app-only. Add both if superadmins spend long sessions there.
-- **Admin: native selects.** (pre-existing) The users/organizations filters and the banner type
-  are plain `<select>`s styled by hand; there is no Select primitive in `@forge/ui` yet.
 ## Verification still owed
 
 - **Look at the admin console (ticket 12) in a running app.** Needs Docker and a superadmin
@@ -59,6 +57,7 @@ something; move an entry to the bottom section when it is resolved.
 
 ## Resolved
 
+- **Hand-styled native selects.** A `Select` in `@forge/ui` (a native `<select>` styled like Input, with a chevron; no new dependency) replaces all six; the organizations status filter now uses the translated labels too.
 - **Marketing headings.** One `type-display` class (condensed, the landing's treatment at page-title size) on every page title; prose headings share the width.
 - **Marketing dark mode.** CSS only (the site ships no JS): `data-theme="system"` on marketing's `<html>` opts into a copy of the `.dark` tokens under `prefers-color-scheme: dark`; `tests/dark-tokens.test.ts` keeps the copy identical (mutation-checked). The app never sets the attribute.
 - **Create-organization button height.** `CreateOrgForm` takes `buttonSize`; the first-organization screen passes `lg`.

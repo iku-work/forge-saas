@@ -14,6 +14,7 @@ import {
   DialogTitle,
   Input,
   Label,
+  Select,
 } from "@forge/ui";
 
 import { getErrorMessage } from "../auth/getErrorMessage";
@@ -105,7 +106,7 @@ export function PlanOverrideModal({
             <Label htmlFor="billing-interval">
               {t("common.admin.plan_override_modal.billing_interval_label")}
             </Label>
-            <select
+            <Select
               id="billing-interval"
               value={billingInterval}
               onChange={(event) => {
@@ -113,7 +114,7 @@ export function PlanOverrideModal({
                   event.target.value as "" | "monthly" | "yearly",
                 );
               }}
-              className="h-9 w-full rounded-md border border-input bg-card px-3 text-sm"
+              className="w-full"
             >
               <option value="">
                 {t("common.admin.plan_override_modal.billing_interval_none")}
@@ -124,7 +125,7 @@ export function PlanOverrideModal({
               <option value="yearly">
                 {t("common.admin.plan_override_modal.billing_interval_yearly")}
               </option>
-            </select>
+            </Select>
           </div>
           <div className="flex items-center gap-2">
             <Checkbox

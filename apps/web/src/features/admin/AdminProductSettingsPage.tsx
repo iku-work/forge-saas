@@ -21,6 +21,7 @@ import {
   Label,
   Page,
   PageHeader,
+  Select,
   SettingsRow,
   SettingsSection,
   Skeleton,
@@ -346,20 +347,20 @@ function TypedSettingsForm({
             label={t("common.admin.product_settings.banner_type_label")}
             htmlFor="banner-type"
           >
-            <select
+            <Select
               id="banner-type"
               value={bannerType}
               onChange={(event) => {
                 setBannerType(event.target.value as BannerType);
               }}
-              className="h-9 w-full rounded-md border border-input bg-card px-3 text-sm"
+              className="w-full"
             >
               {BANNER_TYPES.map((type) => (
                 <option key={type} value={type}>
                   {t(`common.admin.product_settings.banner_type_${type}`)}
                 </option>
               ))}
-            </select>
+            </Select>
           </SettingsRow>
           <SettingsRow
             label={t("common.admin.product_settings.banner_message_label")}

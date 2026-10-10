@@ -36,10 +36,16 @@ import {
   Badge,
   Button,
   Checkbox,
+  DataListRow,
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle,
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
   EmptyState,
   Form,
   FormControl,
@@ -48,16 +54,11 @@ import {
   FormLabel,
   FormMessage,
   Input,
-  Skeleton,
-  DataListRow,
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
   Page,
   PageHeader,
   RowActionsButton,
+  Select,
+  Skeleton,
   StatusPill,
 } from "@forge/ui";
 import type { StatusTone } from "@forge/ui";
@@ -432,10 +433,10 @@ function DeliveryLog({ endpoint }: { endpoint: WebhookEndpointPublic }) {
         >
           {t("tenancy.webhooks.delivery_filter")}
         </label>
-        <select
+        <Select
           id="delivery-status-filter"
           data-testid="delivery-status-filter"
-          className="h-9 rounded-md border border-input bg-card px-3 text-sm"
+          className="w-auto"
           value={status}
           onChange={(event) => {
             setStatus(event.target.value as DeliveryStatus | "");
@@ -447,7 +448,7 @@ function DeliveryLog({ endpoint }: { endpoint: WebhookEndpointPublic }) {
               {t(DELIVERY_STATUS_LABEL_KEYS[value])}
             </option>
           ))}
-        </select>
+        </Select>
       </div>
 
       {actionError ? (

@@ -61,6 +61,7 @@ import {
   Page,
   PageHeader,
   RowActionsButton,
+  Select,
   Skeleton,
   StatusPill,
 } from "@forge/ui";
@@ -244,8 +245,8 @@ function InviteForm({
             <FormItem>
               <FormLabel>{t("tenancy.invite.role_label")}</FormLabel>
               <FormControl>
-                <select
-                  className="h-9 w-full rounded-md border border-input bg-card px-3 text-sm"
+                <Select
+                  className="w-full"
                   data-testid="invite-role-select"
                   {...field}
                 >
@@ -254,7 +255,7 @@ function InviteForm({
                       {t(roleLabelKey(role))}
                     </option>
                   ))}
-                </select>
+                </Select>
               </FormControl>
               <FormMessage />
             </FormItem>

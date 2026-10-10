@@ -11,6 +11,7 @@ import {
   Input,
   Page,
   PageHeader,
+  Select,
   Skeleton,
   StatusPill,
   Table,
@@ -73,21 +74,21 @@ export function AdminOrgsPage() {
           className="max-w-sm"
           aria-label={t("common.admin.orgs.search_placeholder")}
         />
-        <select
+        <Select
           value={status}
           onChange={(event) => {
             setStatus(event.target.value);
           }}
           aria-label={t("common.admin.orgs.filter_status_label")}
-          className="h-9 rounded-md border border-input bg-card px-3 text-sm"
+          className="w-auto"
         >
           <option value="">{t("common.admin.orgs.filter_status_all")}</option>
           {STATUS_OPTIONS.map((option) => (
             <option key={option} value={option}>
-              {option}
+              {subscriptionStatusLabel(t, option)}
             </option>
           ))}
-        </select>
+        </Select>
       </div>
 
       <div className="space-y-4">

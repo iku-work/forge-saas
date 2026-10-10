@@ -22,6 +22,7 @@ export * from "./components/password-input";
 export * from "./components/password-strength-meter";
 export * from "./components/popover";
 export * from "./components/settings-section";
+export * from "./components/select";
 export * from "./components/separator";
 export * from "./components/sheet";
 export * from "./components/skeleton";
