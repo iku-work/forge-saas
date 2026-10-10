@@ -71,7 +71,11 @@ describe("the pricing page, built from committed data", () => {
     // immediately and competes with the stylesheet. Measured, on this page:
     // first paint 1.1 s -> 2.2 s and Largest Contentful Paint 3.4 s, against
     // a 2.5 s budget the other three pages clear at 1.1 s.
-    expect(readPath("/en/pricing/")).toContain('client="visible"');
+    //
+    // Then `client="afterpaint"`, not `client="visible"`: visible fires after
+    // layout but before paint, so the download still raced the LCP paint and
+    // Lighthouse counted it about two runs in three (see the directive).
+    expect(readPath("/en/pricing/")).toContain('client="afterpaint"');
   });
 
   it("renders both billing periods into the HTML before anything hydrates", () => {

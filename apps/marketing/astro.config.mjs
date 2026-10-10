@@ -3,6 +3,7 @@ import mdx from "@astrojs/mdx";
 import react from "@astrojs/react";
 import tailwindcss from "@tailwindcss/vite";
 import { defineConfig } from "astro/config";
+import { fileURLToPath } from "node:url";
 
 import { caddySite } from "./scripts/caddy-site.mjs";
 import { checkAppLinks } from "./scripts/check-app-links.mjs";
@@ -67,6 +68,19 @@ export default defineConfig({
     // React 18 + Radix, every component client-only by construction, zero
     // "use client" directives -- is consumable exactly as it ships.
     react(),
+    // `client:afterpaint` for the pricing island; src/directives/afterpaint.ts
+    // says why Astro's own lazy directives were not lazy enough.
+    {
+      name: "forge:afterpaint",
+      hooks: {
+        "astro:config:setup": ({ addClientDirective }) => {
+          addClientDirective({
+            name: "afterpaint",
+            entrypoint: fileURLToPath(new URL("./src/directives/afterpaint.ts", import.meta.url)),
+          });
+        },
+      },
+    },
     // Constraint 3. T-301 adds the content collections that use it.
     mdx(),
     // T-304: @astrojs/sitemap with the filter that drops noindex pages, and
