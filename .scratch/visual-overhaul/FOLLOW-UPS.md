@@ -16,10 +16,6 @@ something; move an entry to the bottom section when it is resolved.
   palette is app-only. Add both if superadmins spend long sessions there.
 - **Admin: native selects.** (pre-existing) The users/organizations filters and the banner type
   are plain `<select>`s styled by hand; there is no Select primitive in `@forge/ui` yet.
-- **Marketing headings on other pages.** (ticket 13) Only the landing page uses the condensed
-  display type; the features/pricing/guides/blog/legal titles and prose headings still use the
-  plain weight. Bring them onto `type-title` if they should match.
-- **Marketing dark mode.** (pre-existing) The site has none; the tokens support it.
 ## Verification still owed
 
 - **Look at the admin console (ticket 12) in a running app.** Needs Docker and a superadmin
@@ -63,6 +59,8 @@ something; move an entry to the bottom section when it is resolved.
 
 ## Resolved
 
+- **Marketing headings.** One `type-display` class (condensed, the landing's treatment at page-title size) on every page title; prose headings share the width.
+- **Marketing dark mode.** CSS only (the site ships no JS): `data-theme="system"` on marketing's `<html>` opts into a copy of the `.dark` tokens under `prefers-color-scheme: dark`; `tests/dark-tokens.test.ts` keeps the copy identical (mutation-checked). The app never sets the attribute.
 - **Create-organization button height.** `CreateOrgForm` takes `buttonSize`; the first-organization screen passes `lg`.
 - **Admin raw status words.** Subscription states and audit severities translated (`features/admin/statusLabels.ts`, raw word only for an unknown value); member roles reuse the members page's labels.
 - **Checklist on phones.** `Checklist` is a container; below 28rem each step's button sits under its text.

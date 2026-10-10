@@ -134,6 +134,56 @@
   --elev-control: 0 0 #0000;
 }
 
+/* The same values for pages that cannot run a theme script: the marketing
+ * site ships no JavaScript, so it follows the OS setting instead, opted into
+ * with data-theme="system" on <html>. The app never sets that attribute, so
+ * its own light/dark choice is unaffected. Kept identical to .dark above by
+ * apps/marketing/tests/dark-tokens.test.ts -- edit both or neither. */
+:root[data-theme="system"] {
+  color-scheme: light dark;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root[data-theme="system"] {
+    --background: #0e1014;
+    --foreground: #e8eaee;
+    --card: #15181e;
+    --card-foreground: #e8eaee;
+    --popover: #15181e;
+    --popover-foreground: #e8eaee;
+    --primary: #9a88ff;
+    --primary-foreground: #0e1014;
+    --secondary: #1c2028;
+    --secondary-foreground: #e8eaee;
+    --muted: #1c2028;
+    --muted-foreground: #8a91a0;
+    --accent: #1c2028;
+    --accent-foreground: #e8eaee;
+    --destructive: #ff8a80;
+    --destructive-foreground: #0e1014;
+    --border: #252a33;
+    --input: #333a46;
+    --ring: color-mix(in oklab, var(--primary) 55%, transparent);
+
+    --foreground-secondary: #a6adba;
+    --surface-sunken: #1c2028;
+    --border-strong: #333a46;
+    --primary-soft: color-mix(in oklab, var(--primary) 9%, var(--background));
+    --primary-wash: color-mix(in oklab, var(--primary) 6%, var(--card));
+
+    --warning: #f5c46b;
+    --warning-foreground: #0e1014;
+    --success: #4cc79a;
+    --warning-soft: color-mix(in oklab, var(--warning) 12%, var(--background));
+
+    /* Elevation (dark) */
+    --elev-panel: 0 0 0 1px rgb(255 255 255 / 0.06);
+    --elev-menu:
+      0 0 0 1px rgb(255 255 255 / 0.08), 0 12px 32px -6px rgb(0 0 0 / 0.6);
+    --elev-control: 0 0 #0000;
+  }
+}
+
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);

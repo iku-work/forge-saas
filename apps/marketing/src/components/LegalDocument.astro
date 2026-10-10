@@ -62,7 +62,7 @@ const translations = await legalLocales(slug);
   alternateLocales={translations}
 >
   <article class="mx-auto max-w-3xl px-6 py-16">
-    <h1 class="text-balance text-4xl font-semibold tracking-tight">{entry.data.title}</h1>
+    <h1 class="text-balance type-display">{entry.data.title}</h1>
     <p class="mt-4 text-sm text-muted-foreground">
       <time datetime={isoDate(entry.data.effectiveDate)}>
         {t("marketing.legal.effective_date", {

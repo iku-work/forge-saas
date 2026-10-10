@@ -78,7 +78,7 @@ const pageSchema: SchemaNode[] = schema === undefined ? [] : [schema].flat();
 const schemas: SchemaNode[] = [organizationSchema(Astro.site), ...pageSchema];
 ---
 
-<html lang={locale} dir={dir}>
+<html lang={locale} dir={dir} data-theme="system">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
