@@ -83,6 +83,11 @@ export function NotificationsSettingsPage() {
   const [matrix, setMatrix] = useState<PreferencesMatrix>(() =>
     buildInitialMatrix(user?.notification_preferences),
   );
+  // What is stored, to compare against: Save only does something once the
+  // matrix differs. The API returns the resolved matrix (defaults filled in,
+  // required channels on), so there is nothing left to save just to heal it.
+  const [baseline, setBaseline] = useState<PreferencesMatrix>(matrix);
+  const isDirty = JSON.stringify(matrix) !== JSON.stringify(baseline);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -114,6 +119,7 @@ export function NotificationsSettingsPage() {
     setSaved(false);
     try {
       await savePreferences.mutateAsync(matrix);
+      setBaseline(matrix);
       setSaved(true);
     } catch {
       setError(t("notifications.preferences.error_save"));
@@ -127,15 +133,14 @@ export function NotificationsSettingsPage() {
         description={t("notifications.preferences.description")}
       />
       {/* A type x channel matrix stays a table: rows of label-and-control
-          don't fit a grid of checkboxes. Save is always enabled, unlike the
-          other settings sections: saving persists the defaults shown and
-          heals a stored row that switched off a required channel. */}
+          don't fit a grid of checkboxes. Save waits for a change, like the
+          other settings sections. */}
       <SettingsSection
         title={t("notifications.preferences.section_title")}
         footer={
           <Button
             type="button"
-            disabled={savePreferences.isPending}
+            disabled={savePreferences.isPending || !isDirty}
             onClick={() => {
               void handleSave();
             }}

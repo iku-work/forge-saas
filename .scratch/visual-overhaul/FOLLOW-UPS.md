@@ -9,20 +9,12 @@ something; move an entry to the bottom section when it is resolved.
 - **Replaced and removed avatars stay in storage.** (found after the PR) Choosing a new photo or
   removing one only rewrites `user.avatar_object_key`; the old `stored_file` row and object remain
   (and count towards the org's storage). A cleanup job for avatars no user points at would fix it.
-- **Notifications Save is always enabled.** (ticket 07) Unlike other sections, on purpose:
-  saving persists the shown defaults and heals legacy rows. If that healing moves to the
-  backend (normalise on read), the page could adopt "Save only after a change".
 - **Create-organization button is h-9 on the first-organization screen.** (ticket 11)
   `CreateOrgForm` is shared with the switcher's dialog, so its button kept the default size
   while the auth pages' buttons are h-10. Give the form a size prop if the 4px matters.
-- **Invoice statuses outside Stripe's five.** (ticket 09) draft/open/paid/uncollectible/void
-  are translated and toned; anything else shows Stripe's raw word with a neutral pill.
 - **Dashboard after setup is empty.** (ticket 10) Once every checklist step is done the dashboard
   shows only its header and "Your organization is set up." By design for now; real dashboard
   content (recent activity, usage) is product work.
-- **"Choose a plan" stays open during a trial.** (ticket 10) Done means `status === "active"`.
-  If a product has a free plan that is also "active", it ticks immediately; if trials should
-  count, change the rule in `useGettingStarted.ts`.
 - **Admin: raw status words.** (pre-existing, kept in ticket 12) Subscription statuses,
   audit severities and member roles on admin pages show the API's word (`past_due`,
   `elevated`, `owner`) inside the new pills. Translate them like the invoice statuses.
@@ -34,9 +26,6 @@ something; move an entry to the bottom section when it is resolved.
   display type; the features/pricing/guides/blog/legal titles and prose headings still use the
   plain weight. Bring them onto `type-title` if they should match.
 - **Marketing dark mode.** (pre-existing) The site has none; the tokens support it.
-- **"Save" vs "Save changes".** (ticket 06) Buttons kept "Save" so existing translations stay
-  valid. Decide one wording and apply it everywhere at once.
-
 ## Verification still owed
 
 - **Look at the admin console (ticket 12) in a running app.** Needs Docker and a superadmin
@@ -83,6 +72,10 @@ something; move an entry to the bottom section when it is resolved.
 
 ## Resolved
 
+- **Notifications Save was always enabled.** The API now returns the resolved matrix (`preferences.effective`: defaults filled, required channels on), so nothing needs saving to heal, and Save waits for a change.
+- **"Save" vs "Save changes".** Decided 2026-10-10: keep "Save".
+- **"Choose a plan" during a trial.** Decided 2026-10-10: only a paid, active plan ticks it.
+- **Invoice statuses outside Stripe's five.** Stripe has only those five; the raw-word fallback is the intended safety net, nothing to do.
 - **Organization logo upload.** `organization.logo_object_key` (core migration b7c3e9a1d4f2), a `logos` bucket (JPEG/PNG/WebP), `logo_file_id` on PATCH /orgs/{id}, scan-gated GET /orgs/{id}/logo; the Organization page uploads and removes it and the switcher shows it.
 - **Leaving an organization.** `POST /orgs/{id}/leave` (any member; the last owner is told to hand ownership on) and a Leave section, confirmed, at the bottom of Organization settings.
 - **Resend and revoke invitations.** New endpoints (resend issues a fresh link and expiry; revoke deletes); a "⋯" menu on each pending invitation, revoke confirmed. "Copy link" skipped: only a hash of the token is stored.
