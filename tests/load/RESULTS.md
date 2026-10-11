@@ -251,3 +251,7 @@ instead of per-PR.
 | 2026-10-10 | 859d24e | browse | - | - | PASS |
 | 2026-10-10 | 859d24e | presign | - | - | PASS |
 | 2026-10-10 | 859d24e | mixed | - | - | FAIL |
+| 2026-10-11 | 1acf679 | login-burst | - | - | FAIL |
+| 2026-10-11 | 1acf679 | browse | - | - | PASS |
+| 2026-10-11 | 1acf679 | presign | - | - | PASS |
+| 2026-10-11 | 1acf679 | mixed | - | - | FAIL |
