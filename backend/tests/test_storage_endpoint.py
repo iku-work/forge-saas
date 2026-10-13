@@ -21,22 +21,28 @@ is the decision given a resolution result.
 """
 
 import logging
+from collections.abc import Generator
 from pathlib import Path
 
 import pytest
 import yaml
 
+from app.core import module_loader
 from app.core.modules import EnabledModules
 from app.core.storage_endpoint import enforce_storage_endpoint_is_reachable_internally
 from product import config as product_config
 
 
 @pytest.fixture(autouse=True)
-def _file_storage_on(monkeypatch: pytest.MonkeyPatch) -> None:
+def _file_storage_on(monkeypatch: pytest.MonkeyPatch) -> Generator[None]:
     """The check stands down when file_storage is off, so every test here
     sets the defaults (file_storage and its billing dependency on) rather
-    than inheriting whatever product config the run uses."""
+    than inheriting whatever product config the run uses. get_modules() is
+    cached, so clear it on the way in and out."""
     monkeypatch.setattr(product_config, "MODULES", EnabledModules())
+    module_loader.get_modules.cache_clear()
+    yield
+    module_loader.get_modules.cache_clear()
 
 
 REPO_ROOT = Path(__file__).parent.parent.parent
