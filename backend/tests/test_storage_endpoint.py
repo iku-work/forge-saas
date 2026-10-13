@@ -26,7 +26,18 @@ from pathlib import Path
 import pytest
 import yaml
 
+from app.core.modules import EnabledModules
 from app.core.storage_endpoint import enforce_storage_endpoint_is_reachable_internally
+from product import config as product_config
+
+
+@pytest.fixture(autouse=True)
+def _file_storage_on(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The check stands down when file_storage is off, so every test here
+    sets the defaults (file_storage and its billing dependency on) rather
+    than inheriting whatever product config the run uses."""
+    monkeypatch.setattr(product_config, "MODULES", EnabledModules())
+
 
 REPO_ROOT = Path(__file__).parent.parent.parent
 

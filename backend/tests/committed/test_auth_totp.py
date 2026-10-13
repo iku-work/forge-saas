@@ -857,6 +857,7 @@ async def test_a_two_factor_login_records_both_methods_and_refresh_keeps_them(
 
 
 @pytest.mark.owasp("A07")
+@pytest.mark.module_dependent
 async def test_an_enrolled_superadmin_on_a_password_only_session_cannot_reach_admin(
     client: httpx.AsyncClient,
     user_repo: UserRepository,
