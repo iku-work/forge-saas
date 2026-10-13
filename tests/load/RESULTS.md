@@ -259,3 +259,7 @@ instead of per-PR.
 | 2026-10-12 | cf49396 | browse | - | - | PASS |
 | 2026-10-12 | cf49396 | presign | - | - | PASS |
 | 2026-10-12 | cf49396 | mixed | - | - | FAIL |
+| 2026-10-13 | d1ca8c7 | login-burst | - | - | PASS |
+| 2026-10-13 | d1ca8c7 | browse | - | - | PASS |
+| 2026-10-13 | d1ca8c7 | presign | - | - | PASS |
+| 2026-10-13 | d1ca8c7 | mixed | - | - | FAIL |
