@@ -13,6 +13,10 @@ on:
 
 jobs:
   load-test:
+    # The nightly runs only once STAGING_URL is set, alongside zap-full.yml;
+    # until then it was ~9 billed minutes a night for nobody (2026-10-14).
+    # "Run workflow" still runs it on demand.
+    if: github.event_name == 'workflow_dispatch' || vars.STAGING_URL != ''
     runs-on: ubuntu-latest
     timeout-minutes: 30
 

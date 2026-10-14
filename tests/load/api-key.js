@@ -65,12 +65,6 @@ export function setup() {
     JSON.stringify({
       name: `k6 load ${Date.now()}`,
       scopes: ["orgs:read", "members:read"],
-      // T-312's per-key override, raised deliberately. The point of this
-      // script is the cost of *authenticating* a key, and leaving the default
-      // budget in place would measure the rate limiter refusing us instead --
-      // every VU would 429 within seconds and http_req_failed would report a
-      // broken API rather than a throttled test.
-      rate_limit_per_minute: 100000,
     }),
     {
       // authHeaders() carries no Content-Type -- every other script's calls
@@ -98,6 +92,27 @@ export function setup() {
   const keyId = created.json("data.api_key.id");
   if (!key) {
     fail("the create response carried no key");
+  }
+
+  // T-312's per-key override, raised deliberately. The point of this script
+  // is the cost of *authenticating* a key; the default budget (600/min) would
+  // measure the rate limiter refusing us instead, and http_req_failed would
+  // report a broken API rather than a throttled test. The override is a PATCH
+  // field only: sent on create it is silently dropped, which is how 45% of
+  // this script's requests came back 429 every night until 2026-10-14.
+  const raised = http.patch(
+    `${BASE_URL}/api-keys/${keyId}`,
+    JSON.stringify({ rate_limit_per_minute: 100000 }),
+    {
+      headers: {
+        ...authHeaders(token, orgId),
+        "Content-Type": "application/json",
+      },
+      tags: { name: "raise_key_rate_limit" },
+    },
+  );
+  if (raised.status !== 200 || raised.json("data.rate_limit_per_minute") !== 100000) {
+    fail(`could not raise the key's rate limit: ${raised.status} ${raised.body}`);
   }
   return { key, keyId, orgId, token };
 }
