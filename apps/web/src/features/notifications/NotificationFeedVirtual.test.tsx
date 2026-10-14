@@ -1,4 +1,4 @@
-import { act, render, screen } from "@testing-library/react";
+import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -121,9 +121,13 @@ describe("NotificationFeed virtualization", () => {
       await userEvent.keyboard("{ArrowDown}");
     }
 
-    expect(document.activeElement).toHaveAttribute(
-      "data-index",
-      String(ROWS_TO_WALK),
+    // VirtualList focuses a row on the render after scrollToIndex mounts it,
+    // so on a loaded machine the last keypress's focus can still be pending.
+    await waitFor(() =>
+      expect(document.activeElement).toHaveAttribute(
+        "data-index",
+        String(ROWS_TO_WALK),
+      ),
     );
     // The boundary was genuinely crossed -- the row focus started on has
     // been unmounted, so a naive "focus the next sibling" implementation
@@ -134,9 +138,11 @@ describe("NotificationFeed virtualization", () => {
     expect(document.activeElement).toHaveAttribute("role", "listitem");
 
     await userEvent.keyboard("{ArrowUp}");
-    expect(document.activeElement).toHaveAttribute(
-      "data-index",
-      String(ROWS_TO_WALK - 1),
+    await waitFor(() =>
+      expect(document.activeElement).toHaveAttribute(
+        "data-index",
+        String(ROWS_TO_WALK - 1),
+      ),
     );
   }, 45_000);
 

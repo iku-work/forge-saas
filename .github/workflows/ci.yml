@@ -40,9 +40,9 @@ jobs:
       marketing: ${{ steps.marketing-toggle.outputs.enabled }}
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
           cache: pip
@@ -81,9 +81,9 @@ jobs:
         working-directory: backend
         run: python scripts/check_docs.py
 
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@v5
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: "22"
           cache: pnpm
@@ -210,9 +210,9 @@ jobs:
           --health-retries=10
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
           cache: pip
@@ -292,9 +292,9 @@ jobs:
             echo "NAME='$name' -> $(printf '%s' "$message" | head -1)"
           done
 
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@v5
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: "22"
           cache: pnpm
@@ -468,9 +468,9 @@ jobs:
           --health-retries=10
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
           cache: pip
@@ -487,9 +487,9 @@ jobs:
           pip install --require-hashes -r requirements-dev.lock
           pip install --no-deps -e .
 
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@v5
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: "22"
           cache: pnpm
@@ -650,7 +650,7 @@ jobs:
             curl -sfk https://localhost/ -o /dev/null && break
             sleep 1
           done
-          curl -sfk https://localhost/ | grep -q '<div id="root">'
+          curl -sfk https://localhost/ | grep '<div id="root">' >/dev/null
 
           # Behavioural, because the text assertion in test_caddy_config.py
           # could not catch what actually went wrong here: `respond /metrics
@@ -667,7 +667,7 @@ jobs:
 
           # Deep links are the other thing the SPA split has to get right: a
           # client-side route must reach index.html, not FastAPI's 404.
-          curl -sfk https://localhost/settings/billing | grep -q '<div id="root">'
+          curl -sfk https://localhost/settings/billing | grep '<div id="root">' >/dev/null
 
           enabled=$(cd backend && python -c \
             "from product.config import MODULES; print(str(MODULES.marketing.enabled).lower())")
@@ -712,17 +712,17 @@ jobs:
       CHROMATIC_PROJECT_TOKEN: ${{ secrets.CHROMATIC_PROJECT_TOKEN }}
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
           cache: pip
           cache-dependency-path: backend/requirements-dev.lock
 
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@v5
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: "22"
           cache: pnpm
@@ -763,14 +763,14 @@ jobs:
       # host) is wired up -- lets a reviewer download and open either build
       # locally from the Actions run without re-running the pipeline.
       - name: Upload packages/ui Storybook static build
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: storybook-ui
           path: packages/ui/storybook-static
           retention-days: 30
 
       - name: Upload packages/email-templates Storybook static build
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: storybook-email-templates
           path: packages/email-templates/storybook-static
@@ -811,17 +811,17 @@ jobs:
     timeout-minutes: 20
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
           cache: pip
           cache-dependency-path: backend/requirements-dev.lock
 
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@v5
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: "22"
           cache: pnpm
@@ -863,7 +863,7 @@ jobs:
 
       - name: Upload Lighthouse reports
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: lighthouse-reports
           path: apps/marketing/.lighthouseci
@@ -889,7 +889,7 @@ jobs:
       DOMAIN: localhost
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       # The only edit made to the committed examples is the placeholder
       # password -- pool_mode, the reset query, auth type and pool sizing are
@@ -1009,7 +1009,7 @@ jobs:
       DOMAIN: localhost
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Boot the prod stack with ENVIRONMENT=prod and TLS everywhere
         run: make prod-compose-tls-check
@@ -1026,7 +1026,7 @@ jobs:
     timeout-minutes: 20
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           fetch-depth: 0 # trufflehog/gitleaks scan full git history, not just the latest commit
 
@@ -1080,7 +1080,7 @@ jobs:
         run: echo "date=$(date +%Y-%m-%d)" >> "$GITHUB_OUTPUT"
 
       - name: Cache trivy vulnerability DB
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: ~/.cache/trivy
           key: trivy-db-${{ steps.date.outputs.date }}
@@ -1120,7 +1120,7 @@ jobs:
         run: |
           trivy fs . --exit-code 1 --severity HIGH,CRITICAL --skip-dirs node_modules             --skip-files backend/.env.e2e             --skip-files backend/.env.loadtest             --skip-files backend/.env.prod-compose             --ignorefile .trivyignore.yaml             --ignore-unfixed             --ignore-policy .trivyignore.rego
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
           cache: pip
@@ -1142,7 +1142,7 @@ jobs:
         run: bandit -r app/ -ll
 
       - name: Cache semgrep registry rules
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: ~/.cache/semgrep
           key: semgrep-${{ hashFiles('backend/semgrep/**') }}
@@ -1172,9 +1172,9 @@ jobs:
         # superset of it at identical versions (one universal resolution).
         run: pip-audit -r requirements-dev.lock --disable-pip
 
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@v5
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: "22"
           cache: pnpm
@@ -1198,17 +1198,17 @@ jobs:
       IMAGE: ghcr.io/${{ github.repository }}
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
           cache: pip
           cache-dependency-path: backend/requirements-dev.lock
 
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@v5
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: "22"
           cache: pnpm
@@ -1243,7 +1243,7 @@ jobs:
       # builds neither path, and that is a valid configuration rather than a
       # broken job -- the scan step below is conditional on the same toggle.
       - name: Upload the marketing site for the ZAP scan
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: marketing-dist
           path: |
@@ -1253,7 +1253,7 @@ jobs:
           retention-days: 1
 
       - name: Log in to GHCR
-        uses: docker/login-action@v3
+        uses: docker/login-action@v4
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
@@ -1272,7 +1272,7 @@ jobs:
         run: echo "date=$(date +%Y-%m-%d)" >> "$GITHUB_OUTPUT"
 
       - name: Cache trivy vulnerability DB
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: ~/.cache/trivy
           key: trivy-db-${{ steps.date.outputs.date }}
@@ -1321,7 +1321,7 @@ jobs:
           output-file: sbom.cyclonedx.json
 
       - name: Upload SBOM
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: sbom
           path: sbom.cyclonedx.json
@@ -1336,18 +1336,20 @@ jobs:
       # compose-on-a-VPS deploy uses this (Render serves the frontend itself;
       # on AWS the bundle belongs in S3+CloudFront) -- but it is built on
       # every main build so the tag always exists for a rollback to reach
-      # back to.
+      # back to. Only when DEPLOY_TARGET is hetzner, though: its URLs come from
+      # repository variables set alongside that target, and without them
+      # Astro stops on an empty site URL ("Invalid URL").
       #
       # It compiles the frontend again rather than reusing the turbo build
       # above, so the image is reproducible from the Dockerfile alone. The
       # GitHub Actions layer cache is what keeps that from costing a full
       # rebuild each time; only a lockfile or source change invalidates it.
       - name: Set up Buildx for the edge image
-        if: github.ref == 'refs/heads/main'
+        if: github.ref == 'refs/heads/main' && vars.DEPLOY_TARGET == 'hetzner'
         uses: docker/setup-buildx-action@v3
 
       - name: Build and push the edge image
-        if: github.ref == 'refs/heads/main'
+        if: github.ref == 'refs/heads/main' && vars.DEPLOY_TARGET == 'hetzner'
         uses: docker/build-push-action@v6
         with:
           context: .
@@ -1383,7 +1385,7 @@ jobs:
       COMPOSE_PROJECT_NAME: forge-ci
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Copy test environment file
         working-directory: backend
@@ -1398,7 +1400,7 @@ jobs:
       # meant to find headers on it.
       - name: Fetch the marketing site built upstream
         if: needs.lint.outputs.marketing == 'true'
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v7
         with:
           name: marketing-dist
           path: apps/marketing
@@ -1476,7 +1478,7 @@ jobs:
 
       - name: Upload ZAP reports
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: zap-baseline-report
           path: |
@@ -1501,17 +1503,17 @@ jobs:
       COMPOSE_PROJECT_NAME: forge-e2e
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
           cache: pip
           cache-dependency-path: backend/requirements-dev.lock
 
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@v5
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: "22"
           cache: pnpm
@@ -1612,10 +1614,10 @@ jobs:
           marketing() { curl -sk --resolve marketing.localhost:443:127.0.0.1 "$@"; }
 
           echo "--- the app host is still the app"
-          curl -sfk https://localhost/ | grep -q '<div id="root">'
+          curl -sfk https://localhost/ | grep '<div id="root">' >/dev/null
 
           echo "--- the marketing host serves marketing, over its own TLS leaf"
-          marketing -f https://marketing.localhost/en/ | grep -q '<html lang="en"'
+          marketing -f https://marketing.localhost/en/ | grep '<html lang="en"' >/dev/null
 
           headers=$(marketing -D- -o /dev/null https://marketing.localhost/en/ | tr -d '\r')
           echo "$headers"
@@ -1633,7 +1635,7 @@ jobs:
           page=$(marketing https://marketing.localhost/en/)
           asset=$(printf '%s' "$page" | grep -o '/_astro/[A-Za-z0-9._-]*\.css' | sort -u | head -1)
           marketing -D- -o /dev/null "https://marketing.localhost$asset" \
-            | tr -d '\r' | grep -qi '^cache-control: public, max-age=31536000, immutable'
+            | tr -d '\r' | grep -i '^cache-control: public, max-age=31536000, immutable' >/dev/null
 
           echo "--- this build is not the production origin, so: noindex"
           echo "$headers" | grep -qi '^x-robots-tag: noindex'
@@ -1664,7 +1666,7 @@ jobs:
 
       - name: Upload Playwright report + traces
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: playwright-report
           path: |

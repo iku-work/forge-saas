@@ -28,7 +28,7 @@ jobs:
       contents: write
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       # T-223's spec requirement, checked here rather than relying on
       # convention: every script must declare both threshold metrics (via
@@ -126,7 +126,7 @@ jobs:
 
       - name: Upload k6 summaries
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: k6-summaries
           path: tests/load/results/*.json

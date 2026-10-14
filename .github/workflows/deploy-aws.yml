@@ -83,7 +83,7 @@ jobs:
         run: |
           [[ "$TAG" =~ ^[0-9a-f]{7,40}$ ]] || { echo "image-tag must be a commit SHA, got: $TAG" >&2; exit 1; }
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       # Review R4: scans have their own queue and their own worker. Without a
       # service consuming that queue, nothing is ever scanned and every

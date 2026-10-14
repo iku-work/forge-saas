@@ -93,6 +93,7 @@ async def test_reports_only_the_providers_that_have_credentials(
 ) -> None:
     """Half-configured is the common case -- a product registers a Google
     app and never gets round to GitHub."""
+    monkeypatch.setattr(product_config, "MODULES", EnabledModules())  # oauth on
     settings = get_settings()
     monkeypatch.setattr(settings, "GOOGLE_CLIENT_ID", "google-client-id")
     monkeypatch.setattr(settings, "GOOGLE_CLIENT_SECRET", "google-secret")
@@ -128,6 +129,7 @@ async def test_a_provider_with_only_half_its_credentials_is_not_offered(
 async def test_reports_the_marketing_origin(
     client: httpx.AsyncClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    monkeypatch.setattr(product_config, "MODULES", EnabledModules())  # marketing on
     settings = get_settings()
     monkeypatch.setattr(settings, "MARKETING_DOMAIN", "www.example.com")
 

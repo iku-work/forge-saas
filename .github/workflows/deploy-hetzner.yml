@@ -76,7 +76,7 @@ jobs:
           [[ "$BACKEND_IMAGE" =~ ^[a-z0-9./_:-]+$ ]] || { echo "unexpected image ref: $BACKEND_IMAGE" >&2; exit 1; }
           [[ "$ACTOR" =~ ^[A-Za-z0-9-]+(\[bot\])?$ ]] || { echo "unexpected actor: $ACTOR" >&2; exit 1; }
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       # Env, guards and the image pull -- nothing that touches production.
       # Migrations run on the box below (C4): the production database is
