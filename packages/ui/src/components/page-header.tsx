@@ -11,7 +11,9 @@ function Page({ className, ...props }: HTMLAttributes<HTMLDivElement>) {
   return (
     <div
       className={cn(
-        "w-full max-w-[63rem] px-4 pb-24 pt-5 @3xl/shell:px-12",
+        // The same 48px gutter on top as at the sides once the panel has no
+        // top bar (the sidebar carries the toggle then).
+        "w-full max-w-[63rem] px-4 pb-24 pt-5 @3xl/shell:px-12 @3xl/shell:pt-12",
         className,
       )}
       {...props}

@@ -1,6 +1,6 @@
 import { useState, type ReactNode } from "react";
 import { Link, useNavigate } from "@tanstack/react-router";
-import { ArrowLeft, LogOut, Menu, PanelLeft, ShieldAlert } from "lucide-react";
+import { ArrowLeft, LogOut, Menu, ShieldAlert } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
 import { useAuth } from "@forge/hooks";
@@ -21,6 +21,7 @@ import {
 
 import { GlobalBanner } from "../components/GlobalBanner";
 import { RailTooltip } from "../components/RailTooltip";
+import { SidebarToggle } from "../components/SidebarToggle";
 import { MAIN_CONTENT_ID, SkipLink } from "../components/SkipLink";
 import { CommandPalette } from "../features/command-palette/CommandPalette";
 import { isAppleDevice, renderChord } from "../features/shortcuts/registry";
@@ -43,11 +44,14 @@ function AdminSidebar({
   onNavigate,
   onOpenPalette,
   collapsed = false,
+  toggle,
 }: {
   onNavigate?: () => void;
   onOpenPalette: () => void;
   /** Rail mode: tooltips on. The drawer copy never passes it. */
   collapsed?: boolean;
+  /** The collapse button, ending the top row. Desktop column only. */
+  toggle?: ReactNode;
 }) {
   const { t } = useTranslation();
   const { user, logout } = useAuth();
@@ -61,7 +65,7 @@ function AdminSidebar({
 
   const header = (
     <div className="flex flex-col items-start gap-2 px-2.5 pb-2 pt-1.5 group-data-[collapsed]/shell:items-center group-data-[collapsed]/shell:px-0">
-      <div className="flex items-center gap-2.5 text-sm font-semibold">
+      <div className="flex w-full items-center gap-2.5 text-sm font-semibold group-data-[collapsed]/shell:flex-col">
         <span
           aria-hidden="true"
           className="grid size-[1.375rem] shrink-0 place-items-center rounded-sm bg-primary text-xs font-bold text-primary-foreground"
@@ -69,6 +73,9 @@ function AdminSidebar({
           {t("common.app.name").trim().charAt(0).toUpperCase()}
         </span>
         <ShellLabel>{t("common.admin.console")}</ShellLabel>
+        <span className="ms-auto group-data-[collapsed]/shell:ms-0">
+          {toggle}
+        </span>
       </div>
       {/* T-143 / ticket 12: support staff must never mistake this surface
           for the ordinary app while acting on someone else's data. A word
@@ -196,12 +203,6 @@ export function AdminLayout({ children }: { children: ReactNode }) {
     setPaletteOpen(true);
   };
 
-  const toggleLabel = t(
-    sidebar.collapsed
-      ? "common.nav.expand_sidebar"
-      : "common.nav.collapse_sidebar",
-  );
-
   return (
     <div className="flex min-h-dvh flex-col bg-background text-foreground">
       <SkipLink />
@@ -217,6 +218,13 @@ export function AdminLayout({ children }: { children: ReactNode }) {
             <AdminSidebar
               onOpenPalette={openPalette}
               collapsed={sidebar.collapsed}
+              toggle={
+                <SidebarToggle
+                  collapsed={sidebar.collapsed}
+                  onToggle={sidebar.toggle}
+                  testId="admin-sidebar-toggle"
+                />
+              }
             />
           }
         >
@@ -246,20 +254,9 @@ export function AdminLayout({ children }: { children: ReactNode }) {
                     />
                   </SheetContent>
                 </Sheet>
-                <RailTooltip label={toggleLabel} enabled>
-                  <button
-                    type="button"
-                    data-testid="admin-sidebar-toggle"
-                    aria-expanded={!sidebar.collapsed}
-                    aria-keyshortcuts="["
-                    aria-label={toggleLabel}
-                    onClick={sidebar.toggle}
-                    className="-ms-2 hidden rounded-md p-2 text-muted-foreground hover:bg-surface-sunken hover:text-foreground @3xl/shell:inline-flex"
-                  >
-                    <PanelLeft className="size-4" aria-hidden="true" />
-                  </button>
-                </RailTooltip>
-                <p className="flex-1 truncate">{t("common.admin.console")}</p>
+                <p className="flex-1 truncate text-sm font-semibold text-foreground">
+                  {t("common.admin.console")}
+                </p>
               </>
             }
           >

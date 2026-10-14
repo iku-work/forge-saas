@@ -11,7 +11,6 @@ import {
   Settings,
   ShieldAlert,
   Menu,
-  PanelLeft,
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
@@ -61,6 +60,7 @@ import { SupportLink } from "../features/support/SupportLink";
 import { stripLocale } from "../lib/locale-url";
 import { useVisibleNavItems, type NavItem } from "../lib/navigation";
 import { RailTooltip } from "../components/RailTooltip";
+import { SidebarToggle } from "../components/SidebarToggle";
 import { useAvatarSrc } from "../lib/useAvatarSrc";
 import { useOrgLogoSrc } from "../lib/useOrgLogoSrc";
 import { useSidebarCollapsed } from "../lib/useSidebarCollapsed";
@@ -339,6 +339,7 @@ function SidebarNav({
   onNavigate,
   onOpenPalette,
   collapsed = false,
+  toggle,
 }: {
   modules: ActiveModules;
   inSettings: boolean;
@@ -346,6 +347,8 @@ function SidebarNav({
   onOpenPalette: () => void;
   /** Rail mode: tooltips on. The drawer copy never passes it. */
   collapsed?: boolean;
+  /** The collapse button, beside the top row. Desktop column only. */
+  toggle?: ReactNode;
 }) {
   const { t } = useTranslation();
   const locale = useRouteLocale();
@@ -355,24 +358,28 @@ function SidebarNav({
   const header = (
     <>
       {/* With several organizations the switcher is the top row; without,
-          the product's wordmark is, and links home (Jakob's law). */}
-      {modules.multiOrg ? (
-        <OrgSwitcher />
-      ) : (
-        <ShellNavItem
-          asChild
-          className="min-h-10 font-semibold text-foreground"
-        >
-          <Link
-            to="/$locale"
-            params={{ locale }}
-            data-testid="sidebar-wordmark"
+          the product's wordmark is, and links home (Jakob's law). The
+          collapse button ends the row, or sits under the logo in the rail. */}
+      <div className="flex items-center gap-1 group-data-[collapsed]/shell:flex-col">
+        {modules.multiOrg ? (
+          <OrgSwitcher />
+        ) : (
+          <ShellNavItem
+            asChild
+            className="min-h-10 font-semibold text-foreground"
           >
-            <Monogram name={t("common.app.name")} />
-            <ShellLabel>{t("common.app.name")}</ShellLabel>
-          </Link>
-        </ShellNavItem>
-      )}
+            <Link
+              to="/$locale"
+              params={{ locale }}
+              data-testid="sidebar-wordmark"
+            >
+              <Monogram name={t("common.app.name")} />
+              <ShellLabel>{t("common.app.name")}</ShellLabel>
+            </Link>
+          </ShellNavItem>
+        )}
+        {toggle}
+      </div>
       {/* F-005 discoverability: a palette nobody knows about is a palette
           nobody uses, so the hotkey is shown rather than described. Also a
           real button -- ⌘K is unreachable on a touch device. */}
@@ -472,7 +479,8 @@ function SidebarNav({
 
 export function AppLayout({ children }: { children: ReactNode }) {
   const { t } = useTranslation();
-  const { orgs, isLoading } = useOrg();
+  const { orgs, org, isLoading } = useOrg();
+  const logoSrc = useOrgLogoSrc(org);
   const modules = useModules();
   const maintenance = useMaintenance();
   const location = useLocation();
@@ -546,12 +554,6 @@ export function AppLayout({ children }: { children: ReactNode }) {
     return <CreateFirstOrgPrompt />;
   }
 
-  const toggleLabel = t(
-    sidebar.collapsed
-      ? "common.nav.expand_sidebar"
-      : "common.nav.collapse_sidebar",
-  );
-
   const openPalette = (): void => {
     setNavOpen(false);
     setPaletteOpen(true);
@@ -582,6 +584,13 @@ export function AppLayout({ children }: { children: ReactNode }) {
               inSettings={inSettings}
               onOpenPalette={openPalette}
               collapsed={sidebar.collapsed}
+              toggle={
+                <SidebarToggle
+                  collapsed={sidebar.collapsed}
+                  onToggle={sidebar.toggle}
+                  testId="sidebar-toggle"
+                />
+              }
             />
           }
         >
@@ -617,21 +626,21 @@ export function AppLayout({ children }: { children: ReactNode }) {
                     />
                   </SheetContent>
                 </Sheet>
-                {/* Only where the sidebar is a column; on narrow screens the
-                  drawer trigger above takes its place. */}
-                <RailTooltip label={toggleLabel} enabled>
-                  <button
-                    type="button"
-                    data-testid="sidebar-toggle"
-                    aria-expanded={!sidebar.collapsed}
-                    aria-keyshortcuts="["
-                    aria-label={toggleLabel}
-                    onClick={sidebar.toggle}
-                    className="-ms-2 hidden rounded-md p-2 text-muted-foreground hover:bg-surface-sunken hover:text-foreground @3xl/shell:inline-flex"
-                  >
-                    <PanelLeft className="size-4" aria-hidden="true" />
-                  </button>
-                </RailTooltip>
+                {/* Phone only (the bar is hidden once the sidebar is a column):
+                  where you are, beside the button that opens the menu. */}
+                <span className="flex min-w-0 items-center gap-2 text-sm font-semibold text-foreground">
+                  {modules.multiOrg ? (
+                    <>
+                      <Monogram name={org?.name} src={logoSrc} />
+                      <span className="truncate">{org?.name}</span>
+                    </>
+                  ) : (
+                    <>
+                      <Monogram name={t("common.app.name")} />
+                      <span className="truncate">{t("common.app.name")}</span>
+                    </>
+                  )}
+                </span>
               </>
             }
           >

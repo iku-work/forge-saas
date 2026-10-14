@@ -41,7 +41,9 @@ describe("AppLayout (owner, one org)", () => {
     expect(
       await screen.findByRole("heading", { name: "Welcome to Acme Inc" }),
     ).toBeInTheDocument();
-    expect(screen.getByText("Acme Inc")).toBeInTheDocument();
+    expect(screen.getByTestId("org-switcher-trigger")).toHaveTextContent(
+      "Acme Inc",
+    );
     expect(screen.getByTestId("sidebar-primary-nav")).toBeInTheDocument();
     expect(screen.getByTestId("nav-dashboard")).toBeInTheDocument();
   });

@@ -226,7 +226,8 @@ const ShellSearchButton = forwardRef<HTMLButtonElement, ShellSearchButtonProps>(
 ShellSearchButton.displayName = "ShellSearchButton";
 
 interface ShellPanelProps extends HTMLAttributes<HTMLDivElement> {
-  /** The panel's top row: the sidebar toggle, or the drawer trigger on narrow screens. */
+  /** The panel's top row, on narrow screens only: the drawer trigger and
+   *  where you are. Once the sidebar is a column it carries both itself. */
   top?: ReactNode;
 }
 
@@ -240,7 +241,7 @@ function ShellPanel({ top, children, className, ...props }: ShellPanelProps) {
       {...props}
     >
       {top ? (
-        <div className="flex h-13 shrink-0 items-center gap-2 px-4 text-xs text-muted-foreground @3xl/shell:px-7">
+        <div className="flex h-13 shrink-0 items-center gap-2 px-4 text-xs text-muted-foreground @3xl/shell:hidden">
           {top}
         </div>
       ) : null}
