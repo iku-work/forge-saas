@@ -18,6 +18,9 @@ something; move an entry to the bottom section when it is resolved.
   must confirm LCP with the self-hosted font.
 - **Review the machine translations.** Ticket 14 translated 84 keys into ar, de, es and fr and
   listed each in that locale's `__review.json`. A native speaker should review and empty those.
+  Keys added after the PR exist in `en` only and fall back to English elsewhere, among them
+  `tenancy.members.search_placeholder`, `tenancy.members.unnamed`, the three
+  `auth.*.confirm_password_label` and `validation.password.mismatch`; translate them in the same pass.
 
 ## Product questions
 
