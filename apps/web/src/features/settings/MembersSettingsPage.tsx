@@ -98,12 +98,10 @@ const inviteSchema = z.object({
 });
 type InviteInput = z.infer<typeof inviteSchema>;
 
-/** What a member is called on the page: their name, else their email, else
- *  (a user row already gone) the start of their id. */
-function memberName(member: MembershipPublic): string {
-  return (
-    member.user?.full_name ?? member.user?.email ?? member.user_id.slice(0, 8)
-  );
+/** What a member is called on the page: their name, else their email (only
+ *  sent to those who manage members), else `unnamed`. */
+function memberName(member: MembershipPublic, unnamed: string): string {
+  return member.user?.full_name ?? member.user?.email ?? unnamed;
 }
 
 function roleLabelKey(role: ApiMemberRole): string {
@@ -303,7 +301,10 @@ export function MembersSettingsPage({
   const [pendingRemoval, setPendingRemoval] = useState<MembershipPublic | null>(
     null,
   );
-  const emailQuery = useDebouncedValue(search.trim());
+  // Searching is by email, and emails are only sent to those who manage
+  // members (the API refuses `q` from anyone else).
+  const debouncedSearch = useDebouncedValue(search.trim());
+  const emailQuery = canManage ? debouncedSearch : "";
 
   // Raw SDK call rather than the generated *GetInfiniteOptions() helper --
   // see CreateOrgForm.tsx for why. The query key function alone is fine to
@@ -459,23 +460,25 @@ export function MembersSettingsPage({
       ) : null}
 
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-        <div className="relative w-full max-w-xs">
-          <Search
-            className="pointer-events-none absolute start-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
-            aria-hidden="true"
-          />
-          <Input
-            type="search"
-            value={search}
-            onChange={(event) => {
-              setSearch(event.target.value);
-            }}
-            placeholder={t("tenancy.members.search_placeholder")}
-            aria-label={t("tenancy.members.search_placeholder")}
-            className="ps-9"
-            data-testid="members-search"
-          />
-        </div>
+        {canManage ? (
+          <div className="relative w-full max-w-xs">
+            <Search
+              className="pointer-events-none absolute start-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
+              aria-hidden="true"
+            />
+            <Input
+              type="search"
+              value={search}
+              onChange={(event) => {
+                setSearch(event.target.value);
+              }}
+              placeholder={t("tenancy.members.search_placeholder")}
+              aria-label={t("tenancy.members.search_placeholder")}
+              className="ps-9"
+              data-testid="members-search"
+            />
+          </div>
+        ) : null}
         {total !== null ? (
           <p
             className="text-[0.8125rem] text-muted-foreground"
@@ -530,7 +533,7 @@ export function MembersSettingsPage({
               : { initialOffset: initialScrollOffset })}
             renderItem={(member) => {
               const isSelf = member.user_id === user?.id;
-              const name = memberName(member);
+              const name = memberName(member, t("tenancy.members.unnamed"));
               const email = member.user?.email ?? null;
               return (
                 <DataListRow className={MEMBER_ROW}>
@@ -652,7 +655,9 @@ export function MembersSettingsPage({
           }
         }}
         title={t("tenancy.members.remove_confirm_title", {
-          name: pendingRemoval ? memberName(pendingRemoval) : "",
+          name: pendingRemoval
+            ? memberName(pendingRemoval, t("tenancy.members.unnamed"))
+            : "",
         })}
         description={t("tenancy.members.remove_confirm_body", {
           org: org.name,

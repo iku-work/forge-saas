@@ -150,6 +150,34 @@ describe("MembersSettingsPage", () => {
       );
     });
 
+    it("gives a plain member no email search, and names a nameless member", async () => {
+      hooks.usePermission.mockReturnValue(false);
+      server.use(
+        http.get(`${API}/api/v1/orgs/:orgId/members`, () =>
+          HttpResponse.json(
+            envelope([
+              ...members,
+              {
+                ...makeMembership(makeUser(7), "member"),
+                id: "55555555-5555-5555-5555-555555555555",
+                // What the API sends a plain member: no name set, email withheld.
+                user: {
+                  full_name: null,
+                  email: null,
+                  avatar_url: null,
+                  has_uploaded_avatar: false,
+                },
+              },
+            ]),
+          ),
+        ),
+      );
+      renderPage();
+
+      expect(await screen.findByText("Unnamed member")).toBeInTheDocument();
+      expect(screen.queryByTestId("members-search")).not.toBeInTheDocument();
+    });
+
     it("searches by email on the server, not by filtering the loaded page", async () => {
       hooks.usePermission.mockReturnValue(true);
       const queries: (string | null)[] = [];

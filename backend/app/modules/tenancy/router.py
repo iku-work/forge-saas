@@ -242,9 +242,7 @@ async def get_org_logo(
 async def list_members(  # noqa: PLR0913 — cursor pagination (§0.3) needs after+limit on top of the usual params
     request: Request,
     org_id: UUID,
-    principal: Annotated[  # noqa: ARG001 — gates the route and proves org membership; org comes from path
-        CurrentPrincipal, Depends(require_scope(Scope.MEMBERS_READ))
-    ],
+    principal: Annotated[CurrentPrincipal, Depends(require_scope(Scope.MEMBERS_READ))],
     session: Annotated[AsyncSession, Depends(get_session)],
     after: Annotated[UUID | None, Query()] = None,
     limit: Annotated[int, Query(ge=1, le=100)] = 20,
@@ -252,15 +250,28 @@ async def list_members(  # noqa: PLR0913 — cursor pagination (§0.3) needs aft
         str | None,
         Query(
             max_length=254,
-            description="Only members whose email contains this, in any case.",
+            description=(
+                "Only members whose email contains this, in any case. Needs the "
+                "`members:write` scope (a session: owner or admin), as emails do."
+            ),
         ),
     ] = None,
 ) -> Envelope[list[MembershipPublic]]:
-    service = TenancyService(session)
+    # Emails are for whoever manages members. A plain member searching by
+    # email would learn addresses one guess at a time, so the search is gated
+    # with them.
+    show_emails = Scope.MEMBERS_WRITE.value in principal.scopes
     email_query = q.strip() if q else None
+    if email_query and not show_emails:
+        raise PermissionDeniedError(
+            "errors.missing_scope",
+            fallback=f"Searching members needs the '{Scope.MEMBERS_WRITE.value}' scope",
+            params={"scope": Scope.MEMBERS_WRITE.value},
+        )
+    service = TenancyService(session)
     members, next_cursor = await service.list_members(org_id, after, limit, email_query)
     users = await service.users_for_memberships(members)
-    data = [_membership_public(m, users.get(m.user_id)) for m in members]
+    data = [_membership_public(m, users.get(m.user_id), show_email=show_emails) for m in members]
     meta = Meta(
         request_id=_request_id(request),
         next_cursor=str(next_cursor) if next_cursor is not None else None,
@@ -269,12 +280,14 @@ async def list_members(  # noqa: PLR0913 — cursor pagination (§0.3) needs aft
     return Envelope(data=data, meta=meta)
 
 
-def _membership_public(membership: Membership, user: User | None) -> MembershipPublic:
+def _membership_public(
+    membership: Membership, user: User | None, *, show_email: bool
+) -> MembershipPublic:
     public = MembershipPublic.model_validate(membership)
     if user is not None:
         public.user = MemberUserSummary(
             full_name=user.full_name,
-            email=user.email,
+            email=user.email if show_email else None,
             avatar_url=user.avatar_url,
             has_uploaded_avatar=user.has_uploaded_avatar,
         )

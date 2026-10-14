@@ -41,14 +41,16 @@ class OrganizationPublic(AppBaseModel):
 class MemberUserSummary(AppBaseModel):
     """Who a membership belongs to, as fellow members see them.
 
-    Enough to draw a row (a name, an email, a picture) and no more. Never the
+    Enough to draw a row (a name, a picture) and no more. `email` is set only
+    for a caller who can manage members (an owner, an admin, or an API key with
+    `members:write`); everyone else gets null. Never the
     uploaded avatar's object key: `has_uploaded_avatar` only says one exists
     (the web app fetches a short-lived URL for it with a member's session).
     `avatar_url` is an OAuth provider's picture, already an absolute URL.
     """
 
     full_name: str | None
-    email: str
+    email: str | None = None
     avatar_url: str | None
     has_uploaded_avatar: bool
 

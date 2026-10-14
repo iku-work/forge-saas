@@ -60,6 +60,7 @@
     "actions_label": "Actions for {name}",
     "change_role": "Change role",
     "search_placeholder": "Search by email",
+    "unnamed": "Unnamed member",
     "count": "{count, plural, one {# member} other {# members}}",
     "no_match": "No members match “{query}”.",
     "remove_confirm_title": "Remove {name}?",

@@ -115,7 +115,7 @@
         "type": "string"
       },
       "MemberUserSummary": {
-        "description": "Who a membership belongs to, as fellow members see them.\n\nEnough to draw a row (a name, an email, a picture) and no more. Never the\nuploaded avatar's object key: `has_uploaded_avatar` only says one exists\n(the web app fetches a short-lived URL for it with a member's session).\n`avatar_url` is an OAuth provider's picture, already an absolute URL.",
+        "description": "Who a membership belongs to, as fellow members see them.\n\nEnough to draw a row (a name, a picture) and no more. `email` is set only\nfor a caller who can manage members (an owner, an admin, or an API key with\n`members:write`); everyone else gets null. Never the\nuploaded avatar's object key: `has_uploaded_avatar` only says one exists\n(the web app fetches a short-lived URL for it with a member's session).\n`avatar_url` is an OAuth provider's picture, already an absolute URL.",
         "properties": {
           "avatar_url": {
             "anyOf": [
@@ -129,8 +129,15 @@
             "title": "Avatar Url"
           },
           "email": {
-            "title": "Email",
-            "type": "string"
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Email"
           },
           "full_name": {
             "anyOf": [
@@ -148,7 +155,7 @@
             "type": "boolean"
           }
         },
-        "required": ["full_name", "email", "avatar_url", "has_uploaded_avatar"],
+        "required": ["full_name", "avatar_url", "has_uploaded_avatar"],
         "title": "MemberUserSummary",
         "type": "object"
       },
@@ -436,7 +443,7 @@
             }
           },
           {
-            "description": "Only members whose email contains this, in any case.",
+            "description": "Only members whose email contains this, in any case. Needs the `members:write` scope (a session: owner or admin), as emails do.",
             "in": "query",
             "name": "q",
             "required": false,
@@ -450,7 +457,7 @@
                   "type": "null"
                 }
               ],
-              "description": "Only members whose email contains this, in any case.",
+              "description": "Only members whose email contains this, in any case. Needs the `members:write` scope (a session: owner or admin), as emails do.",
               "title": "Q"
             }
           }

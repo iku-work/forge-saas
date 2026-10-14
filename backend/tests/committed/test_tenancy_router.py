@@ -673,6 +673,46 @@ async def test_list_members_treats_like_wildcards_in_the_query_literally(
     assert response.json()["meta"]["total"] == 0
 
 
+async def test_list_members_hides_emails_from_a_plain_member(
+    client: httpx.AsyncClient, session: AsyncSession, org_a: Organization
+) -> None:
+    member, _ = await _add_member(session, org_a)
+
+    response = await client.get(f"/api/v1/orgs/{org_a.id}/members", headers=_auth_header(member))
+
+    assert response.status_code == 200
+    assert {row["user"]["email"] for row in response.json()["data"]} == {None}
+
+
+async def test_list_members_refuses_an_email_search_from_a_plain_member(
+    client: httpx.AsyncClient, session: AsyncSession, user_a: User, org_a: Organization
+) -> None:
+    """Otherwise a member learns addresses one guess at a time."""
+    member, _ = await _add_member(session, org_a)
+
+    response = await client.get(
+        f"/api/v1/orgs/{org_a.id}/members",
+        params={"q": user_a.email[:6]},
+        headers=_auth_header(member),
+    )
+
+    assert response.status_code == 403
+    assert response.json()["error"]["message_key"] == "errors.missing_scope"
+
+
+async def test_list_members_shows_emails_to_an_admin(
+    client: httpx.AsyncClient, session: AsyncSession, user_a: User, org_a: Organization
+) -> None:
+    admin, _ = await _add_member(session, org_a, role=MemberRole.ADMIN)
+
+    response = await client.get(f"/api/v1/orgs/{org_a.id}/members", headers=_auth_header(admin))
+
+    assert {row["user"]["email"] for row in response.json()["data"]} == {
+        user_a.email,
+        admin.email,
+    }
+
+
 async def test_member_avatar_is_404_without_an_uploaded_one(
     client: httpx.AsyncClient, session: AsyncSession, user_a: User, org_a: Organization
 ) -> None:
