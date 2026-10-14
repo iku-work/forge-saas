@@ -2,3 +2,9 @@
 # dev/build; self-documents "exclude this file from your linter and/or
 # formatter" in its own header.
 apps/web/src/routeTree.gen.ts
+
+# The generated API client: CI regenerates it and diffs against the commit
+# (ci.yml, "The committed API client still matches"), so it must stay exactly
+# as openapi-ts writes it. Formatting it is what makes that check fail.
+packages/api-client/openapi.json
+packages/api-client/src/generated/

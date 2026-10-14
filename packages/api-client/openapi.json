@@ -30,7 +30,10 @@
             "type": "array"
           }
         },
-        "required": ["name", "scopes"],
+        "required": [
+          "name",
+          "scopes"
+        ],
         "title": "ApiKeyCreateRequest",
         "type": "object"
       },
@@ -45,7 +48,10 @@
             "type": "string"
           }
         },
-        "required": ["key", "api_key"],
+        "required": [
+          "key",
+          "api_key"
+        ],
         "title": "ApiKeyCreated",
         "type": "object"
       },
@@ -197,7 +203,10 @@
             "type": "string"
           }
         },
-        "required": ["url", "expires_at"],
+        "required": [
+          "url",
+          "expires_at"
+        ],
         "title": "AvatarUrlResponse",
         "type": "object"
       },
@@ -208,7 +217,9 @@
             "type": "string"
           }
         },
-        "required": ["token"],
+        "required": [
+          "token"
+        ],
         "title": "CancelEmailChangeRequest",
         "type": "object"
       },
@@ -226,14 +237,20 @@
             "type": "string"
           }
         },
-        "required": ["current_password", "new_password"],
+        "required": [
+          "current_password",
+          "new_password"
+        ],
         "title": "ChangePasswordRequest",
         "type": "object"
       },
       "CheckoutSessionRequest": {
         "properties": {
           "interval": {
-            "enum": ["monthly", "yearly"],
+            "enum": [
+              "monthly",
+              "yearly"
+            ],
             "title": "Interval",
             "type": "string"
           },
@@ -244,7 +261,10 @@
             "type": "string"
           }
         },
-        "required": ["plan_slug", "interval"],
+        "required": [
+          "plan_slug",
+          "interval"
+        ],
         "title": "CheckoutSessionRequest",
         "type": "object"
       },
@@ -255,7 +275,9 @@
             "type": "string"
           }
         },
-        "required": ["url"],
+        "required": [
+          "url"
+        ],
         "title": "CheckoutSessionResponse",
         "type": "object"
       },
@@ -361,7 +383,9 @@
             "type": "string"
           }
         },
-        "required": ["token"],
+        "required": [
+          "token"
+        ],
         "title": "ConfirmEmailChangeRequest",
         "type": "object"
       },
@@ -390,7 +414,13 @@
             "type": "string"
           }
         },
-        "required": ["id", "consent_type", "granted", "version", "ts"],
+        "required": [
+          "id",
+          "consent_type",
+          "granted",
+          "version",
+          "ts"
+        ],
         "title": "ConsentRecordPublic",
         "type": "object"
       },
@@ -403,7 +433,9 @@
             "type": "string"
           }
         },
-        "required": ["name"],
+        "required": [
+          "name"
+        ],
         "title": "CreateOrgRequest",
         "type": "object"
       },
@@ -465,7 +497,9 @@
             "type": "string"
           }
         },
-        "required": ["confirm"],
+        "required": [
+          "confirm"
+        ],
         "title": "DeleteMeRequest",
         "type": "object"
       },
@@ -482,7 +516,10 @@
             "type": "string"
           }
         },
-        "required": ["password", "code"],
+        "required": [
+          "password",
+          "code"
+        ],
         "title": "Disable2FARequest",
         "type": "object"
       },
@@ -498,7 +535,10 @@
             "type": "string"
           }
         },
-        "required": ["url", "expires_at"],
+        "required": [
+          "url",
+          "expires_at"
+        ],
         "title": "DownloadUrlResponse",
         "type": "object"
       },
@@ -513,7 +553,10 @@
             "type": "string"
           }
         },
-        "required": ["provisioning_uri", "secret"],
+        "required": [
+          "provisioning_uri",
+          "secret"
+        ],
         "title": "Enable2FAResponse",
         "type": "object"
       },
@@ -543,7 +586,9 @@
             "$ref": "#/components/schemas/Meta"
           }
         },
-        "required": ["meta"],
+        "required": [
+          "meta"
+        ],
         "title": "Envelope[ApiKeyCreated]",
         "type": "object"
       },
@@ -573,7 +618,9 @@
             "$ref": "#/components/schemas/Meta"
           }
         },
-        "required": ["meta"],
+        "required": [
+          "meta"
+        ],
         "title": "Envelope[ApiKeyPublic]",
         "type": "object"
       },
@@ -603,7 +650,9 @@
             "$ref": "#/components/schemas/Meta"
           }
         },
-        "required": ["meta"],
+        "required": [
+          "meta"
+        ],
         "title": "Envelope[AvatarUrlResponse]",
         "type": "object"
       },
@@ -633,7 +682,9 @@
             "$ref": "#/components/schemas/Meta"
           }
         },
-        "required": ["meta"],
+        "required": [
+          "meta"
+        ],
         "title": "Envelope[CheckoutSessionResponse]",
         "type": "object"
       },
@@ -663,7 +714,9 @@
             "$ref": "#/components/schemas/Meta"
           }
         },
-        "required": ["meta"],
+        "required": [
+          "meta"
+        ],
         "title": "Envelope[ConfigResponse]",
         "type": "object"
       },
@@ -693,7 +746,9 @@
             "$ref": "#/components/schemas/Meta"
           }
         },
-        "required": ["meta"],
+        "required": [
+          "meta"
+        ],
         "title": "Envelope[ConsentRecordPublic]",
         "type": "object"
       },
@@ -723,7 +778,9 @@
             "$ref": "#/components/schemas/Meta"
           }
         },
-        "required": ["meta"],
+        "required": [
+          "meta"
+        ],
         "title": "Envelope[DataExportJobPublic]",
         "type": "object"
       },
@@ -753,7 +810,9 @@
             "$ref": "#/components/schemas/Meta"
           }
         },
-        "required": ["meta"],
+        "required": [
+          "meta"
+        ],
         "title": "Envelope[DownloadUrlResponse]",
         "type": "object"
       },
@@ -783,7 +842,9 @@
             "$ref": "#/components/schemas/Meta"
           }
         },
-        "required": ["meta"],
+        "required": [
+          "meta"
+        ],
         "title": "Envelope[Enable2FAResponse]",
         "type": "object"
       },
@@ -813,7 +874,9 @@
             "$ref": "#/components/schemas/Meta"
           }
         },
-        "required": ["meta"],
+        "required": [
+          "meta"
+        ],
         "title": "Envelope[ExportJobCreated]",
         "type": "object"
       },
@@ -843,7 +906,9 @@
             "$ref": "#/components/schemas/Meta"
           }
         },
-        "required": ["meta"],
+        "required": [
+          "meta"
+        ],
         "title": "Envelope[FeatureFlagsResponse]",
         "type": "object"
       },
@@ -873,7 +938,9 @@
             "$ref": "#/components/schemas/Meta"
           }
         },
-        "required": ["meta"],
+        "required": [
+          "meta"
+        ],
         "title": "Envelope[InvitationPreview]",
         "type": "object"
       },
@@ -903,7 +970,9 @@
             "$ref": "#/components/schemas/Meta"
           }
         },
-        "required": ["meta"],
+        "required": [
+          "meta"
+        ],
         "title": "Envelope[InvitationPublic]",
         "type": "object"
       },
@@ -933,7 +1002,9 @@
             "$ref": "#/components/schemas/Meta"
           }
         },
-        "required": ["meta"],
+        "required": [
+          "meta"
+        ],
         "title": "Envelope[LoginResponse]",
         "type": "object"
       },
@@ -963,7 +1034,9 @@
             "$ref": "#/components/schemas/Meta"
           }
         },
-        "required": ["meta"],
+        "required": [
+          "meta"
+        ],
         "title": "Envelope[MarkAllReadResponse]",
         "type": "object"
       },
@@ -993,7 +1066,9 @@
             "$ref": "#/components/schemas/Meta"
           }
         },
-        "required": ["meta"],
+        "required": [
+          "meta"
+        ],
         "title": "Envelope[MembershipPublic]",
         "type": "object"
       },
@@ -1017,7 +1092,9 @@
             "$ref": "#/components/schemas/Meta"
           }
         },
-        "required": ["meta"],
+        "required": [
+          "meta"
+        ],
         "title": "Envelope[NoneType]",
         "type": "object"
       },
@@ -1047,7 +1124,9 @@
             "$ref": "#/components/schemas/Meta"
           }
         },
-        "required": ["meta"],
+        "required": [
+          "meta"
+        ],
         "title": "Envelope[NotificationPreferencesUpdate]",
         "type": "object"
       },
@@ -1077,7 +1156,9 @@
             "$ref": "#/components/schemas/Meta"
           }
         },
-        "required": ["meta"],
+        "required": [
+          "meta"
+        ],
         "title": "Envelope[NotificationPublic]",
         "type": "object"
       },
@@ -1107,7 +1188,9 @@
             "$ref": "#/components/schemas/Meta"
           }
         },
-        "required": ["meta"],
+        "required": [
+          "meta"
+        ],
         "title": "Envelope[OrganizationPublic]",
         "type": "object"
       },
@@ -1137,7 +1220,9 @@
             "$ref": "#/components/schemas/Meta"
           }
         },
-        "required": ["meta"],
+        "required": [
+          "meta"
+        ],
         "title": "Envelope[PortalSessionResponse]",
         "type": "object"
       },
@@ -1167,7 +1252,9 @@
             "$ref": "#/components/schemas/Meta"
           }
         },
-        "required": ["meta"],
+        "required": [
+          "meta"
+        ],
         "title": "Envelope[PresignUploadResponse]",
         "type": "object"
       },
@@ -1197,7 +1284,9 @@
             "$ref": "#/components/schemas/Meta"
           }
         },
-        "required": ["meta"],
+        "required": [
+          "meta"
+        ],
         "title": "Envelope[PushTokenPublic]",
         "type": "object"
       },
@@ -1227,7 +1316,9 @@
             "$ref": "#/components/schemas/Meta"
           }
         },
-        "required": ["meta"],
+        "required": [
+          "meta"
+        ],
         "title": "Envelope[RefreshResponse]",
         "type": "object"
       },
@@ -1257,7 +1348,9 @@
             "$ref": "#/components/schemas/Meta"
           }
         },
-        "required": ["meta"],
+        "required": [
+          "meta"
+        ],
         "title": "Envelope[SsoConnectionPublic]",
         "type": "object"
       },
@@ -1287,7 +1380,9 @@
             "$ref": "#/components/schemas/Meta"
           }
         },
-        "required": ["meta"],
+        "required": [
+          "meta"
+        ],
         "title": "Envelope[SsoHintResponse]",
         "type": "object"
       },
@@ -1317,7 +1412,9 @@
             "$ref": "#/components/schemas/Meta"
           }
         },
-        "required": ["meta"],
+        "required": [
+          "meta"
+        ],
         "title": "Envelope[StoredFilePublic]",
         "type": "object"
       },
@@ -1347,7 +1444,9 @@
             "$ref": "#/components/schemas/Meta"
           }
         },
-        "required": ["meta"],
+        "required": [
+          "meta"
+        ],
         "title": "Envelope[SupportContextResponse]",
         "type": "object"
       },
@@ -1377,7 +1476,9 @@
             "$ref": "#/components/schemas/Meta"
           }
         },
-        "required": ["meta"],
+        "required": [
+          "meta"
+        ],
         "title": "Envelope[TwoFactorRequiredResponse]",
         "type": "object"
       },
@@ -1411,7 +1512,9 @@
             "$ref": "#/components/schemas/Meta"
           }
         },
-        "required": ["meta"],
+        "required": [
+          "meta"
+        ],
         "title": "Envelope[Union[LoginResponse, TwoFactorRequiredResponse]]",
         "type": "object"
       },
@@ -1441,7 +1544,9 @@
             "$ref": "#/components/schemas/Meta"
           }
         },
-        "required": ["meta"],
+        "required": [
+          "meta"
+        ],
         "title": "Envelope[Union[SsoConnectionPublic, NoneType]]",
         "type": "object"
       },
@@ -1471,7 +1576,9 @@
             "$ref": "#/components/schemas/Meta"
           }
         },
-        "required": ["meta"],
+        "required": [
+          "meta"
+        ],
         "title": "Envelope[Union[SubscriptionPublic, NoneType]]",
         "type": "object"
       },
@@ -1501,7 +1608,9 @@
             "$ref": "#/components/schemas/Meta"
           }
         },
-        "required": ["meta"],
+        "required": [
+          "meta"
+        ],
         "title": "Envelope[UnreadCountResponse]",
         "type": "object"
       },
@@ -1531,7 +1640,9 @@
             "$ref": "#/components/schemas/Meta"
           }
         },
-        "required": ["meta"],
+        "required": [
+          "meta"
+        ],
         "title": "Envelope[UserPublic]",
         "type": "object"
       },
@@ -1561,7 +1672,9 @@
             "$ref": "#/components/schemas/Meta"
           }
         },
-        "required": ["meta"],
+        "required": [
+          "meta"
+        ],
         "title": "Envelope[Verify2FAResponse]",
         "type": "object"
       },
@@ -1591,7 +1704,9 @@
             "$ref": "#/components/schemas/Meta"
           }
         },
-        "required": ["meta"],
+        "required": [
+          "meta"
+        ],
         "title": "Envelope[WebAuthnCredentialPublic]",
         "type": "object"
       },
@@ -1621,7 +1736,9 @@
             "$ref": "#/components/schemas/Meta"
           }
         },
-        "required": ["meta"],
+        "required": [
+          "meta"
+        ],
         "title": "Envelope[WebAuthnLoginOptionsResponse]",
         "type": "object"
       },
@@ -1651,7 +1768,9 @@
             "$ref": "#/components/schemas/Meta"
           }
         },
-        "required": ["meta"],
+        "required": [
+          "meta"
+        ],
         "title": "Envelope[WebAuthnRegisterOptionsResponse]",
         "type": "object"
       },
@@ -1681,7 +1800,9 @@
             "$ref": "#/components/schemas/Meta"
           }
         },
-        "required": ["meta"],
+        "required": [
+          "meta"
+        ],
         "title": "Envelope[WebhookDeliveryPublic]",
         "type": "object"
       },
@@ -1711,7 +1832,9 @@
             "$ref": "#/components/schemas/Meta"
           }
         },
-        "required": ["meta"],
+        "required": [
+          "meta"
+        ],
         "title": "Envelope[WebhookEndpointCreated]",
         "type": "object"
       },
@@ -1741,7 +1864,9 @@
             "$ref": "#/components/schemas/Meta"
           }
         },
-        "required": ["meta"],
+        "required": [
+          "meta"
+        ],
         "title": "Envelope[WebhookEndpointPublic]",
         "type": "object"
       },
@@ -1771,7 +1896,9 @@
             "$ref": "#/components/schemas/Meta"
           }
         },
-        "required": ["meta"],
+        "required": [
+          "meta"
+        ],
         "title": "Envelope[WebhookSecretRotated]",
         "type": "object"
       },
@@ -1805,7 +1932,9 @@
             "$ref": "#/components/schemas/Meta"
           }
         },
-        "required": ["meta"],
+        "required": [
+          "meta"
+        ],
         "title": "Envelope[list[ApiKeyPublic]]",
         "type": "object"
       },
@@ -1839,7 +1968,9 @@
             "$ref": "#/components/schemas/Meta"
           }
         },
-        "required": ["meta"],
+        "required": [
+          "meta"
+        ],
         "title": "Envelope[list[ConsentRecordPublic]]",
         "type": "object"
       },
@@ -1873,7 +2004,9 @@
             "$ref": "#/components/schemas/Meta"
           }
         },
-        "required": ["meta"],
+        "required": [
+          "meta"
+        ],
         "title": "Envelope[list[InvitationPublic]]",
         "type": "object"
       },
@@ -1907,7 +2040,9 @@
             "$ref": "#/components/schemas/Meta"
           }
         },
-        "required": ["meta"],
+        "required": [
+          "meta"
+        ],
         "title": "Envelope[list[InvoiceDTO]]",
         "type": "object"
       },
@@ -1941,7 +2076,9 @@
             "$ref": "#/components/schemas/Meta"
           }
         },
-        "required": ["meta"],
+        "required": [
+          "meta"
+        ],
         "title": "Envelope[list[MembershipPublic]]",
         "type": "object"
       },
@@ -1975,7 +2112,9 @@
             "$ref": "#/components/schemas/Meta"
           }
         },
-        "required": ["meta"],
+        "required": [
+          "meta"
+        ],
         "title": "Envelope[list[NotificationPublic]]",
         "type": "object"
       },
@@ -2009,7 +2148,9 @@
             "$ref": "#/components/schemas/Meta"
           }
         },
-        "required": ["meta"],
+        "required": [
+          "meta"
+        ],
         "title": "Envelope[list[OAuthAccountPublic]]",
         "type": "object"
       },
@@ -2043,7 +2184,9 @@
             "$ref": "#/components/schemas/Meta"
           }
         },
-        "required": ["meta"],
+        "required": [
+          "meta"
+        ],
         "title": "Envelope[list[OrganizationPublic]]",
         "type": "object"
       },
@@ -2077,7 +2220,9 @@
             "$ref": "#/components/schemas/Meta"
           }
         },
-        "required": ["meta"],
+        "required": [
+          "meta"
+        ],
         "title": "Envelope[list[PlanPublic]]",
         "type": "object"
       },
@@ -2111,7 +2256,9 @@
             "$ref": "#/components/schemas/Meta"
           }
         },
-        "required": ["meta"],
+        "required": [
+          "meta"
+        ],
         "title": "Envelope[list[SessionPublic]]",
         "type": "object"
       },
@@ -2145,7 +2292,9 @@
             "$ref": "#/components/schemas/Meta"
           }
         },
-        "required": ["meta"],
+        "required": [
+          "meta"
+        ],
         "title": "Envelope[list[StoredFilePublic]]",
         "type": "object"
       },
@@ -2179,7 +2328,9 @@
             "$ref": "#/components/schemas/Meta"
           }
         },
-        "required": ["meta"],
+        "required": [
+          "meta"
+        ],
         "title": "Envelope[list[UsageSummary]]",
         "type": "object"
       },
@@ -2213,7 +2364,9 @@
             "$ref": "#/components/schemas/Meta"
           }
         },
-        "required": ["meta"],
+        "required": [
+          "meta"
+        ],
         "title": "Envelope[list[WebAuthnCredentialPublic]]",
         "type": "object"
       },
@@ -2247,7 +2400,9 @@
             "$ref": "#/components/schemas/Meta"
           }
         },
-        "required": ["meta"],
+        "required": [
+          "meta"
+        ],
         "title": "Envelope[list[WebhookDeliveryPublic]]",
         "type": "object"
       },
@@ -2281,7 +2436,9 @@
             "$ref": "#/components/schemas/Meta"
           }
         },
-        "required": ["meta"],
+        "required": [
+          "meta"
+        ],
         "title": "Envelope[list[WebhookEndpointPublic]]",
         "type": "object"
       },
@@ -2315,7 +2472,9 @@
             "$ref": "#/components/schemas/Meta"
           }
         },
-        "required": ["meta"],
+        "required": [
+          "meta"
+        ],
         "title": "Envelope[list[WebhookEventTypePublic]]",
         "type": "object"
       },
@@ -2346,7 +2505,11 @@
             "type": "string"
           }
         },
-        "required": ["code", "message_key", "message"],
+        "required": [
+          "code",
+          "message_key",
+          "message"
+        ],
         "title": "ErrorBody",
         "type": "object"
       },
@@ -2358,7 +2521,9 @@
             "type": "string"
           }
         },
-        "required": ["job_id"],
+        "required": [
+          "job_id"
+        ],
         "title": "ExportJobCreated",
         "type": "object"
       },
@@ -2372,7 +2537,9 @@
             "type": "object"
           }
         },
-        "required": ["flags"],
+        "required": [
+          "flags"
+        ],
         "title": "FeatureFlagsResponse",
         "type": "object"
       },
@@ -2395,7 +2562,10 @@
             "title": "Full Name"
           }
         },
-        "required": ["full_name", "email"],
+        "required": [
+          "full_name",
+          "email"
+        ],
         "title": "FileUploaderSummary",
         "type": "object"
       },
@@ -2411,12 +2581,20 @@
             "type": "string"
           },
           "type": {
-            "enum": ["info", "warning", "critical"],
+            "enum": [
+              "info",
+              "warning",
+              "critical"
+            ],
             "title": "Type",
             "type": "string"
           }
         },
-        "required": ["type", "message", "dismissible"],
+        "required": [
+          "type",
+          "message",
+          "dismissible"
+        ],
         "title": "GlobalBannerResponse",
         "type": "object"
       },
@@ -2457,7 +2635,13 @@
             "$ref": "#/components/schemas/MemberRole"
           }
         },
-        "required": ["org_id", "org_name", "email", "role", "expires_at"],
+        "required": [
+          "org_id",
+          "org_name",
+          "email",
+          "role",
+          "expires_at"
+        ],
         "title": "InvitationPreview",
         "type": "object"
       },
@@ -2520,7 +2704,10 @@
             "$ref": "#/components/schemas/MemberRole"
           }
         },
-        "required": ["email", "role"],
+        "required": [
+          "email",
+          "role"
+        ],
         "title": "InviteRequest",
         "type": "object"
       },
@@ -2626,7 +2813,10 @@
             "type": "string"
           }
         },
-        "required": ["email", "password"],
+        "required": [
+          "email",
+          "password"
+        ],
         "title": "LoginRequest",
         "type": "object"
       },
@@ -2651,7 +2841,10 @@
             "$ref": "#/components/schemas/UserPublic"
           }
         },
-        "required": ["access_token", "user"],
+        "required": [
+          "access_token",
+          "user"
+        ],
         "title": "LoginResponse",
         "type": "object"
       },
@@ -2662,7 +2855,9 @@
             "type": "string"
           }
         },
-        "required": ["token"],
+        "required": [
+          "token"
+        ],
         "title": "MagicLinkConsumeRequest",
         "type": "object"
       },
@@ -2674,7 +2869,9 @@
             "type": "string"
           }
         },
-        "required": ["email"],
+        "required": [
+          "email"
+        ],
         "title": "MagicLinkRequest",
         "type": "object"
       },
@@ -2690,7 +2887,10 @@
             "type": "string"
           }
         },
-        "required": ["enabled", "message"],
+        "required": [
+          "enabled",
+          "message"
+        ],
         "title": "MaintenanceResponse",
         "type": "object"
       },
@@ -2701,12 +2901,18 @@
             "type": "integer"
           }
         },
-        "required": ["updated"],
+        "required": [
+          "updated"
+        ],
         "title": "MarkAllReadResponse",
         "type": "object"
       },
       "MemberRole": {
-        "enum": ["owner", "admin", "member"],
+        "enum": [
+          "owner",
+          "admin",
+          "member"
+        ],
         "title": "MemberRole",
         "type": "string"
       },
@@ -2751,7 +2957,11 @@
             "type": "boolean"
           }
         },
-        "required": ["full_name", "avatar_url", "has_uploaded_avatar"],
+        "required": [
+          "full_name",
+          "avatar_url",
+          "has_uploaded_avatar"
+        ],
         "title": "MemberUserSummary",
         "type": "object"
       },
@@ -2848,7 +3058,9 @@
             "type": "string"
           }
         },
-        "required": ["request_id"],
+        "required": [
+          "request_id"
+        ],
         "title": "Meta",
         "type": "object"
       },
@@ -2943,7 +3155,9 @@
             "type": "object"
           }
         },
-        "required": ["preferences"],
+        "required": [
+          "preferences"
+        ],
         "title": "NotificationPreferencesUpdate",
         "type": "object"
       },
@@ -3027,7 +3241,10 @@
             "type": "string"
           }
         },
-        "required": ["provider", "created_at"],
+        "required": [
+          "provider",
+          "created_at"
+        ],
         "title": "OAuthAccountPublic",
         "type": "object"
       },
@@ -3068,7 +3285,13 @@
             "type": "string"
           }
         },
-        "required": ["id", "name", "slug", "logo_url", "created_at"],
+        "required": [
+          "id",
+          "name",
+          "slug",
+          "logo_url",
+          "created_at"
+        ],
         "title": "OrganizationPublic",
         "type": "object"
       },
@@ -3085,7 +3308,10 @@
             "type": "string"
           }
         },
-        "required": ["token", "new_password"],
+        "required": [
+          "token",
+          "new_password"
+        ],
         "title": "PasswordResetConfirmRequest",
         "type": "object"
       },
@@ -3097,7 +3323,9 @@
             "type": "string"
           }
         },
-        "required": ["email"],
+        "required": [
+          "email"
+        ],
         "title": "PasswordResetRequest",
         "type": "object"
       },
@@ -3155,7 +3383,9 @@
             "type": "string"
           }
         },
-        "required": ["url"],
+        "required": [
+          "url"
+        ],
         "title": "PortalSessionResponse",
         "type": "object"
       },
@@ -3184,7 +3414,11 @@
             "type": "integer"
           }
         },
-        "required": ["filename", "content_type", "size_bytes"],
+        "required": [
+          "filename",
+          "content_type",
+          "size_bytes"
+        ],
         "title": "PresignUploadRequest",
         "type": "object"
       },
@@ -3216,7 +3450,13 @@
             "type": "string"
           }
         },
-        "required": ["file_id", "upload_url", "fields", "key", "expires_at"],
+        "required": [
+          "file_id",
+          "upload_url",
+          "fields",
+          "key",
+          "expires_at"
+        ],
         "title": "PresignUploadResponse",
         "type": "object"
       },
@@ -3243,7 +3483,11 @@
             "type": "string"
           }
         },
-        "required": ["id", "platform", "device_label"],
+        "required": [
+          "id",
+          "platform",
+          "device_label"
+        ],
         "title": "PushTokenPublic",
         "type": "object"
       },
@@ -3261,7 +3505,10 @@
             "title": "Device Label"
           },
           "platform": {
-            "enum": ["ios", "android"],
+            "enum": [
+              "ios",
+              "android"
+            ],
             "title": "Platform",
             "type": "string"
           },
@@ -3270,7 +3517,10 @@
             "type": "string"
           }
         },
-        "required": ["token", "platform"],
+        "required": [
+          "token",
+          "platform"
+        ],
         "title": "PushTokenRegisterRequest",
         "type": "object"
       },
@@ -3293,7 +3543,11 @@
             "type": "string"
           }
         },
-        "required": ["consent_type", "granted", "version"],
+        "required": [
+          "consent_type",
+          "granted",
+          "version"
+        ],
         "title": "RecordConsentRequest",
         "type": "object"
       },
@@ -3332,7 +3586,9 @@
             "title": "Refresh Token"
           }
         },
-        "required": ["access_token"],
+        "required": [
+          "access_token"
+        ],
         "title": "RefreshResponse",
         "type": "object"
       },
@@ -3350,7 +3606,10 @@
             "type": "string"
           }
         },
-        "required": ["email", "password"],
+        "required": [
+          "email",
+          "password"
+        ],
         "title": "RegisterRequest",
         "type": "object"
       },
@@ -3374,7 +3633,9 @@
             "type": "string"
           }
         },
-        "required": ["new_email"],
+        "required": [
+          "new_email"
+        ],
         "title": "RequestEmailChangeRequest",
         "type": "object"
       },
@@ -3634,7 +3895,9 @@
             "type": "string"
           }
         },
-        "required": ["email"],
+        "required": [
+          "email"
+        ],
         "title": "SsoHintRequest",
         "type": "object"
       },
@@ -3668,7 +3931,9 @@
             "type": "boolean"
           }
         },
-        "required": ["sso_available"],
+        "required": [
+          "sso_available"
+        ],
         "title": "SsoHintResponse",
         "type": "object"
       },
@@ -3701,7 +3966,13 @@
             "type": "integer"
           },
           "status": {
-            "enum": ["pending", "ready", "infected", "failed", "deleted"],
+            "enum": [
+              "pending",
+              "ready",
+              "infected",
+              "failed",
+              "deleted"
+            ],
             "title": "Status",
             "type": "string"
           },
@@ -3898,7 +4169,10 @@
             "type": "string"
           }
         },
-        "required": ["temp_token", "code"],
+        "required": [
+          "temp_token",
+          "code"
+        ],
         "title": "TwoFactorLoginRequest",
         "type": "object"
       },
@@ -3914,7 +4188,9 @@
             "type": "string"
           }
         },
-        "required": ["temp_token"],
+        "required": [
+          "temp_token"
+        ],
         "title": "TwoFactorRequiredResponse",
         "type": "object"
       },
@@ -3925,7 +4201,9 @@
             "type": "integer"
           }
         },
-        "required": ["count"],
+        "required": [
+          "count"
+        ],
         "title": "UnreadCountResponse",
         "type": "object"
       },
@@ -3988,7 +4266,9 @@
             "$ref": "#/components/schemas/MemberRole"
           }
         },
-        "required": ["role"],
+        "required": [
+          "role"
+        ],
         "title": "UpdateMembershipRequest",
         "type": "object"
       },
@@ -4199,7 +4479,11 @@
             "type": "string"
           }
         },
-        "required": ["loc", "msg", "type"],
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
         "title": "ValidationError",
         "type": "object"
       },
@@ -4211,7 +4495,9 @@
             "type": "string"
           }
         },
-        "required": ["code"],
+        "required": [
+          "code"
+        ],
         "title": "Verify2FARequest",
         "type": "object"
       },
@@ -4225,7 +4511,9 @@
             "type": "array"
           }
         },
-        "required": ["backup_codes"],
+        "required": [
+          "backup_codes"
+        ],
         "title": "Verify2FAResponse",
         "type": "object"
       },
@@ -4236,7 +4524,9 @@
             "type": "string"
           }
         },
-        "required": ["token"],
+        "required": [
+          "token"
+        ],
         "title": "VerifyEmailRequest",
         "type": "object"
       },
@@ -4280,7 +4570,13 @@
             "title": "Nickname"
           }
         },
-        "required": ["id", "nickname", "aaguid", "created_at", "last_used_at"],
+        "required": [
+          "id",
+          "nickname",
+          "aaguid",
+          "created_at",
+          "last_used_at"
+        ],
         "title": "WebAuthnCredentialPublic",
         "type": "object"
       },
@@ -4291,7 +4587,9 @@
             "type": "string"
           }
         },
-        "required": ["temp_token"],
+        "required": [
+          "temp_token"
+        ],
         "title": "WebAuthnLoginOptionsRequest",
         "type": "object"
       },
@@ -4307,7 +4605,10 @@
             "type": "object"
           }
         },
-        "required": ["options", "challenge_token"],
+        "required": [
+          "options",
+          "challenge_token"
+        ],
         "title": "WebAuthnLoginOptionsResponse",
         "type": "object"
       },
@@ -4323,7 +4624,10 @@
             "type": "object"
           }
         },
-        "required": ["challenge_token", "credential"],
+        "required": [
+          "challenge_token",
+          "credential"
+        ],
         "title": "WebAuthnLoginRequest",
         "type": "object"
       },
@@ -4339,7 +4643,10 @@
             "type": "object"
           }
         },
-        "required": ["options", "challenge_token"],
+        "required": [
+          "options",
+          "challenge_token"
+        ],
         "title": "WebAuthnRegisterOptionsResponse",
         "type": "object"
       },
@@ -4367,7 +4674,10 @@
             "title": "Nickname"
           }
         },
-        "required": ["challenge_token", "credential"],
+        "required": [
+          "challenge_token",
+          "credential"
+        ],
         "title": "WebAuthnRegisterRequest",
         "type": "object"
       },
@@ -4534,7 +4844,10 @@
             "type": "string"
           }
         },
-        "required": ["url", "event_types"],
+        "required": [
+          "url",
+          "event_types"
+        ],
         "title": "WebhookEndpointCreateRequest",
         "type": "object"
       },
@@ -4549,7 +4862,10 @@
             "type": "string"
           }
         },
-        "required": ["endpoint", "secret"],
+        "required": [
+          "endpoint",
+          "secret"
+        ],
         "title": "WebhookEndpointCreated",
         "type": "object"
       },
@@ -4723,7 +5039,10 @@
             "type": "string"
           }
         },
-        "required": ["name", "description"],
+        "required": [
+          "name",
+          "description"
+        ],
         "title": "WebhookEventTypePublic",
         "type": "object"
       },
@@ -4743,7 +5062,11 @@
             "type": "string"
           }
         },
-        "required": ["endpoint", "secret", "previous_secret_expires_at"],
+        "required": [
+          "endpoint",
+          "secret",
+          "previous_secret_expires_at"
+        ],
         "title": "WebhookSecretRotated",
         "type": "object"
       }
@@ -4845,7 +5168,9 @@
           }
         ],
         "summary": "List Api Keys",
-        "tags": ["api_keys"]
+        "tags": [
+          "api_keys"
+        ]
       },
       "post": {
         "description": "Creates an API key and returns it **once**. The key is not stored and cannot be retrieved again; every later read returns the prefix only. Valid scopes: orgs:read, members:read, members:write, files:read.",
@@ -4907,7 +5232,9 @@
           }
         ],
         "summary": "Create Api Key",
-        "tags": ["api_keys"]
+        "tags": [
+          "api_keys"
+        ]
       }
     },
     "/api/v1/api-keys/{key_id}": {
@@ -4970,7 +5297,9 @@
           }
         ],
         "summary": "Delete Api Key",
-        "tags": ["api_keys"]
+        "tags": [
+          "api_keys"
+        ]
       },
       "get": {
         "operationId": "get_api_key_api_v1_api_keys__key_id__get",
@@ -5031,7 +5360,9 @@
           }
         ],
         "summary": "Get Api Key",
-        "tags": ["api_keys"]
+        "tags": [
+          "api_keys"
+        ]
       },
       "patch": {
         "operationId": "update_api_key_api_v1_api_keys__key_id__patch",
@@ -5102,7 +5433,9 @@
           }
         ],
         "summary": "Update Api Key",
-        "tags": ["api_keys"]
+        "tags": [
+          "api_keys"
+        ]
       }
     },
     "/api/v1/api-keys/{key_id}/revoke": {
@@ -5166,7 +5499,9 @@
           }
         ],
         "summary": "Revoke Api Key",
-        "tags": ["api_keys"]
+        "tags": [
+          "api_keys"
+        ]
       }
     },
     "/api/v1/auth/2fa/disable": {
@@ -5210,7 +5545,9 @@
           }
         ],
         "summary": "Disable 2Fa",
-        "tags": ["auth"]
+        "tags": [
+          "auth"
+        ]
       }
     },
     "/api/v1/auth/2fa/enable": {
@@ -5234,7 +5571,9 @@
           }
         ],
         "summary": "Enable 2Fa",
-        "tags": ["auth"]
+        "tags": [
+          "auth"
+        ]
       }
     },
     "/api/v1/auth/2fa/login": {
@@ -5273,7 +5612,9 @@
           }
         },
         "summary": "Login 2Fa",
-        "tags": ["auth"]
+        "tags": [
+          "auth"
+        ]
       }
     },
     "/api/v1/auth/2fa/verify": {
@@ -5317,7 +5658,9 @@
           }
         ],
         "summary": "Verify 2Fa",
-        "tags": ["auth"]
+        "tags": [
+          "auth"
+        ]
       }
     },
     "/api/v1/auth/change-email": {
@@ -5361,7 +5704,9 @@
           }
         ],
         "summary": "Request Email Change",
-        "tags": ["auth"]
+        "tags": [
+          "auth"
+        ]
       }
     },
     "/api/v1/auth/change-email/cancel": {
@@ -5400,7 +5745,9 @@
           }
         },
         "summary": "Cancel Email Change",
-        "tags": ["auth"]
+        "tags": [
+          "auth"
+        ]
       }
     },
     "/api/v1/auth/change-email/confirm": {
@@ -5439,7 +5786,9 @@
           }
         },
         "summary": "Confirm Email Change",
-        "tags": ["auth"]
+        "tags": [
+          "auth"
+        ]
       }
     },
     "/api/v1/auth/change-password": {
@@ -5483,7 +5832,9 @@
           }
         ],
         "summary": "Change Password",
-        "tags": ["auth"]
+        "tags": [
+          "auth"
+        ]
       }
     },
     "/api/v1/auth/forgot-password": {
@@ -5522,7 +5873,9 @@
           }
         },
         "summary": "Forgot Password",
-        "tags": ["auth"]
+        "tags": [
+          "auth"
+        ]
       }
     },
     "/api/v1/auth/login": {
@@ -5569,7 +5922,9 @@
           }
         },
         "summary": "Login",
-        "tags": ["auth"]
+        "tags": [
+          "auth"
+        ]
       }
     },
     "/api/v1/auth/logout": {
@@ -5615,7 +5970,9 @@
           }
         },
         "summary": "Logout",
-        "tags": ["auth"]
+        "tags": [
+          "auth"
+        ]
       }
     },
     "/api/v1/auth/logout-all": {
@@ -5639,7 +5996,9 @@
           }
         ],
         "summary": "Logout All",
-        "tags": ["auth"]
+        "tags": [
+          "auth"
+        ]
       }
     },
     "/api/v1/auth/magic-link": {
@@ -5678,7 +6037,9 @@
           }
         },
         "summary": "Request Magic Link",
-        "tags": ["auth"]
+        "tags": [
+          "auth"
+        ]
       }
     },
     "/api/v1/auth/magic-link/consume": {
@@ -5725,7 +6086,9 @@
           }
         },
         "summary": "Consume Magic Link",
-        "tags": ["auth"]
+        "tags": [
+          "auth"
+        ]
       }
     },
     "/api/v1/auth/me": {
@@ -5749,7 +6112,9 @@
           }
         ],
         "summary": "Me",
-        "tags": ["auth"]
+        "tags": [
+          "auth"
+        ]
       },
       "patch": {
         "operationId": "update_me_api_v1_auth_me_patch",
@@ -5791,7 +6156,9 @@
           }
         ],
         "summary": "Update Me",
-        "tags": ["auth"]
+        "tags": [
+          "auth"
+        ]
       }
     },
     "/api/v1/auth/me/avatar": {
@@ -5816,7 +6183,9 @@
           }
         ],
         "summary": "Get My Avatar",
-        "tags": ["auth"]
+        "tags": [
+          "auth"
+        ]
       }
     },
     "/api/v1/auth/oauth/accounts": {
@@ -5840,7 +6209,9 @@
           }
         ],
         "summary": "List Oauth Accounts",
-        "tags": ["auth"]
+        "tags": [
+          "auth"
+        ]
       }
     },
     "/api/v1/auth/oauth/{provider}": {
@@ -5878,7 +6249,9 @@
           }
         },
         "summary": "Oauth Start",
-        "tags": ["auth"]
+        "tags": [
+          "auth"
+        ]
       }
     },
     "/api/v1/auth/oauth/{provider}/callback": {
@@ -5944,7 +6317,9 @@
           }
         },
         "summary": "Oauth Callback",
-        "tags": ["auth"]
+        "tags": [
+          "auth"
+        ]
       }
     },
     "/api/v1/auth/oauth/{provider}/unlink": {
@@ -5989,7 +6364,9 @@
           }
         ],
         "summary": "Oauth Unlink",
-        "tags": ["auth"]
+        "tags": [
+          "auth"
+        ]
       }
     },
     "/api/v1/auth/refresh": {
@@ -6035,7 +6412,9 @@
           }
         },
         "summary": "Refresh",
-        "tags": ["auth"]
+        "tags": [
+          "auth"
+        ]
       }
     },
     "/api/v1/auth/register": {
@@ -6074,7 +6453,9 @@
           }
         },
         "summary": "Register",
-        "tags": ["auth"]
+        "tags": [
+          "auth"
+        ]
       }
     },
     "/api/v1/auth/reset-password": {
@@ -6113,7 +6494,9 @@
           }
         },
         "summary": "Reset Password",
-        "tags": ["auth"]
+        "tags": [
+          "auth"
+        ]
       }
     },
     "/api/v1/auth/sessions": {
@@ -6137,7 +6520,9 @@
           }
         ],
         "summary": "List Sessions",
-        "tags": ["auth"]
+        "tags": [
+          "auth"
+        ]
       }
     },
     "/api/v1/auth/sessions/{session_id}": {
@@ -6183,7 +6568,9 @@
           }
         ],
         "summary": "Revoke Session",
-        "tags": ["auth"]
+        "tags": [
+          "auth"
+        ]
       }
     },
     "/api/v1/auth/sso/callback": {
@@ -6232,7 +6619,9 @@
           }
         },
         "summary": "Sso Callback",
-        "tags": ["auth"]
+        "tags": [
+          "auth"
+        ]
       }
     },
     "/api/v1/auth/sso/connection": {
@@ -6285,7 +6674,9 @@
           }
         ],
         "summary": "Delete Sso Connection",
-        "tags": ["auth"]
+        "tags": [
+          "auth"
+        ]
       },
       "get": {
         "operationId": "get_sso_connection_api_v1_auth_sso_connection_get",
@@ -6336,7 +6727,9 @@
           }
         ],
         "summary": "Get Sso Connection",
-        "tags": ["auth"]
+        "tags": [
+          "auth"
+        ]
       },
       "put": {
         "description": "Creates or replaces this organization's identity provider. The discovery document is fetched and its `issuer` compared against the one supplied before anything is written, so the most common misconfiguration fails here rather than for every member at once at the next sign-in.",
@@ -6398,7 +6791,9 @@
           }
         ],
         "summary": "Put Sso Connection",
-        "tags": ["auth"]
+        "tags": [
+          "auth"
+        ]
       }
     },
     "/api/v1/auth/sso/hint": {
@@ -6438,7 +6833,9 @@
           }
         },
         "summary": "Sso Hint",
-        "tags": ["auth"]
+        "tags": [
+          "auth"
+        ]
       }
     },
     "/api/v1/auth/sso/{org_slug}/start": {
@@ -6477,7 +6874,9 @@
           }
         },
         "summary": "Sso Start",
-        "tags": ["auth"]
+        "tags": [
+          "auth"
+        ]
       }
     },
     "/api/v1/auth/verify-email": {
@@ -6516,7 +6915,9 @@
           }
         },
         "summary": "Verify Email",
-        "tags": ["auth"]
+        "tags": [
+          "auth"
+        ]
       }
     },
     "/api/v1/auth/webauthn/credentials": {
@@ -6540,7 +6941,9 @@
           }
         ],
         "summary": "List Credentials",
-        "tags": ["auth"]
+        "tags": [
+          "auth"
+        ]
       }
     },
     "/api/v1/auth/webauthn/credentials/{credential_id}": {
@@ -6586,7 +6989,9 @@
           }
         ],
         "summary": "Revoke Credential",
-        "tags": ["auth"]
+        "tags": [
+          "auth"
+        ]
       }
     },
     "/api/v1/auth/webauthn/login": {
@@ -6625,7 +7030,9 @@
           }
         },
         "summary": "Login",
-        "tags": ["auth"]
+        "tags": [
+          "auth"
+        ]
       }
     },
     "/api/v1/auth/webauthn/login/options": {
@@ -6664,7 +7071,9 @@
           }
         },
         "summary": "Login Options",
-        "tags": ["auth"]
+        "tags": [
+          "auth"
+        ]
       }
     },
     "/api/v1/auth/webauthn/register": {
@@ -6708,7 +7117,9 @@
           }
         ],
         "summary": "Register",
-        "tags": ["auth"]
+        "tags": [
+          "auth"
+        ]
       }
     },
     "/api/v1/auth/webauthn/register/options": {
@@ -6732,7 +7143,9 @@
           }
         ],
         "summary": "Register Options",
-        "tags": ["auth"]
+        "tags": [
+          "auth"
+        ]
       }
     },
     "/api/v1/billing/checkout-session": {
@@ -6795,7 +7208,9 @@
           }
         ],
         "summary": "Create Checkout Session",
-        "tags": ["billing"]
+        "tags": [
+          "billing"
+        ]
       }
     },
     "/api/v1/billing/invoices": {
@@ -6876,7 +7291,9 @@
           }
         ],
         "summary": "List Invoices",
-        "tags": ["billing"]
+        "tags": [
+          "billing"
+        ]
       }
     },
     "/api/v1/billing/plans": {
@@ -6895,7 +7312,9 @@
           }
         },
         "summary": "List Plans",
-        "tags": ["billing"]
+        "tags": [
+          "billing"
+        ]
       }
     },
     "/api/v1/billing/portal-session": {
@@ -6948,7 +7367,9 @@
           }
         ],
         "summary": "Create Portal Session",
-        "tags": ["billing"]
+        "tags": [
+          "billing"
+        ]
       }
     },
     "/api/v1/billing/subscription": {
@@ -7001,7 +7422,9 @@
           }
         ],
         "summary": "Get Subscription",
-        "tags": ["billing"]
+        "tags": [
+          "billing"
+        ]
       }
     },
     "/api/v1/billing/usage": {
@@ -7054,7 +7477,9 @@
           }
         ],
         "summary": "Get Usage",
-        "tags": ["billing"]
+        "tags": [
+          "billing"
+        ]
       }
     },
     "/api/v1/billing/webhooks/stripe": {
@@ -7071,7 +7496,9 @@
           }
         },
         "summary": "Stripe Webhook",
-        "tags": ["billing"]
+        "tags": [
+          "billing"
+        ]
       }
     },
     "/api/v1/config": {
@@ -7090,7 +7517,9 @@
           }
         },
         "summary": "Get Config",
-        "tags": ["config"]
+        "tags": [
+          "config"
+        ]
       }
     },
     "/api/v1/files": {
@@ -7182,7 +7611,9 @@
           }
         ],
         "summary": "List Files",
-        "tags": ["files"]
+        "tags": [
+          "files"
+        ]
       }
     },
     "/api/v1/files/presign": {
@@ -7245,7 +7676,9 @@
           }
         ],
         "summary": "Presign Upload",
-        "tags": ["files"]
+        "tags": [
+          "files"
+        ]
       }
     },
     "/api/v1/files/{file_id}": {
@@ -7308,7 +7741,9 @@
           }
         ],
         "summary": "Delete File",
-        "tags": ["files"]
+        "tags": [
+          "files"
+        ]
       }
     },
     "/api/v1/files/{file_id}/confirm": {
@@ -7371,7 +7806,9 @@
           }
         ],
         "summary": "Confirm Upload",
-        "tags": ["files"]
+        "tags": [
+          "files"
+        ]
       }
     },
     "/api/v1/files/{file_id}/download": {
@@ -7434,7 +7871,9 @@
           }
         ],
         "summary": "Download File",
-        "tags": ["files"]
+        "tags": [
+          "files"
+        ]
       }
     },
     "/api/v1/invitations/{token}": {
@@ -7474,7 +7913,9 @@
           }
         },
         "summary": "Preview Invitation",
-        "tags": ["tenancy"]
+        "tags": [
+          "tenancy"
+        ]
       }
     },
     "/api/v1/invitations/{token}/accept": {
@@ -7519,7 +7960,9 @@
           }
         ],
         "summary": "Accept Invitation",
-        "tags": ["tenancy"]
+        "tags": [
+          "tenancy"
+        ]
       }
     },
     "/api/v1/me": {
@@ -7563,7 +8006,9 @@
           }
         ],
         "summary": "Delete Me",
-        "tags": ["gdpr"]
+        "tags": [
+          "gdpr"
+        ]
       }
     },
     "/api/v1/me/consents": {
@@ -7587,7 +8032,9 @@
           }
         ],
         "summary": "List Consents",
-        "tags": ["gdpr"]
+        "tags": [
+          "gdpr"
+        ]
       },
       "post": {
         "operationId": "record_consent_api_v1_me_consents_post",
@@ -7629,7 +8076,9 @@
           }
         ],
         "summary": "Record Consent",
-        "tags": ["gdpr"]
+        "tags": [
+          "gdpr"
+        ]
       }
     },
     "/api/v1/me/export": {
@@ -7653,7 +8102,9 @@
           }
         ],
         "summary": "Request Export",
-        "tags": ["gdpr"]
+        "tags": [
+          "gdpr"
+        ]
       }
     },
     "/api/v1/me/export/{job_id}": {
@@ -7699,7 +8150,9 @@
           }
         ],
         "summary": "Get Export Job",
-        "tags": ["gdpr"]
+        "tags": [
+          "gdpr"
+        ]
       }
     },
     "/api/v1/me/notification-preferences": {
@@ -7743,7 +8196,9 @@
           }
         ],
         "summary": "Update Notification Preferences",
-        "tags": ["notifications"]
+        "tags": [
+          "notifications"
+        ]
       }
     },
     "/api/v1/me/support-context": {
@@ -7796,7 +8251,9 @@
           }
         ],
         "summary": "Get Support Context",
-        "tags": ["support"]
+        "tags": [
+          "support"
+        ]
       }
     },
     "/api/v1/notifications": {
@@ -7888,7 +8345,9 @@
           }
         ],
         "summary": "List Notifications",
-        "tags": ["notifications"]
+        "tags": [
+          "notifications"
+        ]
       }
     },
     "/api/v1/notifications/push-tokens": {
@@ -7932,7 +8391,9 @@
           }
         ],
         "summary": "Register Push Token",
-        "tags": ["notifications"]
+        "tags": [
+          "notifications"
+        ]
       }
     },
     "/api/v1/notifications/read-all": {
@@ -7985,7 +8446,9 @@
           }
         ],
         "summary": "Mark All Notifications Read",
-        "tags": ["notifications"]
+        "tags": [
+          "notifications"
+        ]
       }
     },
     "/api/v1/notifications/stream": {
@@ -8007,7 +8470,9 @@
           }
         ],
         "summary": "Stream Notifications",
-        "tags": ["notifications"]
+        "tags": [
+          "notifications"
+        ]
       }
     },
     "/api/v1/notifications/unread-count": {
@@ -8060,7 +8525,9 @@
           }
         ],
         "summary": "Get Unread Count",
-        "tags": ["notifications"]
+        "tags": [
+          "notifications"
+        ]
       }
     },
     "/api/v1/notifications/{notification_id}/read": {
@@ -8123,7 +8590,9 @@
           }
         ],
         "summary": "Mark Notification Read",
-        "tags": ["notifications"]
+        "tags": [
+          "notifications"
+        ]
       }
     },
     "/api/v1/notifications/{notification_id}/unread": {
@@ -8187,7 +8656,9 @@
           }
         ],
         "summary": "Mark Notification Unread",
-        "tags": ["notifications"]
+        "tags": [
+          "notifications"
+        ]
       }
     },
     "/api/v1/orgs": {
@@ -8211,7 +8682,9 @@
           }
         ],
         "summary": "List My Orgs",
-        "tags": ["tenancy"]
+        "tags": [
+          "tenancy"
+        ]
       },
       "post": {
         "operationId": "create_org_api_v1_orgs_post",
@@ -8253,7 +8726,9 @@
           }
         ],
         "summary": "Create Org",
-        "tags": ["tenancy"]
+        "tags": [
+          "tenancy"
+        ]
       }
     },
     "/api/v1/orgs/{org_id}": {
@@ -8300,7 +8775,9 @@
           }
         ],
         "summary": "Get Org",
-        "tags": ["tenancy"]
+        "tags": [
+          "tenancy"
+        ]
       },
       "patch": {
         "operationId": "update_org_api_v1_orgs__org_id__patch",
@@ -8354,7 +8831,9 @@
           }
         ],
         "summary": "Update Org",
-        "tags": ["tenancy"]
+        "tags": [
+          "tenancy"
+        ]
       }
     },
     "/api/v1/orgs/{org_id}/feature-flags": {
@@ -8400,7 +8879,9 @@
           }
         ],
         "summary": "List Feature Flags",
-        "tags": ["feature_flags"]
+        "tags": [
+          "feature_flags"
+        ]
       }
     },
     "/api/v1/orgs/{org_id}/invitations": {
@@ -8475,7 +8956,9 @@
           }
         ],
         "summary": "List Invitations",
-        "tags": ["tenancy"]
+        "tags": [
+          "tenancy"
+        ]
       },
       "post": {
         "operationId": "create_invitation_api_v1_orgs__org_id__invitations_post",
@@ -8529,7 +9012,9 @@
           }
         ],
         "summary": "Create Invitation",
-        "tags": ["tenancy"]
+        "tags": [
+          "tenancy"
+        ]
       }
     },
     "/api/v1/orgs/{org_id}/invitations/{invitation_id}": {
@@ -8585,7 +9070,9 @@
           }
         ],
         "summary": "Revoke Invitation",
-        "tags": ["tenancy"]
+        "tags": [
+          "tenancy"
+        ]
       }
     },
     "/api/v1/orgs/{org_id}/invitations/{invitation_id}/resend": {
@@ -8641,7 +9128,9 @@
           }
         ],
         "summary": "Resend Invitation",
-        "tags": ["tenancy"]
+        "tags": [
+          "tenancy"
+        ]
       }
     },
     "/api/v1/orgs/{org_id}/leave": {
@@ -8687,7 +9176,9 @@
           }
         ],
         "summary": "Leave Org",
-        "tags": ["tenancy"]
+        "tags": [
+          "tenancy"
+        ]
       }
     },
     "/api/v1/orgs/{org_id}/logo": {
@@ -8734,7 +9225,9 @@
           }
         ],
         "summary": "Get Org Logo",
-        "tags": ["tenancy"]
+        "tags": [
+          "tenancy"
+        ]
       }
     },
     "/api/v1/orgs/{org_id}/members": {
@@ -8829,7 +9322,9 @@
           }
         ],
         "summary": "List Members",
-        "tags": ["tenancy"]
+        "tags": [
+          "tenancy"
+        ]
       }
     },
     "/api/v1/orgs/{org_id}/members/{membership_id}": {
@@ -8885,7 +9380,9 @@
           }
         ],
         "summary": "Remove Member",
-        "tags": ["tenancy"]
+        "tags": [
+          "tenancy"
+        ]
       },
       "patch": {
         "operationId": "update_member_role_api_v1_orgs__org_id__members__membership_id__patch",
@@ -8949,7 +9446,9 @@
           }
         ],
         "summary": "Update Member Role",
-        "tags": ["tenancy"]
+        "tags": [
+          "tenancy"
+        ]
       }
     },
     "/api/v1/orgs/{org_id}/members/{membership_id}/avatar": {
@@ -9006,7 +9505,9 @@
           }
         ],
         "summary": "Get Member Avatar",
-        "tags": ["tenancy"]
+        "tags": [
+          "tenancy"
+        ]
       }
     },
     "/api/v1/webhooks/deliveries/{delivery_id}": {
@@ -9069,7 +9570,9 @@
           }
         ],
         "summary": "Get Delivery",
-        "tags": ["webhooks"]
+        "tags": [
+          "webhooks"
+        ]
       }
     },
     "/api/v1/webhooks/deliveries/{delivery_id}/replay": {
@@ -9133,7 +9636,9 @@
           }
         ],
         "summary": "Replay Delivery",
-        "tags": ["webhooks"]
+        "tags": [
+          "webhooks"
+        ]
       }
     },
     "/api/v1/webhooks/endpoints": {
@@ -9215,7 +9720,9 @@
           }
         ],
         "summary": "List Endpoints",
-        "tags": ["webhooks"]
+        "tags": [
+          "webhooks"
+        ]
       },
       "post": {
         "description": "Registers an endpoint and returns its signing secret **once**. The secret is stored encrypted and is never returned by any later read; rotate it if it is lost. The URL is checked against the outbound guard both here and again immediately before every delivery.",
@@ -9277,7 +9784,9 @@
           }
         ],
         "summary": "Create Endpoint",
-        "tags": ["webhooks"]
+        "tags": [
+          "webhooks"
+        ]
       }
     },
     "/api/v1/webhooks/endpoints/{endpoint_id}": {
@@ -9340,7 +9849,9 @@
           }
         ],
         "summary": "Delete Endpoint",
-        "tags": ["webhooks"]
+        "tags": [
+          "webhooks"
+        ]
       },
       "get": {
         "operationId": "get_endpoint_api_v1_webhooks_endpoints__endpoint_id__get",
@@ -9401,7 +9912,9 @@
           }
         ],
         "summary": "Get Endpoint",
-        "tags": ["webhooks"]
+        "tags": [
+          "webhooks"
+        ]
       },
       "patch": {
         "operationId": "update_endpoint_api_v1_webhooks_endpoints__endpoint_id__patch",
@@ -9472,7 +9985,9 @@
           }
         ],
         "summary": "Update Endpoint",
-        "tags": ["webhooks"]
+        "tags": [
+          "webhooks"
+        ]
       }
     },
     "/api/v1/webhooks/endpoints/{endpoint_id}/deliveries": {
@@ -9526,7 +10041,12 @@
             "schema": {
               "anyOf": [
                 {
-                  "enum": ["pending", "delivered", "failed", "dead"],
+                  "enum": [
+                    "pending",
+                    "delivered",
+                    "failed",
+                    "dead"
+                  ],
                   "type": "string"
                 },
                 {
@@ -9582,7 +10102,9 @@
           }
         ],
         "summary": "List Deliveries",
-        "tags": ["webhooks"]
+        "tags": [
+          "webhooks"
+        ]
       }
     },
     "/api/v1/webhooks/endpoints/{endpoint_id}/rotate-secret": {
@@ -9646,7 +10168,9 @@
           }
         ],
         "summary": "Rotate Secret",
-        "tags": ["webhooks"]
+        "tags": [
+          "webhooks"
+        ]
       }
     },
     "/api/v1/webhooks/event-types": {
@@ -9700,7 +10224,9 @@
           }
         ],
         "summary": "List Event Types",
-        "tags": ["webhooks"]
+        "tags": [
+          "webhooks"
+        ]
       }
     },
     "/health": {
