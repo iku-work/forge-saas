@@ -226,7 +226,7 @@ const ShellSearchButton = forwardRef<HTMLButtonElement, ShellSearchButtonProps>(
 ShellSearchButton.displayName = "ShellSearchButton";
 
 interface ShellPanelProps extends HTMLAttributes<HTMLDivElement> {
-  /** The panel's top row: breadcrumb, and the drawer trigger on narrow screens. */
+  /** The panel's top row: the sidebar toggle, or the drawer trigger on narrow screens. */
   top?: ReactNode;
 }
 

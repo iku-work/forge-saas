@@ -66,29 +66,6 @@ import { useOrgLogoSrc } from "../lib/useOrgLogoSrc";
 import { useSidebarCollapsed } from "../lib/useSidebarCollapsed";
 import { useRouteLocale } from "../lib/useRouteLocale";
 
-// Route paths that sit one level under "Settings" in the header breadcrumb
-// -- "/" gets its nav label directly with no prefix (see pageTitleFor).
-const SETTINGS_PAGE_TITLE_KEYS: Record<string, string> = {
-  "/settings/profile": "common.nav.profile",
-  "/settings/security": "common.nav.security",
-  "/settings/org": "common.nav.organization",
-  "/settings/members": "common.nav.members",
-  "/settings/billing": "common.nav.billing",
-  "/settings/notifications": "common.nav.notifications",
-  "/settings/api-keys": "common.nav.api_keys",
-  "/settings/webhooks": "common.nav.webhooks",
-};
-
-function pageTitleFor(pathname: string, t: (key: string) => string): string {
-  if (pathname === "/files") return t("common.nav.files");
-  if (pathname === "/reports") return t("common.nav.reports");
-  const settingsKey = SETTINGS_PAGE_TITLE_KEYS[pathname];
-  if (settingsKey) {
-    return `${t("common.nav.settings")} / ${t(settingsKey)}`;
-  }
-  return t("common.nav.dashboard");
-}
-
 function initialsFor(email: string): string {
   return email.slice(0, 2).toUpperCase();
 }
@@ -349,8 +326,8 @@ function CreateFirstOrgPrompt() {
  * a mode you enter rather than destinations you keep beside your work.
  *
  * Getting back out is the cost, so there are several ways: "Back to app" at
- * the top of the settings sidebar, Dashboard in the user menu, the
- * breadcrumb, and ⌘K, which reaches every page from either mode.
+ * the top of the settings sidebar, Dashboard in the user menu, and ⌘K,
+ * which reaches every page from either mode.
  *
  * This renders the whole sidebar -- header, navigation and footer -- so the
  * desktop column and the phone drawer are the same component and cannot
@@ -569,8 +546,6 @@ export function AppLayout({ children }: { children: ReactNode }) {
     return <CreateFirstOrgPrompt />;
   }
 
-  const pageTitle = pageTitleFor(activePath, t);
-
   const toggleLabel = t(
     sidebar.collapsed
       ? "common.nav.expand_sidebar"
@@ -642,10 +617,6 @@ export function AppLayout({ children }: { children: ReactNode }) {
                     />
                   </SheetContent>
                 </Sheet>
-                {/* Not a heading -- the breadcrumb duplicates the page's own <h1>
-                  (e.g. DashboardPage's "Dashboard"); a second <h1> with the same
-                  text would be both invalid document structure and ambiguous
-                  for screen-reader/role-based queries. */}
                 {/* Only where the sidebar is a column; on narrow screens the
                   drawer trigger above takes its place. */}
                 <RailTooltip label={toggleLabel} enabled>
@@ -661,7 +632,6 @@ export function AppLayout({ children }: { children: ReactNode }) {
                     <PanelLeft className="size-4" aria-hidden="true" />
                   </button>
                 </RailTooltip>
-                <p className="flex-1 truncate">{pageTitle}</p>
               </>
             }
           >
