@@ -11,8 +11,9 @@
 #   - ZAP_SCANNER_EMAIL (secret)     -- login for a dedicated MEMBER-role
 #                                        user, its own org, synthetic data
 #   - ZAP_SCANNER_PASSWORD (secret)
-# Until STAGING_URL is set the "ZAP full scan" step below fails on its first
-# request; that's the intended signal that staging isn't wired up yet.
+# Until STAGING_URL is set the job is skipped (grey, not red). It used to run
+# and fail every night, which taught everyone to ignore this workflow -- the
+# opposite of a signal (changed 2026-10-14).
 #
 # Rotate ZAP_SCANNER_EMAIL/PASSWORD the same way as every other staging
 # secret: rotate the password on the staging user itself (or recreate the
@@ -31,6 +32,7 @@ on:
 
 jobs:
   zap-full-scan:
+    if: vars.STAGING_URL != ''
     runs-on: ubuntu-latest
     timeout-minutes: 45
 
