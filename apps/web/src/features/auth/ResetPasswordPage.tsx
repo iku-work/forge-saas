@@ -40,7 +40,7 @@ export function ResetPasswordPage({ token }: ResetPasswordPageProps) {
 
   const form = useForm<PasswordResetInput>({
     resolver: zodResolver(passwordResetSchema),
-    defaultValues: { token: token ?? "", newPassword: "" },
+    defaultValues: { token: token ?? "", newPassword: "", confirmPassword: "" },
   });
 
   if (!token) {
@@ -132,6 +132,21 @@ export function ResetPasswordPage({ token }: ResetPasswordPageProps) {
                   {t("auth.reset_password.password_helper")}
                 </p>
                 <PasswordStrengthMeter password={field.value} />
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+          <FormField
+            control={form.control}
+            name="confirmPassword"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>
+                  {t("auth.reset_password.confirm_password_label")}
+                </FormLabel>
+                <FormControl>
+                  <PasswordInput autoComplete="new-password" {...field} />
+                </FormControl>
                 <FormMessage />
               </FormItem>
             )}

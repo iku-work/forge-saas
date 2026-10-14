@@ -132,6 +132,10 @@ describe("SecuritySettingsPage", () => {
       "Correct-Horse9",
     );
     await interaction.type(newPasswordField, "Even-Better-Horse8");
+    await interaction.type(
+      passwordFormScope.getByLabelText("Repeat new password"),
+      "Even-Better-Horse8",
+    );
     await interaction.click(
       passwordFormScope.getByRole("button", { name: "Change password" }),
     );

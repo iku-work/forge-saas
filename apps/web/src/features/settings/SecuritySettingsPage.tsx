@@ -627,7 +627,11 @@ function ChangePasswordCard() {
 
   const form = useForm<ChangePasswordInput>({
     resolver: zodResolver(changePasswordSchema),
-    defaultValues: { currentPassword: "", newPassword: "" },
+    defaultValues: {
+      currentPassword: "",
+      newPassword: "",
+      confirmPassword: "",
+    },
   });
 
   const onSubmit = async (values: ChangePasswordInput): Promise<void> => {
@@ -727,6 +731,28 @@ function ChangePasswordCard() {
                         {t("auth.change_password.password_helper")}
                       </p>
                       <PasswordStrengthMeter password={field.value} />
+                      <FormMessage />
+                    </div>
+                  </SettingsRow>
+                </FormItem>
+              )}
+            />
+            <FormField
+              control={form.control}
+              name="confirmPassword"
+              render={({ field }) => (
+                <FormItem>
+                  <SettingsRow
+                    label={
+                      <FormLabel>
+                        {t("auth.change_password.confirm_password_label")}
+                      </FormLabel>
+                    }
+                  >
+                    <div className="w-full max-w-sm space-y-2">
+                      <FormControl>
+                        <PasswordInput autoComplete="new-password" {...field} />
+                      </FormControl>
                       <FormMessage />
                     </div>
                   </SettingsRow>

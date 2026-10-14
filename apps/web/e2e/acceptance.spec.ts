@@ -35,6 +35,7 @@ test("signup -> verify -> invite -> upgrade", async ({ page, browser }) => {
   await page.goto("/register");
   await page.getByTestId("register-email-input").fill(ownerEmail);
   await page.getByTestId("register-password-input").fill(password);
+  await page.getByTestId("register-confirm-password-input").fill(password);
   await page.getByTestId("register-submit").click();
   await expect(page.getByTestId("register-success")).toBeVisible();
 
@@ -95,6 +96,9 @@ test("signup -> verify -> invite -> upgrade", async ({ page, browser }) => {
     await teammatePage.goto("/register");
     await teammatePage.getByTestId("register-email-input").fill(teammateEmail);
     await teammatePage.getByTestId("register-password-input").fill(password);
+    await teammatePage
+      .getByTestId("register-confirm-password-input")
+      .fill(password);
     await teammatePage.getByTestId("register-submit").click();
     await expect(teammatePage.getByTestId("register-success")).toBeVisible();
 

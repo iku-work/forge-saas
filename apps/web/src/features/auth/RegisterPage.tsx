@@ -40,7 +40,7 @@ export function RegisterPage() {
 
   const form = useForm<RegisterInput>({
     resolver: zodResolver(registerSchema),
-    defaultValues: { email: "", password: "" },
+    defaultValues: { email: "", password: "", confirmPassword: "" },
   });
 
   const onSubmit = async (values: RegisterInput): Promise<void> => {
@@ -191,6 +191,25 @@ export function RegisterPage() {
                   {t("auth.register.password_helper")}
                 </p>
                 <PasswordStrengthMeter password={field.value} />
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+          <FormField
+            control={form.control}
+            name="confirmPassword"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>
+                  {t("auth.register.confirm_password_label")}
+                </FormLabel>
+                <FormControl>
+                  <PasswordInput
+                    autoComplete="new-password"
+                    data-testid="register-confirm-password-input"
+                    {...field}
+                  />
+                </FormControl>
                 <FormMessage />
               </FormItem>
             )}

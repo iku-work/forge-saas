@@ -59,6 +59,7 @@ test("key pages have no serious/critical WCAG A/AA violations", async ({
   // authenticated app shell every remaining page lives behind. ---
   await page.getByTestId("register-email-input").fill(ownerEmail);
   await page.getByTestId("register-password-input").fill(password);
+  await page.getByTestId("register-confirm-password-input").fill(password);
   await page.getByTestId("register-submit").click();
   await expect(page.getByTestId("register-success")).toBeVisible();
 
@@ -131,6 +132,9 @@ test("key pages have no serious/critical WCAG A/AA violations", async ({
         .getByTestId("register-email-input")
         .fill(teammateEmail);
       await teammatePage.getByTestId("register-password-input").fill(password);
+      await teammatePage
+        .getByTestId("register-confirm-password-input")
+        .fill(password);
       await teammatePage.getByTestId("register-submit").click();
       await expect(teammatePage.getByTestId("register-success")).toBeVisible();
 
@@ -209,6 +213,7 @@ test("ar (rtl) locale has no serious/critical WCAG A/AA violations", async ({
   expect(await page.evaluate(() => document.documentElement.dir)).toBe("rtl");
   await page.getByTestId("register-email-input").fill(email);
   await page.getByTestId("register-password-input").fill(rtlPassword);
+  await page.getByTestId("register-confirm-password-input").fill(rtlPassword);
   await page.getByTestId("register-submit").click();
   await expect(page.getByTestId("register-success")).toBeVisible();
 
@@ -267,6 +272,7 @@ test("dark theme has no serious/critical WCAG A/AA violations", async ({
   await page.goto("/register");
   await page.getByTestId("register-email-input").fill(email);
   await page.getByTestId("register-password-input").fill(darkPassword);
+  await page.getByTestId("register-confirm-password-input").fill(darkPassword);
   await page.getByTestId("register-submit").click();
   await expect(page.getByTestId("register-success")).toBeVisible();
 
