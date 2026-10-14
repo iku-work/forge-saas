@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useId, useState } from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { startRegistration } from "@simplewebauthn/browser";
 import type { PublicKeyCredentialCreationOptionsJSON } from "@simplewebauthn/browser";
@@ -31,10 +31,6 @@ import {
   Alert,
   AlertDescription,
   Button,
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
   Form,
   FormControl,
   FormField,
@@ -44,6 +40,10 @@ import {
   Input,
   PasswordInput,
   PasswordStrengthMeter,
+  Page,
+  PageHeader,
+  SettingsRow,
+  SettingsSection,
   Skeleton,
   Table,
   TableBody,
@@ -110,11 +110,11 @@ function SessionsCard() {
   const sessions = sessionsQuery.data?.data ?? [];
 
   return (
-    <Card>
-      <CardHeader>
-        <CardDescription>{t("auth.sessions.description")}</CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-4">
+    <SettingsSection
+      title={t("auth.sessions.title")}
+      description={t("auth.sessions.description")}
+    >
+      <div className="space-y-4 border-t border-border py-5">
         {revokeError ? (
           <Alert variant="destructive">
             <AlertDescription>{revokeError}</AlertDescription>
@@ -180,8 +180,8 @@ function SessionsCard() {
             </TableBody>
           </Table>
         )}
-      </CardContent>
-    </Card>
+      </div>
+    </SettingsSection>
   );
 }
 
@@ -292,11 +292,11 @@ function TwoFactorCard() {
   };
 
   return (
-    <Card>
-      <CardHeader>
-        <CardDescription>{t("auth.two_factor.description")}</CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-4">
+    <SettingsSection
+      title={t("auth.two_factor.title")}
+      description={t("auth.two_factor.description")}
+    >
+      <div className="space-y-4 border-t border-border py-5">
         {error ? (
           <Alert variant="destructive">
             <AlertDescription>{error}</AlertDescription>
@@ -446,8 +446,8 @@ function TwoFactorCard() {
             {t("auth.two_factor.enable")}
           </Button>
         )}
-      </CardContent>
-    </Card>
+      </div>
+    </SettingsSection>
   );
 }
 
@@ -526,11 +526,11 @@ function SecurityKeysCard() {
   const credentials = credentialsQuery.data?.data ?? [];
 
   return (
-    <Card>
-      <CardHeader>
-        <CardDescription>{t("auth.security_keys.description")}</CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-4">
+    <SettingsSection
+      title={t("auth.security_keys.title")}
+      description={t("auth.security_keys.description")}
+    >
+      <div className="space-y-4 border-t border-border py-5">
         {error ? (
           <Alert variant="destructive">
             <AlertDescription>{error}</AlertDescription>
@@ -602,13 +602,14 @@ function SecurityKeysCard() {
         >
           {t("auth.security_keys.register")}
         </Button>
-      </CardContent>
-    </Card>
+      </div>
+    </SettingsSection>
   );
 }
 
 function ChangePasswordCard() {
   const { t } = useTranslation();
+  const formId = useId();
   const [formError, setFormError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
 
@@ -626,7 +627,11 @@ function ChangePasswordCard() {
 
   const form = useForm<ChangePasswordInput>({
     resolver: zodResolver(changePasswordSchema),
-    defaultValues: { currentPassword: "", newPassword: "" },
+    defaultValues: {
+      currentPassword: "",
+      newPassword: "",
+      confirmPassword: "",
+    },
   });
 
   const onSubmit = async (values: ChangePasswordInput): Promise<void> => {
@@ -644,13 +649,22 @@ function ChangePasswordCard() {
   };
 
   return (
-    <Card>
-      <CardHeader>
-        <CardDescription>
-          {t("auth.change_password.description")}
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-4">
+    <SettingsSection
+      title={t("auth.change_password.title")}
+      description={t("auth.change_password.description")}
+      footer={
+        <Button
+          type="submit"
+          form={formId}
+          disabled={form.formState.isSubmitting || !form.formState.isDirty}
+        >
+          {form.formState.isSubmitting
+            ? t("auth.change_password.submit_pending")
+            : t("auth.change_password.submit")}
+        </Button>
+      }
+    >
+      <div className="space-y-4">
         {formError ? (
           <Alert variant="destructive">
             <AlertDescription>{formError}</AlertDescription>
@@ -666,7 +680,7 @@ function ChangePasswordCard() {
 
         <Form {...form}>
           <form
-            className="space-y-3"
+            id={formId}
             onSubmit={(event) => {
               void form.handleSubmit(onSubmit)(event);
             }}
@@ -677,13 +691,23 @@ function ChangePasswordCard() {
               name="currentPassword"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>
-                    {t("auth.change_password.current_password_label")}
-                  </FormLabel>
-                  <FormControl>
-                    <PasswordInput autoComplete="current-password" {...field} />
-                  </FormControl>
-                  <FormMessage />
+                  <SettingsRow
+                    label={
+                      <FormLabel>
+                        {t("auth.change_password.current_password_label")}
+                      </FormLabel>
+                    }
+                  >
+                    <div className="w-full max-w-sm space-y-2">
+                      <FormControl>
+                        <PasswordInput
+                          autoComplete="current-password"
+                          {...field}
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </div>
+                  </SettingsRow>
                 </FormItem>
               )}
             />
@@ -692,34 +716,59 @@ function ChangePasswordCard() {
               name="newPassword"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>
-                    {t("auth.change_password.new_password_label")}
-                  </FormLabel>
-                  <FormControl>
-                    <PasswordInput autoComplete="new-password" {...field} />
-                  </FormControl>
-                  <p className="text-xs text-muted-foreground">
-                    {t("auth.change_password.password_helper")}
-                  </p>
-                  <PasswordStrengthMeter password={field.value} />
-                  <FormMessage />
+                  <SettingsRow
+                    label={
+                      <FormLabel>
+                        {t("auth.change_password.new_password_label")}
+                      </FormLabel>
+                    }
+                  >
+                    <div className="w-full max-w-sm space-y-2">
+                      <FormControl>
+                        <PasswordInput autoComplete="new-password" {...field} />
+                      </FormControl>
+                      <p className="text-xs text-muted-foreground">
+                        {t("auth.change_password.password_helper")}
+                      </p>
+                      <PasswordStrengthMeter password={field.value} />
+                      <FormMessage />
+                    </div>
+                  </SettingsRow>
                 </FormItem>
               )}
             />
-            <Button type="submit" disabled={form.formState.isSubmitting}>
-              {form.formState.isSubmitting
-                ? t("auth.change_password.submit_pending")
-                : t("auth.change_password.submit")}
-            </Button>
+            <FormField
+              control={form.control}
+              name="confirmPassword"
+              render={({ field }) => (
+                <FormItem>
+                  <SettingsRow
+                    label={
+                      <FormLabel>
+                        {t("auth.change_password.confirm_password_label")}
+                      </FormLabel>
+                    }
+                  >
+                    <div className="w-full max-w-sm space-y-2">
+                      <FormControl>
+                        <PasswordInput autoComplete="new-password" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </div>
+                  </SettingsRow>
+                </FormItem>
+              )}
+            />
           </form>
         </Form>
-      </CardContent>
-    </Card>
+      </div>
+    </SettingsSection>
   );
 }
 
 function ChangeEmailCard() {
   const { t } = useTranslation();
+  const formId = useId();
   const [formError, setFormError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
 
@@ -760,11 +809,22 @@ function ChangeEmailCard() {
   };
 
   return (
-    <Card>
-      <CardHeader>
-        <CardDescription>{t("auth.change_email.description")}</CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-4">
+    <SettingsSection
+      title={t("auth.change_email.title")}
+      description={t("auth.change_email.description")}
+      footer={
+        <Button
+          type="submit"
+          form={formId}
+          disabled={form.formState.isSubmitting || !form.formState.isDirty}
+        >
+          {form.formState.isSubmitting
+            ? t("auth.change_email.submit_pending")
+            : t("auth.change_email.submit")}
+        </Button>
+      }
+    >
+      <div className="space-y-4">
         {formError ? (
           <Alert variant="destructive">
             <AlertDescription>{formError}</AlertDescription>
@@ -780,7 +840,7 @@ function ChangeEmailCard() {
 
         <Form {...form}>
           <form
-            className="space-y-3"
+            id={formId}
             onSubmit={(event) => {
               void form.handleSubmit(onSubmit)(event);
             }}
@@ -791,16 +851,26 @@ function ChangeEmailCard() {
               name="currentPassword"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>
-                    {t("auth.change_email.current_password_label")}
-                  </FormLabel>
-                  <FormControl>
-                    <PasswordInput autoComplete="current-password" {...field} />
-                  </FormControl>
-                  <p className="text-xs text-muted-foreground">
-                    {t("auth.change_email.current_password_helper")}
-                  </p>
-                  <FormMessage />
+                  <SettingsRow
+                    label={
+                      <FormLabel>
+                        {t("auth.change_email.current_password_label")}
+                      </FormLabel>
+                    }
+                  >
+                    <div className="w-full max-w-sm space-y-2">
+                      <FormControl>
+                        <PasswordInput
+                          autoComplete="current-password"
+                          {...field}
+                        />
+                      </FormControl>
+                      <p className="text-xs text-muted-foreground">
+                        {t("auth.change_email.current_password_helper")}
+                      </p>
+                      <FormMessage />
+                    </div>
+                  </SettingsRow>
                 </FormItem>
               )}
             />
@@ -809,25 +879,27 @@ function ChangeEmailCard() {
               name="newEmail"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>
-                    {t("auth.change_email.new_email_label")}
-                  </FormLabel>
-                  <FormControl>
-                    <Input type="email" autoComplete="email" {...field} />
-                  </FormControl>
-                  <FormMessage />
+                  <SettingsRow
+                    label={
+                      <FormLabel>
+                        {t("auth.change_email.new_email_label")}
+                      </FormLabel>
+                    }
+                  >
+                    <div className="w-full max-w-sm space-y-2">
+                      <FormControl>
+                        <Input type="email" autoComplete="email" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </div>
+                  </SettingsRow>
                 </FormItem>
               )}
             />
-            <Button type="submit" disabled={form.formState.isSubmitting}>
-              {form.formState.isSubmitting
-                ? t("auth.change_email.submit_pending")
-                : t("auth.change_email.submit")}
-            </Button>
           </form>
         </Form>
-      </CardContent>
-    </Card>
+      </div>
+    </SettingsSection>
   );
 }
 
@@ -874,13 +946,11 @@ function LinkedAccountsCard() {
   );
 
   return (
-    <Card>
-      <CardHeader>
-        <CardDescription>
-          {t("auth.linked_accounts.description")}
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-3">
+    <SettingsSection
+      title={t("auth.linked_accounts.title")}
+      description={t("auth.linked_accounts.description")}
+    >
+      <div className="space-y-3 border-t border-border py-5">
         {unlinkError ? (
           <Alert variant="destructive">
             <AlertDescription>{unlinkError}</AlertDescription>
@@ -921,8 +991,8 @@ function LinkedAccountsCard() {
             );
           })
         )}
-      </CardContent>
-    </Card>
+      </div>
+    </SettingsSection>
   );
 }
 
@@ -930,8 +1000,11 @@ export function SecuritySettingsPage() {
   const { t } = useTranslation();
   const modules = useModules();
   return (
-    <div className="max-w-xl space-y-6 p-6">
-      <h1 className="text-xl font-semibold" data-testid="page-title">{t("common.nav.security")}</h1>
+    <Page>
+      <PageHeader
+        title={t("common.nav.security")}
+        description={t("auth.security_page.description")}
+      />
       <ChangePasswordCard />
       <ChangeEmailCard />
       <SessionsCard />
@@ -946,6 +1019,6 @@ export function SecuritySettingsPage() {
           <LinkedAccountsCard />
         </div>
       ) : null}
-    </div>
+    </Page>
   );
 }

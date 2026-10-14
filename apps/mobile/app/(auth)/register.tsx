@@ -21,7 +21,7 @@ export default function RegisterScreen() {
 
   const { control, handleSubmit, formState } = useForm<RegisterInput>({
     resolver: zodResolver(registerSchema),
-    defaultValues: { email: "", password: "" },
+    defaultValues: { email: "", password: "", confirmPassword: "" },
   });
 
   const onSubmit = async (values: RegisterInput): Promise<void> => {
@@ -76,6 +76,13 @@ export default function RegisterScreen() {
         name="password"
         label={t("auth.register.password_label")}
         hint={t("auth.register.password_helper")}
+        secureTextEntry
+        autoComplete="new-password"
+      />
+      <FormField
+        control={control}
+        name="confirmPassword"
+        label={t("auth.register.confirm_password_label")}
         secureTextEntry
         autoComplete="new-password"
       />

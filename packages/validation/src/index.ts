@@ -16,25 +16,44 @@ export const passwordSchema = z
   .min(12, "validation.password.min_length")
   .max(128, "validation.password.max_length");
 
+// Typed twice wherever a password is chosen, so a slip of the finger is caught
+// here rather than at the next sign-in. Client-side only: the API takes the
+// password once, and nothing here is sent to it.
+const confirmPasswordSchema = z.string().min(1, "validation.required");
+
+const MISMATCH = {
+  message: "validation.password.mismatch",
+  path: ["confirmPassword"],
+};
+
 export const loginSchema = z.object({
   email: z.string().email("validation.email_invalid"),
   password: z.string().min(1, "validation.required"),
 });
 
-export const registerSchema = z.object({
-  email: z.string().email("validation.email_invalid"),
-  password: passwordSchema,
-});
+export const registerSchema = z
+  .object({
+    email: z.string().email("validation.email_invalid"),
+    password: passwordSchema,
+    confirmPassword: confirmPasswordSchema,
+  })
+  .refine((v) => v.password === v.confirmPassword, MISMATCH);
 
-export const passwordResetSchema = z.object({
-  token: z.string().min(1, "validation.required"),
-  newPassword: passwordSchema,
-});
+export const passwordResetSchema = z
+  .object({
+    token: z.string().min(1, "validation.required"),
+    newPassword: passwordSchema,
+    confirmPassword: confirmPasswordSchema,
+  })
+  .refine((v) => v.newPassword === v.confirmPassword, MISMATCH);
 
-export const changePasswordSchema = z.object({
-  currentPassword: z.string().min(1, "validation.current_password_required"),
-  newPassword: passwordSchema,
-});
+export const changePasswordSchema = z
+  .object({
+    currentPassword: z.string().min(1, "validation.current_password_required"),
+    newPassword: passwordSchema,
+    confirmPassword: confirmPasswordSchema,
+  })
+  .refine((v) => v.newPassword === v.confirmPassword, MISMATCH);
 
 export const forgotPasswordSchema = z.object({
   email: z.string().email("validation.email_invalid"),

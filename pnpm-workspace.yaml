@@ -98,15 +98,23 @@ overrides:
   # major it was asked for.
   "fast-uri@3": ">=3.1.7 <4"
   "devalue@5": ">=5.9.3 <6"
-  "seroval@1": ">=1.6.3 <2"
-  "compression@1": ">=1.8.2 <2"
-  "source-map-js@1": ">=1.2.2 <2"
-  "proxy-addr@2": ">=2.0.8 <3"
   "js-yaml@3": ">=3.15.0 <4"
   "nanoid@3": ">=3.3.18 <4"
   "postcss@8": ">=8.5.18 <9"
   "shell-quote@1": ">=1.11.0 <2"
   "socket.io-parser@4": ">=4.2.7 <5"
+  # 2026-10-10: advisories published after the pins above (CVE-2026-87776
+  # compression, -104845/-104846 seroval, -102422 shell-quote, -93749
+  # source-map-js). Same rule: each stays on its own major.
+  "compression@1": ">=1.8.2 <2"
+  "seroval@1": ">=1.6.3 <2"
+  # Kept level with seroval: the plugins are released in lockstep with it.
+  "seroval-plugins@1": ">=1.6.3 <2"
+  "source-map-js@1": ">=1.2.2 <2"
+  # Same day, from `pnpm audit`: http-cache-semantics (GHSA-ch52-4w7c-c8xp)
+  # and proxy-addr (GHSA-jqcg-44mw-7w3h, via @lhci/cli>express).
+  "http-cache-semantics@4": ">=4.2.1 <5"
+  "proxy-addr@2": ">=2.0.8 <3"
   # Found by `pnpm audit`, which reads the GitHub advisory database and so
   # sees a different (larger) set than trivy does. Same rule as above: each
   # stays inside the major its consumers asked for.
@@ -170,18 +178,16 @@ auditConfig:
     # server certificate). The advisory names >=1.4.1; npm's latest is 1.4.0
     # (2026-10-02). Take the fix once it is published.
     - GHSA-86w9-cpqp-85rv
-    # http-cache-semantics (via astro, build time only: the marketing site is
-    # static) and braces (via react-native's codegen>jscodeshift>micromatch).
-    # Both advisories name versions npm has not published (4.2.1 and 3.0.4
-    # as of 2026-10-13). Take the fixes once they exist.
-    - GHSA-ch52-4w7c-c8xp
-    - GHSA-vfj7-8cjw-p6xm
     # tmp, via @lhci/cli>inquirer>external-editor. A fix exists (0.2.6) but its
     # consumers ask for ^0.0.33 and ^0.1.0 -- in 0.x semver those are two
     # breaking jumps away, forced on a transitive dependency of a dev-only
     # measurement tool. Not worth the risk of breaking the Lighthouse runner
     # to silence a temp-file race it reaches only on this machine's own disk.
     - GHSA-ph9p-34f9-6g65
+    # braces, via micromatch in the build tooling (tailwind, nativewind, the
+    # Storybook runner). The advisory names >=3.0.4; npm's latest is 3.0.3
+    # (2026-10-10). Take the fix once it is published.
+    - GHSA-vfj7-8cjw-p6xm
 
 patchedDependencies:
   expo-localization@16.0.1: patches/expo-localization@16.0.1.patch

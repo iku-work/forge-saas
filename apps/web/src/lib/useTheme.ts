@@ -4,9 +4,9 @@ import { updateMeApiV1AuthMePatch } from "@forge/api-client";
 import { useAuth } from "@forge/hooks";
 
 import {
-  adoptServerPreference,
   getPreference,
   getResolvedTheme,
+  reconcileServerPreference,
   setPreference,
   subscribeTheme,
   type ResolvedTheme,
@@ -67,6 +67,9 @@ export function useTheme(): UseThemeResult {
  * The local preference is applied first (by startThemeSync, from
  * localStorage), so the common case -- same device, unchanged choice -- never
  * repaints: adoptServerPreference() short-circuits when the value matches.
+ * An account still on its default "system" does not overrule a choice made
+ * on this device; that choice is saved to the account instead (see
+ * reconcileServerPreference).
  */
 export function useServerThemeSync(): void {
   const { user } = useAuth();
@@ -74,7 +77,12 @@ export function useServerThemeSync(): void {
 
   useEffect(() => {
     if (theme === "light" || theme === "dark" || theme === "system") {
-      adoptServerPreference(theme);
+      const keep = reconcileServerPreference(theme);
+      if (keep) {
+        // Fire and forget, like setTheme: if it fails the choice still holds
+        // on this device and is offered again on the next sign-in.
+        void updateMeApiV1AuthMePatch({ body: { theme: keep } });
+      }
     }
   }, [theme]);
 }

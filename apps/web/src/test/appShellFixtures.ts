@@ -63,6 +63,12 @@ export function makeMembership(
     role,
     invited_by: null,
     created_at: "2026-01-01T00:00:00Z",
+    user: {
+      full_name: user.full_name ?? null,
+      email: user.email,
+      avatar_url: user.avatar_url ?? null,
+      has_uploaded_avatar: user.has_uploaded_avatar ?? false,
+    },
   };
 }
 
@@ -241,6 +247,10 @@ export function makeStoredFile(
     // about the pending or infected cases override it.
     virus_scan_result: "clean",
     uploaded_by: fixtureUser.id,
+    uploader: {
+      full_name: fixtureUser.full_name ?? null,
+      email: fixtureUser.email,
+    },
     created_at: "2026-01-01T00:00:00Z",
     updated_at: "2026-01-01T00:00:00Z",
     ...overrides,

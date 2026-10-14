@@ -37,7 +37,11 @@
     "webhooks": "Webhooks",
     "open_menu": "Abrir menú",
     "menu": "Menú",
-    "skip_to_content": "Saltar al contenido"
+    "skip_to_content": "Saltar al contenido",
+    "back_to_app": "Volver a la aplicación",
+    "collapse_sidebar": "Contraer barra lateral",
+    "expand_sidebar": "Expandir barra lateral",
+    "group_account": "Tu cuenta"
   },
   "support": {
     "contact": "Contactar con soporte",
@@ -60,14 +64,6 @@
   "locale_switcher": {
     "label": "Idioma",
     "select_hint": "Establece este como el idioma de tu aplicación"
-  },
-  "dashboard": {
-    "empty": "Aún no hay nada aquí.",
-    "empty_title": "Bienvenido: tu espacio está listo",
-    "empty_body": "Aquí no hay nada todavía porque acabas de empezar. Elige uno de los pasos de abajo o usa el botón de búsqueda de la cabecera (o pulsa Ctrl/Cmd + K) para ir a cualquier parte.",
-    "empty_action_files": "Sube tu primer archivo",
-    "empty_action_invite": "Invita a un compañero",
-    "empty_action_profile": "Completa tu perfil"
   },
   "not_found": {
     "title": "Página no encontrada",
@@ -104,7 +100,6 @@
   },
   "admin": {
     "badge": "Admin",
-    "back_to_app": "Volver a la aplicación",
     "nav": {
       "dashboard": "Panel",
       "orgs": "Organizaciones",
@@ -314,7 +309,8 @@
       "raw_save": "Reemplazar configuración",
       "raw_invalid_json": "Eso no es JSON válido.",
       "raw_not_an_object": "La configuración debe ser un objeto JSON."
-    }
+    },
+    "console": "Consola de administración"
   },
   "banner": {
     "dismiss": "Cerrar el aviso",
@@ -358,6 +354,29 @@
     "close": "Cerrar un diálogo o menú",
     "goto_dashboard": "Ir al panel",
     "goto_files": "Ir a los archivos",
-    "goto_settings": "Ir a los ajustes"
+    "goto_settings": "Ir a los ajustes",
+    "toggle_sidebar": "Contraer o expandir la barra lateral"
+  },
+  "dashboard": {
+    "checklist_title": "Primeros pasos",
+    "progress": "{done} de {total} completados",
+    "ready_body": "Tu organización está lista.",
+    "shortcut_note": "Pulsa {shortcut} para ir a cualquier página o acción.",
+    "step_done": "Hecho",
+    "step_files_action": "Subir archivo",
+    "step_files_hint": "Los archivos son privados de tu organización y se analizan antes de que nadie pueda abrirlos.",
+    "step_files_title": "Sube tu primer archivo",
+    "step_invite_action": "Invitar miembro",
+    "step_invite_hint": "Los miembros tienen su propio acceso y el rol que elijas.",
+    "step_invite_title": "Invita a un miembro",
+    "step_plan_action": "Ver planes",
+    "step_plan_hint": "Elige el plan que se adapte a tu organización.",
+    "step_plan_title": "Elige un plan",
+    "step_profile_action": "Editar perfil",
+    "step_profile_hint": "Añade tu nombre y una foto para que los miembros te reconozcan.",
+    "step_profile_hint_no_photo": "Añade tu nombre para que los miembros te reconozcan.",
+    "step_profile_title": "Completa tu perfil",
+    "welcome_body": "Unos pocos pasos antes de que tu organización esté lista.",
+    "welcome_title": "Te damos la bienvenida a {org}"
   }
 }

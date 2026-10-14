@@ -38,6 +38,8 @@ from app.core.exceptions import (
 )
 from app.models._mixins import utcnow
 from app.modules.audit.service import AuditService
+from app.modules.auth.models import User
+from app.modules.auth.service import AuthService
 from app.modules.billing.dependencies import OrgSubscription
 from app.modules.notifications.service import NotificationService
 from app.modules.storage.backend import ObjectChangedError, get_storage_backend
@@ -83,6 +85,8 @@ _DEFAULT_ALLOWED_CONTENT_TYPES = frozenset(
 # "configurable per bucket").
 _BUCKET_ALLOWED_CONTENT_TYPES: dict[str, frozenset[str]] = {
     "avatars": frozenset({"image/jpeg", "image/png", "image/webp"}),
+    # No SVG: it can carry script, and a logo is shown on every page.
+    "logos": frozenset({"image/jpeg", "image/png", "image/webp"}),
 }
 
 _SLUG_DISALLOWED = re.compile(r"[^a-z0-9]+")
@@ -352,6 +356,10 @@ class StorageService:
         self, after: UUID | None, limit: int, *, bucket: str | None = None
     ) -> tuple[list[StoredFile], UUID | None]:
         return await self._repo.list_cursor_filtered(after, limit, bucket=bucket)
+
+    async def uploaders_for(self, files: list[StoredFile]) -> dict[UUID, User]:
+        """The users who uploaded a page of files, in one query (T-243)."""
+        return await AuthService(self._session).users_by_ids({f.uploaded_by for f in files})
 
     async def get_download_url(self, file_id: UUID) -> tuple[str, datetime]:
         stored_file = await self._repo.get_or_raise(file_id)

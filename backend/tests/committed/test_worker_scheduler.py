@@ -481,6 +481,8 @@ async def test_create_scheduler_registers_all_jobs_in_utc(redis_client: Redis) -
         # hard-delete is one Redis entry seven days out, and anything that
         # loses it loses the deletion silently.
         "sweep_orphaned_objects",
+        # Avatars and logos nothing points at any more (a replaced photo).
+        "retire_unused_images",
         # The other half of counting live presigns toward the storage quota:
         # without it an abandoned upload holds its org's allowance forever.
         "expire_abandoned_uploads",
@@ -536,7 +538,12 @@ async def test_the_big_sweeps_never_share_a_slot(redis_client: Redis) -> None:
     # is how a slow one starves the next. Likewise the two hourly jobs that
     # took minutes of their own.
     jobs = {job.id: job.trigger for job in create_scheduler(redis_client).get_jobs()}
-    daily = ["prune_old_notifications", "prune_webhook_deliveries", "sweep_orphaned_objects"]
+    daily = [
+        "prune_old_notifications",
+        "prune_webhook_deliveries",
+        "sweep_orphaned_objects",
+        "retire_unused_images",
+    ]
     hours = [_fire_times(jobs[job_id])[0].hour for job_id in daily]
     assert len(set(hours)) == len(hours), dict(zip(daily, hours, strict=True))
 

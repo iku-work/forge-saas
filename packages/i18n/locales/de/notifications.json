@@ -43,7 +43,8 @@
     "type_file_infected": "Eine von Ihnen hochgeladene Datei wird als infiziert eingestuft",
     "channel_required": "erforderlich",
     "required_note": "Über Zahlungsprobleme informieren wir Sie immer per E-Mail; das lässt sich nicht abschalten — sonst würden Sie den Zugang ohne Vorwarnung verlieren.",
-    "type_webhook_endpoint_disabled": "Ein Webhook-Endpunkt wird nach wiederholten Fehlern deaktiviert"
+    "type_webhook_endpoint_disabled": "Ein Webhook-Endpunkt wird nach wiederholten Fehlern deaktiviert",
+    "section_title": "Wie Sie jede Benachrichtigung erhalten"
   },
   "types": {
     "member_invited": {

@@ -384,6 +384,22 @@ async def test_list_files_member_can_read(
     assert len(response.json()["data"]) == 1
 
 
+async def test_list_files_names_each_files_uploader(
+    client: httpx.AsyncClient, session: AsyncSession, owner: User, org: Organization
+) -> None:
+    """The Files list's uploader column shows a person, not two letters of a
+    user id (visual overhaul follow-up)."""
+    await _presign(client, owner, org)
+    member = await _add_member(session, org)
+
+    response = await client.get("/api/v1/files", headers=_headers(member, org))
+
+    assert response.json()["data"][0]["uploader"] == {
+        "full_name": owner.full_name,
+        "email": owner.email,
+    }
+
+
 async def test_list_files_filters_by_bucket(
     client: httpx.AsyncClient, owner: User, org: Organization
 ) -> None:

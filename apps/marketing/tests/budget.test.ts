@@ -14,14 +14,25 @@
  * shape: a correct build cannot demonstrate a checker that catches incorrect
  * ones. The committed fixture is clean, and each case mutates one file.
  */
-import { cpSync, existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import {
+  cpSync,
+  existsSync,
+  mkdtempSync,
+  readFileSync,
+  readdirSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { beforeAll, describe, expect, it } from "vitest";
 
-import { findBudgetProblems } from "../scripts/check-budget.mjs";
+import {
+  FONT_FILE_BUDGET_BYTES,
+  findBudgetProblems,
+} from "../scripts/check-budget.mjs";
 import {
   FIXTURE_ENTRYPOINT,
   FIXTURE_ROUTE,
@@ -67,7 +78,8 @@ async function problemsWith(
  * would then fail on the webfont rule instead of the rule it is about. Cases
  * that *are* about the preload leave it out explicitly.
  */
-const PRELOAD = '<link rel="preload" as="font" href="/fonts/inter.woff2" crossorigin>';
+const PRELOAD =
+  '<link rel="preload" as="font" href="/fonts/inter.woff2" crossorigin>';
 
 /** A one-page document, for the mutations that rewrite one. */
 function page(head: string, body = "<p>Hello.</p>"): string {
@@ -86,15 +98,27 @@ describe("check-budget over the real build", () => {
     await expect(findBudgetProblems(DIST)).resolves.toEqual([]);
   });
 
-  it("finds no webfont at all, so there is no face to swap in or preload", () => {
-    // The strongest form of "handled up front": the token layer uses the
-    // system font stack, so text paints in the first frame, costs zero bytes,
-    // and cannot be the thing that delays Largest Contentful Paint. The rules
-    // above are for whoever changes that.
-    const stylesheets = readdirSync(join(DIST, "_astro")).filter((file) => file.endsWith(".css"));
-    expect(stylesheets.length).toBeGreaterThan(0);
-    for (const file of stylesheets) {
-      expect(readFileSync(join(DIST, "_astro", file), "utf-8")).not.toContain("@font-face");
+  it("ships one self-hosted family and preloads exactly one face per page", () => {
+    // ADR-0008: Instrument Sans (with Plex Sans Arabic under the same family
+    // name for Arabic glyphs). Every other face loads on demand through its
+    // unicode-range, so preloading more than the upright Latin file would
+    // spend bandwidth on faces most pages never render.
+    const css = readdirSync(join(DIST, "_astro"))
+      .filter((file) => file.endsWith(".css"))
+      .map((file) => readFileSync(join(DIST, "_astro", file), "utf-8"))
+      .join("\n");
+    const families = new Set(
+      [
+        ...css.matchAll(/@font-face\s*\{[^}]*font-family:\s*["']?([^;"']+)/g),
+      ].map((match) => match[1]),
+    );
+    expect([...families]).toEqual(["Instrument Sans"]);
+
+    for (const file of builtPages()) {
+      const preloads =
+        read(file).match(/<link[^>]*rel="preload"[^>]*as="font"[^>]*>/g) ?? [];
+      expect(preloads, file).toHaveLength(1);
+      expect(preloads[0], file).toMatch(/instrument-sans-latin\.[^"]*\.woff2/);
     }
   });
 
@@ -112,7 +136,8 @@ describe("check-budget's webfont rule", () => {
 
   it("fails a face with no font-display", async () => {
     const problems = await problemsWith({
-      "styles.css": "@font-face { font-family: Inter; src: url(/fonts/inter.woff2); }",
+      "styles.css":
+        "@font-face { font-family: Inter; src: url(/fonts/inter.woff2); }",
     });
 
     expect(problems).toContain("font-display: swap");
@@ -129,9 +154,19 @@ describe("check-budget's webfont rule", () => {
     expect(problems).toContain("loaded from another origin");
   });
 
+  it("fails a font file over the per-font budget", async () => {
+    const problems = await problemsWith({
+      "fonts/huge.woff2": "x".repeat(FONT_FILE_BUDGET_BYTES + 1),
+    });
+
+    expect(problems).toContain("fonts/huge.woff2");
+    expect(problems).toContain("per-font budget");
+  });
+
   it("fails a site with webfonts and no preload on any page", async () => {
     const problems = await problemsWith({
-      "index.html": "<!DOCTYPE html><html lang=\"en\"><head><title>T</title></head><body></body></html>",
+      "index.html":
+        '<!DOCTYPE html><html lang="en"><head><title>T</title></head><body></body></html>',
     });
 
     expect(problems).toContain('no `<link rel="preload" as="font">`');
@@ -162,7 +197,10 @@ describe("check-budget's image rule", () => {
   it("accepts an <img> with both", async () => {
     await expect(
       problemsWith({
-        "index.html": page("", '<img src="/hero.png" width="800" height="600" alt="A hero">'),
+        "index.html": page(
+          "",
+          '<img src="/hero.png" width="800" height="600" alt="A hero">',
+        ),
       }),
     ).resolves.toBe("");
   });
@@ -171,7 +209,9 @@ describe("check-budget's image rule", () => {
 describe("check-budget's third-party rule", () => {
   it("fails a script from another origin", async () => {
     const problems = await problemsWith({
-      "index.html": page('<script src="https://plausible.io/script.js"></script>'),
+      "index.html": page(
+        '<script src="https://plausible.io/script.js"></script>',
+      ),
     });
 
     expect(problems).toContain("loads from another origin");
@@ -183,13 +223,16 @@ describe("check-budget's third-party rule", () => {
       '<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter">',
       '<link rel="preconnect" href="https://fonts.gstatic.com">',
     ]) {
-      await expect(problemsWith({ "index.html": page(head) })).resolves.toContain(
-        "loads from another origin",
-      );
+      await expect(
+        problemsWith({ "index.html": page(head) }),
+      ).resolves.toContain("loads from another origin");
     }
     await expect(
       problemsWith({
-        "index.html": page("", '<iframe src="https://youtube.com/embed/x"></iframe>'),
+        "index.html": page(
+          "",
+          '<iframe src="https://youtube.com/embed/x"></iframe>',
+        ),
       }),
     ).resolves.toContain("loads from another origin");
   });
@@ -215,7 +258,10 @@ describe("check-budget's third-party rule", () => {
     // it. A link is not a subresource.
     await expect(
       problemsWith({
-        "index.html": page("", '<a href="https://app.example.com/en/register">Start</a>'),
+        "index.html": page(
+          "",
+          '<a href="https://app.example.com/en/register">Start</a>',
+        ),
       }),
     ).resolves.toBe("");
   });
@@ -229,7 +275,9 @@ describe("check-budget's third-party rule", () => {
  * page, an island and a footer, each of which only knows its own headings.
  */
 function headingLevels(html: string): number[] {
-  return [...html.matchAll(/<h([1-6])[\s>]/gi)].map((match) => Number(match[1]));
+  return [...html.matchAll(/<h([1-6])[\s>]/gi)].map((match) =>
+    Number(match[1]),
+  );
 }
 
 describe("the accessibility score the budget demands", () => {
@@ -307,7 +355,9 @@ describe("the pages the Lighthouse job measures", () => {
     expect(assertions["categories:accessibility"][1].minScore).toBe(1);
     expect(assertions["categories:best-practices"][1].minScore).toBe(0.9);
     expect(assertions["categories:seo"][1].minScore).toBe(0.95);
-    expect(assertions["largest-contentful-paint"][1].maxNumericValue).toBe(2500);
+    expect(assertions["largest-contentful-paint"][1].maxNumericValue).toBe(
+      2500,
+    );
     expect(assertions["cumulative-layout-shift"][1].maxNumericValue).toBe(0.1);
     expect(assertions["total-blocking-time"][1].maxNumericValue).toBe(200);
   });
@@ -325,7 +375,9 @@ describe("the regression fixture", () => {
 
   it("contributes no page to dist/", () => {
     expect(existsSync(join(DIST, "lighthouse-fixture"))).toBe(false);
-    expect(builtPages().some((file) => file.includes("lighthouse-fixture"))).toBe(false);
+    expect(
+      builtPages().some((file) => file.includes("lighthouse-fixture")),
+    ).toBe(false);
   });
 
   it("contributes no JavaScript to dist/ either", () => {
@@ -334,7 +386,9 @@ describe("the regression fixture", () => {
     // _astro/UnnecessaryIsland.<hash>.js anyway, because Vite follows a page
     // module's imports rather than the pages it produced.
     const chunks = readdirSync(join(DIST, "_astro"));
-    expect(chunks.some((file) => file.includes("UnnecessaryIsland"))).toBe(false);
+    expect(chunks.some((file) => file.includes("UnnecessaryIsland"))).toBe(
+      false,
+    );
   });
 
   it("still exists, and the two configs agree on where it is served", () => {

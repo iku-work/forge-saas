@@ -46,7 +46,7 @@ test.describe("deployed environment smoke", () => {
     !configured,
     "set E2E_PROD_URL, E2E_PROD_EMAIL and E2E_PROD_PASSWORD to run this",
   );
-  test.use({ reducedMotion: "reduce" });
+  test.use({ contextOptions: { reducedMotion: "reduce" } });
 
   test("every page loads, fits, and makes no failing request", async ({
     browser,
@@ -62,16 +62,24 @@ test.describe("deployed environment smoke", () => {
       // five concurrent notification streams, which a run of full page
       // loads transiently exceeds. Both explained at length in
       // modules.spec.ts.
-      if (response.status() === 401 && response.url().includes("/auth/refresh")) return;
-      if (response.status() === 429 && response.url().includes("/notifications/stream")) {
+      if (response.status() === 401 && response.url().includes("/auth/refresh"))
+        return;
+      if (
+        response.status() === 429 &&
+        response.url().includes("/notifications/stream")
+      ) {
         return;
       }
-      failures.push(`${String(response.status())} ${response.url().split("/api/v1/")[1]}`);
+      failures.push(
+        `${String(response.status())} ${response.url().split("/api/v1/")[1]}`,
+      );
     });
 
     await page.goto("/en/login");
     await page.getByTestId("login-email-input").fill(PROD_EMAIL as string);
-    await page.getByTestId("login-password-input").fill(PROD_PASSWORD as string);
+    await page
+      .getByTestId("login-password-input")
+      .fill(PROD_PASSWORD as string);
     await page.getByTestId("login-submit").click();
     await expect(page.getByTestId("app-shell")).toBeVisible();
 
@@ -100,7 +108,10 @@ test.describe("deployed environment smoke", () => {
               document.documentElement.scrollWidth -
               document.documentElement.clientWidth,
           );
-          expect(overflow, `${path} scrolls sideways at ${String(width)}px`).toBeLessThanOrEqual(0);
+          expect(
+            overflow,
+            `${path} scrolls sideways at ${String(width)}px`,
+          ).toBeLessThanOrEqual(0);
         });
       }
     }

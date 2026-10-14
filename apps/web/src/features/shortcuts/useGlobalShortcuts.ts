@@ -13,6 +13,9 @@ export interface GlobalShortcutHandlers {
   /** Called with a nav path ("/", "/files", ...) for a `g`-sequence. The
    *  caller decides whether that destination is reachable. */
   onNavigate: (path: string) => void;
+  /** `[`: collapse or expand the sidebar. Optional, so a surface without a
+   *  sidebar can use the rest of the shortcuts. */
+  onToggleSidebar?: () => void;
 }
 
 /**
@@ -84,6 +87,14 @@ export function useGlobalShortcuts(handlers: GlobalShortcutHandlers): void {
         event.preventDefault();
         pendingLead.current = null;
         handlersRef.current.onShowShortcuts();
+        return;
+      }
+
+      const onToggleSidebar = handlersRef.current.onToggleSidebar;
+      if (event.key === "[" && onToggleSidebar) {
+        event.preventDefault();
+        pendingLead.current = null;
+        onToggleSidebar();
         return;
       }
 

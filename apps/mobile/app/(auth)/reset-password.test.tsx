@@ -23,9 +23,8 @@ vi.mock("expo-router", () => ({
   Link: ({ children }: { children: ReactNode }) => children,
 }));
 
-const { default: ResetPasswordScreen } = await import(
-  "./reset-password/[token]"
-);
+const { default: ResetPasswordScreen } =
+  await import("./reset-password/[token]");
 
 describe("(auth)/reset-password/[token]", () => {
   beforeEach(() => {
@@ -41,6 +40,10 @@ describe("(auth)/reset-password/[token]", () => {
     render(<ResetPasswordScreen />);
     await user.type(
       screen.getByLabelText("New password"),
+      "Correct-Password-123",
+    );
+    await user.type(
+      screen.getByLabelText("Repeat new password"),
       "Correct-Password-123",
     );
     await user.click(screen.getByRole("button", { name: "Reset password" }));

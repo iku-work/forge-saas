@@ -7,13 +7,13 @@ import { listAdminAuditFeed } from "@forge/api-client";
 import {
   Alert,
   AlertDescription,
-  Badge,
   Button,
-  Card,
-  CardContent,
   Input,
   Label,
+  Page,
+  PageHeader,
   Skeleton,
+  StatusPill,
   Table,
   TableBody,
   TableCell,
@@ -24,8 +24,9 @@ import {
 import { formatDate } from "@forge/utils";
 
 import { useRouteLocale } from "../../lib/useRouteLocale";
+import { auditSeverityLabel } from "../../lib/statusLabels";
 import { getErrorMessage } from "../auth/getErrorMessage";
-import { useDebouncedValue } from "./useDebouncedValue";
+import { useDebouncedValue } from "../../lib/useDebouncedValue";
 
 export function AdminAuditPage() {
   const locale = useRouteLocale();
@@ -58,13 +59,14 @@ export function AdminAuditPage() {
     getNextPageParam: (lastPage) => lastPage.meta.next_cursor ?? null,
   });
 
-  const events = auditQuery.data?.pages.flatMap((page) => page.data ?? []) ?? [];
+  const events =
+    auditQuery.data?.pages.flatMap((page) => page.data ?? []) ?? [];
 
   return (
-    <div className="max-w-5xl space-y-6 p-6">
-      <h1 className="text-xl font-semibold" data-testid="page-title">{t("common.admin.audit.title")}</h1>
+    <Page>
+      <PageHeader title={t("common.admin.audit.title")} />
 
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+      <div className="mb-6 grid grid-cols-2 items-end gap-3 sm:grid-cols-4">
         <Input
           value={actor}
           onChange={(event) => {
@@ -109,78 +111,89 @@ export function AdminAuditPage() {
         </div>
       </div>
 
-      <Card>
-        <CardContent className="space-y-4 pt-6">
-          {auditQuery.isLoading ? (
-            <div className="space-y-2">
-              <Skeleton className="h-8 w-full" />
-              <Skeleton className="h-8 w-full" />
-            </div>
-          ) : auditQuery.isError ? (
-            <Alert variant="destructive">
-              <AlertDescription>
-                {getErrorMessage(auditQuery.error, "common.admin.audit.error_load")}
-              </AlertDescription>
-            </Alert>
-          ) : events.length === 0 ? (
-            <p className="text-sm text-muted-foreground">{t("common.admin.audit.no_results")}</p>
-          ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>{t("common.admin.audit.col_time")}</TableHead>
-                  <TableHead>{t("common.admin.audit.col_actor")}</TableHead>
-                  <TableHead>{t("common.admin.audit.col_action")}</TableHead>
-                  <TableHead>{t("common.admin.audit.col_org")}</TableHead>
-                  <TableHead>{t("common.admin.audit.col_severity")}</TableHead>
+      <div className="space-y-4">
+        {auditQuery.isLoading ? (
+          <div className="space-y-2">
+            <Skeleton className="h-8 w-full" />
+            <Skeleton className="h-8 w-full" />
+          </div>
+        ) : auditQuery.isError ? (
+          <Alert variant="destructive">
+            <AlertDescription>
+              {getErrorMessage(
+                auditQuery.error,
+                "common.admin.audit.error_load",
+              )}
+            </AlertDescription>
+          </Alert>
+        ) : events.length === 0 ? (
+          <p className="text-sm text-muted-foreground">
+            {t("common.admin.audit.no_results")}
+          </p>
+        ) : (
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>{t("common.admin.audit.col_time")}</TableHead>
+                <TableHead>{t("common.admin.audit.col_actor")}</TableHead>
+                <TableHead>{t("common.admin.audit.col_action")}</TableHead>
+                <TableHead>{t("common.admin.audit.col_org")}</TableHead>
+                <TableHead>{t("common.admin.audit.col_severity")}</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {events.map((event) => (
+                <TableRow key={event.id}>
+                  <TableCell className="whitespace-nowrap text-muted-foreground">
+                    {formatDate(event.ts, i18n.language)}
+                  </TableCell>
+                  <TableCell>
+                    {event.actor_email ?? t("common.admin.audit.system_actor")}
+                  </TableCell>
+                  <TableCell className="font-mono text-[0.8125rem]">
+                    {event.action}
+                  </TableCell>
+                  <TableCell>
+                    {event.org_id && event.org_name ? (
+                      <Link
+                        to="/$locale/admin/orgs/$id"
+                        params={{ locale, id: event.org_id }}
+                        className="hover:underline"
+                      >
+                        {event.org_name}
+                      </Link>
+                    ) : (
+                      "—"
+                    )}
+                  </TableCell>
+                  <TableCell>
+                    <StatusPill
+                      tone={
+                        event.severity === "elevated" ? "danger" : "neutral"
+                      }
+                    >
+                      {auditSeverityLabel(t, event.severity)}
+                    </StatusPill>
+                  </TableCell>
                 </TableRow>
-              </TableHeader>
-              <TableBody>
-                {events.map((event) => (
-                  <TableRow key={event.id}>
-                    <TableCell>{formatDate(event.ts, i18n.language)}</TableCell>
-                    <TableCell>
-                      {event.actor_email ?? t("common.admin.audit.system_actor")}
-                    </TableCell>
-                    <TableCell>{event.action}</TableCell>
-                    <TableCell>
-                      {event.org_id && event.org_name ? (
-                        <Link
-                          to="/$locale/admin/orgs/$id"
-                          params={{ locale, id: event.org_id }}
-                          className="underline underline-offset-4"
-                        >
-                          {event.org_name}
-                        </Link>
-                      ) : (
-                        "—"
-                      )}
-                    </TableCell>
-                    <TableCell>
-                      <Badge variant={event.severity === "elevated" ? "destructive" : "secondary"}>
-                        {event.severity}
-                      </Badge>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          )}
+              ))}
+            </TableBody>
+          </Table>
+        )}
 
-          {auditQuery.hasNextPage ? (
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => {
-                void auditQuery.fetchNextPage();
-              }}
-              disabled={auditQuery.isFetchingNextPage}
-            >
-              {t("common.admin.audit.load_more")}
-            </Button>
-          ) : null}
-        </CardContent>
-      </Card>
-    </div>
+        {auditQuery.hasNextPage ? (
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => {
+              void auditQuery.fetchNextPage();
+            }}
+            disabled={auditQuery.isFetchingNextPage}
+          >
+            {t("common.admin.audit.load_more")}
+          </Button>
+        ) : null}
+      </div>
+    </Page>
   );
 }

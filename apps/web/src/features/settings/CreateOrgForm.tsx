@@ -29,9 +29,15 @@ type CreateOrgInput = z.infer<typeof createOrgSchema>;
 
 interface CreateOrgFormProps {
   onCreated?: () => void;
+  /** "lg" on the full-page first-organization screen, to match the account
+   *  pages' buttons; the default inside the switcher's dialog. */
+  buttonSize?: "default" | "lg";
 }
 
-export function CreateOrgForm({ onCreated }: CreateOrgFormProps) {
+export function CreateOrgForm({
+  onCreated,
+  buttonSize = "default",
+}: CreateOrgFormProps) {
   const { t } = useTranslation();
   const { refreshOrgs } = useOrg();
   const [formError, setFormError] = useState<string | null>(null);
@@ -105,6 +111,7 @@ export function CreateOrgForm({ onCreated }: CreateOrgFormProps) {
         />
         <Button
           type="submit"
+          size={buttonSize}
           className="w-full"
           disabled={form.formState.isSubmitting}
           data-testid="create-org-submit"

@@ -9,6 +9,8 @@
  *
  * App-only styling belongs below this line, not in the shared layer. */
 @import "@forge/ui/styles/tokens.css";
+/* No <link rel=preload> for these: the app sits behind sign-in, so `swap` is enough. */
+@import "@forge/ui/styles/fonts.css";
 
 /* -- View transitions (F-006) ---------------------------------------------
  *

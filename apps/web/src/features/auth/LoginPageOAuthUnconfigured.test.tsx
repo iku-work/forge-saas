@@ -47,9 +47,12 @@ describe("LoginPage (oauth module on, no provider configured)", () => {
     expect(
       screen.queryByRole("button", { name: "Continue with GitHub" }),
     ).not.toBeInTheDocument();
-    // The separator belongs to the OAuth block, so it must go too --
-    // otherwise the page keeps an "or" with nothing on the other side.
-    expect(screen.queryByText("or")).not.toBeInTheDocument();
+    // The "or" stays because the magic link is always on its other side
+    // (ticket 11 moved it from the footer into the alternatives).
+    expect(screen.getByText("or")).toBeInTheDocument();
+    expect(
+      screen.getByRole("link", { name: "Use a magic link" }),
+    ).toBeInTheDocument();
     await expectNoA11yViolations(container);
   });
 });

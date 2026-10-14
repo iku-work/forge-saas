@@ -13,7 +13,11 @@ import type {
 } from "@forge/api-client";
 import { t } from "@forge/i18n";
 
-import { envelope, errorEnvelope, fixtureOrg } from "../../test/appShellFixtures";
+import {
+  envelope,
+  errorEnvelope,
+  fixtureOrg,
+} from "../../test/appShellFixtures";
 import { server } from "../../test/server";
 
 const hooks = vi.hoisted(() => ({ useOrg: vi.fn(), usePermission: vi.fn() }));
@@ -197,7 +201,8 @@ describe("BillingSettingsPage", () => {
     renderPage();
 
     expect(await screen.findByText("$29.00")).toBeInTheDocument();
-    expect(screen.getByText("paid")).toBeInTheDocument();
+    // Translated now (ticket 09), not Stripe's raw "paid".
+    expect(screen.getByText("Paid")).toBeInTheDocument();
     const link = screen.getByRole("link", { name: "Download PDF" });
     expect(link).toHaveAttribute(
       "href",
@@ -482,7 +487,9 @@ describe("BillingSettingsPage returning from Stripe Checkout", () => {
   it("says nothing was charged when checkout was abandoned", async () => {
     render(
       <QueryClientProvider
-        client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}
+        client={
+          new QueryClient({ defaultOptions: { queries: { retry: false } } })
+        }
       >
         <BillingSettingsPage checkout="canceled" />
       </QueryClientProvider>,
@@ -498,7 +505,9 @@ describe("BillingSettingsPage returning from Stripe Checkout", () => {
 
     // Waiting on the page proper first, so this is not a vacuous pass
     // against a page that had not rendered yet.
-    expect(await screen.findByTestId("billing-current-plan")).toBeInTheDocument();
+    expect(
+      await screen.findByTestId("billing-current-plan"),
+    ).toBeInTheDocument();
     expect(
       screen.queryByTestId("billing-checkout-canceled"),
     ).not.toBeInTheDocument();

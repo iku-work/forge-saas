@@ -16,14 +16,30 @@ from datetime import datetime
 from typing import Any, cast
 from uuid import UUID
 
-from sqlalchemy import func, select, tuple_
+from sqlalchemy import ColumnElement, func, select, tuple_
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import InvalidCursorError, NotFoundError
 from app.core.repository import DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE
 from app.models._mixins import utcnow
+from app.modules.auth.models import User
 from app.modules.auth.permissions import MemberRole
 from app.modules.tenancy.models import Invitation, Membership, Organization
+
+
+def _email_matches(email_query: str) -> ColumnElement[bool]:
+    """Memberships whose user's email contains `email_query`, in any case.
+
+    Email only: `User.full_name` is encrypted at rest (T-219), so the
+    database cannot match on it. `autoescape` makes a typed `%` or `_` a
+    literal rather than a wildcard.
+    """
+    m = cast("Any", Membership)
+    u = cast("Any", User)
+    matching_users = select(u.id).where(
+        u.email.icontains(email_query, autoescape=True), u.deleted_at.is_(None)
+    )
+    return cast("ColumnElement[bool]", m.user_id.in_(matching_users))
 
 
 class OrganizationRepository:
@@ -139,7 +155,11 @@ class MembershipRepository:
         return membership
 
     async def list_for_org(
-        self, org_id: UUID, after: UUID | None = None, limit: int = DEFAULT_PAGE_SIZE
+        self,
+        org_id: UUID,
+        after: UUID | None = None,
+        limit: int = DEFAULT_PAGE_SIZE,
+        email_query: str | None = None,
     ) -> tuple[list[Membership], UUID | None]:
         # Cursor pagination per §0.3 -- mirrors BaseRepository.list_cursor,
         # but ordered/filtered by hand since Membership isn't a
@@ -152,6 +172,8 @@ class MembershipRepository:
             .order_by(m.created_at.desc(), m.id.desc())
             .limit(capped_limit + 1)
         )
+        if email_query:
+            stmt = stmt.where(_email_matches(email_query))
         if after is not None:
             # Scoped to this org so another org's membership id stays
             # unresolvable -- but unresolvable now says so, instead of
@@ -206,11 +228,14 @@ class MembershipRepository:
         result = await self.session.execute(stmt)
         return result.scalar_one()
 
-    async def count_by_org(self, org_id: UUID) -> int:
+    async def count_by_org(self, org_id: UUID, email_query: str | None = None) -> int:
         # T-141: admin org-detail "member count" -- every role, not one at a
-        # time like count_by_org_and_role above.
+        # time like count_by_org_and_role above. Also the members list's
+        # total, counting what the same `email_query` filter matches.
         m = cast("Any", Membership)
         stmt = select(func.count()).select_from(Membership).where(m.org_id == org_id)
+        if email_query:
+            stmt = stmt.where(_email_matches(email_query))
         result = await self.session.execute(stmt)
         return result.scalar_one()
 
@@ -288,6 +313,29 @@ class InvitationRepository:
         # `page` guards a non-positive capped_limit -- see list_for_org.
         next_cursor = page[-1].id if page and len(items) > capped_limit else None
         return page, next_cursor
+
+    async def get_pending_in_org(self, org_id: UUID, invitation_id: UUID) -> Invitation | None:
+        """A not-yet-accepted invitation, only if it belongs to `org_id`."""
+        m = cast("Any", Invitation)
+        stmt = select(Invitation).where(
+            m.id == invitation_id, m.org_id == org_id, m.accepted_at.is_(None)
+        )
+        result = await self.session.execute(stmt)
+        return result.scalar_one_or_none()
+
+    async def replace_token(
+        self, invitation: Invitation, *, token_hash: str, expires_at: datetime
+    ) -> Invitation:
+        invitation.token_hash = token_hash
+        invitation.expires_at = expires_at
+        await self.session.flush()
+        return invitation
+
+    async def delete(self, invitation: Invitation) -> None:
+        # Invitation has no SoftDeleteMixin (T-025), like Membership: a
+        # revoked invitation is gone, and its link with it.
+        await self.session.delete(invitation)
+        await self.session.flush()
 
     async def get_by_token_hash(self, token_hash: str) -> Invitation | None:
         m = cast("Any", Invitation)

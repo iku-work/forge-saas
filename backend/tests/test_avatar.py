@@ -17,12 +17,15 @@ The check worth reading first is
 
 from uuid import UUID, uuid4
 
+import httpx
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import ConflictError, NotFoundError, UnprocessableEntityError
 from app.modules.auth.models import User
+from app.modules.auth.permissions import MemberRole
 from app.modules.auth.service import AuthService
+from app.modules.auth.utils import create_access_token
 from app.modules.storage import avatars as avatars_module
 from app.modules.storage.avatars import (
     AVATAR_BUCKET,
@@ -30,7 +33,7 @@ from app.modules.storage.avatars import (
     resolve_own_avatar_key,
 )
 from app.modules.storage.models import StoredFile
-from app.modules.tenancy.models import Organization
+from app.modules.tenancy.models import Membership, Organization
 
 pytestmark = pytest.mark.module_dependent  # stored_file
 
@@ -294,3 +297,34 @@ async def test_an_avatar_found_infected_after_it_was_chosen_is_not_served(
 async def test_a_deleted_avatar_is_not_found(session: AsyncSession) -> None:
     with pytest.raises(NotFoundError):
         await presign_own_avatar(session, "org/avatars/gone/me.png")
+
+
+# --- a fellow member's avatar (visual overhaul follow-up) --------------------
+
+
+@pytest.mark.usefixtures("fake_avatar_backend")
+async def test_a_fellow_members_clean_avatar_is_served(
+    session: AsyncSession, client: httpx.AsyncClient, owner: User, org: Organization
+) -> None:
+    """The members list shows photos, so a member can ask for another
+    member's -- through the same scan gate as their own, and only inside an
+    organization they share."""
+    stored = await _make_file(session, uploaded_by=owner.id, org_id=org.id)
+    owner.avatar_object_key = stored.key
+    viewer = User(email=f"viewer-{uuid4().hex[:8]}@example.com", hashed_password="x")
+    session.add(viewer)
+    await session.flush()
+    owner_membership = Membership(user_id=owner.id, org_id=org.id, role=MemberRole.OWNER)
+    session.add_all(
+        [owner_membership, Membership(user_id=viewer.id, org_id=org.id, role=MemberRole.MEMBER)]
+    )
+    await session.flush()
+    token = create_access_token(viewer.id, None, ())
+
+    response = await client.get(
+        f"/api/v1/orgs/{org.id}/members/{owner_membership.id}/avatar",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["data"]["url"] == f"https://fake.example/{stored.key}"

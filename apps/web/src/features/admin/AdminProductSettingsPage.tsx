@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from "react";
+import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 
@@ -16,13 +16,14 @@ import {
   AlertDescription,
   Badge,
   Button,
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
   Checkbox,
   Input,
   Label,
+  Page,
+  PageHeader,
+  Select,
+  SettingsRow,
+  SettingsSection,
   Skeleton,
   toast,
 } from "@forge/ui";
@@ -134,15 +135,11 @@ export function AdminProductSettingsPage() {
   });
 
   return (
-    <div className="max-w-3xl space-y-6 p-6">
-      <div className="space-y-1">
-        <h1 className="text-xl font-semibold" data-testid="page-title">
-          {t("common.admin.product_settings.title")}
-        </h1>
-        <p className="text-sm text-muted-foreground">
-          {t("common.admin.product_settings.description")}
-        </p>
-      </div>
+    <Page>
+      <PageHeader
+        title={t("common.admin.product_settings.title")}
+        description={t("common.admin.product_settings.description")}
+      />
 
       {settingsQuery.isLoading ? (
         <div className="space-y-2">
@@ -189,7 +186,7 @@ export function AdminProductSettingsPage() {
             }}
           />
 
-          <p className="text-xs text-muted-foreground">
+          <p className="mt-8 text-xs text-muted-foreground">
             {settings.updated_at
               ? t("common.admin.product_settings.last_changed", {
                   date: formatDate(settings.updated_at, i18n.language),
@@ -201,7 +198,7 @@ export function AdminProductSettingsPage() {
           </p>
         </>
       ) : null}
-    </div>
+    </Page>
   );
 }
 
@@ -271,148 +268,9 @@ function TypedSettingsForm({
   };
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>
-          {t("common.admin.product_settings.switches_title")}
-        </CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-6">
-        <Field description={documented.get("maintenance_mode")?.description}>
-          <div className="flex items-center gap-2">
-            <Checkbox
-              id="maintenance-mode"
-              checked={maintenanceMode}
-              onCheckedChange={(checked) => {
-                setMaintenanceMode(checked === true);
-              }}
-            />
-            <Label htmlFor="maintenance-mode">
-              {t("common.admin.product_settings.maintenance_mode_label")}
-            </Label>
-          </div>
-        </Field>
-
-        <Field description={documented.get("maintenance_message")?.description}>
-          <Label htmlFor="maintenance-message">
-            {t("common.admin.product_settings.maintenance_message_label")}
-          </Label>
-          <Input
-            id="maintenance-message"
-            value={maintenanceMessage}
-            onChange={(event) => {
-              setMaintenanceMessage(event.target.value);
-            }}
-            placeholder={t(
-              "common.admin.product_settings.maintenance_message_placeholder",
-            )}
-          />
-        </Field>
-
-        <Field description={documented.get("signup_disabled")?.description}>
-          <div className="flex items-center gap-2">
-            <Checkbox
-              id="signup-disabled"
-              checked={signupDisabled}
-              onCheckedChange={(checked) => {
-                setSignupDisabled(checked === true);
-              }}
-            />
-            <Label htmlFor="signup-disabled">
-              {t("common.admin.product_settings.signup_disabled_label")}
-            </Label>
-          </div>
-        </Field>
-
-        <Field description={documented.get("global_banner")?.description}>
-          <div className="flex items-center gap-2">
-            <Checkbox
-              id="banner-enabled"
-              checked={bannerEnabled}
-              onCheckedChange={(checked) => {
-                setBannerEnabled(checked === true);
-              }}
-            />
-            <Label htmlFor="banner-enabled">
-              {t("common.admin.product_settings.banner_label")}
-            </Label>
-          </div>
-          {bannerEnabled ? (
-            <div className="space-y-3 ps-6">
-              <div className="space-y-1">
-                <Label htmlFor="banner-type">
-                  {t("common.admin.product_settings.banner_type_label")}
-                </Label>
-                <select
-                  id="banner-type"
-                  value={bannerType}
-                  onChange={(event) => {
-                    setBannerType(event.target.value as BannerType);
-                  }}
-                  className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm shadow-sm"
-                >
-                  {BANNER_TYPES.map((type) => (
-                    <option key={type} value={type}>
-                      {t(`common.admin.product_settings.banner_type_${type}`)}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div className="space-y-1">
-                <Label htmlFor="banner-message">
-                  {t("common.admin.product_settings.banner_message_label")}
-                </Label>
-                <Input
-                  id="banner-message"
-                  value={bannerMessage}
-                  onChange={(event) => {
-                    setBannerMessage(event.target.value);
-                  }}
-                />
-              </div>
-              <div className="flex items-center gap-2">
-                <Checkbox
-                  id="banner-dismissible"
-                  checked={bannerDismissible}
-                  onCheckedChange={(checked) => {
-                    setBannerDismissible(checked === true);
-                  }}
-                />
-                <Label htmlFor="banner-dismissible">
-                  {t("common.admin.product_settings.banner_dismissible_label")}
-                </Label>
-              </div>
-            </div>
-          ) : null}
-        </Field>
-
-        <Field
-          description={documented.get("emergency_kill_switch")?.description}
-        >
-          <span className="text-sm font-medium">
-            {t("common.admin.product_settings.kill_switch_label")}
-          </span>
-          <div className="space-y-2 ps-1">
-            {data.killable_modules.map((module) => (
-              <div key={module} className="flex items-center gap-2">
-                <Checkbox
-                  id={`kill-${module}`}
-                  checked={killSwitch[module] === true}
-                  onCheckedChange={(checked) => {
-                    setKillSwitch((current) => ({
-                      ...current,
-                      [module]: checked === true,
-                    }));
-                  }}
-                />
-                <Label htmlFor={`kill-${module}`} className="font-normal">
-                  {module}
-                </Label>
-              </div>
-            ))}
-          </div>
-        </Field>
-
+    <SettingsSection
+      title={t("common.admin.product_settings.switches_title")}
+      footer={
         <Button
           type="button"
           onClick={handleSubmit}
@@ -423,25 +281,142 @@ function TypedSettingsForm({
             ? t("common.admin.product_settings.saving")
             : t("common.admin.product_settings.save")}
         </Button>
-      </CardContent>
-    </Card>
-  );
-}
+      }
+    >
+      <SettingsRow
+        label={t("common.admin.product_settings.maintenance_mode_label")}
+        hint={documented.get("maintenance_mode")?.description}
+        htmlFor="maintenance-mode"
+      >
+        <Checkbox
+          id="maintenance-mode"
+          checked={maintenanceMode}
+          onCheckedChange={(checked) => {
+            setMaintenanceMode(checked === true);
+          }}
+        />
+      </SettingsRow>
 
-function Field({
-  description,
-  children,
-}: {
-  description: string | undefined;
-  children: ReactNode;
-}) {
-  return (
-    <div className="space-y-2">
-      {children}
-      {description ? (
-        <p className="text-xs text-muted-foreground">{description}</p>
+      <SettingsRow
+        label={t("common.admin.product_settings.maintenance_message_label")}
+        hint={documented.get("maintenance_message")?.description}
+        htmlFor="maintenance-message"
+      >
+        <Input
+          id="maintenance-message"
+          value={maintenanceMessage}
+          onChange={(event) => {
+            setMaintenanceMessage(event.target.value);
+          }}
+          placeholder={t(
+            "common.admin.product_settings.maintenance_message_placeholder",
+          )}
+        />
+      </SettingsRow>
+
+      <SettingsRow
+        label={t("common.admin.product_settings.signup_disabled_label")}
+        hint={documented.get("signup_disabled")?.description}
+        htmlFor="signup-disabled"
+      >
+        <Checkbox
+          id="signup-disabled"
+          checked={signupDisabled}
+          onCheckedChange={(checked) => {
+            setSignupDisabled(checked === true);
+          }}
+        />
+      </SettingsRow>
+
+      <SettingsRow
+        label={t("common.admin.product_settings.banner_label")}
+        hint={documented.get("global_banner")?.description}
+        htmlFor="banner-enabled"
+      >
+        <Checkbox
+          id="banner-enabled"
+          checked={bannerEnabled}
+          onCheckedChange={(checked) => {
+            setBannerEnabled(checked === true);
+          }}
+        />
+      </SettingsRow>
+      {bannerEnabled ? (
+        <>
+          <SettingsRow
+            label={t("common.admin.product_settings.banner_type_label")}
+            htmlFor="banner-type"
+          >
+            <Select
+              id="banner-type"
+              value={bannerType}
+              onChange={(event) => {
+                setBannerType(event.target.value as BannerType);
+              }}
+              className="w-full"
+            >
+              {BANNER_TYPES.map((type) => (
+                <option key={type} value={type}>
+                  {t(`common.admin.product_settings.banner_type_${type}`)}
+                </option>
+              ))}
+            </Select>
+          </SettingsRow>
+          <SettingsRow
+            label={t("common.admin.product_settings.banner_message_label")}
+            htmlFor="banner-message"
+          >
+            <Input
+              id="banner-message"
+              value={bannerMessage}
+              onChange={(event) => {
+                setBannerMessage(event.target.value);
+              }}
+            />
+          </SettingsRow>
+          <SettingsRow
+            label={t("common.admin.product_settings.banner_dismissible_label")}
+            htmlFor="banner-dismissible"
+          >
+            <Checkbox
+              id="banner-dismissible"
+              checked={bannerDismissible}
+              onCheckedChange={(checked) => {
+                setBannerDismissible(checked === true);
+              }}
+            />
+          </SettingsRow>
+        </>
       ) : null}
-    </div>
+
+      <SettingsRow
+        label={t("common.admin.product_settings.kill_switch_label")}
+        hint={documented.get("emergency_kill_switch")?.description}
+      >
+        <div className="grid gap-2.5">
+          {data.killable_modules.map((module) => (
+            <div key={module} className="flex items-center gap-2">
+              <Checkbox
+                id={`kill-${module}`}
+                checked={killSwitch[module] === true}
+                onCheckedChange={(checked) => {
+                  setKillSwitch((current) => ({
+                    ...current,
+                    [module]: checked === true,
+                  }));
+                }}
+              />
+              <Label
+                htmlFor={`kill-${module}`}
+                className="font-mono text-[0.8125rem] font-normal"
+              >
+                {module}
+              </Label>
+            </div>
+          ))}
+        </div>
+      </SettingsRow>
+    </SettingsSection>
   );
 }
 
@@ -500,19 +475,29 @@ function RawJsonEditor({
   };
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2">
+    <SettingsSection
+      title={
+        <span className="flex items-center gap-2">
           {t("common.admin.product_settings.raw_title")}
           <Badge variant="secondary">
             {t("common.admin.product_settings.raw_advanced")}
           </Badge>
-        </CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-3">
-        <p className="text-xs text-muted-foreground">
-          {t("common.admin.product_settings.raw_description")}
-        </p>
+        </span>
+      }
+      description={t("common.admin.product_settings.raw_description")}
+      footer={
+        <Button
+          type="button"
+          variant="outline"
+          onClick={handleSave}
+          disabled={save.isPending}
+          data-testid="save-raw-product-settings"
+        >
+          {t("common.admin.product_settings.raw_save")}
+        </Button>
+      }
+    >
+      <div className="space-y-3 pb-4">
         <Label htmlFor="raw-settings" className="sr-only">
           {t("common.admin.product_settings.raw_title")}
         </Label>
@@ -524,23 +509,14 @@ function RawJsonEditor({
           }}
           spellCheck={false}
           rows={10}
-          className="w-full rounded-md border border-input bg-background p-3 font-mono text-xs shadow-sm"
+          className="w-full rounded-md border border-input bg-card p-3 font-mono text-xs"
         />
         {parseError ? (
           <Alert variant="destructive">
             <AlertDescription>{parseError}</AlertDescription>
           </Alert>
         ) : null}
-        <Button
-          type="button"
-          variant="outline"
-          onClick={handleSave}
-          disabled={save.isPending}
-          data-testid="save-raw-product-settings"
-        >
-          {t("common.admin.product_settings.raw_save")}
-        </Button>
-      </CardContent>
-    </Card>
+      </div>
+    </SettingsSection>
   );
 }

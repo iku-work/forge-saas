@@ -1,16 +1,18 @@
 ---
 /**
  * The landing page. Zero script bytes, asserted by tests/build.test.ts --
- * @forge/ui's Card and its button classes render here as HTML, with no React
- * in the output at all.
+ * @forge/ui's button classes and the hero's picture of the product (the app
+ * shell and checklist, see HeroProduct.tsx) render here as HTML, with no
+ * React in the output at all.
  *
  * Under `[...locale]` since T-301: one file, one copy of the markup, built
  * once per enabled locale. See src/lib/routing.ts for where the locale sits
  * in the URL and who owns that decision.
  */
-import { Card, CardContent, CardHeader, CardTitle, buttonVariants } from "@forge/ui";
+import { buttonVariants } from "@forge/ui";
 
 import FaqSection from "../../components/FaqSection.astro";
+import HeroProduct from "../../components/HeroProduct";
 import { site } from "../../config/site";
 import BaseLayout from "../../layouts/BaseLayout.astro";
 import { productFaq } from "../../lib/faq";
@@ -73,49 +75,119 @@ const schema = softwareApplicationSchema({
   description={t("marketing.hero.subtitle")}
   locale={locale}
   schema={schema}
+  wide
 >
-  <section class="mx-auto max-w-5xl px-6 py-20">
-    {/* The brand colour from src/config/site.ts, which reads product.config.ts --
-        an inline custom property, not a second copy of the value in a
-        stylesheet. */}
-    <div class="brand-rule mb-8 h-1 w-16 rounded-full"></div>
-    <h1 class="max-w-3xl text-balance text-4xl font-semibold tracking-tight sm:text-5xl">
+  <section class="mx-auto max-w-[75rem] px-6 pt-18">
+    <h1
+      class="max-w-[13ch] text-balance text-[clamp(2.75rem,3.5vw+1.5rem,5.25rem)] font-semibold leading-[1.02] tracking-[-0.035em] [font-stretch:78%]"
+    >
       {t("marketing.hero.title")}
     </h1>
-    <p class="mt-6 max-w-2xl text-pretty text-lg text-muted-foreground">
+    <p class="mt-6 max-w-[34rem] text-pretty text-xl text-foreground-secondary">
       {t("marketing.hero.subtitle")}
     </p>
-    <div class="mt-10 flex flex-wrap gap-3">
-      <a href={appLink("register", locale)} class={buttonVariants({ size: "lg" })}>
+    <div class="mt-9 flex flex-wrap items-center gap-5">
+      <a
+        href={appLink("register", locale)}
+        class={buttonVariants({ size: "lg", className: "h-11 px-5 text-[0.9375rem]" })}
+      >
         {t("marketing.hero.cta_primary")}
       </a>
-      <a href={appLink("login", locale)} class={buttonVariants({ variant: "outline", size: "lg" })}>
-        {t("marketing.hero.cta_secondary")}
+      <a href={localePath(locale, "guides")} class="font-medium text-foreground hover:underline">
+        {t("marketing.hero.cta_guides")}
       </a>
+    </div>
+    {/* A picture of the product, not part of the page's content or tab
+        order: hidden from assistive technology and inert. */}
+    <div class="frame mt-16" aria-hidden="true" inert>
+      <div class="frame-inner">
+        <HeroProduct t={t} />
+      </div>
     </div>
   </section>
 
-  <section class="mx-auto max-w-5xl px-6 pb-4">
-    <h2 class="text-2xl font-semibold tracking-tight">{t("marketing.highlights.heading")}</h2>
-    <div class="mt-8 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-      {
-        highlights.map((highlight) => (
-          <Card className="h-full">
-            <CardHeader>
-              <CardTitle>{highlight.title}</CardTitle>
-            </CardHeader>
-            <CardContent className="text-sm text-muted-foreground">{highlight.body}</CardContent>
-          </Card>
-        ))
-      }
-    </div>
+  <section
+    aria-label={t("marketing.highlights.heading")}
+    class="mx-auto grid max-w-[75rem] gap-10 px-6 pb-36 pt-16 md:grid-cols-3"
+  >
+    {
+      highlights.map((highlight) => (
+        <div>
+          <h2 class="border-t border-border-strong pt-4 text-base font-semibold">{highlight.title}</h2>
+          <p class="mt-2 text-foreground-secondary">{highlight.body}</p>
+        </div>
+      ))
+    }
   </section>
 
   <FaqSection questions={productFaq()} t={t} />
 </BaseLayout>
 
-<style define:vars={{ brandColor: site.brandColor }}>
-  .brand-rule {
-    background-color: var(--brandColor);
+<style>
+  /* The real shell, zoomed out, fading into the page. */
+  .frame {
+    height: 35rem;
+    overflow: hidden;
+    border-radius: 1rem 1rem 0 0;
+    background: var(--background);
+    box-shadow:
+      0 0 0 1px var(--border),
+      0 30px 80px -30px rgb(23 26 33 / 0.25);
+    -webkit-mask-image: linear-gradient(to bottom, #000 70%, transparent);
+    mask-image: linear-gradient(to bottom, #000 70%, transparent);
+    /* The one orchestrated moment: the frame rises, then the checklist
+       settles. Once, on load, CSS only. */
+    animation: rise 640ms var(--ease-out-soft) both 120ms;
+  }
+  /* zoom, not transform: the shell lays itself out at the larger size (its
+     container queries see the zoomed-out width, so it is a desktop shell),
+     and then the whole thing is drawn smaller. */
+  .frame-inner {
+    zoom: 0.8;
+    height: 43.75rem;
+  }
+  .frame :global(ol > li) {
+    animation: settle 420ms var(--ease-out-soft) both;
+  }
+  .frame :global(ol > li:nth-child(1)) {
+    animation-delay: 520ms;
+  }
+  .frame :global(ol > li:nth-child(2)) {
+    animation-delay: 580ms;
+  }
+  .frame :global(ol > li:nth-child(3)) {
+    animation-delay: 640ms;
+  }
+  .frame :global(ol > li:nth-child(4)) {
+    animation-delay: 700ms;
+  }
+  @keyframes rise {
+    from {
+      opacity: 0;
+      transform: translateY(32px);
+    }
+  }
+  @keyframes settle {
+    from {
+      opacity: 0;
+      transform: translateY(6px);
+    }
+  }
+  /* On a phone the shell is narrower than its sidebar breakpoint, so only
+     the panel shows -- the same thing the app does at that width. */
+  @media (max-width: 767px) {
+    .frame {
+      height: 22.5rem;
+    }
+    .frame-inner {
+      zoom: 0.72;
+      height: 31.25rem;
+    }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .frame,
+    .frame :global(ol > li) {
+      animation: none;
+    }
   }
 </style>

@@ -38,7 +38,7 @@ describe("ShortcutsDialog", () => {
 
   it("opens on ? from an authenticated page", async () => {
     renderApp({ initialPath: "/", user });
-    await screen.findByRole("heading", { name: "Dashboard" });
+    await screen.findByRole("heading", { name: "Welcome to Acme Inc" });
 
     await userEvent.keyboard("?");
 
@@ -49,7 +49,7 @@ describe("ShortcutsDialog", () => {
     // The point of the shared registry: a shortcut added to the handler and
     // forgotten in the help, or the reverse, fails here.
     renderApp({ initialPath: "/", user });
-    await screen.findByRole("heading", { name: "Dashboard" });
+    await screen.findByRole("heading", { name: "Welcome to Acme Inc" });
     await userEvent.keyboard("?");
     const dialog = await screen.findByTestId("shortcuts-dialog");
 
@@ -61,7 +61,7 @@ describe("ShortcutsDialog", () => {
 
   it("is dismissable with Escape", async () => {
     renderApp({ initialPath: "/", user });
-    await screen.findByRole("heading", { name: "Dashboard" });
+    await screen.findByRole("heading", { name: "Welcome to Acme Inc" });
     await userEvent.keyboard("?");
     await screen.findByTestId("shortcuts-dialog");
 

@@ -32,6 +32,13 @@ toward the quota (app.modules.storage.quota). A reservation that never
 expires is a slow leak of an org's storage allowance, paid for by every
 client that started an upload and walked away.
 
+`retire_unused_images` removes avatars and logos nothing points at any more.
+Choosing a new photo (or logo), or removing one, only rewrites the key on the
+user (or organization) row; the old file stayed, counting towards its org's
+storage for good. It is the same soft-delete-then-hard-delete path as any
+deletion, after a day's grace so a photo uploaded but not yet chosen (the
+page sets it a moment after the upload confirms) is never caught.
+
 `rescan_unscanned_files` is the migration path for the download gate that
 now requires a clean verdict (app.modules.storage.scan_gate). Every file
 uploaded before that gate existed has `virus_scan_result` NULL -- they were
@@ -45,7 +52,7 @@ runs it should be watching a real scanner come up behind it.
 import argparse
 import asyncio
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Any, cast
 from uuid import UUID
 
@@ -57,8 +64,11 @@ from app.core.db import async_session_factory, dispose_engine
 from app.core.module_loader import is_enabled
 from app.core.tracing import trace_job
 from app.models._mixins import utcnow
+from app.modules.auth.models import User
+from app.modules.storage.avatars import AVATAR_BUCKET
 from app.modules.storage.backend import StorageBackend, get_storage_backend
 from app.modules.storage.keys import delete_every_copy
+from app.modules.storage.logos import LOGO_BUCKET
 from app.modules.storage.models import StoredFile
 from app.modules.storage.quota import reservation_cutoff
 
@@ -66,12 +76,18 @@ from app.modules.storage.quota import reservation_cutoff
 # the grace window, or the sweep deletes objects whose window is still open
 # and whose deferred job is still pending.
 from app.modules.storage.service import HARD_DELETE_GRACE_PERIOD
+from app.modules.tenancy.models import Organization
 
 logger = logging.getLogger(__name__)
 
 # Bounds one sweep's work: a backlog is drained over several ticks rather
 # than in one long transaction holding a connection from a pool of 20.
 _SWEEP_BATCH_SIZE = 200
+
+# How long an uploaded avatar or logo may sit unchosen before it counts as
+# unused: far longer than the moment between an upload and the PATCH that
+# chooses it.
+_UNUSED_IMAGE_GRACE = timedelta(days=1)
 
 # One rescan batch. Deliberately larger than the sweep's: this enqueues jobs
 # rather than doing the work, and the queue is what paces the scanner.
@@ -187,6 +203,51 @@ async def expire_abandoned_uploads(
         await jobs.enqueue_job("hard_delete_stored_file", file_id=stored_file.id)
 
     logger.info("expire_abandoned_uploads: expired %d unconfirmed upload(s)", len(rows))
+
+
+async def retire_unused_images(
+    ctx: dict[str, Any],  # noqa: ARG001 -- scheduler calling convention
+) -> None:
+    """Delete avatars and logos that no user or organization points at."""
+    if not is_enabled("file_storage"):
+        return
+    model = cast("Any", StoredFile)
+    user = cast("Any", User)
+    org = cast("Any", Organization)
+    in_use = (
+        select(user.avatar_object_key)
+        .where(user.avatar_object_key.is_not(None))
+        .union(select(org.logo_object_key).where(org.logo_object_key.is_not(None)))
+    )
+
+    async with async_session_factory() as session:
+        stmt = (
+            select(StoredFile)
+            .where(
+                model.bucket.in_((AVATAR_BUCKET, LOGO_BUCKET)),
+                # Pending uploads are expire_abandoned_uploads' to retire.
+                model.status != "pending",
+                model.deleted_at.is_(None),
+                model.created_at <= utcnow() - _UNUSED_IMAGE_GRACE,
+                model.key.not_in(in_use),
+            )
+            .order_by(model.created_at)
+            .limit(_SWEEP_BATCH_SIZE)
+        )
+        rows = list((await session.execute(stmt)).scalars().all())
+        if not rows:
+            return
+
+        now = utcnow()
+        for stored_file in rows:
+            stored_file.deleted_at = now
+            session.add(stored_file)
+        await session.commit()
+
+    for stored_file in rows:
+        await jobs.enqueue_job("hard_delete_stored_file", file_id=stored_file.id)
+
+    logger.info("retire_unused_images: retired %d unused avatar/logo file(s)", len(rows))
 
 
 async def _purge(session: AsyncSession, backend: StorageBackend, stored_file: StoredFile) -> None:

@@ -1,6 +1,7 @@
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { useEffect } from "react";
+import { useEffect, useId } from "react";
+import { Link } from "@tanstack/react-router";
 import { useForm } from "react-hook-form";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
@@ -13,10 +14,6 @@ import {
   AvatarFallback,
   AvatarImage,
   Button,
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
   FileUploader,
   Form,
   FormControl,
@@ -25,7 +22,10 @@ import {
   FormLabel,
   FormMessage,
   Input,
-  Label,
+  Page,
+  PageHeader,
+  SettingsRow,
+  SettingsSection,
   Skeleton,
 } from "@forge/ui";
 
@@ -33,6 +33,7 @@ import { getErrorMessage } from "../auth/getErrorMessage";
 import { ThemeToggle } from "../../components/ThemeToggle";
 import { RoutedLocaleSwitcher } from "../../lib/RoutedLocaleSwitcher";
 import { AVATAR_QUERY_KEY, useAvatarSrc } from "../../lib/useAvatarSrc";
+import { useRouteLocale } from "../../lib/useRouteLocale";
 
 function initialsFor(email: string): string {
   return email.slice(0, 2).toUpperCase();
@@ -50,6 +51,8 @@ type ProfileInput = z.infer<typeof profileSchema>;
 export function ProfileSettingsPage() {
   const { t } = useTranslation();
   const { user, isLoading, applyUpdatedUser } = useAuth();
+  const locale = useRouteLocale();
+  const detailsFormId = useId();
 
   const form = useForm<ProfileInput>({
     resolver: zodResolver(profileSchema),
@@ -70,7 +73,9 @@ export function ProfileSettingsPage() {
   const queryClient = useQueryClient();
 
   const setAvatar = useMutation({
-    mutationFn: async (fileId: string) => {
+    // null clears the photo: a write to the user row and nothing else, so
+    // it works with file storage off too.
+    mutationFn: async (fileId: string | null) => {
       const { data } = await updateMeApiV1AuthMePatch({
         // The id, never the storage key: the server resolves it and checks
         // the file is this user's, which is what keeps a private bucket
@@ -94,7 +99,7 @@ export function ProfileSettingsPage() {
     },
   });
 
-  const onAvatarUploaded = async (fileId: string): Promise<void> => {
+  const onAvatarChanged = async (fileId: string | null): Promise<void> => {
     try {
       const envelope = await setAvatar.mutateAsync(fileId);
       const updated = envelope.data;
@@ -107,7 +112,13 @@ export function ProfileSettingsPage() {
       // the picture in the corner at the same moment as the one on this
       // page.
       await queryClient.invalidateQueries({ queryKey: AVATAR_QUERY_KEY });
-      toast.success(t("auth.profile.avatar_saved"));
+      toast.success(
+        t(
+          fileId === null
+            ? "auth.profile.avatar_removed"
+            : "auth.profile.avatar_saved",
+        ),
+      );
     } catch (error) {
       toast.error(getErrorMessage(error, "auth.profile.error_avatar"));
     }
@@ -130,8 +141,11 @@ export function ProfileSettingsPage() {
   };
 
   return (
-    <div className="max-w-xl space-y-6 p-6">
-      <h1 className="text-xl font-semibold" data-testid="page-title">{t("common.nav.profile")}</h1>
+    <Page>
+      <PageHeader
+        title={t("common.nav.profile")}
+        description={t("auth.profile.description")}
+      />
 
       {isLoading || !user ? (
         <div className="space-y-4">
@@ -140,39 +154,63 @@ export function ProfileSettingsPage() {
           <Skeleton className="h-4 w-1/2" />
         </div>
       ) : (
-        <Card>
-          <CardHeader>
-            <CardDescription>{t("auth.profile.description")}</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-6">
-            <div className="flex items-start gap-4">
-              <Avatar className="size-16" data-testid="profile-avatar">
+        <>
+          {/* Each section saves alone (ADR-0008). The form lives inside its
+              section and the footer's Save points at it with `form=`, so
+              sections stay direct siblings and space themselves. */}
+          <SettingsSection
+            title={t("auth.profile.section_details")}
+            footer={
+              <Button
+                type="submit"
+                form={detailsFormId}
+                disabled={
+                  form.formState.isSubmitting || !form.formState.isDirty
+                }
+              >
+                {t("auth.profile.save")}
+              </Button>
+            }
+          >
+            <SettingsRow
+              label={t("auth.profile.photo_label")}
+              hint={t("auth.profile.photo_hint")}
+            >
+              <Avatar className="size-12" data-testid="profile-avatar">
                 {avatarSrc ? <AvatarImage src={avatarSrc} alt="" /> : null}
-                <AvatarFallback className="text-lg">
-                  {initialsFor(user.email)}
-                </AvatarFallback>
+                <AvatarFallback>{initialsFor(user.email)}</AvatarFallback>
               </Avatar>
-              <div className="flex-1">
-                <p className="mb-2 text-sm font-medium">
-                  {t("auth.profile.upload_avatar")}
-                </p>
-                <FileUploader
-                  bucket="avatars"
-                  accept="image/*"
-                  maxSize={5 * 1024 * 1024}
-                  onUploaded={(file) => {
-                    // Storing the file was never the point -- until now
-                    // nothing recorded *which* file was the avatar, so this
-                    // handler showed a toast and the upload vanished.
-                    void onAvatarUploaded(file.id);
+              <FileUploader
+                variant="button"
+                buttonLabel={t("auth.profile.upload_avatar")}
+                bucket="avatars"
+                accept="image/*"
+                maxSize={5 * 1024 * 1024}
+                onUploaded={(file) => {
+                  // Storing the file was never the point -- until now
+                  // nothing recorded *which* file was the avatar, so this
+                  // handler showed a toast and the upload vanished.
+                  void onAvatarChanged(file.id);
+                }}
+              />
+              {user.has_uploaded_avatar ? (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  disabled={setAvatar.isPending}
+                  onClick={() => {
+                    void onAvatarChanged(null);
                   }}
-                />
-              </div>
-            </div>
+                  data-testid="profile-avatar-remove"
+                >
+                  {t("auth.profile.remove_avatar")}
+                </Button>
+              ) : null}
+            </SettingsRow>
 
             <Form {...form}>
               <form
-                className="space-y-4"
+                id={detailsFormId}
                 onSubmit={(event) => {
                   void form.handleSubmit(onSubmit)(event);
                 }}
@@ -183,71 +221,68 @@ export function ProfileSettingsPage() {
                   name="fullName"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>{t("auth.profile.name_label")}</FormLabel>
-                      <FormControl>
-                        {/* No placeholder. `auth.profile.no_name` is an
-                            em-dash -- it was the *display* fallback for a
-                            profile with no name, and as a placeholder it
-                            renders an empty field that looks like it already
-                            contains a stray character. The label says Name;
-                            an empty field needs no further explanation. */}
-                        <Input autoComplete="name" {...field} />
-                      </FormControl>
-                      <FormMessage />
+                      <SettingsRow
+                        label={
+                          <FormLabel>{t("auth.profile.name_label")}</FormLabel>
+                        }
+                        hint={t("auth.profile.name_hint")}
+                      >
+                        <div className="w-full max-w-sm space-y-2">
+                          <FormControl>
+                            {/* No placeholder. `auth.profile.no_name` is an
+                                em-dash -- it was the *display* fallback for a
+                                profile with no name, and as a placeholder it
+                                renders an empty field that looks like it
+                                already contains a stray character. */}
+                            <Input autoComplete="name" {...field} />
+                          </FormControl>
+                          <FormMessage />
+                        </div>
+                      </SettingsRow>
                     </FormItem>
                   )}
                 />
-                <Button
-                  type="submit"
-                  disabled={
-                    form.formState.isSubmitting || !form.formState.isDirty
-                  }
-                >
-                  {t("auth.profile.save")}
-                </Button>
               </form>
             </Form>
 
-            <div className="space-y-1">
-              <Label htmlFor="profile-email">
-                {t("auth.login.email_label")}
-              </Label>
-              {/* Read-only on purpose. Changing an email is an account-takeover
-                  vector, so it goes through the verify-both-addresses flow on
-                  the security page (POST /auth/change-email), which is also
-                  gated on a recent sign-in. */}
-              <p id="profile-email" className="text-sm">
-                {user.email}
-              </p>
-              <p className="text-xs text-muted-foreground">
-                {t("auth.profile.email_change_hint")}
-              </p>
-            </div>
+            {/* Read-only on purpose. Changing an email is an account-takeover
+                vector, so it goes through the verify-both-addresses flow on
+                the security page (POST /auth/change-email), which is also
+                gated on a recent sign-in. */}
+            <SettingsRow
+              label={t("auth.login.email_label")}
+              hint={t("auth.profile.email_hint")}
+            >
+              <span>{user.email}</span>
+              <Link
+                to="/$locale/settings/security"
+                params={{ locale }}
+                className="text-primary underline decoration-primary/35 underline-offset-[3px] hover:decoration-current"
+              >
+                {t("auth.profile.change_email")}
+              </Link>
+            </SettingsRow>
+          </SettingsSection>
 
-            <div className="space-y-1">
-              <Label>{t("common.locale_switcher.label")}</Label>
-              <div>
-                <RoutedLocaleSwitcher />
-              </div>
-            </div>
-
-            {/* No <Label> here: ThemeToggle is a radiogroup that carries its
-                own aria-label, and a <Label> with no `htmlFor` pointing at a
-                single control is a label for nothing. The visible heading is
-                a <p> so it reads as the group's caption without claiming a
-                form-control relationship it does not have. */}
-            <div className="space-y-1">
-              <p className="text-body-sm font-medium">
-                {t("common.theme.label")}
-              </p>
+          <SettingsSection title={t("auth.profile.section_preferences")}>
+            <SettingsRow
+              label={t("common.locale_switcher.label")}
+              hint={t("auth.profile.language_hint")}
+            >
+              <RoutedLocaleSwitcher />
+            </SettingsRow>
+            {/* ThemeToggle is a radiogroup with its own aria-label, so the
+                row's label is a caption, not a <label> for one control. It
+                applies immediately: no Save. */}
+            <SettingsRow
+              label={t("common.theme.label")}
+              hint={t("common.theme.hint")}
+            >
               <ThemeToggle />
-              <p className="text-caption text-muted-foreground">
-                {t("common.theme.hint")}
-              </p>
-            </div>
-          </CardContent>
-        </Card>
+            </SettingsRow>
+          </SettingsSection>
+        </>
       )}
-    </div>
+    </Page>
   );
 }

@@ -7,7 +7,7 @@ import { Alert, AlertDescription, Skeleton } from "@forge/ui";
 
 import { useRouteLocale } from "../../lib/useRouteLocale";
 
-import { AuthCard } from "./AuthCard";
+import { AuthLayout } from "./AuthLayout";
 import { getErrorMessage } from "./getErrorMessage";
 
 type ConfirmState = "verifying" | "success" | "error";
@@ -22,7 +22,9 @@ interface ConfirmEmailChangePageProps {
 export function ConfirmEmailChangePage({ token }: ConfirmEmailChangePageProps) {
   const { t } = useTranslation();
   const locale = useRouteLocale();
-  const [state, setState] = useState<ConfirmState>(token ? "verifying" : "error");
+  const [state, setState] = useState<ConfirmState>(
+    token ? "verifying" : "error",
+  );
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   // Single-use token -- without this guard, React 18 Strict Mode's
   // double-invoked effect would consume the token on the first call and
@@ -43,7 +45,10 @@ export function ConfirmEmailChangePage({ token }: ConfirmEmailChangePageProps) {
       })
       .catch((error: unknown) => {
         setErrorMessage(
-          getErrorMessage(error, "auth.confirm_email_change.error_invalid_or_expired"),
+          getErrorMessage(
+            error,
+            "auth.confirm_email_change.error_invalid_or_expired",
+          ),
         );
         setState("error");
       });
@@ -51,20 +56,22 @@ export function ConfirmEmailChangePage({ token }: ConfirmEmailChangePageProps) {
 
   if (state === "verifying") {
     return (
-      <AuthCard title={t("auth.confirm_email_change.title_verifying")}>
+      <AuthLayout title={t("auth.confirm_email_change.title_verifying")}>
         <Skeleton className="h-4 w-full" />
         <Skeleton className="h-4 w-3/4" />
-      </AuthCard>
+      </AuthLayout>
     );
   }
 
   if (state === "success") {
     return (
-      <AuthCard title={t("auth.confirm_email_change.title_success")}>
+      <AuthLayout title={t("auth.confirm_email_change.title_success")}>
         <Alert>
-          <AlertDescription>{t("auth.confirm_email_change.success_message")}</AlertDescription>
+          <AlertDescription>
+            {t("auth.confirm_email_change.success_message")}
+          </AlertDescription>
         </Alert>
-        <p className="text-center text-sm text-muted-foreground">
+        <p className="text-sm text-foreground-secondary">
           <Link
             to="/$locale/login"
             params={{ locale }}
@@ -73,17 +80,17 @@ export function ConfirmEmailChangePage({ token }: ConfirmEmailChangePageProps) {
             {t("auth.confirm_email_change.continue_to_login")}
           </Link>
         </p>
-      </AuthCard>
+      </AuthLayout>
     );
   }
 
   return (
-    <AuthCard title={t("auth.confirm_email_change.title_failed")}>
+    <AuthLayout title={t("auth.confirm_email_change.title_failed")}>
       <Alert variant="destructive">
         <AlertDescription>
           {errorMessage ?? t("auth.confirm_email_change.error_default")}
         </AlertDescription>
       </Alert>
-    </AuthCard>
+    </AuthLayout>
   );
 }

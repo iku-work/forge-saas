@@ -21,12 +21,19 @@ import {
   AlertDescription,
   Avatar,
   AvatarFallback,
-  Badge,
   Button,
   ConfirmDialog,
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
   EmptyState,
   FileUploader,
+  Page,
+  PageHeader,
+  RowActionsButton,
   Skeleton,
+  StatusPill,
   Table,
   TableBody,
   TableCell,
@@ -34,6 +41,7 @@ import {
   TableHeader,
   TableRow,
 } from "@forge/ui";
+import type { StatusTone } from "@forge/ui";
 import { formatBytes } from "@forge/utils";
 
 import {
@@ -51,12 +59,10 @@ function isDownloadable(file: StoredFilePublic): boolean {
   return file.status === "ready" && file.virus_scan_result === "clean";
 }
 
-function statusVariant(
-  status: DisplayStatus,
-): "default" | "secondary" | "destructive" | "outline" {
-  if (status === "ready") return "default";
-  if (status === "infected" || status === "failed") return "destructive";
-  return "secondary";
+function statusTone(status: DisplayStatus): StatusTone {
+  if (status === "ready") return "active";
+  if (status === "infected" || status === "failed") return "danger";
+  return "pending";
 }
 
 function statusKey(status: DisplayStatus): string {
@@ -74,8 +80,14 @@ function downloadBlockedKey(status: DisplayStatus): string {
   return "files.action.download_blocked_pending";
 }
 
-function uploaderInitials(uploaderId: string): string {
-  return uploaderId.slice(0, 2).toUpperCase();
+/** Who uploaded a file: their name, else their email, else (an account
+ *  already gone) the start of their id. */
+function uploaderName(file: StoredFilePublic): string {
+  return (
+    file.uploader?.full_name ??
+    file.uploader?.email ??
+    file.uploaded_by.slice(0, 8)
+  );
 }
 
 export function FilesPage() {
@@ -159,10 +171,12 @@ export function FilesPage() {
     scanPollInterval(files, filesQuery.dataUpdatedAt) === false;
 
   return (
-    <div className="space-y-6 p-6">
-      <h1 className="text-xl font-semibold" data-testid="page-title">
-        {t("files.page.title")}
-      </h1>
+    <Page className="space-y-6">
+      <PageHeader
+        title={t("files.page.title")}
+        description={t("files.page.description")}
+        className="mb-3"
+      />
 
       {canManage ? (
         <FileUploader
@@ -231,23 +245,29 @@ export function FilesPage() {
               {files.map((file) => (
                 <TableRow key={file.id}>
                   <TableCell className="font-medium">{file.filename}</TableCell>
-                  <TableCell className="text-muted-foreground">
+                  <TableCell className="whitespace-nowrap text-muted-foreground">
                     {formatBytes(file.size_bytes)}
                   </TableCell>
                   <TableCell>
-                    <Avatar className="size-6">
-                      <AvatarFallback className="text-xs">
-                        {uploaderInitials(file.uploaded_by)}
-                      </AvatarFallback>
-                    </Avatar>
+                    <span
+                      className="flex min-w-0 items-center gap-2"
+                      title={file.uploader?.email}
+                    >
+                      <Avatar className="size-6">
+                        <AvatarFallback className="text-xs">
+                          {uploaderName(file).charAt(0).toUpperCase()}
+                        </AvatarFallback>
+                      </Avatar>
+                      <span className="truncate">{uploaderName(file)}</span>
+                    </span>
                   </TableCell>
                   <TableCell>
-                    <Badge variant={statusVariant(displayStatus(file))}>
+                    <StatusPill tone={statusTone(displayStatus(file))}>
                       {t(statusKey(displayStatus(file)))}
-                    </Badge>
+                    </StatusPill>
                   </TableCell>
                   <TableCell className="text-end">
-                    <div className="flex justify-end gap-2">
+                    <div className="flex items-center justify-end gap-1">
                       <Button
                         type="button"
                         variant="outline"
@@ -265,18 +285,31 @@ export function FilesPage() {
                       >
                         {t("files.action.download")}
                       </Button>
+                      {/* Download stays a visible button: it is the row's
+                          main action, and a disabled one explains itself in a
+                          way a disabled menu item can't. Delete lives in the
+                          menu and still asks first (F-009). */}
                       {canManage ? (
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          disabled={deleteMutation.isPending}
-                          onClick={() => {
-                            setPendingDelete(file);
-                          }}
-                        >
-                          {t("files.action.delete")}
-                        </Button>
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <RowActionsButton
+                              aria-label={t("files.action.menu_label", {
+                                filename: file.filename,
+                              })}
+                            />
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            <DropdownMenuItem
+                              className="text-destructive focus:text-destructive"
+                              disabled={deleteMutation.isPending}
+                              onSelect={() => {
+                                setPendingDelete(file);
+                              }}
+                            >
+                              {t("files.action.delete")}
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
                       ) : null}
                     </div>
                   </TableCell>
@@ -324,6 +357,6 @@ export function FilesPage() {
           deleteMutation.mutate(file.id);
         }}
       />
-    </div>
+    </Page>
   );
 }

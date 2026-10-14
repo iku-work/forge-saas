@@ -7,7 +7,7 @@ import { Alert, AlertDescription, Skeleton } from "@forge/ui";
 
 import { useRouteLocale } from "../../lib/useRouteLocale";
 
-import { AuthCard } from "./AuthCard";
+import { AuthLayout } from "./AuthLayout";
 import { getErrorMessage } from "./getErrorMessage";
 
 type VerifyState = "verifying" | "success" | "error";
@@ -50,22 +50,22 @@ export function VerifyEmailPage({ token }: VerifyEmailPageProps) {
 
   if (state === "verifying") {
     return (
-      <AuthCard title={t("auth.verify_email.title_verifying")}>
+      <AuthLayout title={t("auth.verify_email.title_verifying")}>
         <Skeleton className="h-4 w-full" />
         <Skeleton className="h-4 w-3/4" />
-      </AuthCard>
+      </AuthLayout>
     );
   }
 
   if (state === "success") {
     return (
-      <AuthCard title={t("auth.verify_email.title_success")}>
+      <AuthLayout title={t("auth.verify_email.title_success")}>
         <Alert data-testid="verify-email-success">
           <AlertDescription>
             {t("auth.verify_email.success_message")}
           </AlertDescription>
         </Alert>
-        <p className="text-center text-sm text-muted-foreground">
+        <p className="text-sm text-foreground-secondary">
           <Link
             to="/$locale/login"
             params={{ locale }}
@@ -75,18 +75,18 @@ export function VerifyEmailPage({ token }: VerifyEmailPageProps) {
             {t("auth.verify_email.continue_to_login")}
           </Link>
         </p>
-      </AuthCard>
+      </AuthLayout>
     );
   }
 
   return (
-    <AuthCard title={t("auth.verify_email.title_failed")}>
+    <AuthLayout title={t("auth.verify_email.title_failed")}>
       <Alert variant="destructive" data-testid="verify-email-error">
         <AlertDescription>
           {errorMessage ?? t("auth.verify_email.error_default")}
         </AlertDescription>
       </Alert>
-      <p className="text-center text-sm text-muted-foreground">
+      <p className="text-sm text-foreground-secondary">
         <Link
           to="/$locale/register"
           params={{ locale }}
@@ -103,6 +103,6 @@ export function VerifyEmailPage({ token }: VerifyEmailPageProps) {
           {t("auth.verify_email.login")}
         </Link>
       </p>
-    </AuthCard>
+    </AuthLayout>
   );
 }

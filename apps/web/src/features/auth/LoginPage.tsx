@@ -32,7 +32,7 @@ import { loginSchema, type LoginInput } from "@forge/validation";
 
 import { useRouteLocale } from "../../lib/useRouteLocale";
 
-import { AuthCard } from "./AuthCard";
+import { AuthLayout } from "./AuthLayout";
 import { getErrorMessage } from "./getErrorMessage";
 import { getOAuthStartUrl, OAUTH_PROVIDER_LABEL_KEYS } from "./oauth";
 import { getSsoStartUrl } from "./sso";
@@ -154,7 +154,7 @@ export function LoginPage() {
 
   if (tempToken) {
     return (
-      <AuthCard
+      <AuthLayout
         title={t("auth.two_factor_challenge.title")}
         description={t("auth.two_factor_challenge.description")}
       >
@@ -162,44 +162,25 @@ export function LoginPage() {
           tempToken={tempToken}
           onSuccess={handleTwoFactorSuccess}
         />
-      </AuthCard>
+      </AuthLayout>
     );
   }
 
   return (
-    <AuthCard
+    <AuthLayout
       title={t("auth.login.title")}
       description={t("auth.login.description")}
       footer={
-        <>
-          <p>
-            <Link
-              to="/$locale/forgot-password"
-              params={{ locale }}
-              className="underline underline-offset-4"
-            >
-              {t("auth.login.forgot_password")}
-            </Link>
-            {" · "}
-            <Link
-              to="/$locale/magic-link"
-              params={{ locale }}
-              className="underline underline-offset-4"
-            >
-              {t("auth.login.magic_link_cta")}
-            </Link>
-          </p>
-          <p>
-            {t("auth.login.no_account")}{" "}
-            <Link
-              to="/$locale/register"
-              params={{ locale }}
-              className="underline underline-offset-4"
-            >
-              {t("auth.login.signup_link")}
-            </Link>
-          </p>
-        </>
+        <p>
+          {t("auth.login.no_account")}{" "}
+          <Link
+            to="/$locale/register"
+            params={{ locale }}
+            className="underline underline-offset-4"
+          >
+            {t("auth.login.signup_link")}
+          </Link>
+        </p>
       }
     >
       {formError ? (
@@ -254,6 +235,7 @@ export function LoginPage() {
               </p>
               <Button
                 type="button"
+                size="lg"
                 className="w-full"
                 data-testid="login-sso-continue"
                 onClick={() => {
@@ -272,6 +254,7 @@ export function LoginPage() {
               <Button
                 type="button"
                 variant="ghost"
+                size="lg"
                 className="w-full"
                 data-testid="login-sso-use-password"
                 onClick={() => {
@@ -288,7 +271,16 @@ export function LoginPage() {
                 name="password"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>{t("auth.login.password_label")}</FormLabel>
+                    <div className="flex items-baseline justify-between gap-4">
+                      <FormLabel>{t("auth.login.password_label")}</FormLabel>
+                      <Link
+                        to="/$locale/forgot-password"
+                        params={{ locale }}
+                        className="inline-flex min-h-6 items-center text-[0.8125rem] text-primary underline underline-offset-4"
+                      >
+                        {t("auth.login.forgot_password")}
+                      </Link>
+                    </div>
                     <FormControl>
                       <PasswordInput
                         autoComplete="current-password"
@@ -302,6 +294,7 @@ export function LoginPage() {
               />
               <Button
                 type="submit"
+                size="lg"
                 className="w-full"
                 disabled={form.formState.isSubmitting}
                 data-testid="login-submit"
@@ -324,22 +317,20 @@ export function LoginPage() {
         </form>
       </Form>
 
-      {oauthProviders.length > 0 && !showSso ? (
+      {showSso ? null : (
         <>
-          <div className="flex items-center gap-2">
+          <div className="my-6 flex items-center gap-3 text-xs text-muted-foreground">
             <Separator className="flex-1" />
-            <span className="text-xs text-muted-foreground">
-              {t("auth.login.oauth_separator")}
-            </span>
+            {t("auth.login.oauth_separator")}
             <Separator className="flex-1" />
           </div>
-
-          <div className="space-y-2">
+          <div className="grid gap-2">
             {oauthProviders.map((provider: string) => (
               <Button
                 key={provider}
                 type="button"
                 variant="outline"
+                size="lg"
                 className="w-full"
                 onClick={() => {
                   window.location.href = getOAuthStartUrl(provider);
@@ -348,9 +339,14 @@ export function LoginPage() {
                 {t(OAUTH_PROVIDER_LABEL_KEYS[provider] ?? "")}
               </Button>
             ))}
+            <Button asChild variant="ghost" size="lg" className="w-full">
+              <Link to="/$locale/magic-link" params={{ locale }}>
+                {t("auth.login.magic_link_cta")}
+              </Link>
+            </Button>
           </div>
         </>
-      ) : null}
-    </AuthCard>
+      )}
+    </AuthLayout>
   );
 }

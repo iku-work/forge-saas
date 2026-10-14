@@ -4,7 +4,8 @@
     "title": "Offre actuelle",
     "status": "Statut : {status}",
     "badge": "Offre actuelle",
-    "free_label": "Gratuit"
+    "free_label": "Gratuit",
+    "plan_label": "Formule"
   },
   "available_plans": {
     "title": "Offres disponibles",
@@ -30,7 +31,14 @@
     "pdf_col": "Reçu",
     "download_pdf": "Télécharger le PDF",
     "load_more": "Charger plus",
-    "error_load": "Impossible de charger les factures."
+    "error_load": "Impossible de charger les factures.",
+    "status": {
+      "draft": "Brouillon",
+      "open": "En attente",
+      "paid": "Payée",
+      "uncollectible": "Irrécouvrable",
+      "void": "Annulée"
+    }
   },
   "error": {
     "permission_denied": "Vous n'avez pas la permission de consulter la facturation de cette organisation.",
@@ -42,5 +50,6 @@
   },
   "checkout": {
     "canceled": "Le paiement a ete annule. Aucun montant ne vous a ete facture."
-  }
+  },
+  "description": "Votre formule, votre consommation et vos factures."
 }

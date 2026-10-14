@@ -19,7 +19,7 @@ export function ImpersonationBanner({
   return (
     <div
       role="alert"
-      className="flex items-center justify-center gap-3 bg-amber-500 px-4 py-2 text-center text-sm font-medium text-amber-950"
+      className="flex items-center justify-center gap-3 bg-warning px-4 py-2 text-center text-sm font-medium text-warning-foreground"
     >
       <span>{t("common.impersonation.banner", { email })}</span>
       <button

@@ -4,7 +4,8 @@
     "title": "Aktueller Tarif",
     "status": "Status: {status}",
     "badge": "Aktueller Tarif",
-    "free_label": "Kostenlos"
+    "free_label": "Kostenlos",
+    "plan_label": "Tarif"
   },
   "available_plans": {
     "title": "Verfügbare Tarife",
@@ -30,7 +31,14 @@
     "pdf_col": "Beleg",
     "download_pdf": "PDF herunterladen",
     "load_more": "Mehr laden",
-    "error_load": "Rechnungen konnten nicht geladen werden."
+    "error_load": "Rechnungen konnten nicht geladen werden.",
+    "status": {
+      "draft": "Entwurf",
+      "open": "Offen",
+      "paid": "Bezahlt",
+      "uncollectible": "Uneinbringlich",
+      "void": "Storniert"
+    }
   },
   "error": {
     "permission_denied": "Sie haben keine Berechtigung, die Abrechnung dieser Organisation einzusehen.",
@@ -42,5 +50,6 @@
   },
   "checkout": {
     "canceled": "Der Bezahlvorgang wurde abgebrochen. Es wurde nichts berechnet."
-  }
+  },
+  "description": "Ihr Tarif, Ihre Nutzung und Ihre Rechnungen."
 }

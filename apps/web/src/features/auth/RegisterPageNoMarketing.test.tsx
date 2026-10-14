@@ -48,5 +48,12 @@ describe("RegisterPage (no marketing site)", () => {
     expect(
       screen.queryByRole("link", { name: "Privacy Policy" }),
     ).not.toBeInTheDocument();
+    // Nor the page footer's links (ticket 11).
+    expect(
+      screen.queryByRole("link", { name: "Terms" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("link", { name: "Privacy" }),
+    ).not.toBeInTheDocument();
   });
 });

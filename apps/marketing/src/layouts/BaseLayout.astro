@@ -36,6 +36,9 @@ import { translator } from "../lib/i18n";
 import { defaultLocale } from "../lib/product";
 import { organizationSchema, type SchemaNode } from "../lib/structured-data";
 import "../styles/global.css";
+// The one preloaded font file (ADR-0008): Latin, upright. Italic, Latin
+// Extended and Arabic load on demand through their unicode-range.
+import fontUrl from "@forge/ui/fonts/instrument-sans-latin.woff2?url";
 
 interface Props {
   title: string;
@@ -49,6 +52,8 @@ interface Props {
   alternateLocales?: string[] | undefined;
   /** JSON-LD describing this page. The Organization node is added below. */
   schema?: SchemaNode | SchemaNode[] | undefined;
+  /** The landing page's wider column; the header widens to line up with it. */
+  wide?: boolean;
 }
 
 const {
@@ -61,6 +66,7 @@ const {
   publishedAt,
   alternateLocales,
   schema,
+  wide = false,
 } = Astro.props;
 const t = translator(locale);
 const dir = localeMeta(locale)?.dir ?? "ltr";
@@ -72,11 +78,18 @@ const pageSchema: SchemaNode[] = schema === undefined ? [] : [schema].flat();
 const schemas: SchemaNode[] = [organizationSchema(Astro.site), ...pageSchema];
 ---
 
-<html lang={locale} dir={dir}>
+<html lang={locale} dir={dir} data-theme="system">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link
+      rel="preload"
+      href={fontUrl}
+      as="font"
+      type="font/woff2"
+      crossorigin
+    />
     <Seo
       title={title}
       description={description}
@@ -96,7 +109,7 @@ const schemas: SchemaNode[] = [organizationSchema(Astro.site), ...pageSchema];
     >
       {t("marketing.nav.skip_to_content")}
     </a>
-    <SiteHeader locale={locale} />
+    <SiteHeader locale={locale} wide={wide} />
     <main id="main">
       <slot />
     </main>

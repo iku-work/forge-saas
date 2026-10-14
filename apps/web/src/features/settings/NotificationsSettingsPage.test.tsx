@@ -12,7 +12,8 @@ import { server } from "../../test/server";
 const hooks = vi.hoisted(() => ({ useAuth: vi.fn() }));
 vi.mock("@forge/hooks", () => hooks);
 
-const { NotificationsSettingsPage } = await import("./NotificationsSettingsPage");
+const { NotificationsSettingsPage } =
+  await import("./NotificationsSettingsPage");
 
 const API = getApiBaseUrl();
 
@@ -37,7 +38,9 @@ describe("NotificationsSettingsPage", () => {
 
     // payment_failed defaults to email=true; member_invited defaults to push=false.
     expect(
-      screen.getByRole("checkbox", { name: "A payment fails Email (required)" }),
+      screen.getByRole("checkbox", {
+        name: "A payment fails Email (required)",
+      }),
     ).toBeChecked();
     expect(
       screen.getByRole("checkbox", {
@@ -86,14 +89,17 @@ describe("NotificationsSettingsPage", () => {
     hooks.useAuth.mockReturnValue({ user: fixtureUser, isLoading: false });
     let savedBody: unknown = null;
     server.use(
-      http.patch(`${API}/api/v1/me/notification-preferences`, async ({ request }) => {
-        savedBody = await request.json();
-        return HttpResponse.json({
-          data: savedBody,
-          error: null,
-          meta: { request_id: "req-1" },
-        });
-      }),
+      http.patch(
+        `${API}/api/v1/me/notification-preferences`,
+        async ({ request }) => {
+          savedBody = await request.json();
+          return HttpResponse.json({
+            data: savedBody,
+            error: null,
+            meta: { request_id: "req-1" },
+          });
+        },
+      ),
     );
 
     renderPage();
@@ -101,7 +107,9 @@ describe("NotificationsSettingsPage", () => {
     await userEvent.click(
       screen.getByRole("checkbox", { name: "A payment fails Push" }),
     );
-    await userEvent.click(screen.getByRole("button", { name: "Save preferences" }));
+    await userEvent.click(
+      screen.getByRole("button", { name: "Save preferences" }),
+    );
 
     expect(await screen.findByText("Preferences saved.")).toBeInTheDocument();
     expect(savedBody).toEqual({
@@ -141,11 +149,13 @@ describe("NotificationsSettingsPage", () => {
 
       const note = screen.getByText(/always email you about billing problems/i);
       expect(
-        screen.getByRole("checkbox", { name: "A payment fails Email (required)" }),
+        screen.getByRole("checkbox", {
+          name: "A payment fails Email (required)",
+        }),
       ).toHaveAttribute("aria-describedby", note.id);
     });
 
-    it("renders a required channel as on even if the stored matrix says off", async () => {
+    it("renders a required channel as on even if the stored matrix says off", () => {
       // The backend's normalize() forces it back on when saved, so a stored
       // `false` can only be a legacy row -- showing it unticked would claim
       // the account behaves in a way it doesn't.
@@ -160,27 +170,32 @@ describe("NotificationsSettingsPage", () => {
       });
       let savedBody: unknown = null;
       server.use(
-        http.patch(`${API}/api/v1/me/notification-preferences`, async ({ request }) => {
-          savedBody = await request.json();
-          return HttpResponse.json({
-            data: savedBody,
-            error: null,
-            meta: { request_id: "req-1" },
-          });
-        }),
+        http.patch(
+          `${API}/api/v1/me/notification-preferences`,
+          async ({ request }) => {
+            savedBody = await request.json();
+            return HttpResponse.json({
+              data: savedBody,
+              error: null,
+              meta: { request_id: "req-1" },
+            });
+          },
+        ),
       );
 
       renderPage();
 
       expect(
-        screen.getByRole("checkbox", { name: "A payment fails Email (required)" }),
+        screen.getByRole("checkbox", {
+          name: "A payment fails Email (required)",
+        }),
       ).toBeChecked();
-      // ...and it's what gets submitted, so the stored row self-heals.
-      await userEvent.click(screen.getByRole("button", { name: "Save preferences" }));
-      await screen.findByText("Preferences saved.");
-      expect(savedBody).toMatchObject({
-        preferences: { payment_failed: { email: true, in_app: false, push: false } },
-      });
+      // Showing it healed is not a change: the API resolves the stored row
+      // the same way on read, so there is nothing to save.
+      expect(
+        screen.getByRole("button", { name: "Save preferences" }),
+      ).toBeDisabled();
+      expect(savedBody).toBeNull();
     });
 
     it("stays on when the disabled checkbox is activated anyway", async () => {
@@ -201,7 +216,11 @@ describe("NotificationsSettingsPage", () => {
     server.use(
       http.patch(`${API}/api/v1/me/notification-preferences`, () =>
         HttpResponse.json(
-          { data: null, error: { code: "internal_error", message: "boom" }, meta: { request_id: "req-1" } },
+          {
+            data: null,
+            error: { code: "internal_error", message: "boom" },
+            meta: { request_id: "req-1" },
+          },
           { status: 500 },
         ),
       ),
@@ -209,7 +228,16 @@ describe("NotificationsSettingsPage", () => {
 
     renderPage();
 
-    await userEvent.click(screen.getByRole("button", { name: "Save preferences" }));
+    // Save waits for a change.
+    expect(
+      screen.getByRole("button", { name: "Save preferences" }),
+    ).toBeDisabled();
+    await userEvent.click(
+      screen.getByRole("checkbox", { name: "Weekly summary In-app" }),
+    );
+    await userEvent.click(
+      screen.getByRole("button", { name: "Save preferences" }),
+    );
 
     expect(
       await screen.findByText("Couldn't save your preferences."),

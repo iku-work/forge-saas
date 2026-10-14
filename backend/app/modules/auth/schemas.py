@@ -11,6 +11,7 @@ from uuid import UUID
 from pydantic import ConfigDict, EmailStr, Field, field_validator, model_validator
 
 from app.core.schemas import AppBaseModel
+from app.modules.notifications.preferences import effective as effective_preferences
 
 # Top-1000 most common breached passwords (SecLists' Common-Credentials/
 # 10k-most-common.txt, first 1000 entries by frequency). Rejected outright
@@ -1090,6 +1091,9 @@ class UserPublic(AppBaseModel):
     # customization on save). Defaulted so the existing UserPublic(...) call
     # sites/tests that predate this field keep constructing without it.
     notification_preferences: dict[str, dict[str, bool]] = Field(default_factory=dict)
+
+    # The resolved matrix, not the stored one: see preferences.effective.
+    _effective_preferences = field_validator("notification_preferences")(effective_preferences)
 
 
 # Long enough for any real name (the longest legally recorded ones run to

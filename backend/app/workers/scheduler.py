@@ -39,7 +39,11 @@ from app.workers.jobs.billing import (
     notify_expiring_trials,
     reconcile_subscriptions,
 )
-from app.workers.jobs.storage import expire_abandoned_uploads, sweep_orphaned_objects
+from app.workers.jobs.storage import (
+    expire_abandoned_uploads,
+    retire_unused_images,
+    sweep_orphaned_objects,
+)
 from app.workers.jobs.usage import report_usage_to_stripe
 from app.workers.jobs.webhooks import prune_webhook_deliveries, sweep_due_webhook_deliveries
 
@@ -240,6 +244,17 @@ def create_scheduler(redis_client: Redis) -> AsyncIOScheduler:
         sweep_orphaned_objects,
         "sweep_orphaned_objects",
         CronTrigger(hour=4, minute=0, timezone="UTC"),
+    )
+    # Replaced and removed avatars and logos: the old file is no longer
+    # referenced by anything, but still counted towards its org's storage.
+    # Daily, an hour after the sweep above, which then hard-deletes them
+    # through the same path as every other deletion.
+    _add_locked_job(
+        scheduler,
+        redis_client,
+        retire_unused_images,
+        "retire_unused_images",
+        CronTrigger(hour=5, minute=0, timezone="UTC"),
     )
 
     # The other half of counting live presigns toward the storage quota

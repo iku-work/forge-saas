@@ -34,6 +34,32 @@ describe("RegisterPage", () => {
     expect(registerCalled).toBe(false);
   });
 
+  it("blocks submission when the repeated password differs", async () => {
+    let registerCalled = false;
+    server.use(
+      http.post(`${API}/api/v1/auth/register`, () => {
+        registerCalled = true;
+        return HttpResponse.json(envelope(null));
+      }),
+    );
+    const user = userEvent.setup();
+    renderApp({ initialPath: "/register" });
+    await screen.findByRole("heading", { name: "Create your account" });
+
+    await user.type(screen.getByLabelText("Email"), "jane@example.com");
+    await user.type(screen.getByLabelText("Password"), "CorrectHorse123");
+    await user.type(
+      screen.getByLabelText("Repeat password"),
+      "CorrectHorse124",
+    );
+    await user.click(screen.getByRole("button", { name: "Sign up" }));
+
+    expect(
+      await screen.findByText("Passwords do not match"),
+    ).toBeInTheDocument();
+    expect(registerCalled).toBe(false);
+  });
+
   it("calls the register API and shows the check-your-inbox state on success", async () => {
     let registerBody: unknown = null;
     server.use(
@@ -48,6 +74,10 @@ describe("RegisterPage", () => {
 
     await user.type(screen.getByLabelText("Email"), "jane@example.com");
     await user.type(screen.getByLabelText("Password"), "CorrectHorse123");
+    await user.type(
+      screen.getByLabelText("Repeat password"),
+      "CorrectHorse123",
+    );
     await user.click(screen.getByRole("button", { name: "Sign up" }));
 
     expect(
@@ -72,7 +102,10 @@ describe("RegisterPage", () => {
 
     // The marketing site is a different origin (T-307), so these are
     // absolute and locale-prefixed exactly as that site routes them.
-    expect(terms).toHaveAttribute("href", "https://marketing.localhost/en/terms");
+    expect(terms).toHaveAttribute(
+      "href",
+      "https://marketing.localhost/en/terms",
+    );
     expect(privacy).toHaveAttribute(
       "href",
       "https://marketing.localhost/en/privacy",

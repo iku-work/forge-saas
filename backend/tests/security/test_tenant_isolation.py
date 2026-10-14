@@ -15,7 +15,7 @@ nothing here needs the bespoke table subsets the router test files build.
 
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, replace
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from uuid import UUID, uuid4
 
 import httpx
@@ -32,7 +32,7 @@ from app.modules.api_keys.service import ApiKeyService
 from app.modules.auth.permissions import MemberRole
 from app.modules.auth.repository import UserRepository
 from app.modules.auth.utils import create_access_token, hash_password
-from app.modules.tenancy.models import Membership, Organization
+from app.modules.tenancy.models import Invitation, Membership, Organization
 from app.modules.tenancy.repository import MembershipRepository, OrganizationRepository
 from product import config as product_config
 
@@ -50,6 +50,8 @@ class TenantIsolationContext:
     org_b_owner_membership: Membership
     # T-311's sweep mints a key as this user; the session cases never need it.
     org_a_owner_id: UUID
+    # A pending invitation in org_b, for the resend/revoke cases.
+    org_b_invitation_id: UUID
 
 
 RequestFn = Callable[[TenantIsolationContext], Awaitable[httpx.Response]]
@@ -125,6 +127,15 @@ async def org_a_api_key(
 async def isolation_ctx(client: httpx.AsyncClient, session: AsyncSession) -> TenantIsolationContext:
     org_a, owner_a = await _create_org_with_owner(session, name="OrgA")
     org_b, owner_b = await _create_org_with_owner(session, name="OrgB")
+    invitation_b = Invitation(
+        org_id=org_b.id,
+        email=f"invitee-{uuid4().hex[:8]}@example.com",
+        role=MemberRole.MEMBER,
+        token_hash=uuid4().hex,
+        invited_by=owner_b.user_id,
+        expires_at=datetime.now(UTC) + timedelta(days=7),
+    )
+    session.add(invitation_b)
     await session.commit()
 
     token = create_access_token(owner_a.user_id, None, ())
@@ -135,6 +146,7 @@ async def isolation_ctx(client: httpx.AsyncClient, session: AsyncSession) -> Ten
         user_a_headers={"Authorization": f"Bearer {token}"},
         org_b_owner_membership=owner_b,
         org_a_owner_id=owner_a.user_id,
+        org_b_invitation_id=invitation_b.id,
     )
 
 
@@ -172,6 +184,34 @@ async def _remove_member(ctx: TenantIsolationContext) -> httpx.Response:
         f"/api/v1/orgs/{ctx.org_a.id}/members/{ctx.org_b_owner_membership.id}",
         headers=ctx.user_a_headers,
     )
+
+
+async def _member_avatar(ctx: TenantIsolationContext) -> httpx.Response:
+    # Same shape as _update_member_role: user_a's own org in the path, another
+    # org's membership as the target.
+    return await ctx.client.get(
+        f"/api/v1/orgs/{ctx.org_a.id}/members/{ctx.org_b_owner_membership.id}/avatar",
+        headers=ctx.user_a_headers,
+    )
+
+
+async def _resend_invitation(ctx: TenantIsolationContext) -> httpx.Response:
+    # user_a's own org in the path, org_b's invitation as the target.
+    return await ctx.client.post(
+        f"/api/v1/orgs/{ctx.org_a.id}/invitations/{ctx.org_b_invitation_id}/resend",
+        headers=ctx.user_a_headers,
+    )
+
+
+async def _revoke_invitation(ctx: TenantIsolationContext) -> httpx.Response:
+    return await ctx.client.delete(
+        f"/api/v1/orgs/{ctx.org_a.id}/invitations/{ctx.org_b_invitation_id}",
+        headers=ctx.user_a_headers,
+    )
+
+
+async def _leave_org(ctx: TenantIsolationContext) -> httpx.Response:
+    return await ctx.client.post(f"/api/v1/orgs/{ctx.org_b.id}/leave", headers=ctx.user_a_headers)
 
 
 async def _list_invitations(ctx: TenantIsolationContext) -> httpx.Response:
@@ -248,6 +288,10 @@ _CASES: list[tuple[str, RequestFn, tuple[int, ...], str | None]] = [
     ("GET /orgs/{org_id}/members", _list_members, (403,), None),
     ("PATCH /orgs/{org_id}/members/{membership_id}", _update_member_role, (404,), None),
     ("DELETE /orgs/{org_id}/members/{membership_id}", _remove_member, (404,), None),
+    ("GET /orgs/{org_id}/members/{membership_id}/avatar", _member_avatar, (404,), None),
+    ("POST /orgs/{org_id}/invitations/{invitation_id}/resend", _resend_invitation, (404,), None),
+    ("DELETE /orgs/{org_id}/invitations/{invitation_id}", _revoke_invitation, (404,), None),
+    ("POST /orgs/{org_id}/leave", _leave_org, (403,), None),
     ("GET /orgs/{org_id}/invitations", _list_invitations, (403,), None),
     ("POST /orgs/{org_id}/invitations", _create_invitation, (403,), None),
     ("POST /billing/checkout-session", _checkout_session, (403,), "billing"),

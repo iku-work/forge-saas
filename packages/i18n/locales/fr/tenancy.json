@@ -1,7 +1,7 @@
 {
   "org_create": {
     "title": "Créez votre organisation",
-    "description": "Vous devez disposer d'une organisation avant de pouvoir inviter des collègues ou gérer la facturation.",
+    "description": "Vous devez disposer d'une organisation avant de pouvoir inviter des membres ou gérer la facturation.",
     "name_label": "Nom de l'organisation",
     "submit": "Créer l'organisation",
     "submit_pending": "Création en cours…",
@@ -12,11 +12,13 @@
     "description": "Gérez le profil de votre organisation.",
     "name_label": "Nom de l'organisation",
     "logo_upload": "Importer un logo",
-    "coming_soon": "Bientôt disponible.",
     "save": "Enregistrer",
     "saved": "Enregistré.",
     "permission_notice": "Seuls les propriétaires et les administrateurs peuvent modifier ceci.",
-    "error_default": "Impossible de mettre à jour l'organisation."
+    "error_default": "Impossible de mettre à jour l'organisation.",
+    "logo_label": "Logo",
+    "name_hint": "Visible par chaque membre, ainsi que dans les e-mails et les invitations.",
+    "section_general": "Général"
   },
   "members": {
     "title": "Membres",
@@ -39,7 +41,12 @@
     },
     "error_load": "Impossible de charger les membres.",
     "error_role_change": "Impossible de mettre à jour le rôle de ce membre.",
-    "error_remove": "Impossible de supprimer ce membre."
+    "error_remove": "Impossible de supprimer ce membre.",
+    "actions_label": "Actions pour {name}",
+    "change_role": "Modifier le rôle",
+    "joined_col": "Arrivée",
+    "status_active": "Actif",
+    "status_col": "Statut"
   },
   "invitations": {
     "title": "Invitations en attente",
@@ -55,7 +62,7 @@
     "error_load": "Impossible de charger les invitations en attente."
   },
   "invite": {
-    "title": "Inviter un collègue",
+    "title": "Inviter un membre",
     "email_label": "E-mail",
     "role_label": "Rôle",
     "submit": "Envoyer l'invitation",
@@ -134,7 +141,8 @@
     "error_revoke": "Impossible de révoquer la clé.",
     "error_no_scopes": "Choisissez au moins une portée.",
     "empty_title": "Aucune clé d'API pour le moment",
-    "empty_body": "Les clés d'API permettent aux scripts et aux intégrations d'appeler l'API au nom de votre organisation, avec les seules portées que vous accordez. Créez-en une pour commencer — la clé n'est affichée qu'une fois."
+    "empty_body": "Les clés d'API permettent aux scripts et aux intégrations d'appeler l'API au nom de votre organisation, avec les seules portées que vous accordez. Créez-en une pour commencer — la clé n'est affichée qu'une fois.",
+    "menu_label": "Actions pour {name}"
   },
   "webhooks": {
     "title": "Webhooks",
@@ -213,6 +221,7 @@
     "error_replay": "Impossible de rejouer la livraison.",
     "error_no_events": "Choisissez au moins un événement.",
     "empty_title": "Aucun endpoint pour le moment",
-    "empty_body": "Les webhooks envoient les événements à une URL que vous contrôlez dès qu'ils se produisent, sans interrogation de votre part. Ajoutez un endpoint et choisissez les événements à recevoir."
+    "empty_body": "Les webhooks envoient les événements à une URL que vous contrôlez dès qu'ils se produisent, sans interrogation de votre part. Ajoutez un endpoint et choisissez les événements à recevoir.",
+    "menu_label": "Actions pour {url}"
   }
 }

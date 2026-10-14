@@ -43,7 +43,8 @@
     "type_file_infected": "Un fichier que vous avez importé est signalé comme infecté",
     "channel_required": "obligatoire",
     "required_note": "Nous vous informons toujours par e-mail des problèmes de paiement ; cela ne peut pas être désactivé, sinon vous perdriez l'accès sans avertissement.",
-    "type_webhook_endpoint_disabled": "Un point de terminaison webhook est désactivé après des échecs répétés"
+    "type_webhook_endpoint_disabled": "Un point de terminaison webhook est désactivé après des échecs répétés",
+    "section_title": "Comment vous recevez chaque notification"
   },
   "types": {
     "member_invited": {

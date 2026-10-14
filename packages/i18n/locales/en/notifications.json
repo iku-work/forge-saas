@@ -43,7 +43,8 @@
     "type_file_infected": "A file you uploaded is flagged as infected",
     "channel_required": "required",
     "required_note": "We always email you about billing problems, so those can't be turned off — you'd lose access without warning.",
-    "type_webhook_endpoint_disabled": "A webhook endpoint is switched off after repeated failures"
+    "type_webhook_endpoint_disabled": "A webhook endpoint is switched off after repeated failures",
+    "section_title": "How each notification reaches you"
   },
   "types": {
     "member_invited": {

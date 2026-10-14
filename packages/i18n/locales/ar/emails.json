@@ -6,7 +6,7 @@
     "invitation": "لقد تمت دعوتك للانضمام إلى مؤسسة",
     "welcome": "مرحبًا بك في ForgeSaaS",
     "download_link": "تصدير بياناتك جاهز",
-    "member_invited": "عضو جديد في الفريق",
+    "member_invited": "عضو جديد",
     "payment_failed": "لم تتم معالجة دفعتك",
     "subscription_expiring": "اشتراكك على وشك الانتهاء",
     "subscription_suspended": "تم تعليق اشتراكك",
@@ -77,10 +77,10 @@
     "expires": "تنتهي صلاحية هذا الرابط خلال 24 ساعة."
   },
   "member_invited": {
-    "title": "عضو جديد في الفريق",
+    "title": "عضو جديد",
     "greeting": "مرحبًا",
     "body": "انضم {member_name} إلى {org_name} بصفة {role}.",
-    "button": "عرض الفريق"
+    "button": "عرض الأعضاء"
   },
   "payment_failed": {
     "title": "فشلت عملية الدفع",
@@ -103,7 +103,7 @@
   "trial_ending": {
     "title": "فترتك التجريبية على وشك الانتهاء",
     "greeting": "مرحبًا",
-    "body": "تنتهي الفترة التجريبية لـ {org_name} في {trial_end_date}. قم بالترقية الآن للحفاظ على وصول فريقك.",
+    "body": "تنتهي الفترة التجريبية لـ {org_name} في {trial_end_date}. قم بالترقية الآن ليحتفظ أعضاؤك بإمكانية الوصول.",
     "button": "الترقية الآن"
   },
   "trial_expired": {

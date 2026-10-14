@@ -61,7 +61,7 @@ describe("AppLayout / routes (billing, notifications, multi-org disabled)", () =
     renderApp({ initialPath: "/", user });
 
     expect(
-      await screen.findByRole("heading", { name: "Dashboard" }),
+      await screen.findByRole("heading", { name: "Welcome to Acme Inc" }),
     ).toBeInTheDocument();
     expect(
       screen.queryByRole("link", { name: "Billing" }),
@@ -97,7 +97,7 @@ describe("AppLayout / routes (billing, notifications, multi-org disabled)", () =
     renderApp({ initialPath: "/", user });
 
     expect(
-      await screen.findByRole("heading", { name: "Dashboard" }),
+      await screen.findByRole("heading", { name: "Welcome to Acme Inc" }),
     ).toBeInTheDocument();
     expect(
       screen.queryByRole("link", { name: "API keys" }),

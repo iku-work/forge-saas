@@ -622,3 +622,250 @@ async def test_invitation_full_round_trip_via_http(
         f"/api/v1/invitations/{token}/accept", headers=_auth_header(user_b)
     )
     assert second_accept.status_code == 401
+
+
+# --- member summaries, email search, total (visual overhaul follow-up) ----------
+
+
+async def test_list_members_carries_each_members_name_and_email(
+    client: httpx.AsyncClient, session: AsyncSession, user_a: User, org_a: Organization
+) -> None:
+    member, _ = await _add_member(session, org_a)
+
+    response = await client.get(f"/api/v1/orgs/{org_a.id}/members", headers=_auth_header(user_a))
+
+    assert response.status_code == 200
+    summaries = {row["user"]["email"]: row["user"] for row in response.json()["data"]}
+    assert summaries[member.email] == {
+        "full_name": None,
+        "email": member.email,
+        "avatar_url": None,
+        "has_uploaded_avatar": False,
+    }
+    assert response.json()["meta"]["total"] == 2
+
+
+async def test_list_members_filters_by_email_in_any_case_and_counts_the_match(
+    client: httpx.AsyncClient, session: AsyncSession, user_a: User, org_a: Organization
+) -> None:
+    member, _ = await _add_member(session, org_a)
+
+    response = await client.get(
+        f"/api/v1/orgs/{org_a.id}/members",
+        params={"q": member.email[:12].upper()},
+        headers=_auth_header(user_a),
+    )
+
+    assert [row["user"]["email"] for row in response.json()["data"]] == [member.email]
+    assert response.json()["meta"]["total"] == 1
+
+
+async def test_list_members_treats_like_wildcards_in_the_query_literally(
+    client: httpx.AsyncClient, session: AsyncSession, user_a: User, org_a: Organization
+) -> None:
+    await _add_member(session, org_a)
+
+    response = await client.get(
+        f"/api/v1/orgs/{org_a.id}/members", params={"q": "%"}, headers=_auth_header(user_a)
+    )
+
+    assert response.json()["data"] == []
+    assert response.json()["meta"]["total"] == 0
+
+
+async def test_list_members_hides_emails_from_a_plain_member(
+    client: httpx.AsyncClient, session: AsyncSession, org_a: Organization
+) -> None:
+    member, _ = await _add_member(session, org_a)
+
+    response = await client.get(f"/api/v1/orgs/{org_a.id}/members", headers=_auth_header(member))
+
+    assert response.status_code == 200
+    assert {row["user"]["email"] for row in response.json()["data"]} == {None}
+
+
+async def test_list_members_refuses_an_email_search_from_a_plain_member(
+    client: httpx.AsyncClient, session: AsyncSession, user_a: User, org_a: Organization
+) -> None:
+    """Otherwise a member learns addresses one guess at a time."""
+    member, _ = await _add_member(session, org_a)
+
+    response = await client.get(
+        f"/api/v1/orgs/{org_a.id}/members",
+        params={"q": user_a.email[:6]},
+        headers=_auth_header(member),
+    )
+
+    assert response.status_code == 403
+    assert response.json()["error"]["message_key"] == "errors.missing_scope"
+
+
+async def test_list_members_shows_emails_to_an_admin(
+    client: httpx.AsyncClient, session: AsyncSession, user_a: User, org_a: Organization
+) -> None:
+    admin, _ = await _add_member(session, org_a, role=MemberRole.ADMIN)
+
+    response = await client.get(f"/api/v1/orgs/{org_a.id}/members", headers=_auth_header(admin))
+
+    assert {row["user"]["email"] for row in response.json()["data"]} == {
+        user_a.email,
+        admin.email,
+    }
+
+
+async def test_member_avatar_is_404_without_an_uploaded_one(
+    client: httpx.AsyncClient, session: AsyncSession, user_a: User, org_a: Organization
+) -> None:
+    _, membership = await _add_member(session, org_a)
+
+    response = await client.get(
+        f"/api/v1/orgs/{org_a.id}/members/{membership.id}/avatar", headers=_auth_header(user_a)
+    )
+
+    assert response.status_code == 404
+
+
+async def test_member_avatar_does_not_reach_another_orgs_membership(
+    client: httpx.AsyncClient,
+    session: AsyncSession,
+    user_a: User,
+    org_a: Organization,
+    org_b: Organization,
+) -> None:
+    _, other = await _add_member(session, org_b)
+
+    response = await client.get(
+        f"/api/v1/orgs/{org_a.id}/members/{other.id}/avatar", headers=_auth_header(user_a)
+    )
+
+    assert response.status_code == 404
+
+
+# --- resend / revoke an invitation (visual overhaul follow-up) -----------------
+
+
+async def test_resend_invitation_issues_a_fresh_link_and_emails_it(
+    client: httpx.AsyncClient,
+    session: AsyncSession,
+    user_a: User,
+    org_a: Organization,
+    enqueued_jobs: list[tuple[str, dict[str, Any]]],
+) -> None:
+    """An expired invitation is the usual reason to resend: it comes back
+    with a new expiry, and the old link stops working (one hash per row)."""
+    invitation = await _add_invitation(
+        session, org_a, user_a, email="late@example.com", expires_in=timedelta(days=-1)
+    )
+    old_hash = invitation.token_hash
+
+    response = await client.post(
+        f"/api/v1/orgs/{org_a.id}/invitations/{invitation.id}/resend",
+        headers=_auth_header(user_a),
+    )
+
+    assert response.status_code == 200
+    assert "token_hash" not in response.json()["data"]
+    await session.refresh(invitation)
+    assert invitation.token_hash != old_hash
+    assert invitation.expires_at > datetime.now(UTC)
+    assert [kwargs["to"] for name, kwargs in enqueued_jobs if name == "send_email"] == [
+        "late@example.com"
+    ]
+
+
+async def test_resend_invitation_member_without_permission_returns_403(
+    client: httpx.AsyncClient, session: AsyncSession, user_a: User, org_a: Organization
+) -> None:
+    invitation = await _add_invitation(session, org_a, user_a)
+    member, _ = await _add_member(session, org_a)
+
+    response = await client.post(
+        f"/api/v1/orgs/{org_a.id}/invitations/{invitation.id}/resend",
+        headers=_auth_header(member),
+    )
+
+    assert response.status_code == 403
+
+
+async def test_resend_an_accepted_invitation_returns_404(
+    client: httpx.AsyncClient, session: AsyncSession, user_a: User, org_a: Organization
+) -> None:
+    invitation = await _add_invitation(session, org_a, user_a, accepted=True)
+
+    response = await client.post(
+        f"/api/v1/orgs/{org_a.id}/invitations/{invitation.id}/resend",
+        headers=_auth_header(user_a),
+    )
+
+    assert response.status_code == 404
+
+
+async def test_revoke_invitation_removes_it_from_the_list(
+    client: httpx.AsyncClient, session: AsyncSession, user_a: User, org_a: Organization
+) -> None:
+    invitation = await _add_invitation(session, org_a, user_a)
+
+    response = await client.delete(
+        f"/api/v1/orgs/{org_a.id}/invitations/{invitation.id}", headers=_auth_header(user_a)
+    )
+
+    assert response.status_code == 200
+    listed = await client.get(f"/api/v1/orgs/{org_a.id}/invitations", headers=_auth_header(user_a))
+    assert listed.json()["data"] == []
+
+
+async def test_revoke_invitation_member_without_permission_returns_403(
+    client: httpx.AsyncClient, session: AsyncSession, user_a: User, org_a: Organization
+) -> None:
+    invitation = await _add_invitation(session, org_a, user_a)
+    member, _ = await _add_member(session, org_a)
+
+    response = await client.delete(
+        f"/api/v1/orgs/{org_a.id}/invitations/{invitation.id}", headers=_auth_header(member)
+    )
+
+    assert response.status_code == 403
+
+
+# --- POST /orgs/{org_id}/leave (visual overhaul follow-up) ------------------------
+
+
+async def test_a_member_can_leave_an_organization(
+    client: httpx.AsyncClient, session: AsyncSession, org_a: Organization
+) -> None:
+    member, membership = await _add_member(session, org_a)
+
+    response = await client.post(f"/api/v1/orgs/{org_a.id}/leave", headers=_auth_header(member))
+
+    assert response.status_code == 200
+    session.expunge(membership)
+    gone = await session.get(Membership, membership.id)
+    assert gone is None
+
+
+async def test_the_last_owner_cannot_leave(
+    client: httpx.AsyncClient, user_a: User, org_a: Organization
+) -> None:
+    """An organization nobody can manage is stranded."""
+    response = await client.post(f"/api/v1/orgs/{org_a.id}/leave", headers=_auth_header(user_a))
+
+    assert response.status_code == 409
+    assert response.json()["error"]["message_key"] == "errors.cannot_leave_last_owner"
+
+
+async def test_an_owner_can_leave_while_another_owner_remains(
+    client: httpx.AsyncClient, session: AsyncSession, user_a: User, org_a: Organization
+) -> None:
+    await _add_member(session, org_a, role=MemberRole.OWNER)
+
+    response = await client.post(f"/api/v1/orgs/{org_a.id}/leave", headers=_auth_header(user_a))
+
+    assert response.status_code == 200
+
+
+async def test_leaving_an_organization_you_are_not_in_returns_403(
+    client: httpx.AsyncClient, user_a: User, org_b: Organization
+) -> None:
+    response = await client.post(f"/api/v1/orgs/{org_b.id}/leave", headers=_auth_header(user_a))
+
+    assert response.status_code == 403

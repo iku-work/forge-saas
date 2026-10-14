@@ -8,7 +8,8 @@
     "error_download": "No se ha podido iniciar la descarga.",
     "error_delete": "No se ha podido eliminar el archivo.",
     "empty_body_read_only": "Nadie de tu organización ha subido un archivo todavía. Pide a un administrador que añada uno si lo necesitas.",
-    "scan_taking_long": "El análisis de algunos archivos está tardando más de lo habitual. Actualiza la página para volver a comprobarlo."
+    "scan_taking_long": "El análisis de algunos archivos está tardando más de lo habitual. Actualiza la página para volver a comprobarlo.",
+    "description": "Archivos compartidos en tu organización, analizados antes de que nadie pueda abrirlos."
   },
   "uploader": {
     "drop_here": "Suelta los archivos aquí",
@@ -47,7 +48,8 @@
     "download_blocked_scanning": "Este archivo todavía se está analizando en busca de virus.",
     "download_blocked_pending": "Esta subida aún no ha terminado.",
     "download_blocked_infected": "Se ha detectado malware en este archivo, por lo que no se puede descargar.",
-    "download_blocked_failed": "No se ha podido analizar este archivo, por lo que no se puede descargar."
+    "download_blocked_failed": "No se ha podido analizar este archivo, por lo que no se puede descargar.",
+    "menu_label": "Acciones para {filename}"
   },
   "picker": {
     "upload_button": "Subir",

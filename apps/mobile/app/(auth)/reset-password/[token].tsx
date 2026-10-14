@@ -26,7 +26,7 @@ export default function ResetPasswordScreen() {
 
   const { control, handleSubmit, formState } = useForm<PasswordResetInput>({
     resolver: zodResolver(passwordResetSchema),
-    defaultValues: { token, newPassword: "" },
+    defaultValues: { token, newPassword: "", confirmPassword: "" },
   });
 
   if (!token) {
@@ -82,6 +82,13 @@ export default function ResetPasswordScreen() {
         name="newPassword"
         label={t("auth.reset_password.new_password_label")}
         hint={t("auth.reset_password.password_helper")}
+        secureTextEntry
+        autoComplete="new-password"
+      />
+      <FormField
+        control={control}
+        name="confirmPassword"
+        label={t("auth.reset_password.confirm_password_label")}
         secureTextEntry
         autoComplete="new-password"
       />

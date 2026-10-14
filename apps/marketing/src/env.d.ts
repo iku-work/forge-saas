@@ -39,3 +39,10 @@ interface ImportMetaEnv {
 interface ImportMeta {
   readonly env: ImportMetaEnv;
 }
+
+// Registered in astro.config.mjs; see src/directives/afterpaint.ts.
+declare namespace Astro {
+  interface ClientDirectives {
+    "client:afterpaint"?: boolean;
+  }
+}

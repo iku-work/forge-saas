@@ -8,7 +8,8 @@
     "error_download": "Le téléchargement n'a pas pu démarrer.",
     "error_delete": "Le fichier n'a pas pu être supprimé.",
     "empty_body_read_only": "Personne dans votre organisation n'a encore importé de fichier. Demandez à un administrateur d'en ajouter un si vous en avez besoin.",
-    "scan_taking_long": "L'analyse de certains fichiers prend plus de temps que d'habitude. Actualisez la page pour vérifier à nouveau."
+    "scan_taking_long": "L'analyse de certains fichiers prend plus de temps que d'habitude. Actualisez la page pour vérifier à nouveau.",
+    "description": "Fichiers partagés dans votre organisation, analysés avant que quiconque puisse les ouvrir."
   },
   "uploader": {
     "drop_here": "Déposez vos fichiers ici",
@@ -47,7 +48,8 @@
     "download_blocked_scanning": "Ce fichier est encore en cours d'analyse antivirus.",
     "download_blocked_pending": "Cet import n'est pas encore terminé.",
     "download_blocked_infected": "Un logiciel malveillant a été détecté dans ce fichier ; il ne peut pas être téléchargé.",
-    "download_blocked_failed": "Ce fichier n'a pas pu être analysé ; il ne peut pas être téléchargé."
+    "download_blocked_failed": "Ce fichier n'a pas pu être analysé ; il ne peut pas être téléchargé.",
+    "menu_label": "Actions pour {filename}"
   },
   "picker": {
     "upload_button": "Importer",

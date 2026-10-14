@@ -75,7 +75,7 @@ describe("the marketing module toggle", () => {
     build({ productConfig: BILLING_DISABLED_FIXTURE });
     const html = readPath(LANDING);
 
-    expect(html).toContain("Accounts and teams");
+    expect(html).toContain("Accounts and organizations");
     expect(html).not.toContain("Subscriptions that reconcile");
   });
 
@@ -116,7 +116,9 @@ describe("the built marketing site", () => {
     // The strings, not a root div: a SPA shell would pass any "the file
     // exists" check while being exactly what P4-A exists to avoid.
     expect(html).toContain("Ship the product, not the plumbing");
-    expect(html).toContain("Accounts, teams, billing and an admin console");
+    expect(html).toContain(
+      "Accounts, organizations, billing and an admin console",
+    );
     expect(html).toContain("What you start with");
   });
 

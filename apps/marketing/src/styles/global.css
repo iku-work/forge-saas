@@ -5,6 +5,7 @@
  * which is exactly the drift a template exists to prevent -- see
  * packages/ui/styles/tokens.css. */
 @import "@forge/ui/styles/tokens.css";
+@import "@forge/ui/styles/fonts.css";
 
 /* Tailwind v4 does not scan node_modules. A @forge/ui component mounted as an
  * island renders classes that exist only in the package's built output, and
@@ -56,4 +57,23 @@
  * trouble. */
 .prose pre {
   overflow-x: auto;
+}
+
+/* Page titles in the landing's condensed display face (visual overhaul):
+ * one class rather than the same five utilities on every page. Smaller than
+ * the landing headline, which is the one place the type is meant to shout. */
+@layer components {
+  .type-display {
+    font-size: 2.5rem;
+    line-height: 1.05;
+    font-weight: 600;
+    font-stretch: 82%;
+    letter-spacing: -0.03em;
+  }
+
+  /* The typography plugin sets size and weight; the width is the face's. */
+  .prose :where(h2, h3) {
+    font-stretch: 86%;
+    letter-spacing: -0.015em;
+  }
 }

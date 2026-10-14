@@ -178,6 +178,19 @@ async def test_a_valid_key_with_the_right_scope_is_served(world: KeyWorld) -> No
 
 
 @pytest.mark.usefixtures("public_api_enabled")
+async def test_member_emails_need_the_write_scope(world: KeyWorld) -> None:
+    """Emails are for whoever manages members: a read-only key gets nulls."""
+    read_only = await _mint(world, scopes=["members:read"])
+    manager = await _mint(world, scopes=["members:read", "members:write"])
+
+    hidden = await world.client.get(_members_url(world), headers=_key_headers(world, read_only))
+    shown = await world.client.get(_members_url(world), headers=_key_headers(world, manager))
+
+    assert hidden.json()["data"][0]["user"]["email"] is None
+    assert shown.json()["data"][0]["user"]["email"] is not None
+
+
+@pytest.mark.usefixtures("public_api_enabled")
 async def test_a_key_without_the_scope_is_refused(world: KeyWorld) -> None:
     """403, not 401: the credential is real and the caller should be told the
     problem is what it may do, not who it is."""

@@ -91,3 +91,22 @@ def normalize(prefs: dict[str, dict[str, bool]]) -> dict[str, dict[str, bool]]:
             row[channel] = True
         normalized[notification_type] = row
     return normalized
+
+
+def effective(prefs: dict[str, dict[str, bool]]) -> dict[str, dict[str, bool]]:
+    """The full matrix a person's preferences resolve to: every known type,
+    every channel, defaults filled in and required channels on.
+
+    What a client is shown (UserPublic applies it on the way out), so the
+    settings page draws exactly what channels_for() will do -- a legacy row
+    that switched off a required channel, or predates a type, reads healed
+    without anyone having to save it first. Storage keeps the sparse shape
+    (see normalize), so a channel added to DEFAULT_PREFERENCES later still
+    reaches everyone who never touched it.
+    """
+    return {
+        notification_type: {
+            channel: channel in channels_for(prefs, notification_type) for channel in CHANNELS
+        }
+        for notification_type in DEFAULT_PREFERENCES
+    }

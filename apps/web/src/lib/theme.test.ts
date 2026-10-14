@@ -6,6 +6,7 @@ import {
   getPreference,
   getResolvedTheme,
   readStoredPreference,
+  reconcileServerPreference,
   resolveTheme,
   setPreference,
   startThemeSync,
@@ -232,6 +233,36 @@ describe("adoptServerPreference", () => {
 
     expect(listener).not.toHaveBeenCalled();
     unsubscribe();
+  });
+});
+
+describe("reconcileServerPreference", () => {
+  it("keeps this device's choice over an account still on the default", () => {
+    // Picked dark, then signed up: a new account says "system", and that is
+    // not a choice the user made.
+    stubMatchMedia(false);
+    teardown = startThemeSync();
+    setPreference("dark");
+
+    expect(reconcileServerPreference("system")).toBe("dark");
+    expect(getPreference()).toBe("dark");
+  });
+
+  it("adopts an explicit account choice", () => {
+    stubMatchMedia(false);
+    teardown = startThemeSync();
+    setPreference("dark");
+
+    expect(reconcileServerPreference("light")).toBeNull();
+    expect(getPreference()).toBe("light");
+  });
+
+  it("leaves a device that never chose on the account's default", () => {
+    stubMatchMedia(false);
+    teardown = startThemeSync();
+
+    expect(reconcileServerPreference("system")).toBeNull();
+    expect(getPreference()).toBe("system");
   });
 });
 
