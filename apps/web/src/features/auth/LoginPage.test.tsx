@@ -16,6 +16,22 @@ vi.mock("@simplewebauthn/browser", () => webauthnBrowser);
 const API = getApiBaseUrl();
 
 describe("LoginPage", () => {
+  it("links Terms and Privacy at the bottom of the page (ticket 11)", async () => {
+    renderApp({ initialPath: "/login" });
+    await screen.findByRole("heading", {
+      name: t("auth.login.title", {}, "en"),
+    });
+
+    expect(screen.getByRole("link", { name: "Terms" })).toHaveAttribute(
+      "href",
+      "https://marketing.localhost/en/terms",
+    );
+    expect(screen.getByRole("link", { name: "Privacy" })).toHaveAttribute(
+      "href",
+      "https://marketing.localhost/en/privacy",
+    );
+  });
+
   it("shows a validation error for an invalid email and does not call the API", async () => {
     let loginCalled = false;
     server.use(
@@ -123,7 +139,9 @@ describe("LoginPage", () => {
       name: t("auth.two_factor_challenge.title", {}, "en"),
     });
     await user.type(
-      screen.getByLabelText(t("auth.two_factor_challenge.code_label", {}, "en")),
+      screen.getByLabelText(
+        t("auth.two_factor_challenge.code_label", {}, "en"),
+      ),
       "123456",
     );
     await user.click(
@@ -133,7 +151,10 @@ describe("LoginPage", () => {
     );
 
     await waitFor(() => {
-      expect(twoFaLoginBody).toEqual({ temp_token: "temp-abc", code: "123456" });
+      expect(twoFaLoginBody).toEqual({
+        temp_token: "temp-abc",
+        code: "123456",
+      });
     });
   });
 

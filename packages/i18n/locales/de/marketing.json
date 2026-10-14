@@ -13,13 +13,13 @@
   },
   "hero": {
     "title": "Bauen Sie das Produkt, nicht das Fundament",
-    "subtitle": "Konten, Teams, Abrechnung und eine Admin-Konsole sind bereits gebaut und getestet. Fangen Sie dort an, wo die interessante Arbeit beginnt.",
+    "subtitle": "Konten, Organisationen, Abrechnung und eine Admin-Konsole sind bereits gebaut und getestet. Fangen Sie dort an, wo die interessante Arbeit beginnt.",
     "cta_primary": "Loslegen",
-    "cta_secondary": "Anmelden"
+    "cta_guides": "Anleitungen lesen"
   },
   "highlights": {
     "heading": "Womit Sie starten",
-    "accounts_title": "Konten und Teams",
+    "accounts_title": "Konten und Organisationen",
     "accounts_body": "Registrierung, Sitzungen, Zwei-Faktor-Authentifizierung, Einladungen und Rollen pro Organisation – ab der ersten Abfrage nach Mandanten getrennt.",
     "billing_title": "Abonnements, die aufgehen",
     "billing_body": "Tarife, Testphasen, Upgrades und Mahnläufe – samt Webhook-Verarbeitung, die auch beim doppelten Eintreffen desselben Ereignisses korrekt bleibt.",
@@ -57,7 +57,7 @@
     "empty": "Es sind noch keine Tarife konfiguriert.",
     "committed_notice": "Diese Preise wurden mit der Website veröffentlicht und ändern sich beim nächsten Deployment, nicht beim nächsten Datenbank-Update.",
     "feature_labels": {
-      "seats": "{count, number} Teammitglieder",
+      "seats": "{count, number} Mitglieder",
       "storage_gb": "{count, number} GB Speicher",
       "api_calls": "{count, number} API-Aufrufe pro Monat"
     },
@@ -159,5 +159,30 @@
     "endpoints_title": "Endpunkte",
     "endpoints_empty": "Dieses Deployment veröffentlicht keine öffentlichen Endpunkte.",
     "scope_required": "Erfordert die Berechtigung {scope}"
+  },
+  "hero_product": {
+    "checklist_title": "Erste Schritte",
+    "description": "Noch ein paar Schritte, bis Ihre Organisation bereit ist.",
+    "nav_dashboard": "Dashboard",
+    "nav_files": "Dateien",
+    "nav_reports": "Berichte",
+    "nav_settings": "Einstellungen",
+    "org": "Acme",
+    "progress": "1 von 4 erledigt",
+    "search": "Suchen",
+    "step_done": "Erledigt",
+    "step_files_action": "Datei hochladen",
+    "step_files_hint": "Dateien sind für Ihre Organisation privat und werden geprüft, bevor jemand sie öffnen kann.",
+    "step_files_title": "Erste Datei hochladen",
+    "step_invite_action": "Mitglied einladen",
+    "step_invite_hint": "Mitglieder erhalten eine eigene Anmeldung und eine Rolle, die Sie wählen.",
+    "step_invite_title": "Ein Mitglied einladen",
+    "step_plan_action": "Tarife ansehen",
+    "step_plan_hint": "Wählen Sie den Tarif, der zu Ihrer Organisation passt.",
+    "step_plan_title": "Tarif wählen",
+    "step_profile_action": "Profil bearbeiten",
+    "step_profile_hint": "Fügen Sie Ihren Namen und ein Foto hinzu, damit Mitglieder Sie erkennen.",
+    "step_profile_title": "Profil vervollständigen",
+    "title": "Willkommen bei {org}"
   }
 }

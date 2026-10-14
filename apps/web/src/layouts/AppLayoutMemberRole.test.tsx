@@ -42,7 +42,7 @@ describe("AppLayout (plain member, one org)", () => {
     renderApp({ initialPath: "/", user });
 
     expect(
-      await screen.findByRole("heading", { name: "Dashboard" }),
+      await screen.findByRole("heading", { name: "Welcome to Acme Inc" }),
     ).toBeInTheDocument();
     expect(
       screen.queryByRole("link", { name: "Billing" }),

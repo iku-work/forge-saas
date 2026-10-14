@@ -46,10 +46,13 @@ from app.core.dependencies import (
 )
 from app.core.envelope import Envelope, Meta
 from app.middleware.rate_limit import api_limit
+from app.modules.auth.models import User
 from app.modules.auth.permissions import Permission
 from app.modules.billing.dependencies import OrgSubscription, get_optional_org_subscription
+from app.modules.storage.models import StoredFile
 from app.modules.storage.schemas import (
     DownloadUrlResponse,
+    FileUploaderSummary,
     PresignUploadRequest,
     PresignUploadResponse,
     StoredFilePublic,
@@ -148,15 +151,22 @@ async def list_files(  # noqa: PLR0913 — cursor pagination (§0.3) needs after
     bucket: Annotated[str, Query()] = "default",
 ) -> Envelope[list[StoredFilePublic]]:
     org, _membership = org_and_membership
-    files, next_cursor = await StorageService(session, org.id, redis).list_files(
-        after, limit, bucket=bucket
-    )
-    data = [StoredFilePublic.model_validate(f) for f in files]
+    service = StorageService(session, org.id, redis)
+    files, next_cursor = await service.list_files(after, limit, bucket=bucket)
+    uploaders = await service.uploaders_for(files)
+    data = [_file_public(f, uploaders.get(f.uploaded_by)) for f in files]
     meta = Meta(
         request_id=_request_id(request),
         next_cursor=str(next_cursor) if next_cursor is not None else None,
     )
     return Envelope(data=data, meta=meta)
+
+
+def _file_public(stored_file: StoredFile, uploader: User | None) -> StoredFilePublic:
+    public = StoredFilePublic.model_validate(stored_file)
+    if uploader is not None:
+        public.uploader = FileUploaderSummary(full_name=uploader.full_name, email=uploader.email)
+    return public
 
 
 @router.get("/{file_id}/download")

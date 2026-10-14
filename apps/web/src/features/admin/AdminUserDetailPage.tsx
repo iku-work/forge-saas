@@ -1,17 +1,21 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
+import { ArrowLeft } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
 import { getAdminUserDetail } from "@forge/api-client";
 import {
   Alert,
   AlertDescription,
-  Badge,
   Button,
-  Card,
-  CardContent,
+  DataListMuted,
+  DataListRow,
+  Page,
+  PageHeader,
+  SettingsSection,
   Skeleton,
+  StatusPill,
   Table,
   TableBody,
   TableCell,
@@ -42,12 +46,13 @@ export function AdminUserDetailPage({ userId }: { userId: string }) {
   const detail = detailQuery.data?.data ?? null;
 
   return (
-    <div className="max-w-4xl space-y-6 p-6">
+    <Page>
       <Link
         to="/$locale/admin/users"
         params={{ locale }}
-        className="text-sm text-muted-foreground underline underline-offset-4"
+        className="mb-3 inline-flex items-center gap-1.5 text-[0.8125rem] text-muted-foreground hover:text-foreground"
       >
+        <ArrowLeft className="size-3.5" aria-hidden="true" />
         {t("common.admin.user_detail.back_to_users")}
       </Link>
 
@@ -56,147 +61,155 @@ export function AdminUserDetailPage({ userId }: { userId: string }) {
       ) : detailQuery.isError ? (
         <Alert variant="destructive">
           <AlertDescription>
-            {getErrorMessage(detailQuery.error, "common.admin.user_detail.error_load")}
+            {getErrorMessage(
+              detailQuery.error,
+              "common.admin.user_detail.error_load",
+            )}
           </AlertDescription>
         </Alert>
       ) : detail ? (
         <>
-          <div className="flex items-center justify-between">
-            <div>
-              <div className="flex items-center gap-2">
-                <h1 className="text-xl font-semibold" data-testid="page-title">{detail.email}</h1>
+          <PageHeader
+            title={<span className="break-all">{detail.email}</span>}
+            description={
+              <span className="flex flex-wrap items-center gap-x-3 gap-y-1">
                 {detail.is_superadmin ? (
-                  <Badge variant="destructive">
+                  <StatusPill tone="danger">
                     {t("common.admin.user_detail.superadmin_badge")}
-                  </Badge>
+                  </StatusPill>
                 ) : null}
-              </div>
-              {detail.full_name ? (
-                <p className="text-sm text-muted-foreground">{detail.full_name}</p>
-              ) : null}
+                {detail.full_name ? <span>{detail.full_name}</span> : null}
+                <span>
+                  {t("common.admin.user_detail.created_line", {
+                    date: formatDate(detail.created_at, i18n.language),
+                  })}
+                </span>
+              </span>
+            }
+            actions={
+              !detail.is_superadmin ? (
+                <>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => {
+                      setHandoffOpen(true);
+                    }}
+                  >
+                    {t("common.admin.user_detail.mobile_handoff_button")}
+                  </Button>
+                  <Button
+                    type="button"
+                    onClick={() => {
+                      setImpersonateOpen(true);
+                    }}
+                  >
+                    {t("common.admin.user_detail.impersonate_button")}
+                  </Button>
+                </>
+              ) : null
+            }
+          />
+
+          <SettingsSection
+            title={t("common.admin.user_detail.memberships_title")}
+          >
+            {detail.memberships.length === 0 ? (
               <p className="text-sm text-muted-foreground">
-                {t("common.admin.user_detail.created_line", {
-                  date: formatDate(detail.created_at, i18n.language),
-                })}
+                {t("common.admin.user_detail.no_memberships")}
               </p>
-            </div>
-            {!detail.is_superadmin ? (
-              <div className="flex gap-2">
-                <Button
-                  type="button"
-                  onClick={() => {
-                    setImpersonateOpen(true);
-                  }}
-                >
-                  {t("common.admin.user_detail.impersonate_button")}
-                </Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => {
-                    setHandoffOpen(true);
-                  }}
-                >
-                  {t("common.admin.user_detail.mobile_handoff_button")}
-                </Button>
-              </div>
-            ) : null}
-          </div>
-
-          <Card>
-            <CardContent className="space-y-2 pt-6">
-              <h2 className="text-sm font-semibold">{t("common.admin.user_detail.memberships_title")}</h2>
-              {detail.memberships.length === 0 ? (
-                <p className="text-sm text-muted-foreground">
-                  {t("common.admin.user_detail.no_memberships")}
-                </p>
-              ) : (
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>{t("common.admin.user_detail.col_org")}</TableHead>
-                      <TableHead>{t("common.admin.user_detail.col_role")}</TableHead>
+            ) : (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>
+                      {t("common.admin.user_detail.col_org")}
+                    </TableHead>
+                    <TableHead>
+                      {t("common.admin.user_detail.col_role")}
+                    </TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {detail.memberships.map((membership) => (
+                    <TableRow key={membership.org_id}>
+                      <TableCell>
+                        <Link
+                          to="/$locale/admin/orgs/$id"
+                          params={{ locale, id: membership.org_id }}
+                          className="font-medium hover:underline"
+                        >
+                          {membership.org_name}
+                        </Link>
+                      </TableCell>
+                      <TableCell className="text-foreground-secondary">
+                        {t(`tenancy.members.role.${membership.role}`)}
+                      </TableCell>
                     </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {detail.memberships.map((membership) => (
-                      <TableRow key={membership.org_id}>
-                        <TableCell>
-                          <Link
-                            to="/$locale/admin/orgs/$id"
-                            params={{ locale, id: membership.org_id }}
-                            className="underline underline-offset-4"
-                          >
-                            {membership.org_name}
-                          </Link>
-                        </TableCell>
-                        <TableCell>
-                          <Badge variant="secondary">{membership.role}</Badge>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              )}
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardContent className="space-y-2 pt-6">
-              <h2 className="text-sm font-semibold">{t("common.admin.user_detail.sessions_title")}</h2>
-              {detail.sessions.length === 0 ? (
-                <p className="text-sm text-muted-foreground">
-                  {t("common.admin.user_detail.no_sessions")}
-                </p>
-              ) : (
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>{t("common.admin.user_detail.col_device")}</TableHead>
-                      <TableHead>{t("common.admin.user_detail.col_last_seen")}</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {detail.sessions.map((session) => (
-                      <TableRow key={session.id}>
-                        <TableCell>{session.device_label ?? "—"}</TableCell>
-                        <TableCell>{formatDate(session.last_seen_at, i18n.language)}</TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              )}
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardContent className="space-y-2 pt-6">
-              <h2 className="text-sm font-semibold">
-                {t("common.admin.user_detail.audit_heading", {
-                  count: detail.audit_summary.total_count,
-                })}
-              </h2>
-              {detail.audit_summary.recent_actions.length === 0 ? (
-                <p className="text-sm text-muted-foreground">
-                  {t("common.admin.user_detail.no_audit")}
-                </p>
-              ) : (
-                <div className="space-y-1">
-                  {detail.audit_summary.recent_actions.map((entry, index) => (
-                    <div
-                      key={`${entry.action}-${String(index)}`}
-                      className="flex items-center justify-between text-sm"
-                    >
-                      <span>{entry.action}</span>
-                      <span className="text-muted-foreground">
-                        {formatDate(entry.ts, i18n.language)}
-                      </span>
-                    </div>
                   ))}
-                </div>
-              )}
-            </CardContent>
-          </Card>
+                </TableBody>
+              </Table>
+            )}
+          </SettingsSection>
+
+          <SettingsSection title={t("common.admin.user_detail.sessions_title")}>
+            {detail.sessions.length === 0 ? (
+              <p className="text-sm text-muted-foreground">
+                {t("common.admin.user_detail.no_sessions")}
+              </p>
+            ) : (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>
+                      {t("common.admin.user_detail.col_device")}
+                    </TableHead>
+                    <TableHead>
+                      {t("common.admin.user_detail.col_last_seen")}
+                    </TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {detail.sessions.map((session) => (
+                    <TableRow key={session.id}>
+                      <TableCell>{session.device_label ?? "—"}</TableCell>
+                      <TableCell className="text-muted-foreground">
+                        {formatDate(session.last_seen_at, i18n.language)}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            )}
+          </SettingsSection>
+
+          <SettingsSection
+            title={t("common.admin.user_detail.audit_heading", {
+              count: detail.audit_summary.total_count,
+            })}
+          >
+            {detail.audit_summary.recent_actions.length === 0 ? (
+              <p className="text-sm text-muted-foreground">
+                {t("common.admin.user_detail.no_audit")}
+              </p>
+            ) : (
+              <div className="border-t border-border">
+                {detail.audit_summary.recent_actions.map((entry, index) => (
+                  <DataListRow
+                    key={`${entry.action}-${String(index)}`}
+                    className="grid-cols-[minmax(0,1fr)_auto]"
+                  >
+                    <span className="truncate font-mono text-[0.8125rem]">
+                      {entry.action}
+                    </span>
+                    <DataListMuted>
+                      {formatDate(entry.ts, i18n.language)}
+                    </DataListMuted>
+                  </DataListRow>
+                ))}
+              </div>
+            )}
+          </SettingsSection>
 
           <ImpersonateModal
             userId={detail.id}
@@ -212,6 +225,6 @@ export function AdminUserDetailPage({ userId }: { userId: string }) {
           />
         </>
       ) : null}
-    </div>
+    </Page>
   );
 }

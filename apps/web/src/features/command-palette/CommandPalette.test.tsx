@@ -53,7 +53,7 @@ describe("CommandPalette", () => {
 
   it("opens on Ctrl+K from anywhere in the shell", async () => {
     renderApp({ initialPath: "/", user });
-    await screen.findByRole("heading", { name: "Dashboard" });
+    await screen.findByRole("heading", { name: "Welcome to Acme Inc" });
 
     await userEvent.keyboard("{Control>}k{/Control}");
 

@@ -15,6 +15,8 @@ import { server } from "../../test/server";
 // reason MembersSettingsPage.test.tsx does: useOrg's bootstrap is a
 // module-scoped singleton, and this file needs a fresh org per test.
 const hooks = vi.hoisted(() => ({
+  // The row menu's dropdown reads the text direction to place itself.
+  useDirection: vi.fn(() => "ltr"),
   useOrg: vi.fn(),
   usePermission: vi.fn(),
 }));
@@ -97,15 +99,17 @@ describe("ApiKeysPage", () => {
     await person.click(screen.getByTestId("api-key-scope-orgs:read"));
     await person.click(screen.getByTestId("api-key-submit"));
 
-    expect(await screen.findByTestId("api-key-created-value")).toHaveTextContent(
-      secret,
-    );
+    expect(
+      await screen.findByTestId("api-key-created-value"),
+    ).toHaveTextContent(secret);
     expect(screen.getByTestId("api-key-created-warning")).toBeInTheDocument();
 
     await person.click(screen.getByTestId("api-key-created-done"));
 
     await waitFor(() => {
-      expect(screen.queryByTestId("api-key-created-value")).not.toBeInTheDocument();
+      expect(
+        screen.queryByTestId("api-key-created-value"),
+      ).not.toBeInTheDocument();
     });
     // Re-opening the create dialog shows an empty form, not the last secret.
     await person.click(screen.getByTestId("api-keys-create-button"));
@@ -138,11 +142,20 @@ describe("ApiKeysPage", () => {
     const person = userEvent.setup();
     renderPage();
 
-    await person.click(await screen.findByTestId(`api-key-revoke-${activeKey.id}`));
+    // Revoke sits in the row's menu (ticket 09).
+    await person.click(
+      await screen.findByTestId(`api-key-actions-${activeKey.id}`),
+    );
+    await person.click(
+      await screen.findByTestId(`api-key-revoke-${activeKey.id}`),
+    );
     const submit = screen.getByTestId("api-key-revoke-submit");
     expect(submit).toBeDisabled();
 
-    await person.type(screen.getByTestId("api-key-revoke-confirm-input"), "REVOKE");
+    await person.type(
+      screen.getByTestId("api-key-revoke-confirm-input"),
+      "REVOKE",
+    );
     expect(submit).toBeEnabled();
     await person.click(submit);
 
@@ -161,9 +174,7 @@ describe("ApiKeysPage", () => {
   });
 
   it("surfaces a load failure instead of rendering an empty list", async () => {
-    server.use(
-      http.get(`${API}/api/v1/api-keys`, () => HttpResponse.error()),
-    );
+    server.use(http.get(`${API}/api/v1/api-keys`, () => HttpResponse.error()));
     renderPage();
 
     expect(
@@ -181,7 +192,9 @@ describe("ApiKeysPage", () => {
     expect(
       await screen.findByTestId("api-keys-permission-denied"),
     ).toBeInTheDocument();
-    expect(screen.queryByTestId("api-keys-create-button")).not.toBeInTheDocument();
+    expect(
+      screen.queryByTestId("api-keys-create-button"),
+    ).not.toBeInTheDocument();
   });
 
   it("has no accessibility violations", async () => {

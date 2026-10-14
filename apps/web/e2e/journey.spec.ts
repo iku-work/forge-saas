@@ -57,7 +57,9 @@ async function signIn(page: import("@playwright/test").Page): Promise<void> {
  * The id comes off the POST the form makes, the same trick
  * acceptance.spec.ts uses.
  */
-async function createFreshOrg(page: import("@playwright/test").Page): Promise<string> {
+async function createFreshOrg(
+  page: import("@playwright/test").Page,
+): Promise<string> {
   // Back inside the shell first: the previous step deliberately ends on
   // /magic-link, which is a public page with no switcher on it.
   await page.goto("/en");
@@ -73,14 +75,18 @@ async function createFreshOrg(page: import("@playwright/test").Page): Promise<st
     .fill(`Journey ${String(Date.now())}`);
   await page.getByTestId("create-org-submit").click();
 
-  const body = (await (await created).json()) as { data: { id: string } | null };
+  const body = (await (await created).json()) as {
+    data: { id: string } | null;
+  };
   const orgId = body.data?.id;
   expect(orgId, "creating an org should return its id").toBeTruthy();
   await expect(page.getByTestId("app-shell")).toBeVisible();
   return orgId as string;
 }
 
-async function planBadge(page: import("@playwright/test").Page): Promise<string> {
+async function planBadge(
+  page: import("@playwright/test").Page,
+): Promise<string> {
   await page.goto("/en/settings/billing");
   const badge = page.getByTestId("billing-current-plan");
   await expect(badge).toBeVisible();
@@ -88,14 +94,16 @@ async function planBadge(page: import("@playwright/test").Page): Promise<string>
 }
 
 test.describe("the billing lifecycle", () => {
-  test.use({ reducedMotion: "reduce" });
+  test.use({ contextOptions: { reducedMotion: "reduce" } });
 
   // One test, not several, and one login. The auth endpoints are rate
   // limited to 5/minute per IP (playwright.config.ts says as much about why
   // its projects run serially), and a spec that signs in per test spends
   // that budget on itself: running this file twice in a minute started
   // failing with no app shell, which is a 429 wearing a disguise.
-  test("session guard, then subscribe, fail, recover, cancel", async ({ page }) => {
+  test("session guard, then subscribe, fail, recover, cancel", async ({
+    page,
+  }) => {
     await signIn(page);
 
     // Act 1. Deployed 2026-09-14: opening the app in a second tab and
@@ -106,9 +114,10 @@ test.describe("the billing lifecycle", () => {
       for (const path of ["/en/login", "/en/forgot-password"]) {
         await page.goto(path);
         await expect(page.getByTestId("app-shell")).toBeVisible();
-        expect(new URL(page.url()).pathname, `${path} should redirect`).toBe("/en");
+        expect(new URL(page.url()).pathname, `${path} should redirect`).toBe(
+          "/en",
+        );
       }
-
     });
 
     const orgId = await createFreshOrg(page);
@@ -163,8 +172,12 @@ test.describe("the billing lifecycle", () => {
         response.status(),
         "an org with a live subscription must not be able to buy another",
       ).toBe(409);
-      const body = (await response.json()) as { error?: { message_key?: string } };
-      expect(body.error?.message_key).toBe("errors.subscription_already_active");
+      const body = (await response.json()) as {
+        error?: { message_key?: string };
+      };
+      expect(body.error?.message_key).toBe(
+        "errors.subscription_already_active",
+      );
     });
 
     // Act 4. Both invoice handlers read `invoice.subscription`, which Basil
@@ -175,9 +188,9 @@ test.describe("the billing lifecycle", () => {
         subscriptionId,
       });
       await page.goto("/en/settings/billing");
-      await expect(page.getByTestId("billing-subscription-status")).toContainText(
-        "past_due",
-      );
+      await expect(
+        page.getByTestId("billing-subscription-status"),
+      ).toContainText("past_due");
       // Still Pro: past_due is inside the grace period, and telling a
       // customer they are on Free while you chase their card is its own lie.
       expect(await planBadge(page)).toContain("Pro");
@@ -198,9 +211,9 @@ test.describe("the billing lifecycle", () => {
         createdAt: recovered - 600,
       });
       await page.goto("/en/settings/billing");
-      await expect(page.getByTestId("billing-subscription-status")).toContainText(
-        "active",
-      );
+      await expect(
+        page.getByTestId("billing-subscription-status"),
+      ).toContainText("active");
     });
 
     // Act 5. A cancelled row kept pointing at the plan it used to grant, so

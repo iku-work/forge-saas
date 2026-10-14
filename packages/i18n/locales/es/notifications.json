@@ -43,7 +43,8 @@
     "type_file_infected": "Un archivo que subiste se marca como infectado",
     "channel_required": "obligatorio",
     "required_note": "Siempre te avisamos por correo de los problemas de facturación, así que eso no se puede desactivar: perderías el acceso sin previo aviso.",
-    "type_webhook_endpoint_disabled": "Un endpoint de webhook se desactiva tras fallos repetidos"
+    "type_webhook_endpoint_disabled": "Un endpoint de webhook se desactiva tras fallos repetidos",
+    "section_title": "Cómo te llega cada notificación"
   },
   "types": {
     "member_invited": {

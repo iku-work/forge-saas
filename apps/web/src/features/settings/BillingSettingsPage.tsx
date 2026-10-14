@@ -22,12 +22,12 @@ import {
   AlertDescription,
   Badge,
   Button,
-  Card,
-  CardContent,
-  CardDescription,
-  CardFooter,
-  CardHeader,
+  Page,
+  PageHeader,
+  SettingsRow,
+  SettingsSection,
   Skeleton,
+  StatusPill,
   Table,
   TableBody,
   TableCell,
@@ -35,6 +35,7 @@ import {
   TableHeader,
   TableRow,
 } from "@forge/ui";
+import type { StatusTone } from "@forge/ui";
 import { formatDate } from "@forge/utils";
 
 import { getErrorMessage } from "../auth/getErrorMessage";
@@ -89,6 +90,32 @@ function formatMicros(
 // "immutability" check (it conservatively treats values live across a
 // suspend point as frozen). Isolating the assignment in its own
 // non-component, non-hook function sidesteps that analysis entirely.
+/* Stripe's invoice statuses (https://docs.stripe.com/invoicing/overview).
+   Anything else is shown as Stripe sent it rather than dropped. */
+const INVOICE_STATUSES = [
+  "draft",
+  "open",
+  "paid",
+  "uncollectible",
+  "void",
+] as const;
+
+function invoiceStatusTone(status: string): StatusTone {
+  if (status === "paid") return "active";
+  if (status === "open" || status === "draft") return "pending";
+  if (status === "uncollectible") return "danger";
+  return "neutral";
+}
+
+function invoiceStatusLabel(
+  status: string,
+  t: (key: string) => string,
+): string {
+  return (INVOICE_STATUSES as readonly string[]).includes(status)
+    ? t(`billing.invoices.status.${status}`)
+    : status;
+}
+
 function redirectTo(url: string): void {
   window.location.href = url;
 }
@@ -282,29 +309,38 @@ export function BillingSettingsPage({
 
   if (orgLoading || !org) {
     return (
-      <div className="max-w-2xl space-y-6 p-6">
-        <h1 className="text-xl font-semibold" data-testid="page-title">{t("billing.title")}</h1>
+      <Page>
+        <PageHeader
+          title={t("billing.title")}
+          description={t("billing.description")}
+        />
         <Skeleton className="h-32 w-full" />
-      </div>
+      </Page>
     );
   }
 
   if (!canRead) {
     return (
-      <div className="max-w-2xl space-y-6 p-6">
-        <h1 className="text-xl font-semibold" data-testid="page-title">{t("billing.title")}</h1>
+      <Page>
+        <PageHeader
+          title={t("billing.title")}
+          description={t("billing.description")}
+        />
         <Alert>
           <AlertDescription>
             {t("billing.error.permission_denied")}
           </AlertDescription>
         </Alert>
-      </div>
+      </Page>
     );
   }
 
   return (
-    <div className="max-w-2xl space-y-6 p-6">
-      <h1 className="text-xl font-semibold" data-testid="page-title">{t("billing.title")}</h1>
+    <Page>
+      <PageHeader
+        title={t("billing.title")}
+        description={t("billing.description")}
+      />
 
       {actionError ? (
         <Alert variant="destructive">
@@ -324,15 +360,12 @@ export function BillingSettingsPage({
         </Alert>
       ) : null}
 
-      <Card>
-        <CardHeader>
-          <CardDescription>{t("billing.current_plan.title")}</CardDescription>
-        </CardHeader>
-        <CardContent>
+      <SettingsSection title={t("billing.current_plan.title")}>
+        <SettingsRow label={t("billing.current_plan.plan_label")}>
           {subscriptionQuery.isLoading || plansQuery.isLoading ? (
             <Skeleton className="h-8 w-32" />
           ) : (
-            <div className="flex items-center gap-3">
+            <div className="flex flex-1 flex-wrap items-center gap-3">
               <Badge data-testid="billing-current-plan">
                 {currentPlan?.name ?? t("billing.current_plan.free_label")}
               </Badge>
@@ -348,9 +381,7 @@ export function BillingSettingsPage({
               ) : null}
             </div>
           )}
-        </CardContent>
-        {canManage && subscription ? (
-          <CardFooter>
+          {canManage && subscription ? (
             <Button
               type="button"
               variant="outline"
@@ -361,16 +392,13 @@ export function BillingSettingsPage({
             >
               {t("billing.manage_button")}
             </Button>
-          </CardFooter>
-        ) : null}
-      </Card>
+          ) : null}
+        </SettingsRow>
+      </SettingsSection>
 
       {usageQuery.isLoading || usageQuery.isError || usage.length > 0 ? (
-        <Card>
-          <CardHeader>
-            <CardDescription>{t("billing.usage.title")}</CardDescription>
-          </CardHeader>
-          <CardContent>
+        <SettingsSection title={t("billing.usage.title")}>
+          <div className="border-t border-border py-5">
             {usageQuery.isLoading ? (
               <Skeleton className="h-16 w-full" />
             ) : usageQuery.isError ? (
@@ -422,65 +450,49 @@ export function BillingSettingsPage({
                 </TableBody>
               </Table>
             )}
-          </CardContent>
-        </Card>
+          </div>
+        </SettingsSection>
       ) : null}
 
       {canManage ? (
-        <Card>
-          <CardHeader>
-            <CardDescription>
-              {t("billing.available_plans.title")}
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            {plansQuery.isLoading ? (
-              <Skeleton className="h-16 w-full" />
-            ) : plans.length === 0 ? (
-              <p className="text-sm text-muted-foreground">
-                {t("billing.available_plans.no_plans")}
-              </p>
-            ) : (
-              plans.map((plan) => (
-                <div
-                  key={plan.id}
-                  className="flex items-center justify-between rounded-md border p-3"
+        <SettingsSection title={t("billing.available_plans.title")}>
+          {plansQuery.isLoading ? (
+            <Skeleton className="h-16 w-full" />
+          ) : plans.length === 0 ? (
+            <p className="border-t border-border py-5 text-sm text-muted-foreground">
+              {t("billing.available_plans.no_plans")}
+            </p>
+          ) : (
+            plans.map((plan) => (
+              <SettingsRow
+                key={plan.id}
+                label={plan.name}
+                hint={`${formatPrice(
+                  plan.price_monthly,
+                  plan.currency,
+                  i18n.language,
+                )}${t("billing.available_plans.per_month")}`}
+              >
+                <Button
+                  type="button"
+                  disabled={plan.id === currentPlan?.id || checkout.isPending}
+                  onClick={() => {
+                    void handleUpgrade(plan.slug);
+                  }}
+                  data-testid={`billing-upgrade-${plan.slug}`}
                 >
-                  <div>
-                    <p className="font-medium">{plan.name}</p>
-                    <p className="text-sm text-muted-foreground">
-                      {formatPrice(
-                        plan.price_monthly,
-                        plan.currency,
-                        i18n.language,
-                      )}
-                      {t("billing.available_plans.per_month")}
-                    </p>
-                  </div>
-                  <Button
-                    type="button"
-                    disabled={plan.id === currentPlan?.id || checkout.isPending}
-                    onClick={() => {
-                      void handleUpgrade(plan.slug);
-                    }}
-                    data-testid={`billing-upgrade-${plan.slug}`}
-                  >
-                    {plan.id === currentPlan?.id
-                      ? t("billing.current_plan.badge")
-                      : t("billing.upgrade_button")}
-                  </Button>
-                </div>
-              ))
-            )}
-          </CardContent>
-        </Card>
+                  {plan.id === currentPlan?.id
+                    ? t("billing.current_plan.badge")
+                    : t("billing.upgrade_button")}
+                </Button>
+              </SettingsRow>
+            ))
+          )}
+        </SettingsSection>
       ) : null}
 
-      <Card>
-        <CardHeader>
-          <CardDescription>{t("billing.invoices.title")}</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
+      <SettingsSection title={t("billing.invoices.title")}>
+        <div className="space-y-4">
           {invoicesQuery.isLoading ? (
             <Skeleton className="h-16 w-full" />
           ) : invoicesQuery.isError ? (
@@ -511,7 +523,7 @@ export function BillingSettingsPage({
               <TableBody>
                 {invoices.map((invoice) => (
                   <TableRow key={invoice.id}>
-                    <TableCell>
+                    <TableCell className="whitespace-nowrap">
                       {formatDate(invoice.created_at, i18n.language)}
                     </TableCell>
                     <TableCell>
@@ -523,7 +535,9 @@ export function BillingSettingsPage({
                     </TableCell>
                     <TableCell>
                       {invoice.status ? (
-                        <Badge variant="secondary">{invoice.status}</Badge>
+                        <StatusPill tone={invoiceStatusTone(invoice.status)}>
+                          {invoiceStatusLabel(invoice.status, t)}
+                        </StatusPill>
                       ) : null}
                     </TableCell>
                     <TableCell className="text-end">
@@ -532,7 +546,7 @@ export function BillingSettingsPage({
                           href={invoice.invoice_pdf}
                           target="_blank"
                           rel="noreferrer"
-                          className="text-sm underline underline-offset-4"
+                          className="text-sm text-primary underline decoration-primary/35 underline-offset-[3px] hover:decoration-current"
                         >
                           {t("billing.invoices.download_pdf")}
                         </a>
@@ -556,8 +570,8 @@ export function BillingSettingsPage({
               {t("billing.invoices.load_more")}
             </Button>
           ) : null}
-        </CardContent>
-      </Card>
-    </div>
+        </div>
+      </SettingsSection>
+    </Page>
   );
 }

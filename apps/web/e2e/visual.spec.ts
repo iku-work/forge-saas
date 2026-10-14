@@ -58,7 +58,10 @@ async function useSeededOrg(page: import("@playwright/test").Page) {
 }
 
 const SNAPSHOT_TARGETS = [
-  { path: "/", name: "dashboard", readyTestId: "app-shell" },
+  // The checklist, not the shell: the shell renders before the checklist's
+  // queries return, and a shot taken then shows its loading skeleton. The
+  // seeded account always has open steps, so the checklist is always there.
+  { path: "/", name: "dashboard", readyTestId: "getting-started" },
   {
     path: "/settings/profile",
     name: "settings-profile",
@@ -82,7 +85,7 @@ const VIEWPORTS = [
 ];
 
 test.describe("visual regression: dashboard + settings", () => {
-  test.use({ reducedMotion: "reduce" });
+  test.use({ contextOptions: { reducedMotion: "reduce" } });
 
   test("app shell, dashboard, and settings pages at desktop + mobile widths", async ({
     page,

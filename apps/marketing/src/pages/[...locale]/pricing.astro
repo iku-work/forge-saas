@@ -59,12 +59,15 @@ const schema = planProductSchemas(plans, {
   schema={schema}
 >
   <section class="mx-auto max-w-5xl px-6 py-16">
-    <h1 class="text-4xl font-semibold tracking-tight">{t("marketing.pricing.title")}</h1>
+    <h1 class="type-display">{t("marketing.pricing.title")}</h1>
     <p class="mt-4 max-w-2xl text-pretty text-lg text-muted-foreground">
       {t("marketing.pricing.subtitle")}
     </p>
 
-    {/* `client:visible`, not `client:load` (T-306). Astro fetches an island's
+    {/* `client:afterpaint` (src/directives/afterpaint.ts), which replaced
+        `client:visible` once the webfont made the first paint late enough for
+        the island's download to race it. Before that, `client:visible`, not
+        `client:load` (T-306). Astro fetches an island's
         JavaScript when its directive fires, and this island is React plus
         every Radix primitive @forge/ui re-exports -- 367 kB uncompressed,
         measured. On `client:load` that download starts immediately and
@@ -83,7 +86,7 @@ const schema = planProductSchemas(plans, {
         <p class="mt-10 text-muted-foreground">{t("marketing.pricing.empty")}</p>
       ) : (
         <PricingPlans
-          client:visible
+          client:afterpaint
           plans={views}
           labels={{
             periodLabel: t("marketing.pricing.period_label"),

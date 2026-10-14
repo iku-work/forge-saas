@@ -180,6 +180,8 @@ test("every interactive target is at least 24x24 (WCAG 2.2 2.5.8)", async ({
   await page.goto("/register");
   await page.getByTestId("register-email-input").fill(email);
   await page.getByTestId("register-password-input").fill(password);
+
+  await page.getByTestId("register-confirm-password-input").fill(password);
   await check("register");
   await page.getByTestId("register-submit").click();
   await expect(page.getByTestId("register-success")).toBeVisible();

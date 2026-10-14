@@ -20,6 +20,10 @@ class CreateOrgRequest(AppBaseModel):
 class UpdateOrgRequest(AppBaseModel):
     name: str | None = Field(default=None, min_length=1, max_length=255)
     logo_url: str | None = None
+    # The id of a file uploaded to this org's "logos" bucket; null clears the
+    # logo. The server resolves it to a storage key -- a client-supplied key
+    # would be a request to presign any object in the bucket.
+    logo_file_id: UUID | None = None
 
 
 class OrganizationPublic(AppBaseModel):
@@ -29,7 +33,26 @@ class OrganizationPublic(AppBaseModel):
     name: str
     slug: str
     logo_url: str | None
+    # Whether an uploaded logo exists; GET /orgs/{id}/logo serves it.
+    has_uploaded_logo: bool = False
     created_at: datetime
+
+
+class MemberUserSummary(AppBaseModel):
+    """Who a membership belongs to, as fellow members see them.
+
+    Enough to draw a row (a name, a picture) and no more. `email` is set only
+    for a caller who can manage members (an owner, an admin, or an API key with
+    `members:write`); everyone else gets null. Never the
+    uploaded avatar's object key: `has_uploaded_avatar` only says one exists
+    (the web app fetches a short-lived URL for it with a member's session).
+    `avatar_url` is an OAuth provider's picture, already an absolute URL.
+    """
+
+    full_name: str | None
+    email: str | None = None
+    avatar_url: str | None
+    has_uploaded_avatar: bool
 
 
 class MembershipPublic(AppBaseModel):
@@ -41,6 +64,9 @@ class MembershipPublic(AppBaseModel):
     role: MemberRole
     invited_by: UUID | None
     created_at: datetime
+    # Null only when the user row is gone (soft-deleted) and the membership
+    # is not yet: the GDPR purge removes both, but not in one statement.
+    user: MemberUserSummary | None = None
 
 
 class UpdateMembershipRequest(AppBaseModel):

@@ -1,5 +1,5 @@
 import { http, HttpResponse } from "msw";
-import { screen } from "@testing-library/react";
+import { screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it } from "vitest";
 
@@ -39,9 +39,11 @@ describe("AppLayout (owner, one org)", () => {
     renderApp({ initialPath: "/", user });
 
     expect(
-      await screen.findByRole("heading", { name: "Dashboard" }),
+      await screen.findByRole("heading", { name: "Welcome to Acme Inc" }),
     ).toBeInTheDocument();
-    expect(screen.getByText("Acme Inc")).toBeInTheDocument();
+    expect(screen.getByTestId("org-switcher-trigger")).toHaveTextContent(
+      "Acme Inc",
+    );
     expect(screen.getByTestId("sidebar-primary-nav")).toBeInTheDocument();
     expect(screen.getByTestId("nav-dashboard")).toBeInTheDocument();
   });
@@ -72,15 +74,34 @@ describe("AppLayout (owner, one org)", () => {
     expect(screen.getByRole("link", { name: "Profile" })).toBeInTheDocument();
   });
 
-  it("points the wordmark at the dashboard", async () => {
-    // Matters more since settings became its own mode: the sidebar shows no
-    // Dashboard link at all while you are in there, so this is the second way
-    // home beside the user menu.
+  it("offers a way back to the app from settings", async () => {
+    // Settings is its own mode and its sidebar shows no Dashboard link, so
+    // this is the first way home, beside the user menu and the palette.
     renderApp({ initialPath: "/settings/billing", user });
 
-    const wordmark = await screen.findByTestId("sidebar-wordmark");
+    const back = await screen.findByRole("link", { name: "Back to app" });
 
-    expect(wordmark).toHaveAttribute("href", "/en");
+    expect(back).toHaveAttribute("href", "/en");
+  });
+
+  it("groups settings into the account and the organization", async () => {
+    renderApp({ initialPath: "/settings/profile", user });
+
+    const account = await screen.findByRole("group", { name: "Your account" });
+    const organization = screen.getByRole("group", { name: "Acme Inc" });
+
+    expect(
+      within(account).getByRole("link", { name: "Profile" }),
+    ).toBeInTheDocument();
+    expect(
+      within(account).getByRole("link", { name: "Security" }),
+    ).toBeInTheDocument();
+    expect(
+      within(organization).getByRole("link", { name: "Members" }),
+    ).toBeInTheDocument();
+    expect(
+      within(organization).getByRole("link", { name: "Billing" }),
+    ).toBeInTheDocument();
   });
 
   it("offers Dashboard and Settings from the user menu", async () => {

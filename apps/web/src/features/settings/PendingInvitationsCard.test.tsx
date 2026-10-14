@@ -1,6 +1,7 @@
 import { http, HttpResponse } from "msw";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, within } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { getApiBaseUrl } from "@forge/api-client";
@@ -63,6 +64,64 @@ describe("PendingInvitationsCard", () => {
     const row = await screen.findByTestId("invitation-row");
     expect(within(row).getByText("new@example.com")).toBeInTheDocument();
     expect(within(row).getByText("Member")).toBeInTheDocument();
+  });
+
+  it("resends an invitation from its row menu", async () => {
+    let resent: string | null = null;
+    server.use(
+      http.get(`${API}/api/v1/orgs/:orgId/invitations`, () =>
+        HttpResponse.json(envelope([makeInvitation(1)])),
+      ),
+      http.post(
+        `${API}/api/v1/orgs/:orgId/invitations/:invitationId/resend`,
+        ({ params }) => {
+          resent = String(params.invitationId);
+          return HttpResponse.json(envelope(makeInvitation(1)));
+        },
+      ),
+    );
+    renderCard();
+
+    await userEvent.click(await screen.findByTestId("invitation-actions"));
+    await userEvent.click(
+      await screen.findByRole("menuitem", { name: "Resend invitation" }),
+    );
+
+    await waitFor(() => {
+      expect(resent).toBe(makeInvitation(1).id);
+    });
+  });
+
+  it("asks before revoking, then revokes", async () => {
+    // F-009: the invitee's link stops working, so it is confirmed first.
+    let revoked: string | null = null;
+    server.use(
+      http.get(`${API}/api/v1/orgs/:orgId/invitations`, () =>
+        HttpResponse.json(envelope([makeInvitation(1)])),
+      ),
+      http.delete(
+        `${API}/api/v1/orgs/:orgId/invitations/:invitationId`,
+        ({ params }) => {
+          revoked = String(params.invitationId);
+          return HttpResponse.json(envelope(null));
+        },
+      ),
+    );
+    renderCard();
+
+    await userEvent.click(await screen.findByTestId("invitation-actions"));
+    await userEvent.click(
+      await screen.findByRole("menuitem", { name: "Revoke invitation" }),
+    );
+    const dialog = await screen.findByTestId("confirm-dialog");
+    expect(revoked).toBeNull();
+    await userEvent.click(
+      within(dialog).getByRole("button", { name: "Revoke invitation" }),
+    );
+
+    await waitFor(() => {
+      expect(revoked).toBe(makeInvitation(1).id);
+    });
   });
 
   it("shows an empty state when nothing is pending", async () => {

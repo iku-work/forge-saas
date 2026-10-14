@@ -7,12 +7,13 @@ import { listAdminUsers } from "@forge/api-client";
 import {
   Alert,
   AlertDescription,
-  Badge,
   Button,
-  Card,
-  CardContent,
   Input,
+  Page,
+  PageHeader,
+  Select,
   Skeleton,
+  StatusPill,
   Table,
   TableBody,
   TableCell,
@@ -24,7 +25,7 @@ import { formatDate } from "@forge/utils";
 
 import { useRouteLocale } from "../../lib/useRouteLocale";
 import { getErrorMessage } from "../auth/getErrorMessage";
-import { useDebouncedValue } from "./useDebouncedValue";
+import { useDebouncedValue } from "../../lib/useDebouncedValue";
 
 type ActiveFilter = "" | "true" | "false";
 
@@ -53,10 +54,10 @@ export function AdminUsersPage() {
   const users = usersQuery.data?.pages.flatMap((page) => page.data ?? []) ?? [];
 
   return (
-    <div className="max-w-5xl space-y-6 p-6">
-      <h1 className="text-xl font-semibold" data-testid="page-title">{t("common.admin.users.title")}</h1>
+    <Page>
+      <PageHeader title={t("common.admin.users.title")} />
 
-      <div className="flex gap-3">
+      <div className="mb-6 flex flex-wrap gap-3">
         <Input
           value={search}
           onChange={(event) => {
@@ -66,86 +67,95 @@ export function AdminUsersPage() {
           className="max-w-sm"
           aria-label={t("common.admin.users.search_placeholder")}
         />
-        <select
+        <Select
           value={active}
           onChange={(event) => {
             setActive(event.target.value as ActiveFilter);
           }}
           aria-label={t("common.admin.users.filter_active_label")}
-          className="h-9 rounded-md border border-input bg-background px-3 text-sm shadow-sm"
+          className="w-auto"
         >
           <option value="">{t("common.admin.users.filter_active_all")}</option>
-          <option value="true">{t("common.admin.users.filter_active_true")}</option>
-          <option value="false">{t("common.admin.users.filter_active_false")}</option>
-        </select>
+          <option value="true">
+            {t("common.admin.users.filter_active_true")}
+          </option>
+          <option value="false">
+            {t("common.admin.users.filter_active_false")}
+          </option>
+        </Select>
       </div>
 
-      <Card>
-        <CardContent className="space-y-4 pt-6">
-          {usersQuery.isLoading ? (
-            <div className="space-y-2">
-              <Skeleton className="h-8 w-full" />
-              <Skeleton className="h-8 w-full" />
-            </div>
-          ) : usersQuery.isError ? (
-            <Alert variant="destructive" data-testid="admin-users-error">
-              <AlertDescription>
-                {getErrorMessage(usersQuery.error, "common.admin.users.error_load")}
-              </AlertDescription>
-            </Alert>
-          ) : users.length === 0 ? (
-            <p className="text-sm text-muted-foreground">{t("common.admin.users.no_results")}</p>
-          ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>{t("common.admin.users.col_email")}</TableHead>
-                  <TableHead>{t("common.admin.users.col_name")}</TableHead>
-                  <TableHead>{t("common.admin.users.col_status")}</TableHead>
-                  <TableHead>{t("common.admin.users.col_created")}</TableHead>
+      <div className="space-y-4">
+        {usersQuery.isLoading ? (
+          <div className="space-y-2">
+            <Skeleton className="h-8 w-full" />
+            <Skeleton className="h-8 w-full" />
+          </div>
+        ) : usersQuery.isError ? (
+          <Alert variant="destructive" data-testid="admin-users-error">
+            <AlertDescription>
+              {getErrorMessage(
+                usersQuery.error,
+                "common.admin.users.error_load",
+              )}
+            </AlertDescription>
+          </Alert>
+        ) : users.length === 0 ? (
+          <p className="text-sm text-muted-foreground">
+            {t("common.admin.users.no_results")}
+          </p>
+        ) : (
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>{t("common.admin.users.col_email")}</TableHead>
+                <TableHead>{t("common.admin.users.col_name")}</TableHead>
+                <TableHead>{t("common.admin.users.col_status")}</TableHead>
+                <TableHead>{t("common.admin.users.col_created")}</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {users.map((user) => (
+                <TableRow key={user.id}>
+                  <TableCell>
+                    <Link
+                      to="/$locale/admin/users/$id"
+                      params={{ locale, id: user.id }}
+                      className="font-medium hover:underline"
+                    >
+                      {user.email}
+                    </Link>
+                  </TableCell>
+                  <TableCell>{user.full_name ?? "—"}</TableCell>
+                  <TableCell>
+                    <StatusPill tone={user.is_active ? "active" : "neutral"}>
+                      {user.is_active
+                        ? t("common.admin.users.status_active")
+                        : t("common.admin.users.status_inactive")}
+                    </StatusPill>
+                  </TableCell>
+                  <TableCell>
+                    {formatDate(user.created_at, i18n.language)}
+                  </TableCell>
                 </TableRow>
-              </TableHeader>
-              <TableBody>
-                {users.map((user) => (
-                  <TableRow key={user.id}>
-                    <TableCell>
-                      <Link
-                        to="/$locale/admin/users/$id"
-                        params={{ locale, id: user.id }}
-                        className="underline underline-offset-4"
-                      >
-                        {user.email}
-                      </Link>
-                    </TableCell>
-                    <TableCell>{user.full_name ?? "—"}</TableCell>
-                    <TableCell>
-                      <Badge variant={user.is_active ? "secondary" : "outline"}>
-                        {user.is_active
-                          ? t("common.admin.users.status_active")
-                          : t("common.admin.users.status_inactive")}
-                      </Badge>
-                    </TableCell>
-                    <TableCell>{formatDate(user.created_at, i18n.language)}</TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          )}
+              ))}
+            </TableBody>
+          </Table>
+        )}
 
-          {usersQuery.hasNextPage ? (
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => {
-                void usersQuery.fetchNextPage();
-              }}
-              disabled={usersQuery.isFetchingNextPage}
-            >
-              {t("common.admin.users.load_more")}
-            </Button>
-          ) : null}
-        </CardContent>
-      </Card>
-    </div>
+        {usersQuery.hasNextPage ? (
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => {
+              void usersQuery.fetchNextPage();
+            }}
+            disabled={usersQuery.isFetchingNextPage}
+          >
+            {t("common.admin.users.load_more")}
+          </Button>
+        ) : null}
+      </div>
+    </Page>
   );
 }

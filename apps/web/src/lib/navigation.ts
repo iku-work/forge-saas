@@ -6,7 +6,10 @@ import {
   FolderOpen,
   KeyRound,
   LayoutDashboard,
+  ListChecks,
+  ScrollText,
   Shield,
+  SlidersHorizontal,
   User as UserIcon,
   Users,
   Webhook,
@@ -32,7 +35,12 @@ export type NavTo =
   | "/$locale/settings/billing"
   | "/$locale/settings/notifications"
   | "/$locale/settings/api-keys"
-  | "/$locale/settings/webhooks";
+  | "/$locale/settings/webhooks"
+  | "/$locale/admin"
+  | "/$locale/admin/orgs"
+  | "/$locale/admin/users"
+  | "/$locale/admin/audit"
+  | "/$locale/admin/settings";
 
 export interface NavItem {
   to: NavTo;
@@ -44,6 +52,9 @@ export interface NavItem {
   // Org-plan-driven gate (T-121), orthogonal to `module` (product-config-driven)
   // -- both a disabled module and a plan without this flag hide the item.
   flag?: string;
+  /** Settings only: which sidebar group the item sits under. Personal settings
+   *  are "account"; everything shared by the Organization is "organization". */
+  group?: "account" | "organization";
 }
 
 /**
@@ -83,30 +94,35 @@ export const SETTINGS_NAV: NavItem[] = [
   {
     to: "/$locale/settings/profile",
     path: "/settings/profile",
+    group: "account",
     labelKey: "common.nav.profile",
     icon: UserIcon,
   },
   {
     to: "/$locale/settings/security",
     path: "/settings/security",
+    group: "account",
     labelKey: "common.nav.security",
     icon: Shield,
   },
   {
     to: "/$locale/settings/org",
     path: "/settings/org",
+    group: "organization",
     labelKey: "common.nav.organization",
     icon: Building2,
   },
   {
     to: "/$locale/settings/members",
     path: "/settings/members",
+    group: "organization",
     labelKey: "common.nav.members",
     icon: Users,
   },
   {
     to: "/$locale/settings/billing",
     path: "/settings/billing",
+    group: "organization",
     labelKey: "common.nav.billing",
     icon: CreditCard,
     permission: Permission.BILLING_READ,
@@ -115,6 +131,7 @@ export const SETTINGS_NAV: NavItem[] = [
   {
     to: "/$locale/settings/notifications",
     path: "/settings/notifications",
+    group: "account",
     labelKey: "common.nav.notifications",
     icon: Bell,
     module: "notifications",
@@ -126,6 +143,7 @@ export const SETTINGS_NAV: NavItem[] = [
   {
     to: "/$locale/settings/api-keys",
     path: "/settings/api-keys",
+    group: "organization",
     labelKey: "common.nav.api_keys",
     icon: KeyRound,
     permission: Permission.SETTINGS_MANAGE,
@@ -134,6 +152,7 @@ export const SETTINGS_NAV: NavItem[] = [
   {
     to: "/$locale/settings/webhooks",
     path: "/settings/webhooks",
+    group: "organization",
     labelKey: "common.nav.webhooks",
     icon: Webhook,
     permission: Permission.SETTINGS_MANAGE,
@@ -187,3 +206,43 @@ export function useVisibleNavItems(): VisibleNav {
   const settings = SETTINGS_NAV.filter(isVisible);
   return { primary, settings, all: [...primary, ...settings] };
 }
+
+/**
+ * The admin console's pages (T-143), for its sidebar and its command
+ * palette. Not gated here: the whole console is behind the superadmin route
+ * guard, and every page in it is open to anyone who got past it.
+ */
+export const ADMIN_NAV_ITEMS: NavItem[] = [
+  {
+    to: "/$locale/admin",
+    path: "/admin",
+    labelKey: "common.admin.nav.dashboard",
+    icon: LayoutDashboard,
+  },
+  {
+    to: "/$locale/admin/orgs",
+    path: "/admin/orgs",
+    labelKey: "common.admin.nav.orgs",
+    icon: ListChecks,
+  },
+  {
+    to: "/$locale/admin/users",
+    path: "/admin/users",
+    labelKey: "common.admin.nav.users",
+    icon: Users,
+  },
+  {
+    to: "/$locale/admin/audit",
+    path: "/admin/audit",
+    labelKey: "common.admin.nav.audit",
+    icon: ScrollText,
+  },
+  // T-263: last on purpose -- the only page here that *changes* the running
+  // product rather than reporting on it.
+  {
+    to: "/$locale/admin/settings",
+    path: "/admin/settings",
+    labelKey: "common.admin.nav.settings",
+    icon: SlidersHorizontal,
+  },
+];

@@ -69,9 +69,7 @@ export function TwoFactorChallenge({
       }
       onSuccess(data.access_token, data.user);
     } catch (caught) {
-      setError(
-        getErrorMessage(caught, "auth.two_factor_challenge.error_code"),
-      );
+      setError(getErrorMessage(caught, "auth.two_factor_challenge.error_code"));
     }
   };
 
@@ -151,6 +149,7 @@ export function TwoFactorChallenge({
           />
           <Button
             type="submit"
+            size="lg"
             className="w-full"
             disabled={form.formState.isSubmitting}
           >
@@ -170,6 +169,7 @@ export function TwoFactorChallenge({
       <Button
         type="button"
         variant="outline"
+        size="lg"
         className="w-full"
         disabled={isUsingSecurityKey}
         onClick={() => {

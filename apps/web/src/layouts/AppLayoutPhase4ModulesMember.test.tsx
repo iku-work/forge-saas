@@ -29,7 +29,9 @@ describe("AppLayout (Phase 4 modules on, plain member)", () => {
       http.post(`${API}/api/v1/auth/refresh`, () =>
         HttpResponse.json(envelope({ access_token: "token" })),
       ),
-      http.get(`${API}/api/v1/auth/me`, () => HttpResponse.json(envelope(user))),
+      http.get(`${API}/api/v1/auth/me`, () =>
+        HttpResponse.json(envelope(user)),
+      ),
       http.get(`${API}/api/v1/orgs`, () =>
         HttpResponse.json(envelope([fixtureOrg])),
       ),
@@ -55,7 +57,7 @@ describe("AppLayout (Phase 4 modules on, plain member)", () => {
     renderApp({ initialPath: "/", user });
 
     expect(
-      await screen.findByRole("heading", { name: "Dashboard" }),
+      await screen.findByRole("heading", { name: "Welcome to Acme Inc" }),
     ).toBeInTheDocument();
     expect(
       screen.queryByRole("link", { name: "API keys" }),

@@ -17,6 +17,7 @@ from app.modules.notifications.preferences import (
     DEFAULT_PREFERENCES,
     REQUIRED_CHANNELS,
     channels_for,
+    effective,
     is_required,
     normalize,
 )
@@ -128,3 +129,22 @@ def test_normalize_does_not_invent_the_optional_channels_a_row_left_out() -> Non
     # Those stay absent so channels_for()'s per-channel default fallback keeps
     # working -- writing them here would freeze today's defaults into the row.
     assert "in_app" not in normalize({"payment_failed": {"push": False}})["payment_failed"]
+
+
+def test_effective_preferences_fill_every_type_and_channel_from_an_empty_row() -> None:
+    """What a new account's settings page shows, before anything is stored."""
+    assert effective({}) == DEFAULT_PREFERENCES
+
+
+def test_effective_preferences_keep_a_customised_channel() -> None:
+    resolved = effective({"file_uploaded": {"email": True}})
+
+    assert resolved["file_uploaded"] == {"email": True, "in_app": True, "push": False}
+
+
+def test_effective_preferences_show_a_required_channel_on_even_if_stored_off() -> None:
+    """A legacy row that switched off a required channel reads healed, so the
+    page has nothing to save just to correct it."""
+    resolved = effective({"payment_failed": {"email": False, "in_app": False, "push": False}})
+
+    assert resolved["payment_failed"]["email"] is True

@@ -1,5 +1,5 @@
 import { useRef, useState } from "react";
-import type { ChangeEvent, DragEvent } from "react";
+import type { ChangeEvent, DragEvent, ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import {
   AlertCircle,
@@ -24,6 +24,13 @@ export interface FileUploaderProps {
   accept?: string;
   maxSize?: number;
   onUploaded: (file: StoredFilePublic) => void;
+  /**
+   * "dropzone" (default): the large dashed target. "button": one secondary
+   * button for a settings row (the profile photo), still accepting a file
+   * dropped onto it. Pass `buttonLabel` with it.
+   */
+  variant?: "dropzone" | "button";
+  buttonLabel?: ReactNode;
 }
 
 type UploadStatus = "queued" | "uploading" | "done" | "error";
@@ -62,7 +69,7 @@ function StatusIcon({ status }: { status: UploadStatus }) {
   if (status === "done")
     return (
       <CheckCircle
-        className="size-4 shrink-0 text-green-500"
+        className="size-4 shrink-0 text-success"
         aria-hidden="true"
       />
     );
@@ -104,6 +111,8 @@ export function FileUploader({
   accept,
   maxSize,
   onUploaded,
+  variant = "dropzone",
+  buttonLabel,
 }: FileUploaderProps) {
   const { t } = useTranslation();
   const [items, setItems] = useState<UploadItem[]>([]);
@@ -174,7 +183,8 @@ export function FileUploader({
     // tests/load/lib/workloads.js and backend/tests/test_storage_backend.py
     // drive this same flow against a real S3-API backend and agree.
     const form = new FormData();
-    for (const [name, value] of Object.entries(fields)) form.append(name, value);
+    for (const [name, value] of Object.entries(fields))
+      form.append(name, value);
     form.append("file", file);
 
     try {
@@ -327,37 +337,61 @@ export function FileUploader({
 
   return (
     <div className="space-y-3">
-      <div
-        role="button"
-        tabIndex={0}
-        aria-label={t("files.uploader.drop_here")}
-        onDragOver={handleDragOver}
-        onDragLeave={handleDragLeave}
-        onDrop={handleDrop}
-        onClick={() => inputRef.current?.click()}
-        onKeyDown={(e) => {
-          if (e.key === "Enter" || e.key === " ") inputRef.current?.click();
-        }}
-        className={cn(
-          "flex cursor-pointer flex-col items-center justify-center gap-2 rounded-lg border-2 border-dashed p-8 text-center transition-colors",
-          isDragActive
-            ? "border-primary bg-primary/5"
-            : "border-muted-foreground/25 hover:border-primary/50",
-        )}
-      >
-        <Upload className="size-8 text-muted-foreground" aria-hidden="true" />
-        <p className="text-sm font-medium">
-          {isDragActive
-            ? t("files.uploader.drag_active")
-            : t("files.uploader.drop_here")}
-        </p>
-        <p className="text-xs text-muted-foreground">
-          <span className="text-primary underline">
-            {t("files.uploader.browse")}
-          </span>{" "}
-          {t("files.uploader.hint")}
-        </p>
-      </div>
+      {variant === "button" ? (
+        // Drag-and-drop still works on the wrapper; the button is the
+        // keyboard and pointer path (WCAG 2.5.7: dragging is never the only way).
+        <div
+          onDragOver={handleDragOver}
+          onDragLeave={handleDragLeave}
+          onDrop={handleDrop}
+          className={cn(
+            "inline-flex rounded-md",
+            isDragActive &&
+              "ring-2 ring-primary ring-offset-2 ring-offset-background",
+          )}
+        >
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => inputRef.current?.click()}
+          >
+            <Upload aria-hidden="true" />
+            {buttonLabel}
+          </Button>
+        </div>
+      ) : (
+        <div
+          role="button"
+          tabIndex={0}
+          aria-label={t("files.uploader.drop_here")}
+          onDragOver={handleDragOver}
+          onDragLeave={handleDragLeave}
+          onDrop={handleDrop}
+          onClick={() => inputRef.current?.click()}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" || e.key === " ") inputRef.current?.click();
+          }}
+          className={cn(
+            "flex cursor-pointer flex-col items-center justify-center gap-2 rounded-lg border-2 border-dashed p-8 text-center transition-colors",
+            isDragActive
+              ? "border-primary bg-primary/5"
+              : "border-muted-foreground/25 hover:border-primary/50",
+          )}
+        >
+          <Upload className="size-8 text-muted-foreground" aria-hidden="true" />
+          <p className="text-sm font-medium">
+            {isDragActive
+              ? t("files.uploader.drag_active")
+              : t("files.uploader.drop_here")}
+          </p>
+          <p className="text-xs text-muted-foreground">
+            <span className="text-primary underline decoration-primary/35 underline-offset-[3px]">
+              {t("files.uploader.browse")}
+            </span>{" "}
+            {t("files.uploader.hint")}
+          </p>
+        </div>
+      )}
       {/* A sibling, not a child, of the role="button" dropzone above --
           axe's nested-interactive rule flags any genuinely-focusable native
           control nested inside another interactive element, regardless of

@@ -20,21 +20,23 @@
  *      Blocking Time, and it is also a privacy decision (T-308) and a CSP
  *      entry (T-307).
  *
- * All three checks are *vacuously* true today, and that is the intended
- * state: this site has no webfonts (the token layer uses the system stack, so
- * text paints in the first frame and costs zero bytes), no raster images
- * outside the Open Graph card nothing renders, and no third-party anything.
- * The value of the checks is that the first person to change one of those
- * finds out here, in seconds, with the rule and its reason attached -- rather
- * than in a red Lighthouse job that says "LCP 3.1 s" and leaves them to work
- * out why.
+ * The webfont check is real since ADR-0008: the site ships one self-hosted
+ * family (Instrument Sans, plus IBM Plex Sans Arabic for Arabic glyphs only),
+ * from `@forge/ui/styles/fonts.css`. Every face must swap, come from this
+ * origin, and stay under FONT_FILE_BUDGET_BYTES, and some page must preload a
+ * face -- BaseLayout preloads exactly one, the upright Latin file. The other
+ * two checks are still vacuously true: no raster images outside the Open
+ * Graph card nothing renders, and no third-party anything. The value of the
+ * checks is that the first person to break one finds out here, in seconds,
+ * with the rule and its reason attached -- rather than in a red Lighthouse
+ * job that says "LCP 3.1 s" and leaves them to work out why.
  *
  * Runs as an Astro integration, like the other three gates, so every build in
  * this repo gets it -- the tests' builds included. Also runnable by hand:
  *
  *     node scripts/check-budget.mjs [dir]     # defaults to ./dist
  */
-import { readFile, readdir } from "node:fs/promises";
+import { readFile, readdir, stat } from "node:fs/promises";
 import { dirname, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -176,14 +178,24 @@ function declaration(block, property) {
   return "";
 }
 
-/** Every `.css` file under `dir`, as paths relative to it, in a stable order. */
-async function cssFiles(dir) {
+/** Every file under `dir` with `extension`, as paths relative to it, in a stable order. */
+async function filesWithExtension(dir, extension) {
   const entries = await readdir(dir, { recursive: true, withFileTypes: true });
   return entries
-    .filter((entry) => entry.isFile() && entry.name.endsWith(".css"))
+    .filter((entry) => entry.isFile() && entry.name.endsWith(extension))
     .map((entry) => relative(dir, join(entry.parentPath, entry.name)).split(sep).join("/"))
     .sort();
 }
+
+const cssFiles = (dir) => filesWithExtension(dir, ".css");
+
+/**
+ * The largest single font file the site may ship (ADR-0008). The upright
+ * Latin subset of Instrument Sans -- the one preloaded file -- is ~57 KB as a
+ * variable woff2; 80 KB leaves room for a font update but not for an
+ * unsubsetted or second family slipping in unnoticed.
+ */
+export const FONT_FILE_BUDGET_BYTES = 80 * 1024;
 
 /**
  * Everything wrong with a built site's budget, as messages.
@@ -214,6 +226,16 @@ export async function findBudgetProblems(dir) {
             `so the font is not a third-party request on the critical path`,
         );
       }
+    }
+  }
+
+  for (const file of await filesWithExtension(dir, ".woff2")) {
+    const { size } = await stat(join(dir, file));
+    if (size > FONT_FILE_BUDGET_BYTES) {
+      problems.push(
+        `${file}: ${Math.round(size / 1024)} KB, over the ${FONT_FILE_BUDGET_BYTES / 1024} KB per-font budget — ` +
+          `subset it (one script per file) or reconsider adding it; see ADR-0008`,
+      );
     }
   }
 
@@ -298,7 +320,7 @@ export function checkBudget() {
               problems.map((problem) => `  ${problem}`).join("\n"),
           );
         }
-        logger.info("no unswapped webfonts, no unsized images, no third-party subresources");
+        logger.info("no unswapped or oversized webfonts, no unsized images, no third-party subresources");
       },
     },
   };

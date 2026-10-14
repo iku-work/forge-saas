@@ -23,7 +23,7 @@ import {
 
 // Must match MembersSettingsPage's own constants: the DOM-node budget below
 // is only meaningful relative to the viewport/row ratio the page ships.
-const ROW_HEIGHT_PX = 52;
+const ROW_HEIGHT_PX = 72;
 const VIEWPORT_HEIGHT_PX = 420;
 
 // The budget the task sets: 1,000 rows of data, fewer than 50 row nodes.

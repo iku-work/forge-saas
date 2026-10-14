@@ -37,7 +37,11 @@
     "webhooks": "Webhooks",
     "open_menu": "Open menu",
     "menu": "Menu",
-    "skip_to_content": "Skip to content"
+    "skip_to_content": "Skip to content",
+    "back_to_app": "Back to app",
+    "group_account": "Your account",
+    "collapse_sidebar": "Collapse sidebar",
+    "expand_sidebar": "Expand sidebar"
   },
   "support": {
     "contact": "Contact support",
@@ -62,12 +66,31 @@
     "select_hint": "Sets this as your app language"
   },
   "dashboard": {
-    "empty": "Nothing here yet.",
-    "empty_title": "Welcome — your workspace is ready",
-    "empty_body": "There's nothing here yet because you've just started. Pick one of the steps below, or use the search button in the header (or press Ctrl/Cmd + K) to jump anywhere in the app.",
-    "empty_action_files": "Upload your first file",
-    "empty_action_invite": "Invite a teammate",
-    "empty_action_profile": "Finish your profile"
+    "welcome_title": "Welcome to {org}",
+    "welcome_body": "A few things to finish before your organization is ready.",
+    "ready_body": "Your organization is set up.",
+    "checklist_title": "Get started",
+    "progress": "{done} of {total} done",
+    "step_done": "Done",
+    "step_profile_title": "Complete your profile",
+    "step_profile_hint": "Add your name and a photo so members recognise you.",
+    "step_profile_hint_no_photo": "Add your name so members recognise you.",
+    "step_profile_action": "Edit profile",
+    "step_files_title": "Upload your first file",
+    "step_files_hint": "Files are private to your organization and scanned before anyone can open them.",
+    "step_files_action": "Upload file",
+    "step_invite_title": "Invite a member",
+    "step_invite_hint": "Members get their own sign-in and a role you choose.",
+    "step_invite_action": "Invite member",
+    "step_plan_title": "Choose a plan",
+    "step_plan_hint": "Pick the plan that fits your organization.",
+    "step_plan_action": "See plans",
+    "shortcut_note": "Press {shortcut} to jump to any page or action.",
+    "overview_members": "Members",
+    "overview_plan": "Plan",
+    "renews": "Renews {date}",
+    "recent_files": "Recent files",
+    "view_all_files": "View all files"
   },
   "not_found": {
     "title": "Page not found",
@@ -104,7 +127,7 @@
   },
   "admin": {
     "badge": "Admin",
-    "back_to_app": "Back to app",
+    "console": "Admin console",
     "nav": {
       "dashboard": "Dashboard",
       "orgs": "Organizations",
@@ -259,7 +282,9 @@
       "system_actor": "System",
       "no_results": "No matching audit events.",
       "error_load": "Couldn't load the audit log.",
-      "load_more": "Load more"
+      "load_more": "Load more",
+      "severity_info": "Info",
+      "severity_elevated": "Elevated"
     },
     "guard": {
       "denied": "You don't have access to the admin area."
@@ -316,6 +341,16 @@
       "raw_not_an_object": "Settings must be a JSON object."
     }
   },
+  "subscription_status": {
+    "active": "Active",
+    "trialing": "Trial",
+    "past_due": "Past due",
+    "canceled": "Canceled",
+    "unpaid": "Unpaid",
+    "incomplete": "Incomplete",
+    "incomplete_expired": "Expired",
+    "paused": "Paused"
+  },
   "banner": {
     "dismiss": "Dismiss announcement",
     "severity_info": "Announcement:",
@@ -358,6 +393,7 @@
     "close": "Close a dialog or menu",
     "goto_dashboard": "Go to dashboard",
     "goto_files": "Go to files",
-    "goto_settings": "Go to settings"
+    "goto_settings": "Go to settings",
+    "toggle_sidebar": "Collapse or expand the sidebar"
   }
 }

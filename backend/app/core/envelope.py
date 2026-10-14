@@ -6,6 +6,10 @@ from pydantic import BaseModel
 class Meta(BaseModel):
     request_id: str
     next_cursor: str | None = None
+    # How many rows the whole (filtered) list holds, for lists that say "12
+    # members". Null where a list does not count: a COUNT is an extra query,
+    # so only lists whose UI shows the number pay for one.
+    total: int | None = None
     version: str = "1.0.0"
 
 

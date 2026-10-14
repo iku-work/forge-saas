@@ -1,7 +1,7 @@
 {
   "org_create": {
     "title": "Create your organization",
-    "description": "You need an organization before you can invite teammates or manage billing.",
+    "description": "You need an organization before you can invite members or manage billing.",
     "name_label": "Organization name",
     "submit": "Create organization",
     "submit_pending": "Creating…",
@@ -12,15 +12,29 @@
     "description": "Manage your organization's profile.",
     "name_label": "Organization name",
     "logo_upload": "Upload logo",
-    "coming_soon": "Coming soon.",
     "save": "Save",
     "saved": "Saved.",
     "permission_notice": "Only owners and admins can change this.",
-    "error_default": "Unable to update the organization."
+    "error_default": "Unable to update the organization.",
+    "section_general": "General",
+    "logo_label": "Logo",
+    "name_hint": "Shown to every member, and in emails and invitations.",
+    "section_leave": "Leave organization",
+    "leave_label": "Leave {org}",
+    "leave_hint": "You lose access straight away. Someone who manages members can invite you back.",
+    "leave_button": "Leave organization",
+    "leave_confirm_title": "Leave {org}?",
+    "left": "You left {org}.",
+    "error_leave": "Couldn’t leave the organization. Please try again.",
+    "logo_hint": "PNG, JPG or WebP, up to 2 MB. Shown in the organization switcher.",
+    "logo_remove": "Remove",
+    "logo_saved": "Logo updated.",
+    "logo_removed": "Logo removed.",
+    "error_logo": "Couldn’t update the logo. Please try again."
   },
   "members": {
     "title": "Members",
-    "description": "People with access to this organization.",
+    "description": "People who can sign in to your organization, and what they can do.",
     "list_label": "Members list",
     "invite_button": "Invite",
     "no_members": "No members yet.",
@@ -28,7 +42,7 @@
     "role_col": "Role",
     "action_col": "Action",
     "you": "You",
-    "remove": "Remove",
+    "remove": "Remove from organization",
     "remove_label": "Remove {user_id}",
     "load_more": "Load more",
     "change_role_label": "Change role for {user_id}",
@@ -39,7 +53,18 @@
     },
     "error_load": "Unable to load members.",
     "error_role_change": "Unable to update this member's role.",
-    "error_remove": "Unable to remove this member."
+    "error_remove": "Unable to remove this member.",
+    "status_col": "Status",
+    "joined_col": "Joined",
+    "status_active": "Active",
+    "actions_label": "Actions for {name}",
+    "change_role": "Change role",
+    "search_placeholder": "Search by email",
+    "unnamed": "Unnamed member",
+    "count": "{count, plural, one {# member} other {# members}}",
+    "no_match": "No members match “{query}”.",
+    "remove_confirm_title": "Remove {name}?",
+    "remove_confirm_body": "They lose access to {org} straight away. You can invite them again later."
   },
   "invitations": {
     "title": "Pending invitations",
@@ -52,10 +77,18 @@
     "expires": "Expires {date}",
     "expired": "Expired",
     "load_more": "Load more",
-    "error_load": "Unable to load pending invitations."
+    "error_load": "Unable to load pending invitations.",
+    "actions_label": "Actions for {email}",
+    "resend": "Resend invitation",
+    "resent": "Invitation sent again to {email}.",
+    "revoke": "Revoke invitation",
+    "revoke_confirm_title": "Revoke this invitation?",
+    "revoke_confirm_body": "The link sent to {email} will stop working. You can invite them again later.",
+    "error_resend": "Couldn’t resend the invitation. Please try again.",
+    "error_revoke": "Couldn’t revoke the invitation. Please try again."
   },
   "invite": {
-    "title": "Invite a teammate",
+    "title": "Invite a member",
     "email_label": "Email",
     "role_label": "Role",
     "submit": "Send invite",
@@ -134,7 +167,8 @@
     "error_revoke": "Couldn't revoke the key.",
     "error_no_scopes": "Choose at least one scope.",
     "empty_title": "No API keys yet",
-    "empty_body": "API keys let scripts and integrations call the API as your organization, with only the scopes you grant. Create one to get started — the key itself is shown once."
+    "empty_body": "API keys let scripts and integrations call the API as your organization, with only the scopes you grant. Create one to get started — the key itself is shown once.",
+    "menu_label": "Actions for {name}"
   },
   "webhooks": {
     "title": "Webhooks",
@@ -213,6 +247,7 @@
     "error_replay": "Couldn't replay the delivery.",
     "error_no_events": "Choose at least one event.",
     "empty_title": "No endpoints yet",
-    "empty_body": "Webhooks push events to a URL you control as they happen, so you don't have to poll for them. Add an endpoint and choose which events it should receive."
+    "empty_body": "Webhooks push events to a URL you control as they happen, so you don't have to poll for them. Add an endpoint and choose which events it should receive.",
+    "menu_label": "Actions for {url}"
   }
 }

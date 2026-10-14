@@ -37,7 +37,11 @@
     "webhooks": "الويبهوك",
     "open_menu": "فتح القائمة",
     "menu": "القائمة",
-    "skip_to_content": "تخطي إلى المحتوى"
+    "skip_to_content": "تخطي إلى المحتوى",
+    "back_to_app": "العودة إلى التطبيق",
+    "collapse_sidebar": "طي الشريط الجانبي",
+    "expand_sidebar": "توسيع الشريط الجانبي",
+    "group_account": "حسابك"
   },
   "support": {
     "contact": "الاتصال بالدعم",
@@ -60,14 +64,6 @@
   "locale_switcher": {
     "label": "اللغة",
     "select_hint": "يجعل هذه لغة تطبيقك"
-  },
-  "dashboard": {
-    "empty": "لا يوجد شيء هنا بعد.",
-    "empty_title": "مرحبًا — مساحة عملك جاهزة",
-    "empty_body": "لا يوجد شيء هنا بعد لأنك بدأت للتو. اختر إحدى الخطوات أدناه، أو استخدم زر البحث في الأعلى (أو اضغط Ctrl/Cmd + K) للانتقال إلى أي مكان في التطبيق.",
-    "empty_action_files": "ارفع أول ملف لك",
-    "empty_action_invite": "ادعُ زميلًا",
-    "empty_action_profile": "أكمل ملفك الشخصي"
   },
   "not_found": {
     "title": "الصفحة غير موجودة",
@@ -104,7 +100,6 @@
   },
   "admin": {
     "badge": "مسؤول",
-    "back_to_app": "العودة إلى التطبيق",
     "nav": {
       "dashboard": "لوحة التحكم",
       "orgs": "المؤسسات",
@@ -314,7 +309,8 @@
       "raw_save": "استبدال الإعدادات",
       "raw_invalid_json": "هذا ليس JSON صالحًا.",
       "raw_not_an_object": "يجب أن تكون الإعدادات كائن JSON."
-    }
+    },
+    "console": "لوحة الإدارة"
   },
   "banner": {
     "dismiss": "إغلاق الإعلان",
@@ -358,6 +354,29 @@
     "close": "إغلاق نافذة أو قائمة",
     "goto_dashboard": "الانتقال إلى لوحة المعلومات",
     "goto_files": "الانتقال إلى الملفات",
-    "goto_settings": "الانتقال إلى الإعدادات"
+    "goto_settings": "الانتقال إلى الإعدادات",
+    "toggle_sidebar": "طي الشريط الجانبي أو توسيعه"
+  },
+  "dashboard": {
+    "checklist_title": "البداية",
+    "progress": "تم {done} من {total}",
+    "ready_body": "تم إعداد مؤسستك.",
+    "shortcut_note": "اضغط {shortcut} للانتقال إلى أي صفحة أو إجراء.",
+    "step_done": "تم",
+    "step_files_action": "رفع ملف",
+    "step_files_hint": "الملفات خاصة بمؤسستك ويتم فحصها قبل أن يتمكن أي أحد من فتحها.",
+    "step_files_title": "ارفع ملفك الأول",
+    "step_invite_action": "دعوة عضو",
+    "step_invite_hint": "يحصل الأعضاء على تسجيل دخول خاص بهم ودور تختاره أنت.",
+    "step_invite_title": "ادعُ عضوًا",
+    "step_plan_action": "عرض الخطط",
+    "step_plan_hint": "اختر الخطة المناسبة لمؤسستك.",
+    "step_plan_title": "اختر خطة",
+    "step_profile_action": "تعديل الملف الشخصي",
+    "step_profile_hint": "أضف اسمك وصورة ليتعرّف عليك الأعضاء.",
+    "step_profile_hint_no_photo": "أضف اسمك ليتعرّف عليك الأعضاء.",
+    "step_profile_title": "أكمل ملفك الشخصي",
+    "welcome_body": "بضع خطوات قبل أن تصبح مؤسستك جاهزة.",
+    "welcome_title": "مرحبًا بك في {org}"
   }
 }

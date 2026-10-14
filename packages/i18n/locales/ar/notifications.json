@@ -43,7 +43,8 @@
     "type_file_infected": "عندما يُوضع على ملف رفعته علامة بأنه مصاب",
     "channel_required": "مطلوب",
     "required_note": "نراسلك دائمًا بالبريد الإلكتروني بشأن مشكلات الدفع، ولا يمكن إيقاف ذلك — وإلا فقدت الوصول دون سابق إنذار.",
-    "type_webhook_endpoint_disabled": "تعطيل نقطة نهاية ويبهوك بعد إخفاقات متكررة"
+    "type_webhook_endpoint_disabled": "تعطيل نقطة نهاية ويبهوك بعد إخفاقات متكررة",
+    "section_title": "كيف يصلك كل إشعار"
   },
   "types": {
     "member_invited": {

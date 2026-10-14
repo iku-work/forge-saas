@@ -21,9 +21,9 @@ import {
 // translated normally.
 
 const STYLES: Record<GlobalBannerValue["type"], string> = {
-  info: "bg-sky-100 text-sky-950 dark:bg-sky-950 dark:text-sky-50",
-  warning: "bg-amber-100 text-amber-950 dark:bg-amber-950 dark:text-amber-50",
-  critical: "bg-red-600 text-white",
+  info: "bg-primary-soft text-foreground",
+  warning: "bg-warning-soft text-foreground",
+  critical: "bg-destructive text-destructive-foreground",
 };
 
 // `alert` interrupts a screen reader immediately; `status` waits for a pause.

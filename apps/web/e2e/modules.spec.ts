@@ -45,7 +45,8 @@ function collectApiFailures(page: Page): string[] {
     if (response.status() < 400) return;
     // A signed-out bootstrap 401 on /auth/refresh is the normal first call
     // on a cold page and says nothing about a module.
-    if (response.status() === 401 && response.url().includes("/auth/refresh")) return;
+    if (response.status() === 401 && response.url().includes("/auth/refresh"))
+      return;
     // The notification stream caps *concurrency*, not request rate: five
     // open streams per user, each released when it closes and pruned after
     // 90s (app/modules/notifications/sse.py). Every `page.goto` here is a
@@ -54,19 +55,24 @@ function collectApiFailures(page: Page): string[] {
     // That is this test's own doing, not a module fault -- a real SPA
     // session opens one per tab. Excluded deliberately rather than silently:
     // a *sustained* 429 here, or one on the first page load, would be real.
-    if (response.status() === 429 && response.url().includes("/notifications/stream")) {
+    if (
+      response.status() === 429 &&
+      response.url().includes("/notifications/stream")
+    ) {
       return;
     }
     // The admin surface refusing a superadmin without 2FA is the gate
     // working; the step below asserts that refusal on purpose.
     if (response.status() === 403 && response.url().includes("/admin/")) return;
-    failures.push(`${String(response.status())} ${response.url().split("/api/v1/")[1]}`);
+    failures.push(
+      `${String(response.status())} ${response.url().split("/api/v1/")[1]}`,
+    );
   });
   return failures;
 }
 
 test.describe("every enabled module is reachable", () => {
-  test.use({ reducedMotion: "reduce" });
+  test.use({ contextOptions: { reducedMotion: "reduce" } });
 
   test("a customer can reach each module's surface", async ({ page }) => {
     const failures = collectApiFailures(page);
@@ -84,7 +90,9 @@ test.describe("every enabled module is reachable", () => {
 
     await test.step("notifications: preferences and the bell", async () => {
       await page.goto("/en/settings/notifications");
-      await expect(page.getByTestId("page-title")).toContainText("Notification");
+      await expect(page.getByTestId("page-title")).toContainText(
+        "Notification",
+      );
       // The bell is the module's only always-on surface, and it lives in the
       // shell rather than on a page -- worth opening, since a broken feed
       // renders a bell that does nothing.
@@ -126,7 +134,9 @@ test.describe("every enabled module is reachable", () => {
       );
     });
 
-    expect(failures, "no module's page should make a failing API call").toEqual([]);
+    expect(failures, "no module's page should make a failing API call").toEqual(
+      [],
+    );
   });
 
   test("the runtime module list matches what this spec covers", async ({

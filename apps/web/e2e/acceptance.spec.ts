@@ -35,6 +35,7 @@ test("signup -> verify -> invite -> upgrade", async ({ page, browser }) => {
   await page.goto("/register");
   await page.getByTestId("register-email-input").fill(ownerEmail);
   await page.getByTestId("register-password-input").fill(password);
+  await page.getByTestId("register-confirm-password-input").fill(password);
   await page.getByTestId("register-submit").click();
   await expect(page.getByTestId("register-success")).toBeVisible();
 
@@ -57,7 +58,8 @@ test("signup -> verify -> invite -> upgrade", async ({ page, browser }) => {
   const [createOrgResponse] = await Promise.all([
     page.waitForResponse(
       (response) =>
-        response.url().endsWith("/api/v1/orgs") && response.request().method() === "POST",
+        response.url().endsWith("/api/v1/orgs") &&
+        response.request().method() === "POST",
     ),
     (async () => {
       await page.getByTestId("create-org-name-input").fill(`Acme ${runId}`);
@@ -74,7 +76,7 @@ test("signup -> verify -> invite -> upgrade", async ({ page, browser }) => {
   // link that was always there.
   await expect(page.getByTestId("nav-reports")).toHaveCount(0);
 
-  // --- Invite a teammate --------------------------------------------------
+  // --- Invite a member ----------------------------------------------------
   await page.goto("/settings/members");
   await page.getByTestId("members-invite-button").click();
   await page.getByTestId("invite-email-input").fill(teammateEmail);
@@ -94,6 +96,9 @@ test("signup -> verify -> invite -> upgrade", async ({ page, browser }) => {
     await teammatePage.goto("/register");
     await teammatePage.getByTestId("register-email-input").fill(teammateEmail);
     await teammatePage.getByTestId("register-password-input").fill(password);
+    await teammatePage
+      .getByTestId("register-confirm-password-input")
+      .fill(password);
     await teammatePage.getByTestId("register-submit").click();
     await expect(teammatePage.getByTestId("register-success")).toBeVisible();
 
@@ -102,7 +107,9 @@ test("signup -> verify -> invite -> upgrade", async ({ page, browser }) => {
       /https:\/\/localhost\/[a-z]{2}\/verify-email\?token=[\w-]+/,
     );
     await teammatePage.goto(teammateVerifyLink);
-    await expect(teammatePage.getByTestId("verify-email-success")).toBeVisible();
+    await expect(
+      teammatePage.getByTestId("verify-email-success"),
+    ).toBeVisible();
     await teammatePage.getByTestId("verify-email-continue-to-login").click();
 
     await teammatePage.getByTestId("login-email-input").fill(teammateEmail);
@@ -110,7 +117,9 @@ test("signup -> verify -> invite -> upgrade", async ({ page, browser }) => {
     await teammatePage.getByTestId("login-submit").click();
     // The teammate has no org of their own yet -- same first-run prompt the
     // owner saw in step 3, proving login succeeded before moving on.
-    await expect(teammatePage.getByTestId("create-first-org-prompt")).toBeVisible();
+    await expect(
+      teammatePage.getByTestId("create-first-org-prompt"),
+    ).toBeVisible();
 
     await teammatePage.goto(acceptInvitationLink);
     await teammatePage.getByTestId("accept-invitation-button").click();
@@ -154,7 +163,9 @@ test("signup -> verify -> invite -> upgrade", async ({ page, browser }) => {
       canonical: document
         .querySelector('link[rel="canonical"]')
         ?.getAttribute("href"),
-      robots: document.querySelector('meta[name="robots"]')?.getAttribute("content"),
+      robots: document
+        .querySelector('meta[name="robots"]')
+        ?.getAttribute("content"),
       alternates: document.querySelectorAll('link[rel="alternate"]').length,
     }));
   // Behind auth: canonical only, noindex on, no hreflang alternates.

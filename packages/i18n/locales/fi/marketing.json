@@ -13,13 +13,12 @@
   },
   "hero": {
     "title": "Julkaise tuote, älä putkitusta",
-    "subtitle": "Tilit, tiimit, laskutus ja hallintakonsoli ovat jo valmiina ja testattuina. Aloita siitä, missä työ on kiinnostavaa.",
-    "cta_primary": "Aloita",
-    "cta_secondary": "Kirjaudu sisään"
+    "subtitle": "Tilit, organisaatiot, laskutus ja hallintakonsoli ovat jo valmiina ja testattuina. Aloita siitä, missä työ on kiinnostavaa.",
+    "cta_primary": "Aloita"
   },
   "highlights": {
     "heading": "Mistä aloitat",
-    "accounts_title": "Tilit ja tiimit",
+    "accounts_title": "Tilit ja organisaatiot",
     "accounts_body": "Rekisteröityminen, istunnot, kaksivaiheinen tunnistautuminen, kutsut ja organisaatiokohtaiset roolit – eristettynä vuokralaisittain ensimmäisestä kyselystä alkaen.",
     "billing_title": "Tilaukset, jotka täsmäävät",
     "billing_body": "Paketit, kokeilujaksot, päivitykset ja maksumuistutukset sekä webhook-käsittely, joka pysyy oikeana silloinkin, kun sama tapahtuma saapuu kahdesti.",
@@ -57,7 +56,7 @@
     "empty": "Paketteja ei ole vielä määritetty.",
     "committed_notice": "Nämä hinnat julkaistiin sivuston mukana ja muuttuvat seuraavassa julkaisussa, eivät seuraavassa tietokantapäivityksessä.",
     "feature_labels": {
-      "seats": "{count, number} tiimin jäsentä",
+      "seats": "{count, number} jäsentä",
       "storage_gb": "{count, number} Gt tallennustilaa",
       "api_calls": "{count, number} API-kutsua kuukaudessa"
     },

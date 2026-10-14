@@ -56,11 +56,14 @@ export function SupportLink() {
           event.preventDefault();
         }
       }}
-      className="flex items-center gap-2 rounded-md px-3 py-2 text-sm text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
+      // In the collapsed rail only the icon shows, like the nav items above it.
+      className="flex items-center gap-2 rounded-md px-3 py-2 text-sm text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground group-data-[collapsed]/shell:size-10 group-data-[collapsed]/shell:justify-center group-data-[collapsed]/shell:px-0"
       data-testid="support-link"
     >
-      <LifeBuoy className="size-4" aria-hidden="true" />
-      {t("common.support.contact")}
+      <LifeBuoy className="size-4 shrink-0" aria-hidden="true" />
+      <span className="group-data-[collapsed]/shell:sr-only">
+        {t("common.support.contact")}
+      </span>
     </a>
   );
 }

@@ -15,6 +15,7 @@ than the repositories directly so it still respects §0.1's router/dependency
 """
 
 from collections.abc import Awaitable, Callable
+from datetime import timedelta
 from typing import Annotated
 from uuid import UUID, uuid4
 
@@ -36,16 +37,19 @@ from app.core.exceptions import NotFoundError, PermissionDeniedError
 from app.core.principal import CurrentPrincipal, require_scope
 from app.middleware.budgets import charge_org
 from app.middleware.rate_limit import api_limit
+from app.models._mixins import utcnow
 from app.modules.api_keys.scopes import Scope
 from app.modules.auth.models import User
 from app.modules.auth.permissions import ROLE_PERMISSIONS, Permission
-from app.modules.tenancy.models import Membership, Organization
+from app.modules.auth.schemas import AvatarUrlResponse
+from app.modules.tenancy.models import Invitation, Membership, Organization
 from app.modules.tenancy.schemas import (
     CreateOrgRequest,
     InvitationPreview,
     InvitationPublic,
     InviteRequest,
     MembershipPublic,
+    MemberUserSummary,
     OrganizationPublic,
     UpdateMembershipRequest,
     UpdateOrgRequest,
@@ -177,11 +181,52 @@ async def update_org(  # noqa: PLR0913 — redis (cache invalidation, T-240) on 
     session: Annotated[AsyncSession, Depends(get_session)],
     redis: Annotated[Redis, Depends(get_redis)],
 ) -> Envelope[OrganizationPublic]:
-    org = await TenancyService(session).update_org(org_id, **body.model_dump(exclude_unset=True))
+    service = TenancyService(session)
+    # exclude_unset: an omitted field is left alone, an explicit null clears it.
+    changes = body.model_dump(exclude_unset=True)
+    if "logo_file_id" in changes:
+        changes["logo_object_key"] = await service.resolve_logo_change(
+            org_id, changes.pop("logo_file_id")
+        )
+    org = await service.update_org(org_id, **changes)
     await session.commit()
     await invalidate_org_cache(redis, org_id)  # T-240: get_current_org caches this row
     return Envelope(
         data=OrganizationPublic.model_validate(org), meta=Meta(request_id=_request_id(request))
+    )
+
+
+@router.get(
+    "/orgs/{org_id}/logo",
+    description=(
+        "A short-lived URL for the organization's uploaded logo. 404 when it has "
+        "none, 409 while its malware scan is pending."
+    ),
+)
+@api_limit
+async def get_org_logo(
+    request: Request,
+    org_id: UUID,
+    # A member's session: the logo serves the web UI, not the public API.
+    viewer: Annotated[  # noqa: ARG001 -- gates the route and proves org membership; org comes from path
+        Membership, Depends(require_org_permission(Permission.MEMBERS_READ))
+    ],
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> Envelope[AvatarUrlResponse]:
+    key = await TenancyService(session).org_logo_key(org_id)
+    # Lazy, as for member avatars: with file_storage off no logo exists, so
+    # the 404 above comes first.
+    from app.modules.storage.logos import (  # noqa: PLC0415
+        LOGO_URL_EXPIRES_IN_SECONDS,
+        presign_org_logo,
+    )
+
+    url = await presign_org_logo(session, org_id=org_id, key=key)
+    return Envelope(
+        data=AvatarUrlResponse(
+            url=url, expires_at=utcnow() + timedelta(seconds=LOGO_URL_EXPIRES_IN_SECONDS)
+        ),
+        meta=Meta(request_id=_request_id(request)),
     )
 
 
@@ -197,20 +242,94 @@ async def update_org(  # noqa: PLR0913 — redis (cache invalidation, T-240) on 
 async def list_members(  # noqa: PLR0913 — cursor pagination (§0.3) needs after+limit on top of the usual params
     request: Request,
     org_id: UUID,
-    principal: Annotated[  # noqa: ARG001 — gates the route and proves org membership; org comes from path
-        CurrentPrincipal, Depends(require_scope(Scope.MEMBERS_READ))
-    ],
+    principal: Annotated[CurrentPrincipal, Depends(require_scope(Scope.MEMBERS_READ))],
     session: Annotated[AsyncSession, Depends(get_session)],
     after: Annotated[UUID | None, Query()] = None,
     limit: Annotated[int, Query(ge=1, le=100)] = 20,
+    q: Annotated[
+        str | None,
+        Query(
+            max_length=254,
+            description=(
+                "Only members whose email contains this, in any case. Needs the "
+                "`members:write` scope (a session: owner or admin), as emails do."
+            ),
+        ),
+    ] = None,
 ) -> Envelope[list[MembershipPublic]]:
-    members, next_cursor = await TenancyService(session).list_members(org_id, after, limit)
-    data = [MembershipPublic.model_validate(m) for m in members]
+    # Emails are for whoever manages members. A plain member searching by
+    # email would learn addresses one guess at a time, so the search is gated
+    # with them.
+    show_emails = Scope.MEMBERS_WRITE.value in principal.scopes
+    email_query = q.strip() if q else None
+    if email_query and not show_emails:
+        raise PermissionDeniedError(
+            "errors.missing_scope",
+            fallback=f"Searching members needs the '{Scope.MEMBERS_WRITE.value}' scope",
+            params={"scope": Scope.MEMBERS_WRITE.value},
+        )
+    service = TenancyService(session)
+    members, next_cursor = await service.list_members(org_id, after, limit, email_query)
+    users = await service.users_for_memberships(members)
+    data = [_membership_public(m, users.get(m.user_id), show_email=show_emails) for m in members]
     meta = Meta(
         request_id=_request_id(request),
         next_cursor=str(next_cursor) if next_cursor is not None else None,
+        total=await service.count_members(org_id, email_query),
     )
     return Envelope(data=data, meta=meta)
+
+
+def _membership_public(
+    membership: Membership, user: User | None, *, show_email: bool
+) -> MembershipPublic:
+    public = MembershipPublic.model_validate(membership)
+    if user is not None:
+        public.user = MemberUserSummary(
+            full_name=user.full_name,
+            email=user.email if show_email else None,
+            avatar_url=user.avatar_url,
+            has_uploaded_avatar=user.has_uploaded_avatar,
+        )
+    return public
+
+
+@router.get(
+    "/orgs/{org_id}/members/{membership_id}/avatar",
+    description=(
+        "A short-lived URL for a fellow member's uploaded avatar. 404 when they "
+        "have none (an OAuth picture is already `user.avatar_url` on the member), "
+        "409 while its malware scan is pending."
+    ),
+)
+@api_limit
+async def get_member_avatar(
+    request: Request,
+    org_id: UUID,
+    membership_id: UUID,
+    # A member's session, not an API-key scope: a photo URL serves the web
+    # UI, and the public API contract (test_public_openapi) is deliberate.
+    viewer: Annotated[  # noqa: ARG001 -- gates the route and proves org membership; org comes from path
+        Membership, Depends(require_org_permission(Permission.MEMBERS_READ))
+    ],
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> Envelope[AvatarUrlResponse]:
+    key = await TenancyService(session).member_avatar_key(org_id, membership_id)
+    # Lazy: storage is an optional module, and this one must import without
+    # it. With file_storage off nobody has an uploaded avatar, so the 404
+    # above is raised before this line is reached.
+    from app.modules.storage.avatars import (  # noqa: PLC0415
+        AVATAR_URL_EXPIRES_IN_SECONDS,
+        presign_own_avatar,
+    )
+
+    url = await presign_own_avatar(session, key)
+    return Envelope(
+        data=AvatarUrlResponse(
+            url=url, expires_at=utcnow() + timedelta(seconds=AVATAR_URL_EXPIRES_IN_SECONDS)
+        ),
+        meta=Meta(request_id=_request_id(request)),
+    )
 
 
 @router.patch(
@@ -260,6 +379,27 @@ async def remove_member(
 
 
 @router.post(
+    "/orgs/{org_id}/leave",
+    dependencies=[Depends(reject_during_impersonation("data_mutation"))],
+)
+@api_limit
+async def leave_org(
+    request: Request,
+    org_id: UUID,  # noqa: ARG001 -- the org the membership below was resolved for
+    membership: Annotated[Membership, Depends(require_org_permission(Permission.MEMBERS_READ))],
+    session: Annotated[AsyncSession, Depends(get_session)],
+    redis: Annotated[Redis, Depends(get_redis)],
+) -> Envelope[None]:
+    # MEMBERS_READ because every role has it: any member may leave. No
+    # step-up, unlike removing someone else -- leaving only takes your own
+    # access away.
+    await TenancyService(session).leave_org(membership)
+    await session.commit()
+    await invalidate_user_cache(redis, membership.user_id)  # T-240, as remove_member
+    return Envelope(data=None, meta=Meta(request_id=_request_id(request)))
+
+
+@router.post(
     "/orgs/{org_id}/invitations", dependencies=[Depends(reject_during_impersonation("notifying"))]
 )
 @api_limit
@@ -288,30 +428,70 @@ async def list_invitations(  # noqa: PLR0913 — cursor pagination (§0.3) needs
     after: Annotated[UUID | None, Query()] = None,
     limit: Annotated[int, Query(ge=1, le=100)] = 20,
 ) -> Envelope[list[InvitationPublic]]:
-    # MEMBERS_MANAGE, not the MEMBERS_READ that gates the member list: this
-    # response is keyed on the invitee's *email address*, which MembershipPublic
-    # deliberately never exposes, and it is the management view of a flow only
-    # MEMBERS_MANAGE can start (see create_invitation above).
+    # MEMBERS_MANAGE, not the MEMBERS_READ that gates the member list: an
+    # invitee is not a member yet, so their email address is the inviter's
+    # business rather than the whole organization's (members do see each
+    # other's, on MembershipPublic.user), and this is the management view of
+    # a flow only MEMBERS_MANAGE can start (see create_invitation above).
     invitations, next_cursor = await TenancyService(session).list_pending_invitations(
         org_id, after, limit
     )
-    data = [
-        InvitationPublic(
-            id=invitation.id,
-            org_id=invitation.org_id,
-            email=invitation.email,
-            role=invitation.role,
-            invited_by=invitation.invited_by,
-            expires_at=invitation.expires_at,
-            created_at=invitation.created_at,
-        )
-        for invitation in invitations
-    ]
+    data = [_invitation_public(invitation) for invitation in invitations]
     meta = Meta(
         request_id=_request_id(request),
         next_cursor=str(next_cursor) if next_cursor is not None else None,
     )
     return Envelope(data=data, meta=meta)
+
+
+def _invitation_public(invitation: Invitation) -> InvitationPublic:
+    # Field by field, never from_attributes: Invitation.token_hash must not
+    # reach a client (T-243).
+    return InvitationPublic(
+        id=invitation.id,
+        org_id=invitation.org_id,
+        email=invitation.email,
+        role=invitation.role,
+        invited_by=invitation.invited_by,
+        expires_at=invitation.expires_at,
+        created_at=invitation.created_at,
+    )
+
+
+@router.post(
+    "/orgs/{org_id}/invitations/{invitation_id}/resend",
+    dependencies=[Depends(reject_during_impersonation("notifying"))],
+)
+@api_limit
+async def resend_invitation(
+    request: Request,
+    org_id: UUID,
+    invitation_id: UUID,
+    actor: Annotated[Membership, Depends(require_org_permission(Permission.MEMBERS_MANAGE))],
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> Envelope[InvitationPublic]:
+    invitation = await TenancyService(session).resend_invitation(org_id, invitation_id, actor)
+    await session.commit()
+    return Envelope(data=_invitation_public(invitation), meta=Meta(request_id=_request_id(request)))
+
+
+@router.delete(
+    "/orgs/{org_id}/invitations/{invitation_id}",
+    dependencies=[Depends(reject_during_impersonation("data_mutation"))],
+)
+@api_limit
+async def revoke_invitation(
+    request: Request,
+    org_id: UUID,
+    invitation_id: UUID,
+    actor: Annotated[  # noqa: ARG001 -- gates the route on MEMBERS_MANAGE; org comes from path
+        Membership, Depends(require_org_permission(Permission.MEMBERS_MANAGE))
+    ],
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> Envelope[None]:
+    await TenancyService(session).revoke_invitation(org_id, invitation_id)
+    await session.commit()
+    return Envelope(data=None, meta=Meta(request_id=_request_id(request)))
 
 
 @router.get("/invitations/{token}")

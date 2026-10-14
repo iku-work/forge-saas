@@ -26,7 +26,7 @@ import { registerSchema, type RegisterInput } from "@forge/validation";
 
 import { useRouteLocale } from "../../lib/useRouteLocale";
 
-import { AuthCard } from "./AuthCard";
+import { AuthLayout } from "./AuthLayout";
 import { getErrorMessage } from "./getErrorMessage";
 
 export function RegisterPage() {
@@ -40,7 +40,7 @@ export function RegisterPage() {
 
   const form = useForm<RegisterInput>({
     resolver: zodResolver(registerSchema),
-    defaultValues: { email: "", password: "" },
+    defaultValues: { email: "", password: "", confirmPassword: "" },
   });
 
   const onSubmit = async (values: RegisterInput): Promise<void> => {
@@ -59,25 +59,25 @@ export function RegisterPage() {
   // a form you can type into but not submit is worse than no form.
   if (signupDisabled) {
     return (
-      <AuthCard title={t("auth.register.title")}>
+      <AuthLayout title={t("auth.register.title")}>
         <Alert data-testid="register-closed">
           <AlertDescription>
             {t("auth.register.signup_closed")}
           </AlertDescription>
         </Alert>
-      </AuthCard>
+      </AuthLayout>
     );
   }
 
   if (submitted) {
     return (
-      <AuthCard title={t("auth.register.success_title")}>
+      <AuthLayout title={t("auth.register.success_title")}>
         <Alert data-testid="register-success">
           <AlertDescription>
             {t("auth.register.success_message")}
           </AlertDescription>
         </Alert>
-        <p className="text-center text-sm text-muted-foreground">
+        <p className="text-sm text-foreground-secondary">
           <Link
             to="/$locale/login"
             params={{ locale }}
@@ -86,12 +86,12 @@ export function RegisterPage() {
             {t("auth.register.back_to_login")}
           </Link>
         </p>
-      </AuthCard>
+      </AuthLayout>
     );
   }
 
   return (
-    <AuthCard
+    <AuthLayout
       title={t("auth.register.title")}
       description={t("auth.register.description")}
       footer={
@@ -195,8 +195,28 @@ export function RegisterPage() {
               </FormItem>
             )}
           />
+          <FormField
+            control={form.control}
+            name="confirmPassword"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>
+                  {t("auth.register.confirm_password_label")}
+                </FormLabel>
+                <FormControl>
+                  <PasswordInput
+                    autoComplete="new-password"
+                    data-testid="register-confirm-password-input"
+                    {...field}
+                  />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
           <Button
             type="submit"
+            size="lg"
             className="w-full"
             disabled={form.formState.isSubmitting}
             data-testid="register-submit"
@@ -207,6 +227,6 @@ export function RegisterPage() {
           </Button>
         </form>
       </Form>
-    </AuthCard>
+    </AuthLayout>
   );
 }

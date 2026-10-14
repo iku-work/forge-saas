@@ -31,7 +31,7 @@ export function SkipLink() {
     <a
       href={`#${MAIN_CONTENT_ID}`}
       data-testid="skip-link"
-      className="sr-only focus:not-sr-only focus:absolute focus:start-4 focus:top-4 focus:z-50 focus:rounded-md focus:bg-background focus:px-4 focus:py-2 focus:text-sm focus:font-medium focus:text-foreground focus:shadow-elevated focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
+      className="sr-only focus:not-sr-only focus:absolute focus:start-4 focus:top-4 focus:z-50 focus:rounded-md focus:bg-background focus:px-4 focus:py-2 focus:text-sm focus:font-medium focus:text-foreground focus:shadow-menu focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
     >
       {t("common.nav.skip_to_content")}
     </a>

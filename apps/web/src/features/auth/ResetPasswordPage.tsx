@@ -25,7 +25,7 @@ import {
 
 import { useRouteLocale } from "../../lib/useRouteLocale";
 
-import { AuthCard } from "./AuthCard";
+import { AuthLayout } from "./AuthLayout";
 import { getErrorMessage } from "./getErrorMessage";
 
 interface ResetPasswordPageProps {
@@ -40,18 +40,18 @@ export function ResetPasswordPage({ token }: ResetPasswordPageProps) {
 
   const form = useForm<PasswordResetInput>({
     resolver: zodResolver(passwordResetSchema),
-    defaultValues: { token: token ?? "", newPassword: "" },
+    defaultValues: { token: token ?? "", newPassword: "", confirmPassword: "" },
   });
 
   if (!token) {
     return (
-      <AuthCard title={t("auth.reset_password.invalid_title")}>
+      <AuthLayout title={t("auth.reset_password.invalid_title")}>
         <Alert variant="destructive">
           <AlertDescription>
             {t("auth.reset_password.invalid_message")}
           </AlertDescription>
         </Alert>
-        <p className="text-center text-sm text-muted-foreground">
+        <p className="text-sm text-foreground-secondary">
           <Link
             to="/$locale/forgot-password"
             params={{ locale }}
@@ -60,7 +60,7 @@ export function ResetPasswordPage({ token }: ResetPasswordPageProps) {
             {t("auth.reset_password.request_new")}
           </Link>
         </p>
-      </AuthCard>
+      </AuthLayout>
     );
   }
 
@@ -81,13 +81,13 @@ export function ResetPasswordPage({ token }: ResetPasswordPageProps) {
 
   if (submitted) {
     return (
-      <AuthCard title={t("auth.reset_password.success_title")}>
+      <AuthLayout title={t("auth.reset_password.success_title")}>
         <Alert>
           <AlertDescription>
             {t("auth.reset_password.success_message")}
           </AlertDescription>
         </Alert>
-        <p className="text-center text-sm text-muted-foreground">
+        <p className="text-sm text-foreground-secondary">
           <Link
             to="/$locale/login"
             params={{ locale }}
@@ -96,12 +96,12 @@ export function ResetPasswordPage({ token }: ResetPasswordPageProps) {
             {t("auth.reset_password.continue_to_login")}
           </Link>
         </p>
-      </AuthCard>
+      </AuthLayout>
     );
   }
 
   return (
-    <AuthCard title={t("auth.reset_password.title")}>
+    <AuthLayout title={t("auth.reset_password.title")}>
       {formError ? (
         <Alert variant="destructive">
           <AlertDescription>{formError}</AlertDescription>
@@ -136,8 +136,24 @@ export function ResetPasswordPage({ token }: ResetPasswordPageProps) {
               </FormItem>
             )}
           />
+          <FormField
+            control={form.control}
+            name="confirmPassword"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>
+                  {t("auth.reset_password.confirm_password_label")}
+                </FormLabel>
+                <FormControl>
+                  <PasswordInput autoComplete="new-password" {...field} />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
           <Button
             type="submit"
+            size="lg"
             className="w-full"
             disabled={form.formState.isSubmitting}
           >
@@ -147,6 +163,6 @@ export function ResetPasswordPage({ token }: ResetPasswordPageProps) {
           </Button>
         </form>
       </Form>
-    </AuthCard>
+    </AuthLayout>
   );
 }

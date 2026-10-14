@@ -90,6 +90,12 @@ export const CHORD_SHORTCUTS: readonly Shortcut[] = [
     labelKey: "common.shortcuts.close",
     category: "actions",
   },
+  {
+    id: "toggle-sidebar",
+    keys: ["["],
+    labelKey: "common.shortcuts.toggle_sidebar",
+    category: "view",
+  },
 ];
 
 export const ALL_SHORTCUTS: readonly Shortcut[] = [
@@ -120,6 +126,11 @@ export function renderKey(key: string, apple: boolean): string {
     return apple ? "⌘" : "Ctrl";
   }
   return key;
+}
+
+/** A chord as one string: "⌘K" on Apple, "Ctrl+K" elsewhere ("CtrlK" is a word). */
+export function renderChord(keys: readonly string[], apple: boolean): string {
+  return keys.map((key) => renderKey(key, apple)).join(apple ? "" : "+");
 }
 
 /**

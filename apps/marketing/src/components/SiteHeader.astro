@@ -21,16 +21,23 @@ import { defaultLocale, localePath } from "../lib/routing";
 
 interface Props {
   locale?: string;
+  /** Line up with the landing page's wider column (ticket 13). */
+  wide?: boolean;
 }
 
-const { locale = defaultLocale } = Astro.props;
+const { locale = defaultLocale, wide = false } = Astro.props;
 const t = translator(locale);
 const links = siteLinks();
 const current = Astro.url.pathname;
 ---
 
 <header class="border-b border-border">
-  <div class="mx-auto flex max-w-5xl flex-wrap items-center gap-x-6 gap-y-3 px-6 py-4">
+  <div
+    class:list={[
+      "mx-auto flex flex-wrap items-center gap-x-6 gap-y-3 px-6 py-4",
+      wide ? "max-w-[75rem]" : "max-w-5xl",
+    ]}
+  >
     <a href={localePath(locale)} class="text-lg font-semibold tracking-tight">{site.name}</a>
     <nav aria-label={t("marketing.nav.primary_label")} class="flex-1">
       <ul class="flex flex-wrap items-center gap-x-5 gap-y-2 text-sm">

@@ -27,9 +27,7 @@
             "$ref": "#/components/schemas/Meta"
           }
         },
-        "required": [
-          "meta"
-        ],
+        "required": ["meta"],
         "title": "Envelope[OrganizationPublic]",
         "type": "object"
       },
@@ -63,9 +61,7 @@
             "$ref": "#/components/schemas/Meta"
           }
         },
-        "required": [
-          "meta"
-        ],
+        "required": ["meta"],
         "title": "Envelope[list[MembershipPublic]]",
         "type": "object"
       },
@@ -96,11 +92,7 @@
             "type": "string"
           }
         },
-        "required": [
-          "code",
-          "message_key",
-          "message"
-        ],
+        "required": ["code", "message_key", "message"],
         "title": "ErrorBody",
         "type": "object"
       },
@@ -118,13 +110,54 @@
         "type": "object"
       },
       "MemberRole": {
-        "enum": [
-          "owner",
-          "admin",
-          "member"
-        ],
+        "enum": ["owner", "admin", "member"],
         "title": "MemberRole",
         "type": "string"
+      },
+      "MemberUserSummary": {
+        "description": "Who a membership belongs to, as fellow members see them.\n\nEnough to draw a row (a name, a picture) and no more. `email` is set only\nfor a caller who can manage members (an owner, an admin, or an API key with\n`members:write`); everyone else gets null. Never the\nuploaded avatar's object key: `has_uploaded_avatar` only says one exists\n(the web app fetches a short-lived URL for it with a member's session).\n`avatar_url` is an OAuth provider's picture, already an absolute URL.",
+        "properties": {
+          "avatar_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Avatar Url"
+          },
+          "email": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Email"
+          },
+          "full_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Full Name"
+          },
+          "has_uploaded_avatar": {
+            "title": "Has Uploaded Avatar",
+            "type": "boolean"
+          }
+        },
+        "required": ["full_name", "avatar_url", "has_uploaded_avatar"],
+        "title": "MemberUserSummary",
+        "type": "object"
       },
       "MembershipPublic": {
         "properties": {
@@ -157,6 +190,16 @@
           },
           "role": {
             "$ref": "#/components/schemas/MemberRole"
+          },
+          "user": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/MemberUserSummary"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "user_id": {
             "format": "uuid",
@@ -192,15 +235,24 @@
             "title": "Request Id",
             "type": "string"
           },
+          "total": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Total"
+          },
           "version": {
             "default": "1.0.0",
             "title": "Version",
             "type": "string"
           }
         },
-        "required": [
-          "request_id"
-        ],
+        "required": ["request_id"],
         "title": "Meta",
         "type": "object"
       },
@@ -210,6 +262,11 @@
             "format": "date-time",
             "title": "Created At",
             "type": "string"
+          },
+          "has_uploaded_logo": {
+            "default": false,
+            "title": "Has Uploaded Logo",
+            "type": "boolean"
           },
           "id": {
             "format": "uuid",
@@ -236,13 +293,7 @@
             "type": "string"
           }
         },
-        "required": [
-          "id",
-          "name",
-          "slug",
-          "logo_url",
-          "created_at"
-        ],
+        "required": ["id", "name", "slug", "logo_url", "created_at"],
         "title": "OrganizationPublic",
         "type": "object"
       },
@@ -278,11 +329,7 @@
             "type": "string"
           }
         },
-        "required": [
-          "loc",
-          "msg",
-          "type"
-        ],
+        "required": ["loc", "msg", "type"],
         "title": "ValidationError",
         "type": "object"
       }
@@ -347,9 +394,7 @@
           }
         ],
         "summary": "Get Org",
-        "tags": [
-          "tenancy"
-        ],
+        "tags": ["tenancy"],
         "x-forge-scope": "orgs:read"
       }
     },
@@ -396,6 +441,25 @@
               "title": "Limit",
               "type": "integer"
             }
+          },
+          {
+            "description": "Only members whose email contains this, in any case. Needs the `members:write` scope (a session: owner or admin), as emails do.",
+            "in": "query",
+            "name": "q",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 254,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Only members whose email contains this, in any case. Needs the `members:write` scope (a session: owner or admin), as emails do.",
+              "title": "Q"
+            }
           }
         ],
         "responses": {
@@ -426,9 +490,7 @@
           }
         ],
         "summary": "List Members",
-        "tags": [
-          "tenancy"
-        ],
+        "tags": ["tenancy"],
         "x-forge-scope": "members:read"
       }
     }

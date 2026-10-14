@@ -26,6 +26,9 @@ interface CommandPaletteProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onShowShortcuts: () => void;
+  /** The pages to offer, when not the app's own (the admin console passes
+   *  its pages). Recents are resolved against the same list. */
+  navItems?: NavItem[];
 }
 
 /**
@@ -40,6 +43,7 @@ export function CommandPalette({
   open,
   onOpenChange,
   onShowShortcuts,
+  navItems,
 }: CommandPaletteProps) {
   const { t } = useTranslation();
   const navigate = useNavigate();
@@ -57,7 +61,8 @@ export function CommandPalette({
   // changed in a way the user would notice.
   const recentPaths = useMemo(() => (open ? readRecentPaths() : []), [open]);
 
-  const byPath = new Map(nav.all.map((item) => [item.path, item]));
+  const pages = navItems ?? nav.all;
+  const byPath = new Map(pages.map((item) => [item.path, item]));
   // Resolved against the *current* nav, so a page that has since been hidden
   // (module turned off, role changed) silently drops out of recents rather
   // than offering a route that will bounce the user straight back.
@@ -114,7 +119,7 @@ export function CommandPalette({
         ) : null}
 
         <CommandGroup heading={t("common.palette.navigation")}>
-          {nav.all.map((item) => renderNavItem(item, "nav"))}
+          {pages.map((item) => renderNavItem(item, "nav"))}
         </CommandGroup>
 
         <CommandSeparator />

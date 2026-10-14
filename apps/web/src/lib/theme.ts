@@ -155,6 +155,30 @@ export function adoptServerPreference(next: ThemePreference): void {
   setLocalPreference(next, false);
 }
 
+/**
+ * Reconciles the account's theme with this device's on sign-in.
+ *
+ * "system" is also what an account that never chose a theme says (the column
+ * defaults to it), so it cannot overrule a choice this device has actually
+ * made: someone who picked dark and then signed up should stay dark. In that
+ * one case the device's choice is kept and returned, for the caller to save
+ * to the account; otherwise the account's choice is applied and this returns
+ * null.
+ *
+ * ponytail: an account that *deliberately* picked "system" elsewhere is
+ * overwritten by an older explicit choice on this device. Telling the two
+ * apart needs a nullable `User.theme`; add it if that ever matters.
+ */
+export function reconcileServerPreference(
+  server: ThemePreference,
+): ThemePreference | null {
+  if (server === "system" && preference !== "system") {
+    return preference;
+  }
+  adoptServerPreference(server);
+  return null;
+}
+
 export function getPreference(): ThemePreference {
   return preference;
 }

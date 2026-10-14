@@ -19,6 +19,7 @@ from app.core.exceptions import (
     ConflictError,
     NotFoundError,
     PermissionDeniedError,
+    UnprocessableEntityError,
 )
 from app.core.module_loader import is_enabled
 from app.core.urls import frontend_url
@@ -27,6 +28,7 @@ from app.modules.audit.service import AuditService
 from app.modules.auth.models import User
 from app.modules.auth.permissions import ROLE_PERMISSIONS, MemberRole, Permission
 from app.modules.auth.repository import UserRepository
+from app.modules.auth.service import AuthService
 from app.modules.auth.utils import hash_token, sign_url_token, verify_url_token
 from app.modules.notifications.service import NotificationService
 from app.modules.tenancy.models import Invitation, Membership, Organization
@@ -96,9 +98,7 @@ class TenancyService:
             invited_by=inviter.user_id,
             expires_at=utcnow() + _INVITATION_TTL,
         )
-        org = await self._orgs.get_by_id(org_id)
-        if org is None:
-            raise NotFoundError("errors.org_not_found", fallback="Organization not found")
+        org = await self._org_or_raise(org_id)
         await self._enqueue_invitation_email(
             org.name, email, plain_token, await self._invitee_locale(email, inviter.user_id)
         )
@@ -118,6 +118,46 @@ class TenancyService:
             EventType.MEMBER_INVITED,
             MemberPayload(email=email, role=role.value),
         )
+
+    async def resend_invitation(
+        self, org_id: UUID, invitation_id: UUID, sender: Membership
+    ) -> Invitation:
+        """Send a pending invitation again, with a fresh link and expiry.
+
+        Works on an expired invitation too -- that is the usual reason to
+        resend. The old link stops working: the row keeps one token hash.
+        """
+        invitation = await self._pending_invitation_or_raise(org_id, invitation_id)
+        plain_token = sign_url_token({"invitation_id": str(invitation.id)}, _INVITATION_TTL_SECONDS)
+        await self._invitations.replace_token(
+            invitation, token_hash=hash_token(plain_token), expires_at=utcnow() + _INVITATION_TTL
+        )
+        org = await self._org_or_raise(org_id)
+        await self._enqueue_invitation_email(
+            org.name,
+            invitation.email,
+            plain_token,
+            await self._invitee_locale(invitation.email, sender.user_id),
+        )
+        return invitation
+
+    async def revoke_invitation(self, org_id: UUID, invitation_id: UUID) -> None:
+        """Withdraw a pending invitation; its link stops working at once."""
+        invitation = await self._pending_invitation_or_raise(org_id, invitation_id)
+        await self._invitations.delete(invitation)
+
+    async def _pending_invitation_or_raise(self, org_id: UUID, invitation_id: UUID) -> Invitation:
+        # 404 for another org's invitation too, so its id reveals nothing.
+        invitation = await self._invitations.get_pending_in_org(org_id, invitation_id)
+        if invitation is None:
+            raise NotFoundError("errors.invitation_not_found", fallback="Invitation not found")
+        return invitation
+
+    async def _org_or_raise(self, org_id: UUID) -> Organization:
+        org = await self._orgs.get_by_id(org_id)
+        if org is None:
+            raise NotFoundError("errors.org_not_found", fallback="Organization not found")
+        return org
 
     async def accept_invitation(self, token: str, user: User) -> Membership:
         # Two independent checks: the itsdangerous signature + embedded TTL
@@ -230,8 +270,61 @@ class TenancyService:
                     fallback="Cannot remove the last owner of an organization",
                 )
 
+        await self._delete_membership(target)
+        # The removed member's user id, so the router can bust that user's
+        # cache (T-240) -- the membership row is gone by the time it returns.
+        return target.user_id
+
+    async def resolve_logo_change(self, org_id: UUID, file_id: UUID | None) -> str | None:
+        """Translate a client-supplied file id into the logo key to store.
+
+        None clears the logo and needs no lookup. Anything else must be a
+        file in this org's logos bucket; otherwise one undifferentiated 422.
+        """
+        if file_id is None:
+            return None
+        # file_storage is optional: without it nothing can have been uploaded,
+        # and stored_file may not exist to query.
+        if not is_enabled("file_storage"):
+            raise UnprocessableEntityError(
+                "errors.logo_file_invalid", fallback="That file cannot be used as a logo."
+            )
+        from app.modules.storage.logos import resolve_org_logo_key  # noqa: PLC0415 -- see above
+
+        key = await resolve_org_logo_key(self._session, org_id=org_id, file_id=file_id)
+        if key is None:
+            raise UnprocessableEntityError(
+                "errors.logo_file_invalid", fallback="That file cannot be used as a logo."
+            )
+        return key
+
+    async def org_logo_key(self, org_id: UUID) -> str:
+        org = await self._org_or_raise(org_id)
+        if org.logo_object_key is None:
+            raise NotFoundError("errors.logo_not_found", fallback="No uploaded logo.")
+        return org.logo_object_key
+
+    async def leave_org(self, membership: Membership) -> None:
+        """A member leaves an organization themselves.
+
+        Any role may leave, but not the last owner: an organization nobody
+        can manage is stranded. They are told to hand ownership on first.
+        """
+        if membership.role == MemberRole.OWNER:
+            owner_count = await self._memberships.count_by_org_and_role(
+                membership.org_id, MemberRole.OWNER
+            )
+            if owner_count <= 1:
+                raise ConflictError(
+                    "errors.cannot_leave_last_owner",
+                    fallback="Make someone else an owner before you leave.",
+                )
+        await self._delete_membership(membership)
+
+    async def _delete_membership(self, target: Membership) -> None:
         # Emitted before the row is removed, and guarded for the same reason
-        # as change_role's: the email is an extra read.
+        # as change_role's: the email is an extra read. A member leaving is
+        # the same event to a subscriber as one being removed.
         if is_enabled("outbound_webhooks"):
             member = await UserRepository(self._session).get_by_id(target.user_id)
             await webhooks.emit(
@@ -246,9 +339,6 @@ class TenancyService:
                 ),
             )
         await self._memberships.remove(target.id)
-        # The removed member's user id, so the router can bust that user's
-        # cache (T-240) -- the membership row is gone by the time it returns.
-        return target.user_id
 
     async def get_membership_or_raise(
         self, org_id: UUID, user_id: UUID
@@ -290,9 +380,37 @@ class TenancyService:
         return org
 
     async def list_members(
-        self, org_id: UUID, after: UUID | None, limit: int
+        self, org_id: UUID, after: UUID | None, limit: int, email_query: str | None = None
     ) -> tuple[list[Membership], UUID | None]:
-        return await self._memberships.list_for_org(org_id, after=after, limit=limit)
+        return await self._memberships.list_for_org(
+            org_id, after=after, limit=limit, email_query=email_query
+        )
+
+    async def count_members(self, org_id: UUID, email_query: str | None = None) -> int:
+        return await self._memberships.count_by_org(org_id, email_query=email_query)
+
+    async def users_for_memberships(self, memberships: list[Membership]) -> dict[UUID, User]:
+        """The users behind a page of memberships, in one query (T-243)."""
+        return await AuthService(self._session).users_by_ids(
+            {membership.user_id for membership in memberships}
+        )
+
+    async def member_avatar_key(self, org_id: UUID, membership_id: UUID) -> str:
+        """The object key of a fellow member's uploaded avatar.
+
+        404 for a membership outside `org_id` (the same answer as one that
+        does not exist, so another org's ids reveal nothing), for a deleted
+        user, and for a member with no uploaded avatar.
+        """
+        membership = await self._memberships.get_by_id(membership_id)
+        if membership is None or membership.org_id != org_id:
+            raise NotFoundError("errors.membership_not_found", fallback="Membership not found")
+        user = (await AuthService(self._session).users_by_ids({membership.user_id})).get(
+            membership.user_id
+        )
+        if user is None or user.avatar_object_key is None:
+            raise NotFoundError("errors.avatar_not_found", fallback="No uploaded avatar.")
+        return user.avatar_object_key
 
     async def list_pending_invitations(
         self, org_id: UUID, after: UUID | None, limit: int

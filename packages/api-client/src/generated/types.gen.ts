@@ -460,6 +460,15 @@ export type EnvelopeInvitationPreview = {
 };
 
 /**
+ * Envelope[InvitationPublic]
+ */
+export type EnvelopeInvitationPublic = {
+    data?: InvitationPublic | null;
+    error?: ErrorBody | null;
+    meta: Meta;
+};
+
+/**
  * Envelope[LoginResponse]
  */
 export type EnvelopeLoginResponse = {
@@ -965,6 +974,22 @@ export type FeatureFlagsResponse = {
 };
 
 /**
+ * FileUploaderSummary
+ *
+ * Who uploaded a file, for the Files list's uploader column.
+ */
+export type FileUploaderSummary = {
+    /**
+     * Email
+     */
+    email: string;
+    /**
+     * Full Name
+     */
+    full_name: string | null;
+};
+
+/**
  * GlobalBannerResponse
  *
  * T-263's `global_banner` setting, rendered above the app shell on web
@@ -1200,6 +1225,37 @@ export type MarkAllReadResponse = {
 export type MemberRole = 'owner' | 'admin' | 'member';
 
 /**
+ * MemberUserSummary
+ *
+ * Who a membership belongs to, as fellow members see them.
+ *
+ * Enough to draw a row (a name, a picture) and no more. `email` is set only
+ * for a caller who can manage members (an owner, an admin, or an API key with
+ * `members:write`); everyone else gets null. Never the
+ * uploaded avatar's object key: `has_uploaded_avatar` only says one exists
+ * (the web app fetches a short-lived URL for it with a member's session).
+ * `avatar_url` is an OAuth provider's picture, already an absolute URL.
+ */
+export type MemberUserSummary = {
+    /**
+     * Avatar Url
+     */
+    avatar_url: string | null;
+    /**
+     * Email
+     */
+    email?: string | null;
+    /**
+     * Full Name
+     */
+    full_name: string | null;
+    /**
+     * Has Uploaded Avatar
+     */
+    has_uploaded_avatar: boolean;
+};
+
+/**
  * MembershipPublic
  */
 export type MembershipPublic = {
@@ -1220,6 +1276,7 @@ export type MembershipPublic = {
      */
     org_id: string;
     role: MemberRole;
+    user?: MemberUserSummary | null;
     /**
      * User Id
      */
@@ -1238,6 +1295,10 @@ export type Meta = {
      * Request Id
      */
     request_id: string;
+    /**
+     * Total
+     */
+    total?: number | null;
     /**
      * Version
      */
@@ -1380,6 +1441,10 @@ export type OrganizationPublic = {
      * Created At
      */
     created_at: string;
+    /**
+     * Has Uploaded Logo
+     */
+    has_uploaded_logo?: boolean;
     /**
      * Id
      */
@@ -1859,6 +1924,7 @@ export type StoredFilePublic = {
      * Uploaded By
      */
     uploaded_by: string;
+    uploader?: FileUploaderSummary | null;
     /**
      * Virus Scan Result
      */
@@ -2029,6 +2095,10 @@ export type UpdateMembershipRequest = {
  * UpdateOrgRequest
  */
 export type UpdateOrgRequest = {
+    /**
+     * Logo File Id
+     */
+    logo_file_id?: string | null;
     /**
      * Logo Url
      */
@@ -4720,6 +4790,134 @@ export type CreateInvitationApiV1OrgsOrgIdInvitationsPostResponses = {
 
 export type CreateInvitationApiV1OrgsOrgIdInvitationsPostResponse = CreateInvitationApiV1OrgsOrgIdInvitationsPostResponses[keyof CreateInvitationApiV1OrgsOrgIdInvitationsPostResponses];
 
+export type RevokeInvitationApiV1OrgsOrgIdInvitationsInvitationIdDeleteData = {
+    body?: never;
+    path: {
+        /**
+         * Org Id
+         */
+        org_id: string;
+        /**
+         * Invitation Id
+         */
+        invitation_id: string;
+    };
+    query?: never;
+    url: '/api/v1/orgs/{org_id}/invitations/{invitation_id}';
+};
+
+export type RevokeInvitationApiV1OrgsOrgIdInvitationsInvitationIdDeleteErrors = {
+    /**
+     * Validation Error
+     */
+    422: EnvelopeNoneType;
+};
+
+export type RevokeInvitationApiV1OrgsOrgIdInvitationsInvitationIdDeleteError = RevokeInvitationApiV1OrgsOrgIdInvitationsInvitationIdDeleteErrors[keyof RevokeInvitationApiV1OrgsOrgIdInvitationsInvitationIdDeleteErrors];
+
+export type RevokeInvitationApiV1OrgsOrgIdInvitationsInvitationIdDeleteResponses = {
+    /**
+     * Successful Response
+     */
+    200: EnvelopeNoneType;
+};
+
+export type RevokeInvitationApiV1OrgsOrgIdInvitationsInvitationIdDeleteResponse = RevokeInvitationApiV1OrgsOrgIdInvitationsInvitationIdDeleteResponses[keyof RevokeInvitationApiV1OrgsOrgIdInvitationsInvitationIdDeleteResponses];
+
+export type ResendInvitationApiV1OrgsOrgIdInvitationsInvitationIdResendPostData = {
+    body?: never;
+    path: {
+        /**
+         * Org Id
+         */
+        org_id: string;
+        /**
+         * Invitation Id
+         */
+        invitation_id: string;
+    };
+    query?: never;
+    url: '/api/v1/orgs/{org_id}/invitations/{invitation_id}/resend';
+};
+
+export type ResendInvitationApiV1OrgsOrgIdInvitationsInvitationIdResendPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: EnvelopeNoneType;
+};
+
+export type ResendInvitationApiV1OrgsOrgIdInvitationsInvitationIdResendPostError = ResendInvitationApiV1OrgsOrgIdInvitationsInvitationIdResendPostErrors[keyof ResendInvitationApiV1OrgsOrgIdInvitationsInvitationIdResendPostErrors];
+
+export type ResendInvitationApiV1OrgsOrgIdInvitationsInvitationIdResendPostResponses = {
+    /**
+     * Successful Response
+     */
+    200: EnvelopeInvitationPublic;
+};
+
+export type ResendInvitationApiV1OrgsOrgIdInvitationsInvitationIdResendPostResponse = ResendInvitationApiV1OrgsOrgIdInvitationsInvitationIdResendPostResponses[keyof ResendInvitationApiV1OrgsOrgIdInvitationsInvitationIdResendPostResponses];
+
+export type LeaveOrgApiV1OrgsOrgIdLeavePostData = {
+    body?: never;
+    path: {
+        /**
+         * Org Id
+         */
+        org_id: string;
+    };
+    query?: never;
+    url: '/api/v1/orgs/{org_id}/leave';
+};
+
+export type LeaveOrgApiV1OrgsOrgIdLeavePostErrors = {
+    /**
+     * Validation Error
+     */
+    422: EnvelopeNoneType;
+};
+
+export type LeaveOrgApiV1OrgsOrgIdLeavePostError = LeaveOrgApiV1OrgsOrgIdLeavePostErrors[keyof LeaveOrgApiV1OrgsOrgIdLeavePostErrors];
+
+export type LeaveOrgApiV1OrgsOrgIdLeavePostResponses = {
+    /**
+     * Successful Response
+     */
+    200: EnvelopeNoneType;
+};
+
+export type LeaveOrgApiV1OrgsOrgIdLeavePostResponse = LeaveOrgApiV1OrgsOrgIdLeavePostResponses[keyof LeaveOrgApiV1OrgsOrgIdLeavePostResponses];
+
+export type GetOrgLogoApiV1OrgsOrgIdLogoGetData = {
+    body?: never;
+    path: {
+        /**
+         * Org Id
+         */
+        org_id: string;
+    };
+    query?: never;
+    url: '/api/v1/orgs/{org_id}/logo';
+};
+
+export type GetOrgLogoApiV1OrgsOrgIdLogoGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: EnvelopeNoneType;
+};
+
+export type GetOrgLogoApiV1OrgsOrgIdLogoGetError = GetOrgLogoApiV1OrgsOrgIdLogoGetErrors[keyof GetOrgLogoApiV1OrgsOrgIdLogoGetErrors];
+
+export type GetOrgLogoApiV1OrgsOrgIdLogoGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: EnvelopeAvatarUrlResponse;
+};
+
+export type GetOrgLogoApiV1OrgsOrgIdLogoGetResponse = GetOrgLogoApiV1OrgsOrgIdLogoGetResponses[keyof GetOrgLogoApiV1OrgsOrgIdLogoGetResponses];
+
 export type ListMembersApiV1OrgsOrgIdMembersGetData = {
     body?: never;
     path: {
@@ -4737,6 +4935,12 @@ export type ListMembersApiV1OrgsOrgIdMembersGetData = {
          * Limit
          */
         limit?: number;
+        /**
+         * Q
+         *
+         * Only members whose email contains this, in any case. Needs the `members:write` scope (a session: owner or admin), as emails do.
+         */
+        q?: string | null;
     };
     url: '/api/v1/orgs/{org_id}/members';
 };
@@ -4826,6 +5030,40 @@ export type UpdateMemberRoleApiV1OrgsOrgIdMembersMembershipIdPatchResponses = {
 };
 
 export type UpdateMemberRoleApiV1OrgsOrgIdMembersMembershipIdPatchResponse = UpdateMemberRoleApiV1OrgsOrgIdMembersMembershipIdPatchResponses[keyof UpdateMemberRoleApiV1OrgsOrgIdMembersMembershipIdPatchResponses];
+
+export type GetMemberAvatarApiV1OrgsOrgIdMembersMembershipIdAvatarGetData = {
+    body?: never;
+    path: {
+        /**
+         * Org Id
+         */
+        org_id: string;
+        /**
+         * Membership Id
+         */
+        membership_id: string;
+    };
+    query?: never;
+    url: '/api/v1/orgs/{org_id}/members/{membership_id}/avatar';
+};
+
+export type GetMemberAvatarApiV1OrgsOrgIdMembersMembershipIdAvatarGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: EnvelopeNoneType;
+};
+
+export type GetMemberAvatarApiV1OrgsOrgIdMembersMembershipIdAvatarGetError = GetMemberAvatarApiV1OrgsOrgIdMembersMembershipIdAvatarGetErrors[keyof GetMemberAvatarApiV1OrgsOrgIdMembersMembershipIdAvatarGetErrors];
+
+export type GetMemberAvatarApiV1OrgsOrgIdMembersMembershipIdAvatarGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: EnvelopeAvatarUrlResponse;
+};
+
+export type GetMemberAvatarApiV1OrgsOrgIdMembersMembershipIdAvatarGetResponse = GetMemberAvatarApiV1OrgsOrgIdMembersMembershipIdAvatarGetResponses[keyof GetMemberAvatarApiV1OrgsOrgIdMembersMembershipIdAvatarGetResponses];
 
 export type GetDeliveryApiV1WebhooksDeliveriesDeliveryIdGetData = {
     body?: never;

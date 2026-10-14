@@ -59,14 +59,13 @@ export function NotificationBell() {
           type="button"
           aria-label={ariaLabel}
           data-testid="notification-bell-trigger"
-          className="relative rounded-md p-2 text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+          className="relative rounded-md p-2 text-foreground-secondary hover:bg-foreground/5 hover:text-foreground"
         >
           <Bell className="size-4" aria-hidden="true" />
           {unreadCount > 0 ? (
             <Badge
-              variant="destructive"
               data-testid="notification-badge"
-              className="absolute -inset-e-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full px-1 text-[10px] leading-none"
+              className="absolute -inset-e-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-primary px-1 text-[10px] leading-none text-primary-foreground"
             >
               {unreadCount > MAX_BADGE_COUNT
                 ? `${String(MAX_BADGE_COUNT)}+`
@@ -75,8 +74,10 @@ export function NotificationBell() {
           ) : null}
         </button>
       </PopoverTrigger>
+      {/* Opens upwards from the foot of the sidebar, where the bell lives. */}
       <PopoverContent
-        align="end"
+        side="top"
+        align="start"
         className="w-96 p-0"
         aria-label={t("notifications.feed.heading")}
         data-testid="notification-panel"

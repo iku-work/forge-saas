@@ -8,7 +8,8 @@
     "error_download": "Der Download konnte nicht gestartet werden.",
     "error_delete": "Die Datei konnte nicht gelöscht werden.",
     "empty_body_read_only": "In Ihrer Organisation hat noch niemand eine Datei hochgeladen. Wenden Sie sich an eine Administratorin oder einen Administrator, wenn Sie eine hinzufügen möchten.",
-    "scan_taking_long": "Die Prüfung einiger Dateien dauert länger als üblich. Laden Sie die Seite neu, um erneut nachzusehen."
+    "scan_taking_long": "Die Prüfung einiger Dateien dauert länger als üblich. Laden Sie die Seite neu, um erneut nachzusehen.",
+    "description": "Dateien, die in Ihrer Organisation geteilt werden, geprüft, bevor jemand sie öffnen kann."
   },
   "uploader": {
     "drop_here": "Dateien hier ablegen",
@@ -47,7 +48,8 @@
     "download_blocked_scanning": "Diese Datei wird noch auf Schadsoftware geprüft.",
     "download_blocked_pending": "Dieser Upload ist noch nicht abgeschlossen.",
     "download_blocked_infected": "In dieser Datei wurde Schadsoftware gefunden, daher kann sie nicht heruntergeladen werden.",
-    "download_blocked_failed": "Diese Datei konnte nicht geprüft werden und kann daher nicht heruntergeladen werden."
+    "download_blocked_failed": "Diese Datei konnte nicht geprüft werden und kann daher nicht heruntergeladen werden.",
+    "menu_label": "Aktionen für {filename}"
   },
   "picker": {
     "upload_button": "Hochladen",

@@ -13,13 +13,13 @@
   },
   "hero": {
     "title": "Lanza el producto, no la fontanería",
-    "subtitle": "Las cuentas, los equipos, la facturación y una consola de administración ya están construidas y probadas. Empieza donde está el trabajo interesante.",
+    "subtitle": "Las cuentas, las organizaciones, la facturación y una consola de administración ya están construidas y probadas. Empieza donde está el trabajo interesante.",
     "cta_primary": "Empezar",
-    "cta_secondary": "Iniciar sesión"
+    "cta_guides": "Leer las guías"
   },
   "highlights": {
     "heading": "Con lo que empiezas",
-    "accounts_title": "Cuentas y equipos",
+    "accounts_title": "Cuentas y organizaciones",
     "accounts_body": "Registro, sesiones, autenticación en dos pasos, invitaciones y roles por organización, aislados por inquilino desde la primera consulta.",
     "billing_title": "Suscripciones que cuadran",
     "billing_body": "Planes, pruebas, mejoras de plan y reclamación de pagos, con un manejo de webhooks que sigue siendo correcto cuando el mismo evento llega dos veces.",
@@ -57,7 +57,7 @@
     "empty": "Todavía no hay planes configurados.",
     "committed_notice": "Estos precios se publicaron junto con el sitio y cambian en el siguiente despliegue, no en la siguiente actualización de la base de datos.",
     "feature_labels": {
-      "seats": "{count, number} miembros del equipo",
+      "seats": "{count, number} miembros",
       "storage_gb": "{count, number} GB de almacenamiento",
       "api_calls": "{count, number} llamadas a la API al mes"
     },
@@ -159,5 +159,30 @@
     "endpoints_title": "Endpoints",
     "endpoints_empty": "Este despliegue no publica endpoints públicos.",
     "scope_required": "Requiere el permiso {scope}"
+  },
+  "hero_product": {
+    "checklist_title": "Primeros pasos",
+    "description": "Unos pocos pasos antes de que tu organización esté lista.",
+    "nav_dashboard": "Panel",
+    "nav_files": "Archivos",
+    "nav_reports": "Informes",
+    "nav_settings": "Configuración",
+    "org": "Acme",
+    "progress": "1 de 4 completados",
+    "search": "Buscar",
+    "step_done": "Hecho",
+    "step_files_action": "Subir archivo",
+    "step_files_hint": "Los archivos son privados de tu organización y se analizan antes de que nadie pueda abrirlos.",
+    "step_files_title": "Sube tu primer archivo",
+    "step_invite_action": "Invitar miembro",
+    "step_invite_hint": "Los miembros tienen su propio acceso y el rol que elijas.",
+    "step_invite_title": "Invita a un miembro",
+    "step_plan_action": "Ver planes",
+    "step_plan_hint": "Elige el plan que se adapte a tu organización.",
+    "step_plan_title": "Elige un plan",
+    "step_profile_action": "Editar perfil",
+    "step_profile_hint": "Añade tu nombre y una foto para que los miembros te reconozcan.",
+    "step_profile_title": "Completa tu perfil",
+    "title": "Te damos la bienvenida a {org}"
   }
 }

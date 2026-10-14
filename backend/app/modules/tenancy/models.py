@@ -40,6 +40,11 @@ class Organization(UUIDPKMixin, TimestampMixin, SoftDeleteMixin, SQLModel, table
     name: str
     slug: str = Field(unique=True, index=True)
     logo_url: str | None = Field(default=None)
+    # An uploaded logo's private object key, the counterpart of
+    # User.avatar_object_key: served only as a short-lived presigned URL by
+    # GET /orgs/{id}/logo, never sent to a client, and deliberately not a
+    # foreign key to stored_file (an optional module's table).
+    logo_object_key: str | None = Field(default=None)
     settings: dict[str, object] = Field(
         default_factory=dict, sa_column=Column(JSONB, nullable=False, default=dict)
     )
@@ -49,6 +54,12 @@ class Organization(UUIDPKMixin, TimestampMixin, SoftDeleteMixin, SQLModel, table
     # it, and the billing module's tables can be absent entirely.
     plan_id: UUID | None = Field(default=None, foreign_key="plan.id", index=True)
     stripe_customer_id: str | None = Field(default=None)
+
+    @property
+    def has_uploaded_logo(self) -> bool:
+        """What OrganizationPublic exposes instead of the key, as
+        User.has_uploaded_avatar does for avatars."""
+        return self.logo_object_key is not None
 
 
 class Membership(UUIDPKMixin, TimestampMixin, SQLModel, table=True):

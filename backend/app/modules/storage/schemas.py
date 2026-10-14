@@ -24,6 +24,13 @@ class PresignUploadResponse(AppBaseModel):
     expires_at: datetime
 
 
+class FileUploaderSummary(AppBaseModel):
+    """Who uploaded a file, for the Files list's uploader column."""
+
+    full_name: str | None
+    email: str
+
+
 class StoredFilePublic(AppBaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -50,6 +57,8 @@ class StoredFilePublic(AppBaseModel):
     # its confirmation, which is when the scan starts. `created_at` is the
     # presign, which can be most of the upload window earlier (review OCT-06).
     updated_at: datetime
+    # Null when the uploader's account is gone; `uploaded_by` still says who.
+    uploader: FileUploaderSummary | None = None
 
 
 class DownloadUrlResponse(AppBaseModel):

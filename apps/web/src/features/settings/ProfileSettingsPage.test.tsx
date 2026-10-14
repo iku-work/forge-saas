@@ -28,6 +28,28 @@ vi.mock("../../lib/RoutedLocaleSwitcher", () => ({
   RoutedLocaleSwitcher: () => <div data-testid="locale-switcher" />,
 }));
 
+// Same reason: the "Change email" row links to the security page, and a
+// router <Link> (and the locale read from route params) needs a live router.
+// A plain anchor keeps the href assertable.
+vi.mock("@tanstack/react-router", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@tanstack/react-router")>()),
+  Link: ({
+    to,
+    params,
+    children,
+    ...rest
+  }: {
+    to: string;
+    params: { locale: string };
+    children: React.ReactNode;
+  }) => (
+    <a href={to.replace("$locale", params.locale)} {...rest}>
+      {children}
+    </a>
+  ),
+  useParams: () => "en",
+}));
+
 const { ProfileSettingsPage } = await import("./ProfileSettingsPage");
 
 const API = getApiBaseUrl();
@@ -178,6 +200,19 @@ describe("ProfileSettingsPage", () => {
     });
   });
 
+  it("sends a change of email to the security page", async () => {
+    hooks.useAuth.mockReturnValue({
+      user,
+      isLoading: false,
+      applyUpdatedUser: vi.fn(),
+    });
+    renderPage();
+
+    expect(
+      await screen.findByRole("link", { name: "Change email" }),
+    ).toHaveAttribute("href", "/en/settings/security");
+  });
+
   it("keeps Save disabled until something actually changes", async () => {
     hooks.useAuth.mockReturnValue({
       user,
@@ -195,6 +230,51 @@ describe("ProfileSettingsPage", () => {
     await userEvent.type(nameInput(), "!");
 
     expect(screen.getByRole("button", { name: "Save" })).toBeEnabled();
+  });
+
+  it("removes an uploaded photo by clearing avatar_file_id", async () => {
+    const applyUpdatedUser = vi.fn();
+    hooks.useAuth.mockReturnValue({
+      user: { ...user, has_uploaded_avatar: true },
+      isLoading: false,
+      applyUpdatedUser,
+    });
+    let sent: unknown = null;
+    server.use(
+      http.patch(`${API}/api/v1/auth/me`, async ({ request }) => {
+        sent = await request.json();
+        return HttpResponse.json({
+          data: { ...user, has_uploaded_avatar: false },
+          error: null,
+          meta: { request_id: "r1" },
+        });
+      }),
+    );
+
+    renderPage();
+    await userEvent.click(await screen.findByTestId("profile-avatar-remove"));
+
+    await waitFor(() => {
+      expect(sent).toEqual({ avatar_file_id: null });
+    });
+    expect(applyUpdatedUser).toHaveBeenCalledWith(
+      expect.objectContaining({ has_uploaded_avatar: false }),
+    );
+  });
+
+  it("offers no Remove without an uploaded photo", async () => {
+    hooks.useAuth.mockReturnValue({
+      user: { ...user, has_uploaded_avatar: false },
+      isLoading: false,
+      applyUpdatedUser: vi.fn(),
+    });
+
+    renderPage();
+
+    await screen.findByTestId("profile-avatar");
+    expect(
+      screen.queryByTestId("profile-avatar-remove"),
+    ).not.toBeInTheDocument();
   });
 
   it("fetches a signed URL for the avatar rather than using a public one", async () => {

@@ -26,7 +26,7 @@ import { magicLinkSchema, type MagicLinkInput } from "@forge/validation";
 
 import { useRouteLocale } from "../../lib/useRouteLocale";
 
-import { AuthCard } from "./AuthCard";
+import { AuthLayout } from "./AuthLayout";
 import { getErrorMessage } from "./getErrorMessage";
 import { TwoFactorChallenge } from "./TwoFactorChallenge";
 
@@ -98,7 +98,7 @@ function MagicLinkConsume({ token }: { token: string }) {
 
   if (tempToken) {
     return (
-      <AuthCard
+      <AuthLayout
         title={t("auth.two_factor_challenge.title")}
         description={t("auth.two_factor_challenge.description")}
       >
@@ -113,17 +113,17 @@ function MagicLinkConsume({ token }: { token: string }) {
             window.location.assign("/");
           }}
         />
-      </AuthCard>
+      </AuthLayout>
     );
   }
 
   if (errorMessage) {
     return (
-      <AuthCard title={t("auth.magic_link.title_failed")}>
+      <AuthLayout title={t("auth.magic_link.title_failed")}>
         <Alert variant="destructive">
           <AlertDescription>{errorMessage}</AlertDescription>
         </Alert>
-        <p className="text-center text-sm text-muted-foreground">
+        <p className="text-sm text-foreground-secondary">
           <Link
             to="/$locale/magic-link"
             params={{ locale }}
@@ -132,15 +132,15 @@ function MagicLinkConsume({ token }: { token: string }) {
             {t("auth.magic_link.request_new")}
           </Link>
         </p>
-      </AuthCard>
+      </AuthLayout>
     );
   }
 
   return (
-    <AuthCard title={t("auth.magic_link.title_consuming")}>
+    <AuthLayout title={t("auth.magic_link.title_consuming")}>
       <Skeleton className="h-4 w-full" />
       <Skeleton className="h-4 w-3/4" />
-    </AuthCard>
+    </AuthLayout>
   );
 }
 
@@ -170,13 +170,13 @@ function MagicLinkRequestForm() {
 
   if (submitted) {
     return (
-      <AuthCard title={t("auth.magic_link.success_title")}>
+      <AuthLayout title={t("auth.magic_link.success_title")}>
         <Alert>
           <AlertDescription>
             {t("auth.magic_link.success_message")}
           </AlertDescription>
         </Alert>
-        <p className="text-center text-sm text-muted-foreground">
+        <p className="text-sm text-foreground-secondary">
           <Link
             to="/$locale/login"
             params={{ locale }}
@@ -185,12 +185,12 @@ function MagicLinkRequestForm() {
             {t("auth.magic_link.back_to_login")}
           </Link>
         </p>
-      </AuthCard>
+      </AuthLayout>
     );
   }
 
   return (
-    <AuthCard
+    <AuthLayout
       title={t("auth.magic_link.title")}
       description={t("auth.magic_link.description")}
       footer={
@@ -234,6 +234,7 @@ function MagicLinkRequestForm() {
           />
           <Button
             type="submit"
+            size="lg"
             className="w-full"
             disabled={form.formState.isSubmitting}
           >
@@ -243,6 +244,6 @@ function MagicLinkRequestForm() {
           </Button>
         </form>
       </Form>
-    </AuthCard>
+    </AuthLayout>
   );
 }

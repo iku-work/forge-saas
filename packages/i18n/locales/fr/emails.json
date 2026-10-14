@@ -6,7 +6,7 @@
     "invitation": "Vous avez été invité à rejoindre une organisation",
     "welcome": "Bienvenue sur ForgeSaaS",
     "download_link": "Votre export de données est prêt",
-    "member_invited": "Nouveau membre de l'équipe",
+    "member_invited": "Nouveau membre",
     "payment_failed": "Votre paiement n'a pas abouti",
     "subscription_expiring": "Votre abonnement expire bientôt",
     "subscription_suspended": "Votre abonnement a été suspendu",
@@ -77,10 +77,10 @@
     "expires": "Ce lien expire dans 24 heures."
   },
   "member_invited": {
-    "title": "Nouveau membre de l'équipe",
+    "title": "Nouveau membre",
     "greeting": "Bonjour",
     "body": "{member_name} a rejoint {org_name} en tant que {role}.",
-    "button": "Voir l'équipe"
+    "button": "Voir les membres"
   },
   "payment_failed": {
     "title": "Échec du paiement",
@@ -103,7 +103,7 @@
   "trial_ending": {
     "title": "Votre essai se termine bientôt",
     "greeting": "Bonjour",
-    "body": "L'essai de {org_name} se termine le {trial_end_date}. Effectuez une mise à niveau dès maintenant pour conserver l'accès de votre équipe.",
+    "body": "L'essai de {org_name} se termine le {trial_end_date}. Effectuez une mise à niveau dès maintenant pour que vos membres conservent leur accès.",
     "button": "Mettre à niveau"
   },
   "trial_expired": {

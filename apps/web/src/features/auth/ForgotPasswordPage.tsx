@@ -24,7 +24,7 @@ import {
 
 import { useRouteLocale } from "../../lib/useRouteLocale";
 
-import { AuthCard } from "./AuthCard";
+import { AuthLayout } from "./AuthLayout";
 import { getErrorMessage } from "./getErrorMessage";
 
 export function ForgotPasswordPage() {
@@ -55,13 +55,13 @@ export function ForgotPasswordPage() {
 
   if (submitted) {
     return (
-      <AuthCard title={t("auth.forgot_password.success_title")}>
+      <AuthLayout title={t("auth.forgot_password.success_title")}>
         <Alert>
           <AlertDescription>
             {t("auth.forgot_password.success_message")}
           </AlertDescription>
         </Alert>
-        <p className="text-center text-sm text-muted-foreground">
+        <p className="text-sm text-foreground-secondary">
           <Link
             to="/$locale/login"
             params={{ locale }}
@@ -70,12 +70,12 @@ export function ForgotPasswordPage() {
             {t("auth.forgot_password.back_to_login")}
           </Link>
         </p>
-      </AuthCard>
+      </AuthLayout>
     );
   }
 
   return (
-    <AuthCard
+    <AuthLayout
       title={t("auth.forgot_password.title")}
       description={t("auth.forgot_password.description")}
       footer={
@@ -119,6 +119,7 @@ export function ForgotPasswordPage() {
           />
           <Button
             type="submit"
+            size="lg"
             className="w-full"
             disabled={form.formState.isSubmitting}
           >
@@ -128,6 +129,6 @@ export function ForgotPasswordPage() {
           </Button>
         </form>
       </Form>
-    </AuthCard>
+    </AuthLayout>
   );
 }

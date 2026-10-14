@@ -6,7 +6,7 @@
     "invitation": "Sinut on kutsuttu liittymään organisaatioon",
     "welcome": "Tervetuloa ForgeSaaSiin",
     "download_link": "Tietojesi vienti on valmis",
-    "member_invited": "Uusi tiimin jäsen",
+    "member_invited": "Uusi jäsen",
     "payment_failed": "Maksusi epäonnistui",
     "subscription_expiring": "Tilauksesi on päättymässä",
     "subscription_suspended": "Tilauksesi on keskeytetty",
@@ -77,10 +77,10 @@
     "expires": "Tämä linkki vanhenee 24 tunnin kuluttua."
   },
   "member_invited": {
-    "title": "Uusi tiimin jäsen",
+    "title": "Uusi jäsen",
     "greeting": "Hei",
     "body": "{member_name} liittyi {org_name}-organisaatioon roolilla {role}.",
-    "button": "Näytä tiimi"
+    "button": "Näytä jäsenet"
   },
   "payment_failed": {
     "title": "Maksu epäonnistui",
@@ -103,7 +103,7 @@
   "trial_ending": {
     "title": "Kokeilujaksosi on päättymässä",
     "greeting": "Hei",
-    "body": "{org_name}-organisaation kokeilujakso päättyy {trial_end_date}. Päivitä tilaus, jotta tiimisi käyttöoikeus jatkuu.",
+    "body": "{org_name}-organisaation kokeilujakso päättyy {trial_end_date}. Päivitä tilaus, jotta jäsenesi säilyttävät käyttöoikeutensa.",
     "button": "Päivitä tilaus"
   },
   "trial_expired": {
