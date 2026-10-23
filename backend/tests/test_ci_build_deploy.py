@@ -267,6 +267,76 @@ def test_preflight_writes_a_hostile_env_file_verbatim(tmp_path: Path) -> None:
     assert not (tmp_path / "pwned").exists()
 
 
+def _write_env_from_bitwarden(
+    tmp_path: Path, secrets: list[dict[str, str]]
+) -> subprocess.CompletedProcess[str]:
+    """Run Hetzner's real "Write prod.env from Bitwarden" step with `bws`
+    replaced by a script that prints `secrets`."""
+    bash, jq = shutil.which("bash"), shutil.which("jq")
+    if bash is None or jq is None:
+        pytest.skip("needs bash and jq")
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    (tmp_path / "secrets.json").write_text(json.dumps(secrets), encoding="utf-8")
+    fake = bin_dir / "bws"
+    fake.write_text(
+        f"#!/bin/sh\ncat '{(tmp_path / 'secrets.json').as_posix()}'\n", encoding="utf-8"
+    )
+    fake.chmod(0o755)
+    steps = _deploy_workflow("hetzner")["jobs"]["deploy"]["steps"]
+    step = next(s for s in steps if s.get("name") == "Write prod.env from Bitwarden")
+    # The flags GitHub runs a `run:` step with.
+    return subprocess.run(  # noqa: S603 -- fixed argv: the step under test
+        [bash, "--noprofile", "--norc", "-eo", "pipefail", "-c", step["run"]],
+        cwd=tmp_path,
+        env={**os.environ, "PATH": f"{bin_dir}{os.pathsep}{os.environ['PATH']}"},
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+
+def test_bitwarden_env_quotes_pems_and_leaves_out_other_consumers(tmp_path: Path) -> None:
+    pem = "-----BEGIN PRIVATE KEY-----\nabc\n-----END PRIVATE KEY-----"
+    result = _write_env_from_bitwarden(
+        tmp_path,
+        [
+            {"key": "JWT_PRIVATE_KEY", "value": pem},
+            {"key": "JWT_PUBLIC_KEY", "value": f'"{pem}"'},
+            {"key": "DATABASE_URL", "value": "postgresql+asyncpg://u:p$(id)@db/forge"},
+            {"key": "GRAFANA_CLOUD_TOKEN", "value": "glc_x"},
+            {"key": "BACKUP_SFTP_PASSWORD", "value": "x"},
+            {"key": "VITE_SENTRY_DSN", "value": "x"},
+        ],
+    )
+    assert result.returncode == 0, result.stderr
+    assert (tmp_path / "prod.env").read_text(encoding="utf-8") == (
+        f'JWT_PRIVATE_KEY="{pem}"\n'
+        f'JWT_PUBLIC_KEY="{pem}"\n'
+        "DATABASE_URL=postgresql+asyncpg://u:p$(id)@db/forge\n"
+    )
+    assert "::add-mask::-----BEGIN PRIVATE KEY-----" in result.stdout
+
+
+@pytest.mark.parametrize(
+    ("secrets", "message"),
+    [
+        (
+            [{"key": "ENCRYPTION_KEY", "value": "a"}, {"key": "ENCRYPTION_KEY", "value": "b"}],
+            "Defined more than once in Bitwarden: ENCRYPTION_KEY",
+        ),
+        ([{"key": "BACKUP_AGE_IDENTITY", "value": "AGE-SECRET-KEY-1X"}], "BACKUP_AGE_IDENTITY"),
+    ],
+)
+def test_bitwarden_env_refuses_a_duplicate_or_the_backup_identity(
+    tmp_path: Path, secrets: list[dict[str, str]], message: str
+) -> None:
+    result = _write_env_from_bitwarden(tmp_path, secrets)
+    assert result.returncode != 0
+    assert message in result.stderr
+    assert not (tmp_path / "prod.env").exists()
+
+
 # OWASP A06 (vulnerable components): T-212's mapping asserts the dependency
 # audit tools are wired into a job that gates the pipeline (`build` needs
 # `security`, per test_build_job_needs_test_and_security above) and none of

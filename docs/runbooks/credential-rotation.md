@@ -40,7 +40,9 @@ account (`account-recovery.md`), or `ENCRYPTION_KEY`
   `backend/.env`. Rotation is therefore: change it at the provider, update
   that secret, redeploy. There is no SSH step and no file to hand-edit —
   hand-editing on the box is how `CADDY_TRUSTED_PROXIES` came to be missing
-  for a week.
+  for a week. On Hetzner, the values live in the Bitwarden project
+  `forge-prod`, one secret per name, instead: wherever this runbook says
+  "update `PROD_ENV_FILE`", edit that secret there.
 - **Keep the old credential alive until the new one is serving.** Every
   procedure below is add-then-remove, never remove-then-add. The revoke is
   the last step, after verification.
