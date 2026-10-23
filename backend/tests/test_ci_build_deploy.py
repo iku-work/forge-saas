@@ -297,7 +297,8 @@ def _write_env_from_bitwarden(
 
 
 def test_bitwarden_env_quotes_pems_and_leaves_out_other_consumers(tmp_path: Path) -> None:
-    pem = "-----BEGIN PRIVATE KEY-----\nabc\n-----END PRIVATE KEY-----"
+    # A public key: gitleaks flags any private-key header, even a fake one.
+    pem = "-----BEGIN PUBLIC KEY-----\nabc\n-----END PUBLIC KEY-----"
     result = _write_env_from_bitwarden(
         tmp_path,
         [
