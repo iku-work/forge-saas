@@ -20,8 +20,11 @@ inputs:
   prod-env-file:
     description: >-
       The complete production .env, passed from the calling workflow's
-      secrets. Composite actions cannot read `secrets` themselves.
-    required: true
+      secrets. Composite actions cannot read `secrets` themselves. Leave it
+      out when an earlier step already wrote prod.env (Hetzner reads it from
+      Bitwarden).
+    required: false
+    default: ""
   registry-username:
     description: GHCR username.
     required: true
@@ -57,10 +60,12 @@ runs:
       env:
         PROD_ENV_FILE: ${{ inputs.prod-env-file }}
       run: |
-        printf '%s' "$PROD_ENV_FILE" > prod.env
+        if [ -n "$PROD_ENV_FILE" ]; then
+          printf '%s' "$PROD_ENV_FILE" > prod.env
+        fi
         echo "path=prod.env" >> "$GITHUB_OUTPUT"
         if [ ! -s prod.env ]; then
-          echo "PROD_ENV_FILE is empty -- refusing to deploy." >&2
+          echo "The production env is empty -- refusing to deploy." >&2
           exit 1
         fi
 

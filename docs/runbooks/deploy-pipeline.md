@@ -25,10 +25,11 @@ Not this runbook: application faults after a successful deploy (that is
   (Settings → Secrets and variables → Actions → Variables), not a secret.
   Unset deploys nothing; set `render`, `hetzner` or `aws` to deploy from
   CI. (Before 2026-10-01 unset meant `render`.)
-- **`PROD_ENV_FILE` is the whole `backend/.env`**, as one secret. Every
-  target reads it. `Settings()` validates every required field at import, so
-  a partial file fails the migration step rather than the app's first
-  request.
+- **The whole `backend/.env` comes from one place.** On Hetzner, that is
+  the Bitwarden Secrets Manager project `forge-prod`, one secret per line,
+  read with `BWS_ACCESS_TOKEN`. On Render and AWS, it is the `PROD_ENV_FILE`
+  secret. `Settings()` validates every required field at import, so a
+  partial file fails the migration step rather than the app's first request.
 - **The runner never reaches the production database** (review C4,
   2026-09-29). Each target migrates on its own infrastructure; see step 3.
 - **Deploys wait for the whole gate**: `build` (and through it `test` and
@@ -71,7 +72,8 @@ Whichever target runs, `.github/actions/deploy-preflight` does the same three
 things first, on the runner, before anything is touched:
 
 1. logs in to GHCR
-2. writes `prod.env` from `PROD_ENV_FILE`, failing if it is empty. The
+2. writes `prod.env` from `PROD_ENV_FILE` (Hetzner has already written it
+   from Bitwarden), failing if it is empty. The
    secret reaches the script through `env:`, never `${{ }}` pasted into its
    source, so a `'` or `$(` in a password is data rather than shell (C4;
    `test_preflight_writes_a_hostile_env_file_verbatim` runs the real step)

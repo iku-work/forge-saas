@@ -11,8 +11,11 @@ name: Deploy — Hetzner (docker compose over SSH)
 # host, and the bundle lives inside the Caddy image, so a release is a
 # container rather than a directory edited underneath a running server.
 #
-# Secrets this needs:
-#   PROD_ENV_FILE      the complete backend/.env, same secret Render uses
+# Secrets this needs, all in the `production` environment:
+#   BWS_ACCESS_TOKEN   Bitwarden Secrets Manager machine-account token. The
+#                      account reads the forge-prod project, and every secret
+#                      there becomes a line of backend/.env (see "Write
+#                      prod.env from Bitwarden" for the few that do not)
 #   SSH_HOST           box hostname or IP
 #   SSH_USER           the login (must be in the `docker` group)
 #   SSH_KEY            private key, PEM
@@ -64,7 +67,11 @@ jobs:
       SSH_USER: ${{ secrets.SSH_USER }}
       SSH_HOST: ${{ secrets.SSH_HOST }}
       PROD_DOMAIN: ${{ secrets.PROD_DOMAIN }}
+      # --env-file: compose interpolates DOMAIN and the other Caddy hostnames
+      # from backend/.env, the file this deploy ships, rather than from a
+      # root .env that would only ever be edited by hand on the box.
       COMPOSE: >-
+        --env-file backend/.env
         -f docker-compose.prod.yml
         -f docker-compose.tls.yml
         -f docker-compose.registry.yml
@@ -78,14 +85,59 @@ jobs:
 
       - uses: actions/checkout@v5
 
-      # Env, guards and the image pull -- nothing that touches production.
+      # Pinned by version and checksum, like any binary that handles the
+      # production secrets.
+      - name: Install the Bitwarden Secrets Manager CLI
+        env:
+          BWS_VERSION: "2.1.0"
+          BWS_SHA256: ba8233c3a4aee5d43e3c73bbd04d99e9bc5aba13bbbfd06d89b073abe732b860
+        run: |
+          curl -fsSLo bws.zip "https://github.com/bitwarden/sdk-sm/releases/download/bws-v$BWS_VERSION/bws-x86_64-unknown-linux-gnu-$BWS_VERSION.zip"
+          echo "$BWS_SHA256  bws.zip" | sha256sum -c --quiet -
+          install -d "$RUNNER_TEMP/bin"
+          unzip -q -o bws.zip bws -d "$RUNNER_TEMP/bin"
+          rm bws.zip
+          echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
+
+      # One line of backend/.env per secret the machine account can read,
+      # except those meant for other consumers: backups and the Grafana agent
+      # on the box, and the client builds (VITE_, EXPO_PUBLIC_). The backend
+      # gets what it reads and nothing more.
+      #
+      # A multi-line value (a PEM) pasted without its quotes gets them back,
+      # because dotenv ends an unquoted value at the newline. A name defined
+      # twice fails the deploy: which copy wins is not something to find out
+      # from a backend that cannot decrypt its own columns. The backup
+      # identity fails it too -- it opens every backup and must never be
+      # readable by anything that deploys.
+      - name: Write prod.env from Bitwarden
+        env:
+          BWS_ACCESS_TOKEN: ${{ secrets.BWS_ACCESS_TOKEN }}
+          BWS_SERVER_URL: https://vault.bitwarden.eu
+        run: |
+          secrets=$(bws secret list --output json)
+          dupes=$(jq -r '[.[].key] | group_by(.) | map(select(length > 1)[0]) | join(" ")' <<<"$secrets")
+          if [ -n "$dupes" ]; then
+            echo "Defined more than once in Bitwarden: $dupes" >&2
+            exit 1
+          fi
+          if jq -e 'any(.[]; .key == "BACKUP_AGE_IDENTITY")' <<<"$secrets" >/dev/null; then
+            echo "BACKUP_AGE_IDENTITY is readable by the deploy. Move it out of forge-prod." >&2
+            exit 1
+          fi
+          jq -r '.[].value | split("\n")[] | select(length >= 8) | "::add-mask::" + .' <<<"$secrets"
+          jq -r '.[]
+            | select(.key | test("^(BACKUP|GRAFANA|VITE|EXPO_PUBLIC)_") | not)
+            | .key + "=" + (if (.value | contains("\n")) and (.value | startswith("\"") | not)
+                            then "\"" + .value + "\"" else .value end)' <<<"$secrets" > prod.env
+
+      # Guards and the registry login -- nothing that touches production.
       # Migrations run on the box below (C4): the production database is
       # never reachable from GitHub's network.
       - name: Preflight — env and guards
         uses: ./.github/actions/deploy-preflight
         with:
           image: ${{ env.BACKEND_IMAGE }}
-          prod-env-file: ${{ secrets.PROD_ENV_FILE }}
           registry-username: ${{ github.actor }}
           registry-password: ${{ secrets.GITHUB_TOKEN }}
 
@@ -104,13 +156,15 @@ jobs:
       # repositories that share one tag, so a rollback needs the tag in order
       # to rebuild both refs. And compose is asked which container is the
       # backend rather than guessing `forge-backend-1`, which depends on
-      # whatever directory the project happens to sit in.
+      # whatever directory the project happens to sit in. The registry overlay
+      # refuses to parse without image refs, so placeholders stand in: `ps`
+      # finds the container by service, not by image.
       - name: Record the currently-deployed tag (rollback target)
         id: previous
         run: |
           PREVIOUS=$(ssh -i ~/.ssh/id_deploy "$SSH_USER@$SSH_HOST" \
-            'cd ~/forge && docker inspect --format "{{.Config.Image}}" \
-               "$(docker compose -f docker-compose.prod.yml -f docker-compose.tls.yml -f docker-compose.registry.yml ps -q backend)" 2>/dev/null || true')
+            "cd ~/forge && docker inspect --format '{{.Config.Image}}' \
+               \"\$(BACKEND_IMAGE=unset CADDY_IMAGE=unset docker compose $COMPOSE ps -q backend)\" 2>/dev/null || true")
           echo "full ref currently running: ${PREVIOUS:-<nothing>}"
           PREVIOUS_TAG=${PREVIOUS##*:}
           # Interpolated into the rollback script, so held to the same rule.
@@ -122,7 +176,7 @@ jobs:
 
       # The env file goes over the wire rather than being edited in place.
       # Hand-editing it on the box is how CADDY_TRUSTED_PROXIES came to be
-      # missing for a week; the file is now derived from one secret and
+      # missing for a week; the file is now derived from Bitwarden and
       # nothing else.
       - name: Ship the production env
         run: |
@@ -195,6 +249,8 @@ jobs:
         run: |
           ssh -i ~/.ssh/id_deploy "$SSH_USER@$SSH_HOST" bash -euo pipefail <<EOF
             cd ~/forge
+            export BACKEND_IMAGE='$BACKEND_IMAGE'
+            export CADDY_IMAGE='$CADDY_IMAGE'
             check() {
               local svc=\$1 want=\$2 id image state
               id=\$(docker compose $COMPOSE ps -q \$svc)
