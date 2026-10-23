@@ -315,7 +315,7 @@ def test_bitwarden_env_quotes_pems_and_leaves_out_other_consumers(tmp_path: Path
         f'JWT_PUBLIC_KEY="{pem}"\n'
         "DATABASE_URL=postgresql+asyncpg://u:p$(id)@db/forge\n"
     )
-    assert "::add-mask::-----BEGIN PRIVATE KEY-----" in result.stdout
+    assert "::add-mask::-----BEGIN PUBLIC KEY-----" in result.stdout
 
 
 @pytest.mark.parametrize(
