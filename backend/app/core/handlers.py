@@ -8,6 +8,7 @@ from fastapi.encoders import jsonable_encoder
 from fastapi.exception_handlers import http_exception_handler as _default_http_exception_handler
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse, Response
+from sqlalchemy.exc import DBAPIError
 from starlette import status
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
@@ -147,6 +148,28 @@ async def stripe_error_handler(request: Request, exc: Exception) -> JSONResponse
     return _envelope_response(request, 502, error)
 
 
+async def database_error_handler(request: Request, exc: Exception) -> JSONResponse:
+    """A NUL byte in any text the client sent is a 422, not a 500.
+
+    Postgres refuses NUL in text (SQLSTATE 22021, character_not_in_repertoire)
+    and nothing before it does: pydantic, FastAPI and asyncpg all pass "\\x00"
+    through. Schemathesis found it with `GET /files?bucket=%00`, but any string
+    reaching a query -- query, path or body -- fails the same way, so it is
+    answered here once rather than validated per field. Every other database
+    error is still ours, and still a 500.
+    """
+    assert isinstance(exc, DBAPIError)  # noqa: S101 — Starlette dispatches by registered class
+    if getattr(exc.orig, "sqlstate", None) == "22021":
+        message = _translate_or_fallback(
+            "errors.validation_failed", _locale(request), "Request validation failed."
+        )
+        error = ErrorBody(
+            code="validation_error", message_key="errors.validation_failed", message=message
+        )
+        return _envelope_response(request, 422, error)
+    return await unhandled_exception_handler(request, exc)
+
+
 async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONResponse:
     sentry_sdk.capture_exception(exc)
     message = _translate_or_fallback(
@@ -161,6 +184,7 @@ def register_exception_handlers(app: FastAPI) -> None:
     # Before the catch-all Exception handler below, which would otherwise
     # turn an upstream refusal into a 500 filed as an application bug.
     app.add_exception_handler(stripe.StripeError, stripe_error_handler)
+    app.add_exception_handler(DBAPIError, database_error_handler)
     app.add_exception_handler(RequestValidationError, validation_error_handler)
     app.add_exception_handler(StarletteHTTPException, http_exception_handler)
     app.add_exception_handler(Exception, unhandled_exception_handler)
