@@ -202,6 +202,15 @@ auditConfig:
     # Storybook runner). The advisory names >=3.0.4; npm's latest is 3.0.3
     # (2026-10-10). Take the fix once it is published.
     - GHSA-vfj7-8cjw-p6xm
+    # zod 3, memory exhaustion validating a huge array without a length cap,
+    # fixed only in 4.6.6. The product's own zod (web, mobile, ui, validation)
+    # is on 4.x; what is left is chromium-bidi@14.0.0, which puppeteer-core
+    # (via @lhci/cli>lighthouse) pins exactly and which asks for ^3.24.1.
+    # puppeteer-core imports chromium-bidi only for the WebDriver BiDi
+    # protocol, and Lighthouse drives Chrome over CDP, so the code is never
+    # even loaded. Forcing it onto zod 4 would cross a major. Lift this when
+    # lighthouse moves to a puppeteer whose chromium-bidi asks for zod 4.
+    - GHSA-mrhx-c7xc-m3w5
 
 patchedDependencies:
   expo-localization@16.0.1: patches/expo-localization@16.0.1.patch
