@@ -2,7 +2,7 @@ import { http, HttpResponse } from "msw";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { getApiBaseUrl } from "@forge/api-client";
 import { Toaster } from "@forge/ui";
@@ -50,6 +50,12 @@ async function openFeed() {
   );
   return screen.findByText("Needs attention");
 }
+
+// sonner removes a dismissed toast on a 200 ms timer that unmounting the
+// Toaster does not clear. Dismissed in the last test, it fired after vitest had
+// torn down jsdom -- "window is not defined", an unhandled error that fails
+// the run with every test green (CI, 2026-10-23). Outlive it before teardown.
+afterAll(() => new Promise((resolve) => setTimeout(resolve, 300)));
 
 describe("mark read / undo (F-008, F-009)", () => {
   beforeEach(() => {

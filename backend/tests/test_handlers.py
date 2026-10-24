@@ -3,6 +3,7 @@ import logging
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from pydantic import BaseModel
+from sqlalchemy.exc import DBAPIError
 
 from app.core.exceptions import NotFoundError
 from app.core.handlers import register_exception_handlers
@@ -10,6 +11,15 @@ from app.core.handlers import register_exception_handlers
 
 class _Payload(BaseModel):
     name: str
+
+
+class _PgError(Exception):
+    """Stands in for asyncpg's error as SQLAlchemy wraps it: what the handler
+    reads is the SQLSTATE."""
+
+    def __init__(self, sqlstate: str) -> None:
+        super().__init__(sqlstate)
+        self.sqlstate = sqlstate
 
 
 def _build_test_app() -> FastAPI:
@@ -33,6 +43,10 @@ def _build_test_app() -> FastAPI:
     @test_app.post("/validate")
     async def validate(payload: _Payload) -> dict[str, str]:
         return {"name": payload.name}
+
+    @test_app.get("/raise-db/{sqlstate}")
+    async def raise_db(sqlstate: str) -> None:
+        raise DBAPIError("SELECT 1", None, _PgError(sqlstate))
 
     @test_app.get("/raise-unhandled")
     async def raise_unhandled() -> None:
@@ -193,3 +207,23 @@ def test_request_id_echoed_when_already_set_on_request_state() -> None:
     response = client.get("/raise-not-found")
 
     assert response.json()["meta"]["request_id"] == "fixed-request-id"
+
+
+def test_a_nul_byte_postgres_refuses_is_a_422_not_a_500() -> None:
+    # SQLSTATE 22021: Postgres refusing a NUL byte in text. Schemathesis found it
+    # through GET /files?bucket=%00.
+    client = TestClient(_build_test_app(), raise_server_exceptions=False)
+
+    response = client.get("/raise-db/22021")
+
+    assert response.status_code == 422
+    assert response.json()["error"]["code"] == "validation_error"
+
+
+def test_any_other_database_error_is_still_a_500() -> None:
+    client = TestClient(_build_test_app(), raise_server_exceptions=False)
+
+    response = client.get("/raise-db/40001")
+
+    assert response.status_code == 500
+    assert response.json()["error"]["code"] == "internal_error"
