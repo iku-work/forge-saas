@@ -91,9 +91,9 @@ const ROLE_OPTIONS: ApiMemberRole[] = [
 ];
 
 const inviteSchema = z.object({
-  email: z.string().email("validation.email_invalid"),
+  email: z.email("validation.email_invalid"),
   role: z.enum(["owner", "admin", "member"], {
-    message: "validation.role_required",
+    error: "validation.role_required",
   }),
 });
 type InviteInput = z.infer<typeof inviteSchema>;
