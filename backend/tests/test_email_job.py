@@ -19,6 +19,7 @@ path used to reach MailHog in dev.
 """
 
 import json
+import logging
 from pathlib import Path
 from typing import Any
 from unittest.mock import AsyncMock, Mock
@@ -187,6 +188,23 @@ async def test_send_email_invokes_render_and_sends_its_output(
     assert params["subject"] == "Verify your email address"
     assert params["html"] == "<p>rendered html</p>"
     assert params["text"] == "rendered text"
+
+
+@pytest.mark.usefixtures("mock_render")
+async def test_send_email_logs_the_resend_id_but_not_the_recipient(
+    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    """The id is what ties a send on the box to Resend's delivery events."""
+    monkeypatch.setattr(
+        email_job.resend.Emails, "send_async", AsyncMock(return_value={"id": "re_msg_42"})
+    )
+
+    with caplog.at_level(logging.INFO, logger=email_job.__name__):
+        await email_job.send_email({}, to="alice@example.com", template="verify_email", context={})
+
+    assert "resend_id=re_msg_42" in caplog.text
+    assert "template=verify_email" in caplog.text
+    assert "alice@example.com" not in caplog.text
 
 
 async def test_send_email_passes_context_through_to_render_unmodified(

@@ -155,8 +155,8 @@ async def _send_via_smtp(*, to: str, subject: str, html: str, text: str) -> None
 
 
 @resilient("resend")
-async def _send_via_resend(*, to: str, subject: str, html: str, text: str) -> None:
-    await resend.Emails.send_async(
+async def _send_via_resend(*, to: str, subject: str, html: str, text: str) -> str:
+    response = await resend.Emails.send_async(
         {
             "from": get_settings().EMAIL_FROM_ADDRESS,
             "to": to,
@@ -165,6 +165,7 @@ async def _send_via_resend(*, to: str, subject: str, html: str, text: str) -> No
             "text": text,
         }
     )
+    return response["id"]
 
 
 @trace_job
@@ -194,7 +195,7 @@ async def send_email(  # noqa: PLR0913 -- ctx + the four wire params plus T-234'
 
     resend.api_key = settings.RESEND_API_KEY
     try:
-        await _send_via_resend(to=to, subject=subject, html=html, text=text)
+        resend_id = await _send_via_resend(to=to, subject=subject, html=html, text=text)
     except ExternalServiceUnavailableError:
         # The "resend" breaker is open -- re-queue the whole job rather than
         # dropping the email; see module docstring.
@@ -204,4 +205,7 @@ async def send_email(  # noqa: PLR0913 -- ctx + the four wire params plus T-234'
         sentry_sdk.capture_exception(exc)
         return
     else:
+        # The Resend id is the only handle from this box to Resend's delivery
+        # events; the recipient stays out of the log line (§0.6) -- Resend has it.
+        logger.info("send_email: sent (template=%s, resend_id=%s)", template, resend_id)
         FORGE_EMAILS_SENT_TOTAL.inc()

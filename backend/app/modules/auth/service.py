@@ -214,18 +214,18 @@ class AuthService:
             # path exactly as it does on the happy path below — the only
             # observable difference anywhere is this log line.
             logger.warning("auth.register: duplicate email attempt (user_id=%s)", existing.id)
+            if existing.email_verified_at is None:
+                # Registering again is how someone whose first verification
+                # email never arrived asks for another; without this they
+                # are stuck. The submitted password is ignored -- only the
+                # inbox owner can act on what this sends.
+                await self._send_verification_email(existing)
             return
 
         user = await self._users.create(
             email=req.email,
             hashed_password=await _hash_password_off_loop(req.password),
             is_active=False,
-        )
-        plain_token, token_hash = generate_refresh_token()
-        await self._email_verification_tokens.create(
-            user_id=user.id,
-            token_hash=token_hash,
-            expires_at=utcnow() + _EMAIL_VERIFICATION_TOKEN_TTL,
         )
 
         logger.info("auth.register: created user (user_id=%s)", user.id)
@@ -237,6 +237,15 @@ class AuthService:
             resource_id=str(user.id),
             org_id=None,
             actor_id=user.id,
+        )
+        await self._send_verification_email(user)
+
+    async def _send_verification_email(self, user: User) -> None:
+        plain_token, token_hash = generate_refresh_token()
+        await self._email_verification_tokens.create(
+            user_id=user.id,
+            token_hash=token_hash,
+            expires_at=utcnow() + _EMAIL_VERIFICATION_TOKEN_TTL,
         )
         await self._enqueue_verification_email(user, plain_token)
 
