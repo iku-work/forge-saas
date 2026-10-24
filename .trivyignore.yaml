@@ -105,17 +105,16 @@ vulnerabilities:
   # 2026-10-24 iku-work — expires 2027-01-24
   #
   # zod 3.25.76: memory exhaustion validating a huge array that has no length
-  # cap. The fix exists only in 4.6.6; zod 3 gets none, and web, mobile, ui
-  # and validation all depend on ^3, so taking it means migrating to zod 4.
-  # Every zod in this repo runs in the browser or at build time (forms, Astro
-  # content schemas), never on a server parsing attacker input, so the worst
-  # case is a user exhausting their own tab. The zod 4 copies are overridden
-  # to 4.6.6+ in pnpm-workspace.yaml, where pnpm audit's GHSA-mrhx-c7xc-m3w5
-  # is ignored for the same reason. The expiry forces the zod 4 migration.
+  # cap, fixed only in 4.6.6. web, mobile, ui and validation are on zod 4;
+  # the one copy left is chromium-bidi@14.0.0's, pinned exactly by
+  # puppeteer-core via @lhci/cli>lighthouse (apps/marketing's Lighthouse CI
+  # runner, a devDependency). puppeteer-core loads chromium-bidi only for the
+  # WebDriver BiDi protocol and Lighthouse speaks CDP, so it is never loaded.
+  # pnpm audit's GHSA-mrhx-c7xc-m3w5 is ignored for the same reason.
   - id: CVE-2023-54404
     paths:
       - "pnpm-lock.yaml"
     statement: >-
-      zod 3.x has no fix (4.6.6+ only); client-side and build-time
-      validation only, never server-side. zod 4 copies are overridden.
+      Only zod copy left on 3.x is chromium-bidi's, via @lhci/cli>lighthouse's
+      puppeteer-core; dev-only and never loaded (Lighthouse uses CDP).
     expired_at: 2027-01-24

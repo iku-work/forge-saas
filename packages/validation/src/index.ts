@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-// Every .min()/.max()/.email() message below is a @forge/i18n translation
+// Every .min()/.max()/z.email() message below is a @forge/i18n translation
 // key, not English text -- react-hook-form's resolver surfaces these as
 // `error.message`, and packages/ui's <FormMessage> is what actually runs
 // them through t() at render time (T-069's "translate at the form level").
@@ -22,18 +22,18 @@ export const passwordSchema = z
 const confirmPasswordSchema = z.string().min(1, "validation.required");
 
 const MISMATCH = {
-  message: "validation.password.mismatch",
+  error: "validation.password.mismatch",
   path: ["confirmPassword"],
 };
 
 export const loginSchema = z.object({
-  email: z.string().email("validation.email_invalid"),
+  email: z.email("validation.email_invalid"),
   password: z.string().min(1, "validation.required"),
 });
 
 export const registerSchema = z
   .object({
-    email: z.string().email("validation.email_invalid"),
+    email: z.email("validation.email_invalid"),
     password: passwordSchema,
     confirmPassword: confirmPasswordSchema,
   })
@@ -56,7 +56,7 @@ export const changePasswordSchema = z
   .refine((v) => v.newPassword === v.confirmPassword, MISMATCH);
 
 export const forgotPasswordSchema = z.object({
-  email: z.string().email("validation.email_invalid"),
+  email: z.email("validation.email_invalid"),
 });
 
 export const changeEmailSchema = z.object({
@@ -64,16 +64,16 @@ export const changeEmailSchema = z.object({
   // OAuth-only account (no password set) legitimately submits this blank,
   // and the backend (not this schema) is what knows which case applies.
   currentPassword: z.string().optional(),
-  newEmail: z.string().email("validation.email_invalid"),
+  newEmail: z.email("validation.email_invalid"),
 });
 
 export const magicLinkSchema = z.object({
-  email: z.string().email("validation.email_invalid"),
+  email: z.email("validation.email_invalid"),
 });
 
 export const profileSchema = z.object({
   fullName: z.string().min(1, "validation.required").max(255).optional(),
-  avatarUrl: z.string().url().optional(),
+  avatarUrl: z.url().optional(),
   locale: z.string().min(2).max(10).optional(),
 });
 

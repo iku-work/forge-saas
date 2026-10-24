@@ -132,7 +132,7 @@ function deliveryStatusLabelKey(status: string): string {
 }
 
 const createSchema = z.object({
-  url: z.string().url("validation.url_invalid"),
+  url: z.url("validation.url_invalid"),
   description: z.string().max(500),
   eventTypes: z.array(z.string()).min(1, "tenancy.webhooks.error_no_events"),
 });
