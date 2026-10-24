@@ -10,9 +10,10 @@ Verifies T-034's main.py:
     run on.
 """
 
-from collections.abc import AsyncGenerator
+import logging
+from collections.abc import AsyncGenerator, Awaitable, Callable
 from typing import TYPE_CHECKING, Any
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, Mock
 
 import pytest
 from arq import create_pool
@@ -23,6 +24,7 @@ from redis.asyncio import Redis
 
 from app.core.config import get_settings
 from app.core.jobs import SCAN_QUEUE_NAME
+from app.workers import main as worker_main
 from app.workers.jobs.billing import send_dunning_email
 from app.workers.jobs.email import send_email
 from app.workers.jobs.encryption import rotate_encryption_keys_job
@@ -105,6 +107,28 @@ def test_scans_run_in_their_own_worker_on_their_own_queue() -> None:
 
 
 # --- worker_startup / worker_shutdown --------------------------------------------
+
+
+@pytest.mark.parametrize("startup", [worker_startup, scan_worker_startup])
+async def test_worker_startup_routes_app_logging_through_the_app_sinks(
+    startup: Callable[[dict[str, Any]], Awaitable[None]], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The arq CLI only configures its own logger: without this, every app.*
+    logger.info in a job (the Resend id among them) never reached stdout."""
+    configure = Mock()
+    monkeypatch.setattr(worker_main, "configure_logging", configure)
+    monkeypatch.setattr(worker_main, "enforce_storage_endpoint_is_reachable_internally", Mock())
+    monkeypatch.setattr(worker_main, "start_worker_metrics_server", Mock())
+    monkeypatch.setattr(worker_main, "create_scheduler", Mock())
+    arq_logger = logging.getLogger("arq")
+    monkeypatch.setattr(arq_logger, "handlers", [logging.StreamHandler()])
+    ctx: dict[str, Any] = {}
+
+    await startup(ctx)
+    await ctx["redis"].aclose()
+
+    configure.assert_called_once_with()
+    assert arq_logger.handlers == []
 
 
 @pytest.fixture

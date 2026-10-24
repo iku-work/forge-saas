@@ -146,6 +146,51 @@ async def test_register_duplicate_email_does_not_create_second_user(
     assert count == 1
 
 
+async def test_register_duplicate_unverified_email_resends_verification(
+    service: AuthService,
+    user_repo: UserRepository,
+    session: AsyncSession,
+    enqueued_jobs: list[tuple[str, Any]],
+) -> None:
+    """A first verification email that never arrived is otherwise a dead end:
+    registering again is the only way to ask for another one."""
+    req = RegisterRequest(email="frank@example.com", password=_VALID_PASSWORD)
+    await service.register(req)
+
+    await service.register(req)
+
+    sends = [k for f, k in enqueued_jobs if f == "send_email"]
+    assert [k["template"] for k in sends] == ["verify_email", "verify_email"]
+    assert sends[0]["context"]["verification_url"] != sends[1]["context"]["verification_url"]
+    user = await user_repo.get_by_email("frank@example.com")
+    assert user is not None
+    token_count = (
+        await session.execute(
+            select(func.count())
+            .select_from(EmailVerificationToken)
+            .where(EmailVerificationToken.user_id == user.id)
+        )
+    ).scalar_one()
+    assert token_count == 2
+
+
+async def test_register_duplicate_verified_email_sends_nothing(
+    service: AuthService,
+    user_repo: UserRepository,
+    enqueued_jobs: list[tuple[str, Any]],
+) -> None:
+    await user_repo.create(
+        email="grace@example.com",
+        hashed_password="hashed",
+        is_active=True,
+        email_verified_at=datetime.now(UTC),
+    )
+
+    await service.register(RegisterRequest(email="grace@example.com", password=_VALID_PASSWORD))
+
+    assert enqueued_jobs == []
+
+
 # --- verify_email --------------------------------------------------------------
 
 

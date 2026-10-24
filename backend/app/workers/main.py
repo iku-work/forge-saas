@@ -6,6 +6,7 @@ worker) gets its own engine instance from that import, so no cross-process
 connection sharing is involved.
 """
 
+import logging
 from typing import Any, ClassVar
 
 from arq.typing import WorkerCoroutine
@@ -15,6 +16,7 @@ from app.core.config import get_settings
 from app.core.db import dispose_engine
 from app.core.jobs import SCAN_QUEUE_NAME
 from app.core.jobs import redis_settings as build_redis_settings
+from app.core.logging import configure_logging
 from app.core.metrics import start_worker_metrics_server
 from app.core.storage_endpoint import enforce_storage_endpoint_is_reachable_internally
 from app.workers.jobs.billing import send_dunning_email
@@ -28,7 +30,17 @@ from app.workers.jobs.webhooks import deliver_webhook
 from app.workers.scheduler import create_scheduler
 
 
+def _configure_worker_logging() -> None:
+    # The arq CLI configures only its own `arq` logger, so without this every
+    # app.* logger.info in a job was dropped and WARNING+ went out unscrubbed
+    # through logging.lastResort. arq's own handler is removed so its lines
+    # reach stdout once, through the same JSON sink, rather than twice.
+    configure_logging()
+    logging.getLogger("arq").handlers.clear()
+
+
 async def worker_startup(ctx: dict[str, Any]) -> None:
+    _configure_worker_logging()
     settings = get_settings()
     # This process makes S3 calls of its own (object deletion, exports), so
     # it needs the same route the API needs -- and it is the process most
@@ -94,6 +106,7 @@ class WorkerSettings:
 
 
 async def scan_worker_startup(ctx: dict[str, Any]) -> None:
+    _configure_worker_logging()
     settings = get_settings()
     # Streams every object it scans from the object store.
     enforce_storage_endpoint_is_reachable_internally(settings)
