@@ -101,3 +101,21 @@ vulnerabilities:
       - "pnpm-lock.yaml"
     statement: Same image-size 1.2.1 via metro as CVE-2025-71329.
     expired_at: 2027-01-01
+
+  # 2026-10-24 iku-work — expires 2027-01-24
+  #
+  # zod 3.25.76: memory exhaustion validating a huge array that has no length
+  # cap. The fix exists only in 4.6.6; zod 3 gets none, and web, mobile, ui
+  # and validation all depend on ^3, so taking it means migrating to zod 4.
+  # Every zod in this repo runs in the browser or at build time (forms, Astro
+  # content schemas), never on a server parsing attacker input, so the worst
+  # case is a user exhausting their own tab. The zod 4 copies are overridden
+  # to 4.6.6+ in pnpm-workspace.yaml, where pnpm audit's GHSA-mrhx-c7xc-m3w5
+  # is ignored for the same reason. The expiry forces the zod 4 migration.
+  - id: CVE-2023-54404
+    paths:
+      - "pnpm-lock.yaml"
+    statement: >-
+      zod 3.x has no fix (4.6.6+ only); client-side and build-time
+      validation only, never server-side. zod 4 copies are overridden.
+    expired_at: 2027-01-24
