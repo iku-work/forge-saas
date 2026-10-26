@@ -258,7 +258,13 @@ jobs:
             # alias for STORAGE_DOMAIN and the storage guard (correctly)
             # refuses to reach object storage over the public internet. That
             # deadlock took production down on 2026-09-14.
-            docker compose $COMPOSE up -d --no-deps backend worker scanner-worker caddy
+            #
+            # And caddy in a call of its own, first. In one call, compose still
+            # orders caddy after the backend is healthy, which on a fresh box
+            # (no caddy running yet, so no alias) never happens: the first
+            # deploy to forge-prod-2 hung there (2026-10-26).
+            docker compose $COMPOSE up -d --no-deps caddy
+            docker compose $COMPOSE up -d --no-deps backend worker scanner-worker
           EOF
 
       # Review OCT-05: `up -d` returns before healthchecks pass, and the
@@ -331,6 +337,8 @@ jobs:
             git checkout --quiet $PREVIOUS_TAG
             export BACKEND_IMAGE='$REPO:$PREVIOUS_TAG'
             export CADDY_IMAGE='$REPO-caddy:$PREVIOUS_TAG'
-            docker compose $COMPOSE up -d --no-deps backend worker scanner-worker caddy
+            # Caddy first, for the reason given in "Pull and switch".
+            docker compose $COMPOSE up -d --no-deps caddy
+            docker compose $COMPOSE up -d --no-deps backend worker scanner-worker
           EOF
           echo "rolled back to $PREVIOUS_TAG" >&2

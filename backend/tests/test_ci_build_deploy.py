@@ -458,6 +458,20 @@ def test_a_deploy_needs_an_explicit_target(target: str) -> None:
     assert "== ''" not in condition
 
 
+def test_hetzner_starts_caddy_on_its_own_before_the_backend() -> None:
+    # Caddy carries the storage alias the backend's boot check needs. Started
+    # in the same `up` as the backend, compose waits for a backend that cannot
+    # become healthy without it: the first deploy to a fresh box (2026-10-26).
+    steps = _deploy_workflow("hetzner")["jobs"]["deploy"]["steps"]
+    for name in ("Pull and switch", "Roll back to the previous image"):
+        run = next(s["run"] for s in steps if s.get("name") == name)
+        ups = [line.strip() for line in run.splitlines() if " up -d " in line]
+        assert ups == [
+            "docker compose $COMPOSE up -d --no-deps caddy",
+            "docker compose $COMPOSE up -d --no-deps backend worker scanner-worker",
+        ], name
+
+
 def test_hetzner_verifies_every_service_before_declaring_success() -> None:
     # Review OCT-05: /health/ready alone passed while a worker crash-looped.
     steps = _deploy_workflow("hetzner")["jobs"]["deploy"]["steps"]
