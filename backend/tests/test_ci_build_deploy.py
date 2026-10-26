@@ -303,8 +303,11 @@ def test_bitwarden_env_quotes_pems_and_leaves_out_other_consumers(tmp_path: Path
         tmp_path,
         [
             {"key": "JWT_PRIVATE_KEY", "value": pem},
-            {"key": "JWT_PUBLIC_KEY", "value": f'"{pem}"'},
-            {"key": "DATABASE_URL", "value": "postgresql+asyncpg://u:p$(id)@db/forge"},
+            {"key": "JWT_PUBLIC_KEY", "value": f'"{pem}"\n'},
+            # Pasted with a trailing newline, the way six values were on
+            # 2026-10-26: it must not become a quoted two-line value.
+            {"key": "DATABASE_URL", "value": "postgresql+asyncpg://u:p$(id)@db/forge\n"},
+            {"key": "REDIS_URL", "value": "'rediss://redis:6379/0'"},
             {"key": "GRAFANA_CLOUD_TOKEN", "value": "glc_x"},
             {"key": "BACKUP_SFTP_PASSWORD", "value": "x"},
             {"key": "VITE_SENTRY_DSN", "value": "x"},
@@ -315,6 +318,7 @@ def test_bitwarden_env_quotes_pems_and_leaves_out_other_consumers(tmp_path: Path
         f'JWT_PRIVATE_KEY="{pem}"\n'
         f'JWT_PUBLIC_KEY="{pem}"\n'
         "DATABASE_URL=postgresql+asyncpg://u:p$(id)@db/forge\n"
+        "REDIS_URL=rediss://redis:6379/0\n"
     )
     assert "::add-mask::-----BEGIN PUBLIC KEY-----" in result.stdout
 
@@ -327,9 +331,21 @@ def test_bitwarden_env_quotes_pems_and_leaves_out_other_consumers(tmp_path: Path
             "Defined more than once in Bitwarden: ENCRYPTION_KEY",
         ),
         ([{"key": "BACKUP_AGE_IDENTITY", "value": "AGE-SECRET-KEY-1X"}], "BACKUP_AGE_IDENTITY"),
+        ([], "can read no secrets"),
+        # The 2026-10-26 JWT_PRIVATE_KEY: an opening quote, and the END line
+        # and closing quote lost in the paste.
+        (
+            [{"key": "JWT_PRIVATE_KEY", "value": '"-----BEGIN PUBLIC KEY-----\nabc'}],
+            "Malformed in Bitwarden (an unclosed quote, or a PEM with no END line): "
+            "JWT_PRIVATE_KEY",
+        ),
+        (
+            [{"key": "JWT_PUBLIC_KEY", "value": "-----BEGIN PUBLIC KEY-----\nabc"}],
+            "JWT_PUBLIC_KEY",
+        ),
     ],
 )
-def test_bitwarden_env_refuses_a_duplicate_or_the_backup_identity(
+def test_bitwarden_env_refuses_what_would_ship_broken(
     tmp_path: Path, secrets: list[dict[str, str]], message: str
 ) -> None:
     result = _write_env_from_bitwarden(tmp_path, secrets)
