@@ -104,18 +104,34 @@ jobs:
       # on the box, and the client builds (VITE_, EXPO_PUBLIC_). The backend
       # gets what it reads and nothing more.
       #
-      # A multi-line value (a PEM) pasted without its quotes gets them back,
-      # because dotenv ends an unquoted value at the newline. A name defined
-      # twice fails the deploy: which copy wins is not something to find out
-      # from a backend that cannot decrypt its own columns. The backup
-      # identity fails it too -- it opens every backup and must never be
-      # readable by anything that deploys.
+      # Values are cleaned of what pasting adds and the value never had: the
+      # quotes it wore in a .env file, and the trailing newline -- which,
+      # left in, quoted DATABASE_URL and five others onto two lines
+      # (2026-10-26). A multi-line value (a PEM) is then quoted, because
+      # dotenv ends an unquoted value at the newline.
+      #
+      # The deploy fails, naming the secret, on anything that would ship
+      # broken: no secrets at all (the machine account lost access to the
+      # project), a name defined twice (which copy wins is not something to
+      # find out from a backend that cannot decrypt its own columns), an
+      # unclosed quote or a PEM with no END line (compose then misreads every
+      # line after it), and the backup identity, which opens every backup and
+      # must never be readable by anything that deploys.
       - name: Write prod.env from Bitwarden
         env:
           BWS_ACCESS_TOKEN: ${{ secrets.BWS_ACCESS_TOKEN }}
           BWS_SERVER_URL: https://vault.bitwarden.eu
         run: |
-          secrets=$(bws secret list --output json)
+          # $sq: a single quote, which a single-quoted jq program cannot spell.
+          secrets=$(bws secret list --output json | jq --arg sq "'" '[.[] | .value |= (
+            sub("^\\s+"; "") | sub("\\s+$"; "")
+            | if length > 1 and ((startswith("\"") and endswith("\""))
+                                 or (startswith($sq) and endswith($sq)))
+              then .[1:-1] else . end)]')
+          if [ "$(jq length <<<"$secrets")" -eq 0 ]; then
+            echo "The machine account can read no secrets. Give it Can read on forge-prod." >&2
+            exit 1
+          fi
           dupes=$(jq -r '[.[].key] | group_by(.) | map(select(length > 1)[0]) | join(" ")' <<<"$secrets")
           if [ -n "$dupes" ]; then
             echo "Defined more than once in Bitwarden: $dupes" >&2
@@ -125,11 +141,17 @@ jobs:
             echo "BACKUP_AGE_IDENTITY is readable by the deploy. Move it out of forge-prod." >&2
             exit 1
           fi
+          broken=$(jq -r --arg sq "'" '[.[] | select((.value | startswith("\"") or startswith($sq))
+                                       or ((.value | contains("-----BEGIN ")) and (.value | contains("-----END ") | not)))
+                           | .key] | join(" ")' <<<"$secrets")
+          if [ -n "$broken" ]; then
+            echo "Malformed in Bitwarden (an unclosed quote, or a PEM with no END line): $broken" >&2
+            exit 1
+          fi
           jq -r '.[].value | split("\n")[] | select(length >= 8) | "::add-mask::" + .' <<<"$secrets"
           jq -r '.[]
             | select(.key | test("^(BACKUP|GRAFANA|VITE|EXPO_PUBLIC)_") | not)
-            | .key + "=" + (if (.value | contains("\n")) and (.value | startswith("\"") | not)
-                            then "\"" + .value + "\"" else .value end)' <<<"$secrets" > prod.env
+            | .key + "=" + (if .value | contains("\n") then "\"" + .value + "\"" else .value end)' <<<"$secrets" > prod.env
 
       # Guards and the registry login -- nothing that touches production.
       # Migrations run on the box below (C4): the production database is
@@ -205,7 +227,8 @@ jobs:
             git fetch --quiet origin
             git checkout --quiet $TAG
             if [ -f backend/.env.next ]; then
-              cp backend/.env backend/.env.prev
+              # A first deploy has no env to keep.
+              if [ -f backend/.env ]; then cp backend/.env backend/.env.prev; fi
               mv backend/.env.next backend/.env
             fi
 
