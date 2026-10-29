@@ -23,8 +23,8 @@
     "@forge/api-client": "workspace:*",
     "@forge/i18n": "workspace:*",
     "@forge/types": "workspace:*",
-    "@tanstack/react-query": "^5.101.1",
-    "i18next": "^26.3.3"
+    "@tanstack/react-query": "^5.104.5",
+    "i18next": "^26.5.6"
   },
   "peerDependencies": {
     "react": "^18.3.1"
@@ -33,6 +33,6 @@
     "@types/react": "^18.3.31",
     "react": "^18.3.1",
     "tsup": "^8.3.5",
-    "typescript": "^5.7.2"
+    "typescript": "^5.9.3"
   }
 }

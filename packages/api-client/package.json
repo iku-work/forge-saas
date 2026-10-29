@@ -21,11 +21,11 @@
     "generate": "node ./scripts/dump-openapi.mjs && openapi-ts"
   },
   "dependencies": {
-    "@tanstack/react-query": "^5.101.1"
+    "@tanstack/react-query": "^5.104.5"
   },
   "devDependencies": {
     "@hey-api/openapi-ts": "^0.99.0",
     "tsup": "^8.3.5",
-    "typescript": "^5.7.2"
+    "typescript": "^5.9.3"
   }
 }
