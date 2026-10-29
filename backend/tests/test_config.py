@@ -111,7 +111,7 @@ def test_a_published_key_refuses_to_start_outside_dev(
     key = KEYS[name]
     monkeypatch.setattr(config, "_PUBLISHED_KEY_FINGERPRINTS", {config._key_fingerprint(key)})
 
-    with pytest.raises(RuntimeError, match="has been published"):
+    with pytest.raises(RuntimeError, match=f"^{name} is a key that has been published"):
         Settings(_env_file=FIXTURE_ENV_FILE, **{**PROD_SAFE_OVERRIDES, name: f'"{key}"\n'})
     # Dev still starts: the fixtures there are throwaway by design.
     Settings(_env_file=FIXTURE_ENV_FILE, ENVIRONMENT="dev")
