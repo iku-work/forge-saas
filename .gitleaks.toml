@@ -10,19 +10,20 @@ paths = [
   # findings, not secrets. High-entropy hex digests trip the generic-api-key
   # rule every time.
   '''\.secrets\.baseline''',
-  # Settings() needs a structurally-valid RS256 keypair + Fernet key to
-  # construct in tests; both are dummy, never-deployed, generated solely for
-  # tests/test_config.py (see file header comment).
+  # Test-only env fixtures. Since 2026-10-29 they carry no key material --
+  # each run generates its own (backend/tests/_test_env.py,
+  # scripts/gen-test-secrets.mjs) -- but they keep dummy, well-formed values
+  # (sk_test_..., whsec_..., local DSNs) that the generic rules match.
   '''backend/\.env\.test''',
   # Placeholder PEM markers ("...") for documentation only -- not parseable
   # key material, but gitleaks' private-key rule matches the BEGIN/END
   # markers regardless of body content.
   '''backend/\.env\.example''',
-  # T-244: same dummy keypair as .env.test above, in the fixture CI's
-  # pgbouncer-prod-compose job boots docker-compose.prod.yml with.
+  # T-244: the fixture CI's pgbouncer-prod-compose job boots
+  # docker-compose.prod.yml with. Same dummy values as .env.test above.
   '''backend/\.env\.prod-compose''',
-  # T-220: same dummy keypair again, in the fixture the e2e-web job (and
-  # maestro-mobile.yml) copies to .env to boot the stack for Playwright.
+  # T-220: the fixture the e2e-web job (and maestro-mobile.yml) copies to
+  # .env to boot the stack for Playwright.
   '''backend/\.env\.e2e''',
   # T-223: and again, for the k6 load-test stack.
   '''backend/\.env\.loadtest''',

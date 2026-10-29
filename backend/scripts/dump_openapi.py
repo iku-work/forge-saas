@@ -101,6 +101,12 @@ def _load_env_fallback() -> None:
     for name, value in dotenv_values(fallback).items():
         if value is not None:
             os.environ.setdefault(name, value)
+    # .env.test carries no keys any more; any valid ones do for a schema.
+    # Run as a script, this directory is on sys.path already.
+    from throwaway_keys import generate  # noqa: PLC0415 -- only on this fallback path
+
+    for name, value in generate().items():
+        os.environ.setdefault(name, value)
 
 
 def _enable_every_module() -> None:

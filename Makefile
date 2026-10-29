@@ -99,6 +99,7 @@ load-test: seed-load
 # backend/tests/test_pgbouncer.py and needs none of this.
 prod-compose-check:
 	cp backend/.env.prod-compose backend/.env
+	node scripts/gen-test-secrets.mjs >> backend/.env
 	sed 's/change-me/postgres/' .env.postgres.example > .env.postgres
 	sed 's/change-me/postgres/' .env.pgbouncer.example > .env.pgbouncer
 	cp .env.postgres-exporter.example .env.postgres-exporter
@@ -138,6 +139,7 @@ check-certs:
 # self-hosted deployment really uses, which nothing did until now.
 prod-compose-tls-check: internal-certs
 	sed -e 's|^ENVIRONMENT=.*|ENVIRONMENT=prod|' 	    -e 's|^FORCE_HTTPS=.*|FORCE_HTTPS=true|' 	    -e 's|^VIRUS_SCANNER=.*|VIRUS_SCANNER=clamav|' 	    -e 's|^PASSWORD_PEPPER=.*|PASSWORD_PEPPER=local-check-pepper|' 	    -e 's|^DATABASE_URL=.*|DATABASE_URL=postgresql+asyncpg://postgres:postgres@pgbouncer:6432/forge?sslmode=require|' 	    -e 's|^MIGRATIONS_DATABASE_URL=.*|MIGRATIONS_DATABASE_URL=postgresql+asyncpg://postgres:postgres@postgres:5432/forge?sslmode=require|' 	    -e 's|^REDIS_URL=.*|REDIS_URL=rediss://redis:6379/0?ssl_ca_certs=/certs/ca.crt|' 	    backend/.env.prod-compose > backend/.env
+	node scripts/gen-test-secrets.mjs >> backend/.env
 	sed 's/change-me/postgres/' .env.postgres.example > .env.postgres
 	sed 's/change-me/postgres/' .env.pgbouncer.example > .env.pgbouncer
 	cp .env.postgres-exporter.example .env.postgres-exporter

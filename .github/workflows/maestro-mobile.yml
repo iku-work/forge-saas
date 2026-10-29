@@ -65,7 +65,9 @@ jobs:
       # MailHog. See that file's own header comment for the full reasoning.
       - name: Copy E2E environment file
         working-directory: backend
-        run: cp .env.e2e .env
+        run: |
+          cp .env.e2e .env
+          node ../scripts/gen-test-secrets.mjs >> .env
 
       # Unlike a passive scan that never sends mail, deep-link.yaml's
       # invitation email only reaches MailHog if something actually

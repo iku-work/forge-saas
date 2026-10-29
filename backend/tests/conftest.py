@@ -4,7 +4,6 @@ import socket
 from collections.abc import AsyncGenerator, Generator
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime
-from pathlib import Path
 from typing import Any
 from uuid import uuid4
 
@@ -38,8 +37,9 @@ from app.modules.tenancy.repository import MembershipRepository, OrganizationRep
 from tests._client import serve_app
 from tests._database import DatabaseHandle
 from tests._sessions import rolling_back
+from tests._test_env import TEST_ENV_FILE
 
-_ENV_TEST_FILE = Path(__file__).parent.parent / ".env.test"
+_ENV_TEST_FILE = TEST_ENV_FILE
 # Where `.env.test` points DATABASE_URL, REDIS_URL and AWS_ENDPOINT_URL. Nothing listens there
 # under test; see `_no_dead_addresses`.
 _DEAD_ADDRESSES = frozenset(

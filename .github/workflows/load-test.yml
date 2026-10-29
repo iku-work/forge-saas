@@ -58,7 +58,9 @@ jobs:
 
       - name: Copy load-test environment file
         working-directory: backend
-        run: cp .env.loadtest .env
+        run: |
+          cp .env.loadtest .env
+          node ../scripts/gen-test-secrets.mjs >> .env
 
       # T-350: api-key.js needs `public_api` on, and the template ships it
       # off. The phase4 fixture is the same one CI's module-matrix job runs,

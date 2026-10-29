@@ -1,16 +1,16 @@
 from collections.abc import Generator
-from pathlib import Path
 
 import pytest
 from pydantic import ValidationError
 
-from app.core import module_loader
+from app.core import config, module_loader
 from app.core.config import Settings, get_settings, validate_stripe_keys
 from app.core.modules import EnabledModules, ModuleConfig
 from product import config as product_config
 from tests._prod_settings import PROD_SAFE_OVERRIDES
+from tests._test_env import KEYS, TEST_ENV_FILE
 
-FIXTURE_ENV_FILE = Path(__file__).parent.parent / ".env.test"
+FIXTURE_ENV_FILE = TEST_ENV_FILE
 
 
 @pytest.fixture(autouse=True)
@@ -98,6 +98,23 @@ def test_password_pepper_required_outside_dev(monkeypatch: pytest.MonkeyPatch) -
 
     with pytest.raises(RuntimeError, match="PASSWORD_PEPPER"):
         Settings(_env_file=FIXTURE_ENV_FILE, **{**PROD_SAFE_OVERRIDES, "PASSWORD_PEPPER": ""})
+
+
+@pytest.mark.parametrize("name", ["JWT_PRIVATE_KEY", "ENCRYPTION_KEY"])
+def test_a_published_key_refuses_to_start_outside_dev(
+    monkeypatch: pytest.MonkeyPatch, name: str
+) -> None:
+    """The published keys themselves are not in the repo any more, so this
+    run's key is marked published instead -- re-pasted with quotes and a
+    trailing newline, the way the 2026-10-26 one was."""
+    _clear_settings_env(monkeypatch)
+    key = KEYS[name]
+    monkeypatch.setattr(config, "_PUBLISHED_KEY_FINGERPRINTS", {config._key_fingerprint(key)})
+
+    with pytest.raises(RuntimeError, match="has been published"):
+        Settings(_env_file=FIXTURE_ENV_FILE, **{**PROD_SAFE_OVERRIDES, name: f'"{key}"\n'})
+    # Dev still starts: the fixtures there are throwaway by design.
+    Settings(_env_file=FIXTURE_ENV_FILE, ENVIRONMENT="dev")
 
 
 @pytest.mark.parametrize(

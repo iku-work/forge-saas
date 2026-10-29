@@ -10,8 +10,9 @@ from opentelemetry.sdk.trace.sampling import ALWAYS_ON
 from app.core.config import Settings
 from app.core.logging import _is_sensitive_key, _scrub, configure_logging
 from tests._prod_settings import PROD_SAFE_OVERRIDES
+from tests._test_env import TEST_ENV_FILE
 
-FIXTURE_ENV_FILE = Path(__file__).parent.parent / ".env.test"
+FIXTURE_ENV_FILE = TEST_ENV_FILE
 
 
 @pytest.fixture(autouse=True)
