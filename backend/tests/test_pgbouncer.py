@@ -32,6 +32,7 @@ from app.core.db import build_connect_args
 from app.core.migrations import build_config
 from app.core.migrations import upgrade as upgrade_migrations
 from tests._prod_settings import PROD_SAFE_OVERRIDES
+from tests._test_env import TEST_ENV_FILE
 
 REPO_ROOT = Path(__file__).parent.parent.parent
 PGBOUNCER_ENV_EXAMPLE = REPO_ROOT / ".env.pgbouncer.example"
@@ -317,7 +318,7 @@ async def test_migrations_run_while_traffic_flows_through_pgbouncer(
 # --------------------------------------------------------------------------
 
 
-FIXTURE_ENV_FILE = REPO_ROOT / "backend" / ".env.test"
+FIXTURE_ENV_FILE = TEST_ENV_FILE
 
 # The shared production shape, pointed at the compose service names.
 _PROD_SAFE_OVERRIDES: dict[str, object] = {
