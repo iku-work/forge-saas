@@ -83,7 +83,7 @@ jobs:
         run: |
           [[ "$TAG" =~ ^[0-9a-f]{7,40}$ ]] || { echo "image-tag must be a commit SHA, got: $TAG" >&2; exit 1; }
 
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
 
       # Review R4: scans have their own queue and their own worker. Without a
       # service consuming that queue, nothing is ever scanned and every
@@ -107,7 +107,7 @@ jobs:
           registry-password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Assume the deploy role
-        uses: aws-actions/configure-aws-credentials@v4
+        uses: aws-actions/configure-aws-credentials@v6
         with:
           role-to-assume: ${{ vars.AWS_ROLE_ARN }}
           aws-region: ${{ vars.AWS_REGION }}
