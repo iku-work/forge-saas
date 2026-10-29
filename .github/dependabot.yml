@@ -1,0 +1,45 @@
+# Weekly, grouped dependency updates: one PR per ecosystem rather than one per
+# package, because every PR runs the full CI (about 70 minutes of runners).
+#
+# cooldown: a release is only proposed once it is a week old. The May 2026
+# @tanstack compromise (AGENTS.md §0.12) published malicious versions that were
+# pulled within days; waiting out that window is the cheapest defence.
+#
+# Python is not here on purpose. CI and the image install from the hash-pinned
+# backend/requirements*.lock, exported from uv.lock, and Dependabot can update
+# uv.lock but not the export, so its PRs would change nothing that runs.
+# pip-audit in the security job flags Python advisories instead; the fix is
+# `uv lock --upgrade-package <name>` followed by the two `uv export` commands in
+# the Makefile's lock target.
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7
+    open-pull-requests-limit: 3
+    groups:
+      npm:
+        patterns: ["*"]
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7
+    groups:
+      actions:
+        patterns: ["*"]
+
+  - package-ecosystem: docker
+    directories: [/, /backend]
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7
+    groups:
+      docker:
+        patterns: ["*"]
