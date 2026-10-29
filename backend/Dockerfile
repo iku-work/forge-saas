@@ -46,7 +46,7 @@ RUN pip install --no-cache-dir --prefix=/install --require-hashes -r requirement
 # workspace install otherwise expects every workspace member on disk to
 # match the lockfile -- simplest to satisfy that than to fight a partial
 # checkout. None of this stage's image survives past the COPY --from below.
-FROM node:22-slim AS email-templates-builder
+FROM node:25-slim AS email-templates-builder
 
 WORKDIR /repo
 
