@@ -14,8 +14,7 @@
 # job's ~55-minute limit before it could open a PR, twice. Security fixes still
 # arrive: Dependabot security updates (repo settings) open one PR per advisory,
 # and `pnpm audit` in the security job fails CI on anything high or critical.
-# Routine bumps are `pnpm update -r` by hand; leave Expo SDK packages to
-# `npx expo install --fix`.
+# Routine bumps come from .github/workflows/npm-update.yml, daily.
 #
 # Python is not here either. CI and the image install from the hash-pinned
 # backend/requirements*.lock, exported from uv.lock, and Dependabot can update

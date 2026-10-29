@@ -1,0 +1,84 @@
+name: npm update
+
+# Dependabot's npm job re-resolves this 12-project workspace once per package
+# and timed out before opening a PR (see .github/dependabot.yml). This does
+# the same work in one `pnpm update`, about 40 s.
+#
+# Daily, and a no-op when nothing changed: either no newer version in range,
+# or the open PR already carries exactly this lockfile.
+#
+# What it updates: every dependency, direct and transitive, within the ranges
+# package.json already allows, so no majors. Only pnpm-lock.yaml changes
+# (--no-save), and --lockfile-only runs no install scripts.
+# - minimum-release-age=10080: a release must be a week old (the May 2026
+#   @tanstack compromise, AGENTS.md section 0.12, was pulled within days).
+# - Expo SDK packages are left alone. They move together on an SDK upgrade
+#   via `npx expo install --fix`, and expo-localization is pinned by a patch.
+#
+# Undoing one: revert its merge commit. The lockfile is the whole change.
+on:
+  schedule:
+    - cron: "0 5 * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: npm-update
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+  pull-requests: write
+  actions: write
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      BRANCH: npm-update
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: pnpm/action-setup@v6
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+
+      - name: Update the lockfile within package.json ranges
+        run: >-
+          pnpm update -r --lockfile-only --no-save
+          --config.minimum-release-age=10080
+          '!expo' '!expo-*' '!@expo/*' '!react-native' '!react-native-*'
+
+      - name: Open or refresh the PR
+        run: |
+          if git diff --quiet -- pnpm-lock.yaml; then
+            echo "Everything is already up to date."
+            exit 0
+          fi
+          if git ls-remote --exit-code --heads origin "$BRANCH" >/dev/null; then
+            git fetch --quiet origin "$BRANCH"
+            if git diff --quiet "origin/$BRANCH" -- pnpm-lock.yaml; then
+              echo "The open PR already has this lockfile."
+              exit 0
+            fi
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git switch --quiet -c "$BRANCH"
+          git commit --quiet -m "Update npm dependencies within their ranges" pnpm-lock.yaml
+          git push --quiet --force origin "$BRANCH"
+
+          if [ -z "$(gh pr list --head "$BRANCH" --state open --json number --jq '.[].number')" ]; then
+            gh pr create --head "$BRANCH" \
+              --title "Update npm dependencies within their ranges" \
+              --body "Opened by .github/workflows/npm-update.yml. Only pnpm-lock.yaml changes: every dependency moved to the newest version its package.json range allows, released at least a week ago. Expo SDK packages are excluded. Refreshed daily while open; undo after merging with a revert."
+          fi
+
+          # A push made with GITHUB_TOKEN starts no workflows, so the PR would
+          # sit without CI. workflow_dispatch is the one event that token may
+          # start, and its checks land on the same commit the PR shows.
+          gh workflow run ci.yml --ref "$BRANCH"
