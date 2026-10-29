@@ -102,7 +102,8 @@ def _load_env_fallback() -> None:
         if value is not None:
             os.environ.setdefault(name, value)
     # .env.test carries no keys any more; any valid ones do for a schema.
-    from scripts.throwaway_keys import generate  # noqa: PLC0415 -- must follow the sys.path setup
+    # Run as a script, this directory is on sys.path already.
+    from throwaway_keys import generate  # noqa: PLC0415 -- only on this fallback path
 
     for name, value in generate().items():
         os.environ.setdefault(name, value)
