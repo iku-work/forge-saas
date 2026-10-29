@@ -235,7 +235,9 @@ jobs:
       # values in .env.test must already be on disk as backend/.env first.
       - name: Copy test environment file
         working-directory: backend
-        run: cp .env.test .env
+        run: |
+          cp .env.test .env
+          node ../scripts/gen-test-secrets.mjs >> .env
 
       # T-048's fixtures spin up their own Postgres/Redis via testcontainers
       # (Docker-in-Docker, available by default on GitHub-hosted runners) --
@@ -499,7 +501,9 @@ jobs:
 
       - name: Copy test environment file
         working-directory: backend
-        run: cp .env.test .env
+        run: |
+          cp .env.test .env
+          node ../scripts/gen-test-secrets.mjs >> .env
 
       # Deliberately *before* the fixture is applied, and identical in every
       # combination -- but for a reason that changed in T-313. The schema is
@@ -897,6 +901,7 @@ jobs:
       - name: Materialise env files for the prod stack
         run: |
           cp backend/.env.prod-compose backend/.env
+          node scripts/gen-test-secrets.mjs >> backend/.env
           sed 's/change-me/postgres/' .env.postgres.example > .env.postgres
           sed 's/change-me/postgres/' .env.pgbouncer.example > .env.pgbouncer
           cp .env.postgres-exporter.example .env.postgres-exporter
@@ -1389,7 +1394,9 @@ jobs:
 
       - name: Copy test environment file
         working-directory: backend
-        run: cp .env.test .env
+        run: |
+          cp .env.test .env
+          node ../scripts/gen-test-secrets.mjs >> .env
 
       # T-350: the marketing host only exists once `astro build` has written
       # both the site and the Caddy site block that serves it (T-307). The
@@ -1561,7 +1568,9 @@ jobs:
 
       - name: Copy E2E environment file
         working-directory: backend
-        run: cp .env.e2e .env
+        run: |
+          cp .env.e2e .env
+          node ../scripts/gen-test-secrets.mjs >> .env
 
       # Unlike zap-baseline's passive HTTP scan (which never exercises it),
       # this suite's verification/invitation emails only reach MailHog if
