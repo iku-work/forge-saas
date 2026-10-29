@@ -83,7 +83,7 @@ jobs:
           [[ "$BACKEND_IMAGE" =~ ^[a-z0-9./_:-]+$ ]] || { echo "unexpected image ref: $BACKEND_IMAGE" >&2; exit 1; }
           [[ "$ACTOR" =~ ^[A-Za-z0-9-]+(\[bot\])?$ ]] || { echo "unexpected actor: $ACTOR" >&2; exit 1; }
 
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
 
       # Pinned by version and checksum, like any binary that handles the
       # production secrets.
