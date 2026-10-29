@@ -1,3 +1,4 @@
+import hashlib
 from functools import lru_cache
 from typing import Literal, Self
 
@@ -14,6 +15,28 @@ from app.core.module_loader import is_enabled
 # by definition, every targeted one -- so it fails closed there rather than
 # guessing. See app.modules.storage.scanner's module docstring.
 _NON_SCANNING_VIRUS_SCANNERS = frozenset({"noop", "virustotal"})
+
+# Key material that has been public, by fingerprint (see _key_fingerprint):
+# the test JWT private key and ENCRYPTION_KEY that this repo's env fixtures
+# carried until 2026-10-29. They were purged from the history then, but every
+# clone made earlier still has them, and on 2026-10-26 the JWT one was pasted
+# into the production secrets by mistake. A deployment using one can have its
+# tokens forged or its encrypted columns read by anyone, so it does not start.
+_PUBLISHED_KEY_FINGERPRINTS = frozenset(
+    {
+        "b9f29362bdf52e7695e6e53493b12769cebeb151e8eec9a4c8fbfdcbc683d442",
+        "c78f0264e6f842c51028f9942004d4f632498f785e81b57f73633e3e045a15c8",
+    }
+)
+
+
+def _key_fingerprint(value: str) -> str:
+    """sha256 of a key's material alone: quotes, PEM header/footer lines and
+    whitespace removed, so a re-pasted or re-wrapped copy still matches."""
+    lines = value.strip().strip("\"'").splitlines()
+    body = "".join(line.strip() for line in lines if not line.strip().startswith("-----"))
+    return hashlib.sha256(body.encode()).hexdigest()
+
 
 # The profile argon2-cffi's PasswordHasher() uses by default -- read, not
 # retyped, so the settings' defaults and the floor below cannot drift from it.
@@ -478,6 +501,15 @@ class Settings(BaseSettings):
                 "service behind the 'clamav' profile).",
             ),
             (not self.PASSWORD_PEPPER, "PASSWORD_PEPPER must be set outside dev"),
+            (
+                any(
+                    _key_fingerprint(key) in _PUBLISHED_KEY_FINGERPRINTS
+                    for key in (self.JWT_PRIVATE_KEY, self.ENCRYPTION_KEY)
+                ),
+                "JWT_PRIVATE_KEY or ENCRYPTION_KEY is a key that has been published "
+                "(a test key once committed to this repo). Generate new ones; see "
+                "docs/runbooks/credential-rotation.md.",
+            ),
             (
                 bool(weak_argon2),
                 f"{', '.join(weak_argon2)} below argon2-cffi's defaults outside dev -- "
