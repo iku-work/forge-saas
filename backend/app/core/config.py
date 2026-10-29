@@ -488,6 +488,14 @@ class Settings(BaseSettings):
             )
             if value < floor
         ]
+        published = [
+            name
+            for name, key in (
+                ("JWT_PRIVATE_KEY", self.JWT_PRIVATE_KEY),
+                ("ENCRYPTION_KEY", self.ENCRYPTION_KEY),
+            )
+            if _key_fingerprint(key) in _PUBLISHED_KEY_FINGERPRINTS
+        ]
         rules = (
             ("*" in self.ALLOWED_ORIGINS, "ALLOWED_ORIGINS must not contain '*' outside dev"),
             (not self.FORCE_HTTPS, "FORCE_HTTPS must be true in non-dev environments"),
@@ -502,12 +510,9 @@ class Settings(BaseSettings):
             ),
             (not self.PASSWORD_PEPPER, "PASSWORD_PEPPER must be set outside dev"),
             (
-                any(
-                    _key_fingerprint(key) in _PUBLISHED_KEY_FINGERPRINTS
-                    for key in (self.JWT_PRIVATE_KEY, self.ENCRYPTION_KEY)
-                ),
-                "JWT_PRIVATE_KEY or ENCRYPTION_KEY is a key that has been published "
-                "(a test key once committed to this repo). Generate new ones; see "
+                bool(published),
+                f"{' and '.join(published)} is a key that has been published (a test "
+                "key once committed to this repo). Generate a new one; see "
                 "docs/runbooks/credential-rotation.md.",
             ),
             (
