@@ -20,6 +20,20 @@ updates:
     cooldown:
       default-days: 7
     open-pull-requests-limit: 3
+    # Majors are deliberate upgrades, done by hand. Grouping them with
+    # everything else re-resolves the whole workspace once per package and the
+    # job times out before it opens a PR.
+    # Expo SDK packages move together with `npx expo install --fix` on an SDK
+    # upgrade; bumping one alone breaks the app, and expo-localization is pinned
+    # exactly by a pnpm patch (pnpm-workspace.yaml patchedDependencies).
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "expo"
+      - dependency-name: "expo-*"
+      - dependency-name: "@expo/*"
+      - dependency-name: "react-native"
+      - dependency-name: "react-native-*"
     groups:
       npm:
         patterns: ["*"]
@@ -40,6 +54,11 @@ updates:
       interval: weekly
     cooldown:
       default-days: 7
+    # Same rule as npm: node 22 -> 25 left LTS and dropped corepack, which the
+    # Dockerfiles use to install pnpm.
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
     groups:
       docker:
         patterns: ["*"]
