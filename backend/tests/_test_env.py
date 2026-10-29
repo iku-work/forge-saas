@@ -1,10 +1,8 @@
 """backend/.env.test plus key material generated for this test run.
 
-.env.test carries no keys: a key committed to a public repo is a published
-key, and production refuses the ones that once were (app.core.config). Each
-run generates a JWT keypair and a Fernet key, exports them, and writes
-TEST_ENV_FILE -- .env.test with the keys appended -- for the tests that build
-Settings from a file.
+.env.test carries no keys (see scripts/throwaway_keys.py). Each run generates
+them, exports them, and writes TEST_ENV_FILE -- .env.test with the keys
+appended -- for the tests that build Settings from a file.
 
 Imported by tests/__init__.py, so it runs before conftest imports anything
 from `app`: some modules build Settings at import time.
@@ -15,25 +13,9 @@ import os
 import tempfile
 from pathlib import Path
 
-from cryptography.fernet import Fernet
-from cryptography.hazmat.primitives import serialization
-from cryptography.hazmat.primitives.asymmetric import rsa
+from scripts.throwaway_keys import generate
 
-_private = rsa.generate_private_key(public_exponent=65537, key_size=2048)
-KEYS = {
-    "JWT_PRIVATE_KEY": _private.private_bytes(
-        serialization.Encoding.PEM,
-        serialization.PrivateFormat.PKCS8,
-        serialization.NoEncryption(),
-    )
-    .decode()
-    .strip(),
-    "JWT_PUBLIC_KEY": _private.public_key()
-    .public_bytes(serialization.Encoding.PEM, serialization.PublicFormat.SubjectPublicKeyInfo)
-    .decode()
-    .strip(),
-    "ENCRYPTION_KEY": Fernet.generate_key().decode(),
-}
+KEYS = generate()
 os.environ.update(KEYS)
 
 _fixture = (Path(__file__).parent.parent / ".env.test").read_text(encoding="utf-8")
