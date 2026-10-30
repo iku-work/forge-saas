@@ -24,6 +24,10 @@ export function initSentry(): void {
     dsn,
     environment: process.env.NODE_ENV === "production" ? "production" : "development",
     release: getRelease(),
+    // No personal data, the same rule as web and the backend. Web has moved
+    // to `dataCollection`; @sentry/react-native 8.17's options type does not
+    // accept it yet, so this keeps the deprecated flag until it does.
+    // eslint-disable-next-line @typescript-eslint/no-deprecated -- see above
     sendDefaultPii: false,
   });
 }
