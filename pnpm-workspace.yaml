@@ -140,6 +140,11 @@ overrides:
   # whereas naming the parent that asks for it does.
   "@hey-api/json-schema-ref-parser>js-yaml": ">=4.3.2 <5"
   "jsdom>undici": ">=7.30.1 <8"
+  # 2026-10-30: GHSA-rj75-hqrm-r3gf (postcss-selector-parser, quadratic
+  # selector parsing). @tailwindcss/typography pins exactly 6.0.10, and its
+  # latest release (0.5.20) still does; tailwindcss itself already asks for
+  # ^6.1.2, so 6.1.5 is a patch-level move inside the API it was built for.
+  "@tailwindcss/typography>postcss-selector-parser": ">=6.1.5 <7"
   # Exempted from the blanket tar bump above (T-222): @expo/cli@0.22.28's own
   # bundled tar.js/npm.js do `require('tar').default.extract` -- CJS interop
   # that assumes any `__esModule`-flagged module also has a `.default`. tar's
@@ -220,6 +225,29 @@ auditConfig:
     # upgrade.
     - GHSA-qr28-fpjm-wq7f
     - GHSA-vcc3-ghjq-m6fr
+    # 2026-10-30, moderate and low advisories with no fix that can be taken,
+    # each checked against the code that would have to call it:
+    # - uuid < 11.1.1 (GHSA-w5hq-g745-h8pq): a missing bounds check in v3, v5
+    #   and v6 when a buffer is passed. Every consumer here (Expo CLI's
+    #   bunyan and rudder-sdk, xcode, @lhci/cli, jest-junit,
+    #   istanbul-lib-processinfo) calls only v1 or v4. Their ranges stop at
+    #   ^7/^8, so the fix is a major away.
+    # - esbuild 0.27 via tsup (GHSA-g7r4-m6w7-qqqr): file read through
+    #   esbuild's development server on Windows. tsup and bundle-require
+    #   only build and never start that server. tsup 9 asks for ^0.28.2.
+    # - deepmerge <= 4.3.1 (GHSA-gcqx-w48m-w2h4): no fixed release exists.
+    #   Its consumers (Expo config, jest-config, html-to-text at email-template
+    #   build time) merge this repo's own config, never request data.
+    # - tar 6 via @expo/cli (GHSA-vmf3-w455-68vh, GHSA-gvwx-54wh-qm9j,
+    #   GHSA-w8wr-v893-vjvp) and tmp via @lhci/cli (GHSA-52f5-9888-hmc6): the
+    #   same pins as the entries above, for the same reasons.
+    - GHSA-w5hq-g745-h8pq
+    - GHSA-g7r4-m6w7-qqqr
+    - GHSA-gcqx-w48m-w2h4
+    - GHSA-vmf3-w455-68vh
+    - GHSA-gvwx-54wh-qm9j
+    - GHSA-w8wr-v893-vjvp
+    - GHSA-52f5-9888-hmc6
 
 patchedDependencies:
   decode-uri-component@0.2.2: patches/decode-uri-component@0.2.2.patch
