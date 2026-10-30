@@ -5,7 +5,18 @@
 # @tanstack compromise (AGENTS.md §0.12) published malicious versions that were
 # pulled within days; waiting out that window is the cheapest defence.
 #
-# Python is not here on purpose. CI and the image install from the hash-pinned
+# Majors are ignored: they are deliberate upgrades, done by hand. node 22 -> 25
+# was proposed as one, and it left LTS and dropped the corepack the Dockerfiles
+# use to install pnpm.
+#
+# npm is not here on purpose. Dependabot re-resolves the whole 12-project pnpm
+# workspace once per package (about 75 s each), so a weekly grouped run hit the
+# job's ~55-minute limit before it could open a PR, twice. Security fixes still
+# arrive: Dependabot security updates (repo settings) open one PR per advisory,
+# and `pnpm audit` in the security job fails CI on anything high or critical.
+# Routine bumps come from .github/workflows/npm-update.yml, daily.
+#
+# Python is not here either. CI and the image install from the hash-pinned
 # backend/requirements*.lock, exported from uv.lock, and Dependabot can update
 # uv.lock but not the export, so its PRs would change nothing that runs.
 # pip-audit in the security job flags Python advisories instead; the fix is
@@ -13,31 +24,6 @@
 # the Makefile's lock target.
 version: 2
 updates:
-  - package-ecosystem: npm
-    directory: /
-    schedule:
-      interval: weekly
-    cooldown:
-      default-days: 7
-    open-pull-requests-limit: 3
-    # Majors are deliberate upgrades, done by hand. Grouping them with
-    # everything else re-resolves the whole workspace once per package and the
-    # job times out before it opens a PR.
-    # Expo SDK packages move together with `npx expo install --fix` on an SDK
-    # upgrade; bumping one alone breaks the app, and expo-localization is pinned
-    # exactly by a pnpm patch (pnpm-workspace.yaml patchedDependencies).
-    ignore:
-      - dependency-name: "*"
-        update-types: ["version-update:semver-major"]
-      - dependency-name: "expo"
-      - dependency-name: "expo-*"
-      - dependency-name: "@expo/*"
-      - dependency-name: "react-native"
-      - dependency-name: "react-native-*"
-    groups:
-      npm:
-        patterns: ["*"]
-
   - package-ecosystem: github-actions
     directory: /
     schedule:
@@ -54,8 +40,6 @@ updates:
       interval: weekly
     cooldown:
       default-days: 7
-    # Same rule as npm: node 22 -> 25 left LTS and dropped corepack, which the
-    # Dockerfiles use to install pnpm.
     ignore:
       - dependency-name: "*"
         update-types: ["version-update:semver-major"]
