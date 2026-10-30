@@ -119,3 +119,22 @@ vulnerabilities:
       zod 3.x has no fix (4.6.6+ only); client-side and build-time
       validation only, never server-side. zod 4 copies are overridden.
     expired_at: 2027-01-24
+
+  # 2026-10-30 iku-work — expires 2027-01-30
+  #
+  # decode-uri-component 0.2.2: quadratic time decoding many distinct
+  # percent-encoded runs. FIXED, not accepted: patches/decode-uri-component@
+  # 0.2.2.patch backports 0.5.1's decoder, and trivy still matches the version
+  # number. The patch is needed because 0.5.1 is ESM-only and the one consumer,
+  # query-string 7 under expo-router, require()s it.
+  # apps/mobile/src/test/decodeUriComponentPatch.test.ts runs the advisory's
+  # proof of concept through the app's own dependency chain and fails if an
+  # unpatched copy comes back; pnpm refuses to install if the patch stops
+  # applying. Drop both when an Expo SDK upgrade brings a newer react-navigation.
+  - id: CVE-2026-118664
+    paths:
+      - "pnpm-lock.yaml"
+    statement: >-
+      Fixed by patches/decode-uri-component@0.2.2.patch (backport of 0.5.1);
+      verified by apps/mobile/src/test/decodeUriComponentPatch.test.ts.
+    expired_at: 2027-01-30

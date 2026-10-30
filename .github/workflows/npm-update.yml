@@ -4,8 +4,9 @@ name: npm update
 # and timed out before opening a PR (see .github/dependabot.yml). This does
 # the same work in one `pnpm update`, about 40 s.
 #
-# Daily, and a no-op when nothing changed: either no newer version in range,
-# or the open PR already carries exactly this lockfile.
+# Weekly, Mondays an hour after CI's module-matrix run. A no-op when nothing
+# changed: either no newer version in range, or the open PR already carries
+# exactly this lockfile.
 #
 # What it updates: every dependency, direct and transitive, within the ranges
 # package.json already allows, so no majors. Only pnpm-lock.yaml changes
@@ -18,7 +19,7 @@ name: npm update
 # Undoing one: revert its merge commit. The lockfile is the whole change.
 on:
   schedule:
-    - cron: "0 5 * * *"
+    - cron: "0 5 * * 1"
   workflow_dispatch:
 
 concurrency:
@@ -75,7 +76,7 @@ jobs:
           if [ -z "$(gh pr list --head "$BRANCH" --state open --json number --jq '.[].number')" ]; then
             gh pr create --head "$BRANCH" \
               --title "Update npm dependencies within their ranges" \
-              --body "Opened by .github/workflows/npm-update.yml. Only pnpm-lock.yaml changes: every dependency moved to the newest version its package.json range allows, released at least a week ago. Expo SDK packages are excluded. Refreshed daily while open; undo after merging with a revert."
+              --body "Opened by .github/workflows/npm-update.yml. Only pnpm-lock.yaml changes: every dependency moved to the newest version its package.json range allows, released at least a week ago. Expo SDK packages are excluded. Refreshed weekly while open; undo after merging with a revert."
           fi
 
           # A push made with GITHUB_TOKEN starts no workflows, so the PR would

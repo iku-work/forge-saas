@@ -211,6 +211,16 @@ auditConfig:
     # case is a user's own tab. The zod 4 copies are overridden above. Lift
     # this when the packages move to zod 4.
     - GHSA-mrhx-c7xc-m3w5
+    # decode-uri-component 0.2.2, via expo-router>@react-navigation/core>
+    # query-string 7. FIXED, not accepted: patchedDependencies below backports
+    # 0.5.1's decoder, and pnpm audit still matches the version number. 0.5.1
+    # itself is ESM-only and query-string require()s it.
+    # apps/mobile/src/test/decodeUriComponentPatch.test.ts proves the shipped
+    # copy is the fixed one. Drop these with the patch at the next Expo SDK
+    # upgrade.
+    - GHSA-qr28-fpjm-wq7f
+    - GHSA-vcc3-ghjq-m6fr
 
 patchedDependencies:
+  decode-uri-component@0.2.2: patches/decode-uri-component@0.2.2.patch
   expo-localization@16.0.1: patches/expo-localization@16.0.1.patch
