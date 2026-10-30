@@ -211,6 +211,13 @@ auditConfig:
     # case is a user's own tab. The zod 4 copies are overridden above. Lift
     # this when the packages move to zod 4.
     - GHSA-mrhx-c7xc-m3w5
+    # decode-uri-component 0.2.2, via expo-router>@react-navigation/core>
+    # query-string 7, in the mobile app only. Fixed only in 0.5.1, which is
+    # ESM-only, and query-string require()s it and calls the result, so the
+    # override would break deep-link parsing. Worst case is a crafted link
+    # hanging the user's own app. Ends with the next Expo SDK upgrade; the
+    # dated trivy entry in .trivyignore.yaml carries the same reasoning.
+    - GHSA-qr28-fpjm-wq7f
 
 patchedDependencies:
   expo-localization@16.0.1: patches/expo-localization@16.0.1.patch

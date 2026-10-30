@@ -119,3 +119,21 @@ vulnerabilities:
       zod 3.x has no fix (4.6.6+ only); client-side and build-time
       validation only, never server-side. zod 4 copies are overridden.
     expired_at: 2027-01-24
+
+  # 2026-10-30 iku-work — expires 2027-01-30
+  #
+  # decode-uri-component 0.2.2: quadratic time decoding long runs of
+  # percent-encoded bytes. Fixed only in 0.5.1, which is ESM-only, and the one
+  # consumer (query-string 7, via @react-navigation/core under expo-router)
+  # `require()`s it and calls the result, so the override would break the
+  # mobile app's URL parsing. It runs only inside the mobile app, never on a
+  # server: the worst case is a crafted deep link hanging the user's own app.
+  # Fixed by the next Expo SDK upgrade (newer react-navigation); pnpm audit's
+  # GHSA-qr28-fpjm-wq7f is ignored in pnpm-workspace.yaml for the same reason.
+  - id: CVE-2026-118664
+    paths:
+      - "pnpm-lock.yaml"
+    statement: >-
+      decode-uri-component 0.2.2 via query-string 7 in the mobile app only;
+      the fix (0.5.1) is ESM-only and query-string require()s it.
+    expired_at: 2027-01-30
