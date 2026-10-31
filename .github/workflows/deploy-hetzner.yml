@@ -254,7 +254,7 @@ jobs:
                 echo "No ~/forge-backup.env: this box has no backups (scripts/bootstrap-hetzner-box.sh). Refusing to migrate without one." >&2
                 exit 1
               fi
-              (set -a; . ~/forge-backup.env; set +a; bash scripts/backup-postgres.sh </dev/null)
+              (set -a; . ~/forge-backup.env; set +a; bash scripts/backup.sh db </dev/null)
             fi
 
             docker compose $COMPOSE run --rm --no-deps backend python -m app.core.migrations

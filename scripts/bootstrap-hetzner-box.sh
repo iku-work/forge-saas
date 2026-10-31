@@ -158,7 +158,8 @@ echo "== Encrypted daily backup (docs/runbooks/backup-restore.md)"
 # them. ~/forge-backup.env is outside the checkout so a deploy's checkout
 # never touches it, and the deploy reads it too, for the backup it takes
 # before every migration.
-command -v age >/dev/null || { apt-get update -qq; apt-get install -y -qq age >/dev/null; }
+command -v age >/dev/null && command -v rclone >/dev/null ||
+  { apt-get update -qq; apt-get install -y -qq age rclone >/dev/null; }
 install -d -m 700 -o "$DEPLOY_USER" -g "$DEPLOY_USER" /var/backups/forge
 if [ ! -f "$HOME_DIR/forge-backup.env" ]; then
   install -m 600 -o "$DEPLOY_USER" -g "$DEPLOY_USER" /dev/null "$HOME_DIR/forge-backup.env"
@@ -166,32 +167,31 @@ if [ ! -f "$HOME_DIR/forge-backup.env" ]; then
 BACKUP_AGE_RECIPIENT=$BACKUP_RECIPIENT
 BACKUP_DIR=/var/backups/forge
 BACKUP_RETENTION_DAYS=14
-# The compose set the backup needs to reach Postgres: the deploy's, minus the
-# registry overlay (it requires the image refs), with DOMAIN and friends
-# interpolated from the env the deploy ships, as the deploy itself does.
+# The compose set the backup needs to reach Postgres and MinIO: the deploy's,
+# minus the registry overlay (it requires the image refs), with DOMAIN and
+# friends interpolated from the env the deploy ships, as the deploy does.
 COMPOSE_FILE=docker-compose.prod.yml:docker-compose.tls.yml
 COMPOSE_ENV_FILES=backend/.env
-# Until this is set, every archive sits on the same disk as the database.
-# An rclone remote, e.g. b2:forge-backups; rclone must be installed.
-#BACKUP_REMOTE=
+# The off-host copy is added by scripts/set-backup-remote.sh. Until then
+# every archive sits on the same disk as the database.
 EOF
 fi
 cat > /etc/systemd/system/forge-backup.service <<EOF
 [Unit]
-Description=Encrypted Postgres backup (scripts/backup-postgres.sh)
+Description=Encrypted backup of the database and uploaded files (scripts/backup.sh)
 
 [Service]
 Type=oneshot
 User=$DEPLOY_USER
 WorkingDirectory=$APP_DIR
 EnvironmentFile=$HOME_DIR/forge-backup.env
-ExecStart=/usr/bin/bash $APP_DIR/scripts/backup-postgres.sh
+ExecStart=/usr/bin/bash $APP_DIR/scripts/backup.sh
 EOF
 # Persistent: a run missed while the box was off happens at the next boot
 # instead of being skipped.
 cat > /etc/systemd/system/forge-backup.timer <<EOF
 [Unit]
-Description=Daily encrypted Postgres backup
+Description=Daily encrypted backup
 
 [Timer]
 OnCalendar=*-*-* 03:30:00 UTC
@@ -207,5 +207,7 @@ echo
 echo "Done. Next, from docs/runbooks/new-server.md:"
 [ -f "$APP_DIR/bitwarden-values.txt" ] &&
   echo "  - copy $APP_DIR/bitwarden-values.txt into Bitwarden, then delete it"
+grep -q '^BACKUP_REMOTE=' "$HOME_DIR/forge-backup.env" ||
+  echo "  - point backups off the box: ssh -t $DEPLOY_USER@<this box> bash forge/scripts/set-backup-remote.sh"
 echo "  - add the CI deploy key and the GitHub environment secrets, then deploy"
 echo "  - after the first deploy, run the restore drill (backup-restore.md)"

@@ -479,7 +479,7 @@ def test_hetzner_takes_a_backup_before_it_migrates() -> None:
     # bash's stdin, and an exec that inherits it eats the migration line.
     steps = _deploy_workflow("hetzner")["jobs"]["deploy"]["steps"]
     run = next(s["run"] for s in steps if s.get("name") == "Migrate on the box")
-    backup = run.index("scripts/backup-postgres.sh")
+    backup = run.index("scripts/backup.sh db")
     assert backup < run.index("python -m app.core.migrations")
     assert "Refusing to migrate" in run
     execs = [m.start() for m in re.finditer(r"compose \$COMPOSE exec", run)]

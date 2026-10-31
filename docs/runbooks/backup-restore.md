@@ -1,11 +1,10 @@
 # Backup/restore runbook (T-225)
 
-> **Status**: the self-hosted path is **exercised** — backup, restore and
-> decryption were run end to end against the live deployment on 2026-09-29,
-> and the schedule is installed (see "Verification status" at the bottom for
-> the numbers and for the two gaps that remain, the larger being that
-> archives are not yet copied off-host). The Render path is still written
-> but unexecuted.
+> **Status**: the self-hosted path is **exercised end to end** (2026-10-31):
+> database and uploaded files, encrypted, copied off-host to a locked
+> Cloudflare R2 bucket, restored from the copy fetched back, and watched by a
+> Sentry cron monitor. See "Verification status" at the bottom for the
+> numbers. The Render path is still written but unexecuted.
 
 Covers the two deployment paths this repo supports: Render (managed
 Postgres/Redis, `docs/runbooks/deploy-render.md`) and self-hosted
@@ -90,15 +89,23 @@ That paragraph used to end "an operator choosing the self-hosted path is
 expected to wire up their own backup schedule". That is a fair thing to say
 about *retention policy* and a bad thing to say about whether backups happen
 at all: the 2026-09-24 audit found one dump, four days old, mode 0664, on
-the same disk as the database, and no restore ever executed. Two scripts now
+the same disk as the database, and no restore ever executed. Scripts now
 ship instead.
 
-### `scripts/backup-postgres.sh`
+### `scripts/backup.sh`
 
-`pg_dump -Fc` from inside the container, encrypted to an age public key,
-written 0600, pruned on a retention window, optionally copied off-host with
-rclone. It refuses to run rather than writing plaintext if the recipient or
-`age` is missing.
+Two archives per run, each encrypted to an age public key, written 0600,
+copied off-host with rclone, local copies pruned on a retention window:
+
+- `forge-<stamp>.dump.age`: `pg_dump -Fc` from inside the container.
+- `files-<stamp>.tar.age`: every object in the MinIO bucket, through MinIO's
+  own API (`mc mirror`), except `incoming/` and `data-exports/`, which
+  expire within a day anyway. Taken through the API rather than the volume,
+  the archive holds the files themselves, so restoring it does not need
+  `MINIO_KMS_SECRET_KEY`.
+
+It refuses to run rather than writing plaintext if the recipient or `age` is
+missing. `backup.sh db` takes the database only; that is what the deploy runs.
 
 **The key is made on your laptop, not the box.** The point of public-key
 encryption here is that the host can write backups and cannot read them, so
@@ -115,14 +122,15 @@ source of truth for the units; what it sets up:
   (`/var/backups/forge`, owned by `forge`, mode 700), 14 days' retention, and
   the compose set the script needs (`COMPOSE_FILE`, plus `COMPOSE_ENV_FILES`
   for the hostnames compose interpolates). It sits outside the checkout, so a
-  deploy never touches it. Edit it to set `BACKUP_REMOTE`.
+  deploy never touches it.
+- `age` and `rclone`.
 - `forge-backup.service`, running the script as `forge` with that file, and
   `forge-backup.timer`, daily at 03:30 UTC with `Persistent=true`: a backup
   missed while the box was off runs at the next boot instead of being skipped.
-- Every deploy (`deploy-hetzner.yml`, "Migrate on the box") also runs the
-  script before it migrates, and refuses to migrate on a box without
-  `forge-backup.env`. The newest archive is therefore always the state the
-  last migration started from.
+- Every deploy (`deploy-hetzner.yml`, "Migrate on the box") also runs
+  `backup.sh db` before it migrates, and refuses to migrate on a box without
+  `forge-backup.env`. The newest database archive is therefore always the
+  state the last migration started from.
 
 ```sh
 systemctl list-timers forge-backup.timer      # the next run
@@ -130,20 +138,101 @@ journalctl -u forge-backup.service            # the last one
 sudo systemctl start forge-backup.service     # one now
 ```
 
-### `scripts/restore-postgres.sh` — and the drill
+### Off-host copy: Cloudflare R2
+
+A backup on the same disk as the database survives a bad migration and not a
+dead disk, a deleted server or a locked hosting account. The default is a
+Cloudflare R2 bucket: a different company from the server's, in an account
+every product already has for its domain, free up to 10 GB, with free
+downloads on the day you restore.
+
+**In the Cloudflare dashboard → R2 Object Storage:**
+
+1. **Create bucket** `<product>-prod-backups`, location **Specify
+   jurisdiction → European Union**.
+2. Bucket → **Settings → Bucket lock rules → Add rule**: prefix empty,
+   retention **30 days**. Nothing in the bucket can then be deleted or
+   overwritten for 30 days, by anyone, including the box's own key.
+3. **Settings → Object lifecycle rules → Add rule**: prefix empty, delete
+   after **90 days**, so storage does not grow forever.
+4. **Manage API tokens → Create Account API token**: **Object Read &
+   Write**, applied to that bucket only. Keep the page open.
+
+**On the box**, as `forge`, in a terminal, since it prompts:
 
 ```sh
-# the drill, from your laptop: restores into a scratch database, times it,
-# spot-checks it. The key is streamed over ssh and read into memory; it is
-# never written to the box's disk.
-ssh forge@<box> 'cd ~/forge && set -a && . ~/forge-backup.env && set +a &&
-  AGE_IDENTITY=/dev/stdin ./scripts/restore-postgres.sh /var/backups/forge/forge-<stamp>.dump.age' \
-  < <product>-backup-key.txt
+ssh -t forge@<box> bash forge/scripts/set-backup-remote.sh
 ```
 
-It defaults to the scratch database `forge_restore_check` precisely so the
-drill is the easy thing to run. Restoring over the live database needs an
-explicit `--into forge`, and warns for ten seconds before it starts.
+It asks for the bucket, the S3 endpoint
+(`https://<account id>.eu.r2.cloudflarestorage.com`), the Access Key ID and
+the Secret Access Key, which is not echoed. It validates each value, writes
+them to `~forge/forge-backup.env`, and checks the bucket answers. The secret
+goes from your clipboard to that file and nowhere else. Close the token page
+after.
+
+**What R2 gives up, deliberately.** An R2 token that can write can also
+delete, so a key stolen from the box could remove archives *older* than the
+lock period; the newest 30 days stay protected. The Cloudflare account then
+also holds both DNS and backups: give it a passkey or hardware key. For a
+product holding sensitive data, use a provider with upload-only keys
+(Backblaze B2: a key without `deleteFiles`, plus Object Lock). Only the
+rclone remote changes; `backup.sh` does not care.
+
+**Things that cost time here:** rclone 1.60 (Ubuntu's) verifies each upload
+with `HEAD ?versionId=...`, which R2 answers `501 Not Implemented`; the
+upload itself has already succeeded. `set-backup-remote.sh` sets `no_head`,
+which loses nothing because the upload carries a `Content-MD5` R2 checks. A
+bucket-scoped token cannot list buckets, hence `no_check_bucket`.
+
+### Alerting: a Sentry cron monitor
+
+A full run of `backup.sh` checks in to a Sentry cron monitor named
+`forge-backup`, through the backend's own `SENTRY_DSN` (read from
+`backend/.env`; `BACKUP_SENTRY_DSN` overrides it). The first check-in creates
+the monitor with the timer's schedule (03:30 UTC, two hours' margin). A run
+that fails anywhere, a refusal included, reports an error; a run that never
+happens is reported missed. Either becomes a Sentry issue, which reaches you
+through the project's alert rules. Without a DSN the script says so on every
+run.
+
+Keep the schedule in `backup.sh`'s check-in and the timer's `OnCalendar`
+the same, or Sentry reports a missed backup every day.
+
+### `scripts/restore-postgres.sh`, `scripts/restore-files.sh`: the drill
+
+Restore from the **off-host** copy: that is the one you will have when the
+box is gone. Fetch it first:
+
+```sh
+ssh forge@<box> 'cd ~/forge && set -a && . ~/forge-backup.env && set +a &&
+  umask 077 && mkdir -p /tmp/from-r2 &&
+  rclone copy "$BACKUP_REMOTE/forge-<stamp>.dump.age" /tmp/from-r2/ &&
+  rclone copy "$BACKUP_REMOTE/files-<stamp>.tar.age" /tmp/from-r2/'
+```
+
+Then restore each one. The private key lives only in the Password Manager,
+so copy it there and pipe the clipboard in: it goes into memory on the box
+and is never written to its disk. From PowerShell:
+
+```powershell
+Get-Clipboard | ssh forge@<box> 'cd ~/forge && set -a && . ~/forge-backup.env && set +a && AGE_IDENTITY=/dev/stdin ./scripts/restore-postgres.sh /tmp/from-r2/forge-<stamp>.dump.age'
+Get-Clipboard | ssh forge@<box> 'cd ~/forge && set -a && . ~/forge-backup.env && set +a && AGE_IDENTITY=/dev/stdin ./scripts/restore-files.sh /tmp/from-r2/files-<stamp>.tar.age'
+```
+
+(On macOS or Linux, `pbpaste |` or `< key.txt` instead.) Clear the clipboard
+afterwards.
+
+Both default to a scratch target, `forge_restore_check` and
+`<bucket>-restore-check`, precisely so the drill is the easy thing to run.
+Restoring over the live database or bucket needs an explicit `--into <name>`,
+and warns for ten seconds before it starts. Compare the scratch database's
+row counts with the live one, then drop it; remove the scratch bucket
+(`mc rb --force`, inside the minio container) and `/tmp/from-r2`.
+
+**If the box is gone**, the Cloudflare dashboard downloads any archive from
+the bucket, or a new read token fetches them to a new box. The archive and
+the private key are all a restore needs.
 
 **Run the drill on a schedule and record the elapsed time below.** An
 untested backup is a belief. The three things a drill catches that nothing
@@ -156,7 +245,9 @@ column as unreadable ciphertext while every row count looks correct.
 docker-compose.prod.yml stop backend worker`) so nothing writes underneath
 the restore, then `--into` the live database name, then bring them back and
 verify with the same `psql`/`alembic current` spot-check as the Render path
-above before resuming traffic.
+above before resuming traffic. Restore the files archive from the same run
+with `restore-files.sh --into <bucket>`: a database and a bucket from
+different days disagree about which files exist.
 
 ### Redis
 
@@ -374,8 +465,27 @@ in at start, so a restarted container reuses its stale copy.
 
       Not covered this time: decrypting an `EncryptedString` column, because
       this box has never had a signup and the columns hold no rows. The
-      2026-09-29 drill covers that check. Archives are still not off-host
-      (`BACKUP_REMOTE` unset).
+      2026-09-29 drill covers that check. Archives were not yet off-host;
+      the next entry, the same day, fixes that.
+- [x] **Off-host, files and alerting (2026-10-31, forge-prod-2).** A
+      Cloudflare R2 bucket in the EU jurisdiction, with a 30-day bucket lock
+      and a 90-day expiry, configured with `set-backup-remote.sh`.
+      - **The box cannot delete or tamper.** With the box's own key,
+        deleting an uploaded object and overwriting it were both refused
+        (`409 ObjectLockedByBucketPolicy`), and the content was unchanged.
+      - **Database from R2.** The archive fetched back from R2 had the same
+        sha256 as the local copy. With the key piped from the Password
+        Manager, it restored with all 27 tables identical to live and the
+        same five migration heads.
+      - **Files from R2.** A test object put in the live bucket came back
+        from the R2 copy into the scratch bucket with its exact content,
+        stored SSE-S3 like every upload. The object and the scratch bucket
+        were removed afterwards.
+      - **Sentry.** A check-in from the box was accepted (`202`), creating
+        the `forge-backup` monitor.
+      - **Found on the way:** rclone 1.60's post-upload `HEAD ?versionId=`
+        gets `501` from R2 (now `no_head`), and the MinIO image has no `tar`
+        (the files archive streams out through `docker cp`).
 - [x] **Docker-network TLS exercised end-to-end on the self-hosted path
       (2026-09-03).** `make prod-compose-tls-check` against the real
       `docker-compose.prod.yml` with `ENVIRONMENT=prod`: certificate
