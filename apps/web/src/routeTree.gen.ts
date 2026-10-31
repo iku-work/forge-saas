@@ -9,42 +9,42 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
-import { Route as LocaleRouteImport } from './routes/$locale'
-import { Route as SplatRouteImport } from './routes/$'
 import { Route as IndexRouteImport } from './routes/index'
-import { Route as LocaleVerifyEmailRouteImport } from './routes/$locale.verify-email'
-import { Route as LocaleResetPasswordRouteImport } from './routes/$locale.reset-password'
-import { Route as LocaleRegisterRouteImport } from './routes/$locale.register'
-import { Route as LocaleMagicLinkRouteImport } from './routes/$locale.magic-link'
-import { Route as LocaleLoginRouteImport } from './routes/$locale.login'
-import { Route as LocaleForgotPasswordRouteImport } from './routes/$locale.forgot-password'
-import { Route as LocaleConfirmEmailChangeRouteImport } from './routes/$locale.confirm-email-change'
-import { Route as LocaleCancelEmailChangeRouteImport } from './routes/$locale.cancel-email-change'
-import { Route as LocaleAdminRouteImport } from './routes/$locale.admin'
+import { Route as SplatRouteImport } from './routes/$'
+import { Route as LocaleRouteImport } from './routes/$locale'
 import { Route as LocaleAppRouteImport } from './routes/$locale._app'
-import { Route as LocaleAdminIndexRouteImport } from './routes/$locale.admin.index'
+import { Route as LocaleAdminRouteImport } from './routes/$locale.admin'
+import { Route as LocaleCancelEmailChangeRouteImport } from './routes/$locale.cancel-email-change'
+import { Route as LocaleConfirmEmailChangeRouteImport } from './routes/$locale.confirm-email-change'
+import { Route as LocaleForgotPasswordRouteImport } from './routes/$locale.forgot-password'
+import { Route as LocaleLoginRouteImport } from './routes/$locale.login'
+import { Route as LocaleMagicLinkRouteImport } from './routes/$locale.magic-link'
+import { Route as LocaleRegisterRouteImport } from './routes/$locale.register'
+import { Route as LocaleResetPasswordRouteImport } from './routes/$locale.reset-password'
+import { Route as LocaleVerifyEmailRouteImport } from './routes/$locale.verify-email'
 import { Route as LocaleAppIndexRouteImport } from './routes/$locale._app.index'
-import { Route as LocaleAdminUsersRouteImport } from './routes/$locale.admin.users'
-import { Route as LocaleAdminSettingsRouteImport } from './routes/$locale.admin.settings'
-import { Route as LocaleAdminOrgsRouteImport } from './routes/$locale.admin.orgs'
-import { Route as LocaleAdminAuditRouteImport } from './routes/$locale.admin.audit'
-import { Route as LocaleAcceptInvitationTokenRouteImport } from './routes/$locale.accept-invitation.$token'
-import { Route as LocaleAppReportsRouteImport } from './routes/$locale._app.reports'
 import { Route as LocaleAppFilesRouteImport } from './routes/$locale._app.files'
-import { Route as LocaleAdminUsersIdRouteImport } from './routes/$locale.admin.users_.$id'
-import { Route as LocaleAdminOrgsIdRouteImport } from './routes/$locale.admin.orgs_.$id'
-import { Route as LocaleAppSettingsWebhooksRouteImport } from './routes/$locale._app.settings.webhooks'
-import { Route as LocaleAppSettingsSecurityRouteImport } from './routes/$locale._app.settings.security'
-import { Route as LocaleAppSettingsProfileRouteImport } from './routes/$locale._app.settings.profile'
-import { Route as LocaleAppSettingsOrgRouteImport } from './routes/$locale._app.settings.org'
-import { Route as LocaleAppSettingsNotificationsRouteImport } from './routes/$locale._app.settings.notifications'
-import { Route as LocaleAppSettingsMembersRouteImport } from './routes/$locale._app.settings.members'
-import { Route as LocaleAppSettingsBillingRouteImport } from './routes/$locale._app.settings.billing'
+import { Route as LocaleAppReportsRouteImport } from './routes/$locale._app.reports'
+import { Route as LocaleAcceptInvitationTokenRouteImport } from './routes/$locale.accept-invitation.$token'
+import { Route as LocaleAdminIndexRouteImport } from './routes/$locale.admin.index'
+import { Route as LocaleAdminAuditRouteImport } from './routes/$locale.admin.audit'
+import { Route as LocaleAdminOrgsRouteImport } from './routes/$locale.admin.orgs'
+import { Route as LocaleAdminSettingsRouteImport } from './routes/$locale.admin.settings'
+import { Route as LocaleAdminUsersRouteImport } from './routes/$locale.admin.users'
 import { Route as LocaleAppSettingsApiKeysRouteImport } from './routes/$locale._app.settings.api-keys'
+import { Route as LocaleAppSettingsBillingRouteImport } from './routes/$locale._app.settings.billing'
+import { Route as LocaleAppSettingsMembersRouteImport } from './routes/$locale._app.settings.members'
+import { Route as LocaleAppSettingsNotificationsRouteImport } from './routes/$locale._app.settings.notifications'
+import { Route as LocaleAppSettingsOrgRouteImport } from './routes/$locale._app.settings.org'
+import { Route as LocaleAppSettingsProfileRouteImport } from './routes/$locale._app.settings.profile'
+import { Route as LocaleAppSettingsSecurityRouteImport } from './routes/$locale._app.settings.security'
+import { Route as LocaleAppSettingsWebhooksRouteImport } from './routes/$locale._app.settings.webhooks'
+import { Route as LocaleAdminOrgsIdRouteImport } from './routes/$locale.admin.orgs_.$id'
+import { Route as LocaleAdminUsersIdRouteImport } from './routes/$locale.admin.users_.$id'
 
-const LocaleRoute = LocaleRouteImport.update({
-  id: '/$locale',
-  path: '/$locale',
+const IndexRoute = IndexRouteImport.update({
+  id: '/',
+  path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
 const SplatRoute = SplatRouteImport.update({
@@ -52,39 +52,23 @@ const SplatRoute = SplatRouteImport.update({
   path: '/$',
   getParentRoute: () => rootRouteImport,
 } as any)
-const IndexRoute = IndexRouteImport.update({
-  id: '/',
-  path: '/',
+const LocaleRoute = LocaleRouteImport.update({
+  id: '/$locale',
+  path: '/$locale',
   getParentRoute: () => rootRouteImport,
 } as any)
-const LocaleVerifyEmailRoute = LocaleVerifyEmailRouteImport.update({
-  id: '/verify-email',
-  path: '/verify-email',
+const LocaleAppRoute = LocaleAppRouteImport.update({
+  id: '/_app',
   getParentRoute: () => LocaleRoute,
 } as any)
-const LocaleResetPasswordRoute = LocaleResetPasswordRouteImport.update({
-  id: '/reset-password',
-  path: '/reset-password',
+const LocaleAdminRoute = LocaleAdminRouteImport.update({
+  id: '/admin',
+  path: '/admin',
   getParentRoute: () => LocaleRoute,
 } as any)
-const LocaleRegisterRoute = LocaleRegisterRouteImport.update({
-  id: '/register',
-  path: '/register',
-  getParentRoute: () => LocaleRoute,
-} as any)
-const LocaleMagicLinkRoute = LocaleMagicLinkRouteImport.update({
-  id: '/magic-link',
-  path: '/magic-link',
-  getParentRoute: () => LocaleRoute,
-} as any)
-const LocaleLoginRoute = LocaleLoginRouteImport.update({
-  id: '/login',
-  path: '/login',
-  getParentRoute: () => LocaleRoute,
-} as any)
-const LocaleForgotPasswordRoute = LocaleForgotPasswordRouteImport.update({
-  id: '/forgot-password',
-  path: '/forgot-password',
+const LocaleCancelEmailChangeRoute = LocaleCancelEmailChangeRouteImport.update({
+  id: '/cancel-email-change',
+  path: '/cancel-email-change',
   getParentRoute: () => LocaleRoute,
 } as any)
 const LocaleConfirmEmailChangeRoute =
@@ -93,59 +77,39 @@ const LocaleConfirmEmailChangeRoute =
     path: '/confirm-email-change',
     getParentRoute: () => LocaleRoute,
   } as any)
-const LocaleCancelEmailChangeRoute = LocaleCancelEmailChangeRouteImport.update({
-  id: '/cancel-email-change',
-  path: '/cancel-email-change',
+const LocaleForgotPasswordRoute = LocaleForgotPasswordRouteImport.update({
+  id: '/forgot-password',
+  path: '/forgot-password',
   getParentRoute: () => LocaleRoute,
 } as any)
-const LocaleAdminRoute = LocaleAdminRouteImport.update({
-  id: '/admin',
-  path: '/admin',
+const LocaleLoginRoute = LocaleLoginRouteImport.update({
+  id: '/login',
+  path: '/login',
   getParentRoute: () => LocaleRoute,
 } as any)
-const LocaleAppRoute = LocaleAppRouteImport.update({
-  id: '/_app',
+const LocaleMagicLinkRoute = LocaleMagicLinkRouteImport.update({
+  id: '/magic-link',
+  path: '/magic-link',
   getParentRoute: () => LocaleRoute,
 } as any)
-const LocaleAdminIndexRoute = LocaleAdminIndexRouteImport.update({
-  id: '/',
-  path: '/',
-  getParentRoute: () => LocaleAdminRoute,
+const LocaleRegisterRoute = LocaleRegisterRouteImport.update({
+  id: '/register',
+  path: '/register',
+  getParentRoute: () => LocaleRoute,
+} as any)
+const LocaleResetPasswordRoute = LocaleResetPasswordRouteImport.update({
+  id: '/reset-password',
+  path: '/reset-password',
+  getParentRoute: () => LocaleRoute,
+} as any)
+const LocaleVerifyEmailRoute = LocaleVerifyEmailRouteImport.update({
+  id: '/verify-email',
+  path: '/verify-email',
+  getParentRoute: () => LocaleRoute,
 } as any)
 const LocaleAppIndexRoute = LocaleAppIndexRouteImport.update({
   id: '/',
   path: '/',
-  getParentRoute: () => LocaleAppRoute,
-} as any)
-const LocaleAdminUsersRoute = LocaleAdminUsersRouteImport.update({
-  id: '/users',
-  path: '/users',
-  getParentRoute: () => LocaleAdminRoute,
-} as any)
-const LocaleAdminSettingsRoute = LocaleAdminSettingsRouteImport.update({
-  id: '/settings',
-  path: '/settings',
-  getParentRoute: () => LocaleAdminRoute,
-} as any)
-const LocaleAdminOrgsRoute = LocaleAdminOrgsRouteImport.update({
-  id: '/orgs',
-  path: '/orgs',
-  getParentRoute: () => LocaleAdminRoute,
-} as any)
-const LocaleAdminAuditRoute = LocaleAdminAuditRouteImport.update({
-  id: '/audit',
-  path: '/audit',
-  getParentRoute: () => LocaleAdminRoute,
-} as any)
-const LocaleAcceptInvitationTokenRoute =
-  LocaleAcceptInvitationTokenRouteImport.update({
-    id: '/accept-invitation/$token',
-    path: '/accept-invitation/$token',
-    getParentRoute: () => LocaleRoute,
-  } as any)
-const LocaleAppReportsRoute = LocaleAppReportsRouteImport.update({
-  id: '/reports',
-  path: '/reports',
   getParentRoute: () => LocaleAppRoute,
 } as any)
 const LocaleAppFilesRoute = LocaleAppFilesRouteImport.update({
@@ -153,49 +117,46 @@ const LocaleAppFilesRoute = LocaleAppFilesRouteImport.update({
   path: '/files',
   getParentRoute: () => LocaleAppRoute,
 } as any)
-const LocaleAdminUsersIdRoute = LocaleAdminUsersIdRouteImport.update({
-  id: '/users_/$id',
-  path: '/users/$id',
-  getParentRoute: () => LocaleAdminRoute,
-} as any)
-const LocaleAdminOrgsIdRoute = LocaleAdminOrgsIdRouteImport.update({
-  id: '/orgs_/$id',
-  path: '/orgs/$id',
-  getParentRoute: () => LocaleAdminRoute,
-} as any)
-const LocaleAppSettingsWebhooksRoute =
-  LocaleAppSettingsWebhooksRouteImport.update({
-    id: '/settings/webhooks',
-    path: '/settings/webhooks',
-    getParentRoute: () => LocaleAppRoute,
-  } as any)
-const LocaleAppSettingsSecurityRoute =
-  LocaleAppSettingsSecurityRouteImport.update({
-    id: '/settings/security',
-    path: '/settings/security',
-    getParentRoute: () => LocaleAppRoute,
-  } as any)
-const LocaleAppSettingsProfileRoute =
-  LocaleAppSettingsProfileRouteImport.update({
-    id: '/settings/profile',
-    path: '/settings/profile',
-    getParentRoute: () => LocaleAppRoute,
-  } as any)
-const LocaleAppSettingsOrgRoute = LocaleAppSettingsOrgRouteImport.update({
-  id: '/settings/org',
-  path: '/settings/org',
+const LocaleAppReportsRoute = LocaleAppReportsRouteImport.update({
+  id: '/reports',
+  path: '/reports',
   getParentRoute: () => LocaleAppRoute,
 } as any)
-const LocaleAppSettingsNotificationsRoute =
-  LocaleAppSettingsNotificationsRouteImport.update({
-    id: '/settings/notifications',
-    path: '/settings/notifications',
-    getParentRoute: () => LocaleAppRoute,
+const LocaleAcceptInvitationTokenRoute =
+  LocaleAcceptInvitationTokenRouteImport.update({
+    id: '/accept-invitation/$token',
+    path: '/accept-invitation/$token',
+    getParentRoute: () => LocaleRoute,
   } as any)
-const LocaleAppSettingsMembersRoute =
-  LocaleAppSettingsMembersRouteImport.update({
-    id: '/settings/members',
-    path: '/settings/members',
+const LocaleAdminIndexRoute = LocaleAdminIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => LocaleAdminRoute,
+} as any)
+const LocaleAdminAuditRoute = LocaleAdminAuditRouteImport.update({
+  id: '/audit',
+  path: '/audit',
+  getParentRoute: () => LocaleAdminRoute,
+} as any)
+const LocaleAdminOrgsRoute = LocaleAdminOrgsRouteImport.update({
+  id: '/orgs',
+  path: '/orgs',
+  getParentRoute: () => LocaleAdminRoute,
+} as any)
+const LocaleAdminSettingsRoute = LocaleAdminSettingsRouteImport.update({
+  id: '/settings',
+  path: '/settings',
+  getParentRoute: () => LocaleAdminRoute,
+} as any)
+const LocaleAdminUsersRoute = LocaleAdminUsersRouteImport.update({
+  id: '/users',
+  path: '/users',
+  getParentRoute: () => LocaleAdminRoute,
+} as any)
+const LocaleAppSettingsApiKeysRoute =
+  LocaleAppSettingsApiKeysRouteImport.update({
+    id: '/settings/api-keys',
+    path: '/settings/api-keys',
     getParentRoute: () => LocaleAppRoute,
   } as any)
 const LocaleAppSettingsBillingRoute =
@@ -204,12 +165,51 @@ const LocaleAppSettingsBillingRoute =
     path: '/settings/billing',
     getParentRoute: () => LocaleAppRoute,
   } as any)
-const LocaleAppSettingsApiKeysRoute =
-  LocaleAppSettingsApiKeysRouteImport.update({
-    id: '/settings/api-keys',
-    path: '/settings/api-keys',
+const LocaleAppSettingsMembersRoute =
+  LocaleAppSettingsMembersRouteImport.update({
+    id: '/settings/members',
+    path: '/settings/members',
     getParentRoute: () => LocaleAppRoute,
   } as any)
+const LocaleAppSettingsNotificationsRoute =
+  LocaleAppSettingsNotificationsRouteImport.update({
+    id: '/settings/notifications',
+    path: '/settings/notifications',
+    getParentRoute: () => LocaleAppRoute,
+  } as any)
+const LocaleAppSettingsOrgRoute = LocaleAppSettingsOrgRouteImport.update({
+  id: '/settings/org',
+  path: '/settings/org',
+  getParentRoute: () => LocaleAppRoute,
+} as any)
+const LocaleAppSettingsProfileRoute =
+  LocaleAppSettingsProfileRouteImport.update({
+    id: '/settings/profile',
+    path: '/settings/profile',
+    getParentRoute: () => LocaleAppRoute,
+  } as any)
+const LocaleAppSettingsSecurityRoute =
+  LocaleAppSettingsSecurityRouteImport.update({
+    id: '/settings/security',
+    path: '/settings/security',
+    getParentRoute: () => LocaleAppRoute,
+  } as any)
+const LocaleAppSettingsWebhooksRoute =
+  LocaleAppSettingsWebhooksRouteImport.update({
+    id: '/settings/webhooks',
+    path: '/settings/webhooks',
+    getParentRoute: () => LocaleAppRoute,
+  } as any)
+const LocaleAdminOrgsIdRoute = LocaleAdminOrgsIdRouteImport.update({
+  id: '/orgs_/$id',
+  path: '/orgs/$id',
+  getParentRoute: () => LocaleAdminRoute,
+} as any)
+const LocaleAdminUsersIdRoute = LocaleAdminUsersIdRouteImport.update({
+  id: '/users_/$id',
+  path: '/users/$id',
+  getParentRoute: () => LocaleAdminRoute,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -419,11 +419,11 @@ export interface RootRouteChildren {
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
-    '/$locale': {
-      id: '/$locale'
-      path: '/$locale'
-      fullPath: '/$locale'
-      preLoaderRoute: typeof LocaleRouteImport
+    '/': {
+      id: '/'
+      path: '/'
+      fullPath: '/'
+      preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/$': {
@@ -433,67 +433,18 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof SplatRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/': {
-      id: '/'
-      path: '/'
-      fullPath: '/'
-      preLoaderRoute: typeof IndexRouteImport
+    '/$locale': {
+      id: '/$locale'
+      path: '/$locale'
+      fullPath: '/$locale'
+      preLoaderRoute: typeof LocaleRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/$locale/verify-email': {
-      id: '/$locale/verify-email'
-      path: '/verify-email'
-      fullPath: '/$locale/verify-email'
-      preLoaderRoute: typeof LocaleVerifyEmailRouteImport
-      parentRoute: typeof LocaleRoute
-    }
-    '/$locale/reset-password': {
-      id: '/$locale/reset-password'
-      path: '/reset-password'
-      fullPath: '/$locale/reset-password'
-      preLoaderRoute: typeof LocaleResetPasswordRouteImport
-      parentRoute: typeof LocaleRoute
-    }
-    '/$locale/register': {
-      id: '/$locale/register'
-      path: '/register'
-      fullPath: '/$locale/register'
-      preLoaderRoute: typeof LocaleRegisterRouteImport
-      parentRoute: typeof LocaleRoute
-    }
-    '/$locale/magic-link': {
-      id: '/$locale/magic-link'
-      path: '/magic-link'
-      fullPath: '/$locale/magic-link'
-      preLoaderRoute: typeof LocaleMagicLinkRouteImport
-      parentRoute: typeof LocaleRoute
-    }
-    '/$locale/login': {
-      id: '/$locale/login'
-      path: '/login'
-      fullPath: '/$locale/login'
-      preLoaderRoute: typeof LocaleLoginRouteImport
-      parentRoute: typeof LocaleRoute
-    }
-    '/$locale/forgot-password': {
-      id: '/$locale/forgot-password'
-      path: '/forgot-password'
-      fullPath: '/$locale/forgot-password'
-      preLoaderRoute: typeof LocaleForgotPasswordRouteImport
-      parentRoute: typeof LocaleRoute
-    }
-    '/$locale/confirm-email-change': {
-      id: '/$locale/confirm-email-change'
-      path: '/confirm-email-change'
-      fullPath: '/$locale/confirm-email-change'
-      preLoaderRoute: typeof LocaleConfirmEmailChangeRouteImport
-      parentRoute: typeof LocaleRoute
-    }
-    '/$locale/cancel-email-change': {
-      id: '/$locale/cancel-email-change'
-      path: '/cancel-email-change'
-      fullPath: '/$locale/cancel-email-change'
-      preLoaderRoute: typeof LocaleCancelEmailChangeRouteImport
+    '/$locale/_app': {
+      id: '/$locale/_app'
+      path: ''
+      fullPath: '/$locale'
+      preLoaderRoute: typeof LocaleAppRouteImport
       parentRoute: typeof LocaleRoute
     }
     '/$locale/admin': {
@@ -503,67 +454,67 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof LocaleAdminRouteImport
       parentRoute: typeof LocaleRoute
     }
-    '/$locale/_app': {
-      id: '/$locale/_app'
-      path: ''
-      fullPath: '/$locale'
-      preLoaderRoute: typeof LocaleAppRouteImport
+    '/$locale/cancel-email-change': {
+      id: '/$locale/cancel-email-change'
+      path: '/cancel-email-change'
+      fullPath: '/$locale/cancel-email-change'
+      preLoaderRoute: typeof LocaleCancelEmailChangeRouteImport
       parentRoute: typeof LocaleRoute
     }
-    '/$locale/admin/': {
-      id: '/$locale/admin/'
-      path: '/'
-      fullPath: '/$locale/admin/'
-      preLoaderRoute: typeof LocaleAdminIndexRouteImport
-      parentRoute: typeof LocaleAdminRoute
+    '/$locale/confirm-email-change': {
+      id: '/$locale/confirm-email-change'
+      path: '/confirm-email-change'
+      fullPath: '/$locale/confirm-email-change'
+      preLoaderRoute: typeof LocaleConfirmEmailChangeRouteImport
+      parentRoute: typeof LocaleRoute
+    }
+    '/$locale/forgot-password': {
+      id: '/$locale/forgot-password'
+      path: '/forgot-password'
+      fullPath: '/$locale/forgot-password'
+      preLoaderRoute: typeof LocaleForgotPasswordRouteImport
+      parentRoute: typeof LocaleRoute
+    }
+    '/$locale/login': {
+      id: '/$locale/login'
+      path: '/login'
+      fullPath: '/$locale/login'
+      preLoaderRoute: typeof LocaleLoginRouteImport
+      parentRoute: typeof LocaleRoute
+    }
+    '/$locale/magic-link': {
+      id: '/$locale/magic-link'
+      path: '/magic-link'
+      fullPath: '/$locale/magic-link'
+      preLoaderRoute: typeof LocaleMagicLinkRouteImport
+      parentRoute: typeof LocaleRoute
+    }
+    '/$locale/register': {
+      id: '/$locale/register'
+      path: '/register'
+      fullPath: '/$locale/register'
+      preLoaderRoute: typeof LocaleRegisterRouteImport
+      parentRoute: typeof LocaleRoute
+    }
+    '/$locale/reset-password': {
+      id: '/$locale/reset-password'
+      path: '/reset-password'
+      fullPath: '/$locale/reset-password'
+      preLoaderRoute: typeof LocaleResetPasswordRouteImport
+      parentRoute: typeof LocaleRoute
+    }
+    '/$locale/verify-email': {
+      id: '/$locale/verify-email'
+      path: '/verify-email'
+      fullPath: '/$locale/verify-email'
+      preLoaderRoute: typeof LocaleVerifyEmailRouteImport
+      parentRoute: typeof LocaleRoute
     }
     '/$locale/_app/': {
       id: '/$locale/_app/'
       path: '/'
       fullPath: '/$locale/'
       preLoaderRoute: typeof LocaleAppIndexRouteImport
-      parentRoute: typeof LocaleAppRoute
-    }
-    '/$locale/admin/users': {
-      id: '/$locale/admin/users'
-      path: '/users'
-      fullPath: '/$locale/admin/users'
-      preLoaderRoute: typeof LocaleAdminUsersRouteImport
-      parentRoute: typeof LocaleAdminRoute
-    }
-    '/$locale/admin/settings': {
-      id: '/$locale/admin/settings'
-      path: '/settings'
-      fullPath: '/$locale/admin/settings'
-      preLoaderRoute: typeof LocaleAdminSettingsRouteImport
-      parentRoute: typeof LocaleAdminRoute
-    }
-    '/$locale/admin/orgs': {
-      id: '/$locale/admin/orgs'
-      path: '/orgs'
-      fullPath: '/$locale/admin/orgs'
-      preLoaderRoute: typeof LocaleAdminOrgsRouteImport
-      parentRoute: typeof LocaleAdminRoute
-    }
-    '/$locale/admin/audit': {
-      id: '/$locale/admin/audit'
-      path: '/audit'
-      fullPath: '/$locale/admin/audit'
-      preLoaderRoute: typeof LocaleAdminAuditRouteImport
-      parentRoute: typeof LocaleAdminRoute
-    }
-    '/$locale/accept-invitation/$token': {
-      id: '/$locale/accept-invitation/$token'
-      path: '/accept-invitation/$token'
-      fullPath: '/$locale/accept-invitation/$token'
-      preLoaderRoute: typeof LocaleAcceptInvitationTokenRouteImport
-      parentRoute: typeof LocaleRoute
-    }
-    '/$locale/_app/reports': {
-      id: '/$locale/_app/reports'
-      path: '/reports'
-      fullPath: '/$locale/reports'
-      preLoaderRoute: typeof LocaleAppReportsRouteImport
       parentRoute: typeof LocaleAppRoute
     }
     '/$locale/_app/files': {
@@ -573,60 +524,60 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof LocaleAppFilesRouteImport
       parentRoute: typeof LocaleAppRoute
     }
-    '/$locale/admin/users_/$id': {
-      id: '/$locale/admin/users_/$id'
-      path: '/users/$id'
-      fullPath: '/$locale/admin/users/$id'
-      preLoaderRoute: typeof LocaleAdminUsersIdRouteImport
+    '/$locale/_app/reports': {
+      id: '/$locale/_app/reports'
+      path: '/reports'
+      fullPath: '/$locale/reports'
+      preLoaderRoute: typeof LocaleAppReportsRouteImport
+      parentRoute: typeof LocaleAppRoute
+    }
+    '/$locale/accept-invitation/$token': {
+      id: '/$locale/accept-invitation/$token'
+      path: '/accept-invitation/$token'
+      fullPath: '/$locale/accept-invitation/$token'
+      preLoaderRoute: typeof LocaleAcceptInvitationTokenRouteImport
+      parentRoute: typeof LocaleRoute
+    }
+    '/$locale/admin/': {
+      id: '/$locale/admin/'
+      path: '/'
+      fullPath: '/$locale/admin/'
+      preLoaderRoute: typeof LocaleAdminIndexRouteImport
       parentRoute: typeof LocaleAdminRoute
     }
-    '/$locale/admin/orgs_/$id': {
-      id: '/$locale/admin/orgs_/$id'
-      path: '/orgs/$id'
-      fullPath: '/$locale/admin/orgs/$id'
-      preLoaderRoute: typeof LocaleAdminOrgsIdRouteImport
+    '/$locale/admin/audit': {
+      id: '/$locale/admin/audit'
+      path: '/audit'
+      fullPath: '/$locale/admin/audit'
+      preLoaderRoute: typeof LocaleAdminAuditRouteImport
       parentRoute: typeof LocaleAdminRoute
     }
-    '/$locale/_app/settings/webhooks': {
-      id: '/$locale/_app/settings/webhooks'
-      path: '/settings/webhooks'
-      fullPath: '/$locale/settings/webhooks'
-      preLoaderRoute: typeof LocaleAppSettingsWebhooksRouteImport
-      parentRoute: typeof LocaleAppRoute
+    '/$locale/admin/orgs': {
+      id: '/$locale/admin/orgs'
+      path: '/orgs'
+      fullPath: '/$locale/admin/orgs'
+      preLoaderRoute: typeof LocaleAdminOrgsRouteImport
+      parentRoute: typeof LocaleAdminRoute
     }
-    '/$locale/_app/settings/security': {
-      id: '/$locale/_app/settings/security'
-      path: '/settings/security'
-      fullPath: '/$locale/settings/security'
-      preLoaderRoute: typeof LocaleAppSettingsSecurityRouteImport
-      parentRoute: typeof LocaleAppRoute
+    '/$locale/admin/settings': {
+      id: '/$locale/admin/settings'
+      path: '/settings'
+      fullPath: '/$locale/admin/settings'
+      preLoaderRoute: typeof LocaleAdminSettingsRouteImport
+      parentRoute: typeof LocaleAdminRoute
     }
-    '/$locale/_app/settings/profile': {
-      id: '/$locale/_app/settings/profile'
-      path: '/settings/profile'
-      fullPath: '/$locale/settings/profile'
-      preLoaderRoute: typeof LocaleAppSettingsProfileRouteImport
-      parentRoute: typeof LocaleAppRoute
+    '/$locale/admin/users': {
+      id: '/$locale/admin/users'
+      path: '/users'
+      fullPath: '/$locale/admin/users'
+      preLoaderRoute: typeof LocaleAdminUsersRouteImport
+      parentRoute: typeof LocaleAdminRoute
     }
-    '/$locale/_app/settings/org': {
-      id: '/$locale/_app/settings/org'
-      path: '/settings/org'
-      fullPath: '/$locale/settings/org'
-      preLoaderRoute: typeof LocaleAppSettingsOrgRouteImport
-      parentRoute: typeof LocaleAppRoute
-    }
-    '/$locale/_app/settings/notifications': {
-      id: '/$locale/_app/settings/notifications'
-      path: '/settings/notifications'
-      fullPath: '/$locale/settings/notifications'
-      preLoaderRoute: typeof LocaleAppSettingsNotificationsRouteImport
-      parentRoute: typeof LocaleAppRoute
-    }
-    '/$locale/_app/settings/members': {
-      id: '/$locale/_app/settings/members'
-      path: '/settings/members'
-      fullPath: '/$locale/settings/members'
-      preLoaderRoute: typeof LocaleAppSettingsMembersRouteImport
+    '/$locale/_app/settings/api-keys': {
+      id: '/$locale/_app/settings/api-keys'
+      path: '/settings/api-keys'
+      fullPath: '/$locale/settings/api-keys'
+      preLoaderRoute: typeof LocaleAppSettingsApiKeysRouteImport
       parentRoute: typeof LocaleAppRoute
     }
     '/$locale/_app/settings/billing': {
@@ -636,12 +587,61 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof LocaleAppSettingsBillingRouteImport
       parentRoute: typeof LocaleAppRoute
     }
-    '/$locale/_app/settings/api-keys': {
-      id: '/$locale/_app/settings/api-keys'
-      path: '/settings/api-keys'
-      fullPath: '/$locale/settings/api-keys'
-      preLoaderRoute: typeof LocaleAppSettingsApiKeysRouteImport
+    '/$locale/_app/settings/members': {
+      id: '/$locale/_app/settings/members'
+      path: '/settings/members'
+      fullPath: '/$locale/settings/members'
+      preLoaderRoute: typeof LocaleAppSettingsMembersRouteImport
       parentRoute: typeof LocaleAppRoute
+    }
+    '/$locale/_app/settings/notifications': {
+      id: '/$locale/_app/settings/notifications'
+      path: '/settings/notifications'
+      fullPath: '/$locale/settings/notifications'
+      preLoaderRoute: typeof LocaleAppSettingsNotificationsRouteImport
+      parentRoute: typeof LocaleAppRoute
+    }
+    '/$locale/_app/settings/org': {
+      id: '/$locale/_app/settings/org'
+      path: '/settings/org'
+      fullPath: '/$locale/settings/org'
+      preLoaderRoute: typeof LocaleAppSettingsOrgRouteImport
+      parentRoute: typeof LocaleAppRoute
+    }
+    '/$locale/_app/settings/profile': {
+      id: '/$locale/_app/settings/profile'
+      path: '/settings/profile'
+      fullPath: '/$locale/settings/profile'
+      preLoaderRoute: typeof LocaleAppSettingsProfileRouteImport
+      parentRoute: typeof LocaleAppRoute
+    }
+    '/$locale/_app/settings/security': {
+      id: '/$locale/_app/settings/security'
+      path: '/settings/security'
+      fullPath: '/$locale/settings/security'
+      preLoaderRoute: typeof LocaleAppSettingsSecurityRouteImport
+      parentRoute: typeof LocaleAppRoute
+    }
+    '/$locale/_app/settings/webhooks': {
+      id: '/$locale/_app/settings/webhooks'
+      path: '/settings/webhooks'
+      fullPath: '/$locale/settings/webhooks'
+      preLoaderRoute: typeof LocaleAppSettingsWebhooksRouteImport
+      parentRoute: typeof LocaleAppRoute
+    }
+    '/$locale/admin/orgs_/$id': {
+      id: '/$locale/admin/orgs_/$id'
+      path: '/orgs/$id'
+      fullPath: '/$locale/admin/orgs/$id'
+      preLoaderRoute: typeof LocaleAdminOrgsIdRouteImport
+      parentRoute: typeof LocaleAdminRoute
+    }
+    '/$locale/admin/users_/$id': {
+      id: '/$locale/admin/users_/$id'
+      path: '/users/$id'
+      fullPath: '/$locale/admin/users/$id'
+      preLoaderRoute: typeof LocaleAdminUsersIdRouteImport
+      parentRoute: typeof LocaleAdminRoute
     }
   }
 }

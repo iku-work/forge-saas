@@ -65,7 +65,7 @@ describe("Profile settings: language switcher (T-069)", () => {
 
     await userEvent.click(
       screen.getByRole("button", {
-        name: t("common.locale_switcher.label", {}, "en"),
+        name: `${t("common.locale_switcher.label", {}, "en")} English`,
       }),
     );
     await userEvent.click(
@@ -96,7 +96,7 @@ describe("Profile settings: language switcher (T-069)", () => {
 
     await userEvent.click(
       screen.getByRole("button", {
-        name: t("common.locale_switcher.label", {}, "en"),
+        name: `${t("common.locale_switcher.label", {}, "en")} English`,
       }),
     );
     await screen.findByRole("menuitem", { name: "suomi" });

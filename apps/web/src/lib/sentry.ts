@@ -11,7 +11,19 @@ export function initSentry(): void {
     dsn,
     environment: import.meta.env.MODE,
     release: import.meta.env.VITE_SENTRY_RELEASE as string | undefined,
-    sendDefaultPii: false,
+    // No personal data, the same rule as the backend's send_default_pii=False.
+    // `dataCollection` replaces the deprecated `sendDefaultPii`, and setting it
+    // switches every omitted field to Sentry's collect-everything default, so
+    // each field that can carry personal data is turned off here explicitly.
+    dataCollection: {
+      userInfo: false,
+      cookies: false,
+      httpHeaders: false,
+      httpBodies: [],
+      urlQueryParams: false,
+      genAI: { inputs: false, outputs: false },
+      databaseQueryData: false,
+    },
   });
 }
 

@@ -39,6 +39,16 @@ describe("initSentry", () => {
     expect(sentry.init).not.toHaveBeenCalled();
   });
 
+  it("sends no personal data by default", () => {
+    vi.stubEnv("EXPO_PUBLIC_SENTRY_DSN", "https://public@example.com/1");
+
+    initSentry();
+
+    expect(sentry.init).toHaveBeenCalledWith(
+      expect.objectContaining({ sendDefaultPii: false }),
+    );
+  });
+
   it("tags the release with the app version and embedded fallback when no OTA update is active", () => {
     vi.stubEnv("EXPO_PUBLIC_SENTRY_DSN", "https://public@example.com/1");
 
