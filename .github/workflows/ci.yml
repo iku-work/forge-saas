@@ -1185,7 +1185,10 @@ jobs:
           cache: pnpm
 
       - name: Install frontend dependencies
-        run: pnpm install --frozen-lockfile
+        # Same one-week minimum release age as npm-update.yml, so a lockfile
+        # that entry would reject fails here, on its PR. A security fix taken
+        # early is named in minimumReleaseAgeExclude (pnpm-workspace.yaml).
+        run: pnpm install --frozen-lockfile --config.minimum-release-age=10080
 
       - name: pnpm audit (Node dependency CVEs, high+ severity)
         run: pnpm audit --audit-level=high

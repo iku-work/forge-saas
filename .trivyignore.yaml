@@ -130,7 +130,12 @@ vulnerabilities:
   # apps/mobile/src/test/decodeUriComponentPatch.test.ts runs the advisory's
   # proof of concept through the app's own dependency chain and fails if an
   # unpatched copy comes back; pnpm refuses to install if the patch stops
-  # applying. Drop both when an Expo SDK upgrade brings a newer react-navigation.
+  # applying.
+  # Permanent fix, deferred to mobile work (2026-10-31): @react-navigation/core
+  # 7.23+ no longer uses query-string, so bumping @react-navigation/native to
+  # 7.5.1+ (in range for expo-router 4, no SDK upgrade) removes the package.
+  # It changes deep-link URL parsing, so it needs a Maestro run. Then drop
+  # this entry, the patch, its test and the two pnpm auditConfig ignores.
   - id: CVE-2026-118664
     paths:
       - "pnpm-lock.yaml"
