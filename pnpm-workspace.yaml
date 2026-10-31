@@ -2,6 +2,11 @@ packages:
   - "apps/*"
   - "packages/*"
 allowBuilds:
+  # File watcher pulled in by jest-haste-map 30 (@storybook/test-runner's
+  # jest), used only in watch mode, which test-storybook never runs. Its
+  # install script is a compile-from-source fallback; the prebuilt binary
+  # arrives as an optional @parcel/watcher-<platform> package with no script.
+  '@parcel/watcher': false
   # Native binary downloader for the sentry-cli binary that @sentry/vite-plugin
   # (T-201) shells out to when uploading source maps -- CI-only (see
   # apps/web/vite.config.ts), but the postinstall still needs to fetch the
@@ -35,10 +40,10 @@ minimumReleaseAgeExclude:
   # CVE-2026-118772 (email-validation ReDoS) and node-forge CVE-2026-118779
   # and four more (TLS and ASN.1 parsing DoS). Pinned to exact versions so
   # the exemption covers these releases and nothing published after them.
-  - "joi@17.13.9"
-  - "joi@18.3.1"
-  - "node-forge@1.4.1"
-  - "node-forge@1.4.2"
+  # One entry per package: pnpm keeps only the first entry for a name, so
+  # several versions of one package are joined with `||` in that entry.
+  - "joi@17.13.9 || 18.3.1"
+  - "node-forge@1.4.1 || 1.4.2"
   # follow-redirects GHSA-mrwp-f3q8-3g9p (high), same reasoning.
   - "follow-redirects@1.16.2"
 overrides:
