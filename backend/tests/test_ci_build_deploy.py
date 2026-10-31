@@ -503,5 +503,12 @@ def test_e2e_runs_in_the_playwright_image_matching_the_installed_version() -> No
     )
     tag = re.search(r"mcr\.microsoft\.com/playwright:v([\d.]+)-", run)
     assert tag, run
-    package = json.loads((REPO_ROOT / "apps" / "web" / "package.json").read_text())
-    assert package["devDependencies"]["@playwright/test"].lstrip("^~") == tag[1]
+    # The lockfile, not package.json: a `^` range let a routine lockfile
+    # update install a newer playwright while the range still "matched".
+    lock = yaml.safe_load((REPO_ROOT / "pnpm-lock.yaml").read_text(encoding="utf-8"))
+    installed = {
+        key.split("@")[-1]
+        for key in lock["packages"]
+        if key.startswith(("playwright@", "playwright-core@", "@playwright/test@"))
+    }
+    assert installed == {tag[1]}, f"image v{tag[1]}, lockfile {sorted(installed)}"

@@ -40,7 +40,7 @@
   "devDependencies": {
     "@axe-core/playwright": "^4.12.1",
     "@eslint/js": "^10.0.1",
-    "@playwright/test": "^1.61.1",
+    "@playwright/test": "1.61.1",
     "@sentry/vite-plugin": "^5.3.0",
     "@storybook/react-vite": "^9.1.21",
     "@tailwindcss/vite": "^4.3.1",

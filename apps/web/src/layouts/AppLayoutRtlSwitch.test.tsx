@@ -58,7 +58,7 @@ describe("Profile settings: rtl language switch (T-231)", () => {
 
     await userEvent.click(
       screen.getByRole("button", {
-        name: t("common.locale_switcher.label", {}, "en"),
+        name: `${t("common.locale_switcher.label", {}, "en")} English`,
       }),
     );
     await userEvent.click(
@@ -75,7 +75,7 @@ describe("Profile settings: rtl language switch (T-231)", () => {
 
     await userEvent.click(
       screen.getByRole("button", {
-        name: t("common.locale_switcher.label", {}, "ar"),
+        name: `${t("common.locale_switcher.label", {}, "ar")} العربية`,
       }),
     );
     await userEvent.click(

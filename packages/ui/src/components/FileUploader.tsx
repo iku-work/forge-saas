@@ -363,7 +363,6 @@ export function FileUploader({
         <div
           role="button"
           tabIndex={0}
-          aria-label={t("files.uploader.drop_here")}
           onDragOver={handleDragOver}
           onDragLeave={handleDragLeave}
           onDrop={handleDrop}

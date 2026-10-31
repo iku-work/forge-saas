@@ -40,15 +40,18 @@ export function LocaleSwitcher({ onSwitch }: LocaleSwitcherProps = {}) {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
+        {/* Named by its content, "Language English", not an aria-label: WCAG
+            2.5.3 (axe's label-content-name-mismatch) wants the visible text,
+            the current language, inside the accessible name. */}
         <button
           type="button"
-          aria-label={t("common.locale_switcher.label")}
           className="flex items-center gap-2 rounded-md border px-3 py-2 text-sm font-medium"
         >
           <Globe
             className="size-4 shrink-0 text-muted-foreground"
             aria-hidden="true"
           />
+          <span className="sr-only">{t("common.locale_switcher.label")}</span>{" "}
           <span>{nativeNameFor(locale)}</span>
           <ChevronsUpDown
             className="size-4 shrink-0 text-muted-foreground"

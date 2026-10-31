@@ -145,6 +145,15 @@ overrides:
   # latest release (0.5.20) still does; tailwindcss itself already asks for
   # ^6.1.2, so 6.1.5 is a patch-level move inside the API it was built for.
   "@tailwindcss/typography>postcss-selector-parser": ">=6.1.5 <7"
+  # Playwright is pinned exactly, everywhere, to the version of the
+  # mcr.microsoft.com/playwright image CI's e2e-web job runs in. That image
+  # carries the browsers, and it renders the committed visual baselines; a
+  # newer playwright finds no browsers in it ("Executable doesn't exist").
+  # Moving it means bumping the image tag in ci.yml, these two lines and
+  # apps/web + packages/ui's package.json together, then regenerating the
+  # baselines. test_ci_build_deploy.py checks the lockfile against the tag.
+  "playwright": "1.61.1"
+  "playwright-core": "1.61.1"
   # Exempted from the blanket tar bump above (T-222): @expo/cli@0.22.28's own
   # bundled tar.js/npm.js do `require('tar').default.extract` -- CJS interop
   # that assumes any `__esModule`-flagged module also has a `.default`. tar's
