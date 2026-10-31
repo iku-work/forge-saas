@@ -5,7 +5,11 @@
 # Run as root ON THE NEW SERVER, from a copy of this file:
 #
 #   scp scripts/bootstrap-hetzner-box.sh root@<ip>:
-#   ssh root@<ip> bash bootstrap-hetzner-box.sh git@github.com:<owner>/<repo>.git
+#   ssh root@<ip> bash bootstrap-hetzner-box.sh git@github.com:<owner>/<repo>.git age1...
+#
+# The second argument is the public half of the backup key, made on your own
+# machine with `age-keygen` (docs/runbooks/new-server.md). It is required: a
+# box without backups is the default this script exists to rule out.
 #
 # Safe to run again: every step checks first. The first run stops after
 # printing a read-only deploy key for the repository; add it on GitHub and run
@@ -14,19 +18,27 @@
 # What the deploy workflow does not do, because it only updates a server that
 # already runs: harden SSH, install Docker, add swap and the `forge` user,
 # check out the repo, generate the infrastructure passwords and internal TLS
-# certificates, and start the stateful services (Postgres, pgbouncer, Redis,
-# MinIO, ClamAV, the exporters). Written down from the first deploy to a fresh
-# box on 2026-10-26, which needed every one of these by hand.
+# certificates, start the stateful services (Postgres, pgbouncer, Redis,
+# MinIO, ClamAV, the exporters) and schedule the encrypted daily backup.
+# Written down from the first deploy to a fresh box on 2026-10-26, which
+# needed every one of these by hand -- and got no backup at all, found by
+# the restore drill on 2026-10-31.
 set -euo pipefail
 # The single-quoted blocks are expanded by the deploy user's shell, on purpose.
 # shellcheck disable=SC2016
 
-REPO="${1:?usage: bootstrap-hetzner-box.sh <git ssh url of the repository>}"
+USAGE="usage: bootstrap-hetzner-box.sh <git ssh url of the repository> <age public key>"
+REPO="${1:?$USAGE}"
+BACKUP_RECIPIENT="${2:?$USAGE}"
 DEPLOY_USER=forge
 HOME_DIR=/home/$DEPLOY_USER
 APP_DIR=$HOME_DIR/forge
 
 [ "$(id -u)" = 0 ] || { echo "Run as root." >&2; exit 1; }
+# Checked before anything changes, and strictly: it is written into a file
+# both systemd and the deploy's shell read.
+[[ "$BACKUP_RECIPIENT" =~ ^age1[02-9ac-hj-np-z]{58}$ ]] ||
+  { echo "The second argument must be an age public key (age1...), not: $BACKUP_RECIPIENT" >&2; exit 1; }
 as_user() { runuser -u "$DEPLOY_USER" -- bash -euo pipefail -c "$1"; }
 
 echo "== SSH: keys only"
@@ -141,8 +153,59 @@ as_user '
     up -d --quiet-pull postgres pgbouncer redis minio minio-init clamav postgres-exporter node-exporter
 '
 
+echo "== Encrypted daily backup (docs/runbooks/backup-restore.md)"
+# The box holds only the public key: it can write backups and cannot read
+# them. ~/forge-backup.env is outside the checkout so a deploy's checkout
+# never touches it, and the deploy reads it too, for the backup it takes
+# before every migration.
+command -v age >/dev/null || { apt-get update -qq; apt-get install -y -qq age >/dev/null; }
+install -d -m 700 -o "$DEPLOY_USER" -g "$DEPLOY_USER" /var/backups/forge
+if [ ! -f "$HOME_DIR/forge-backup.env" ]; then
+  install -m 600 -o "$DEPLOY_USER" -g "$DEPLOY_USER" /dev/null "$HOME_DIR/forge-backup.env"
+  cat > "$HOME_DIR/forge-backup.env" <<EOF
+BACKUP_AGE_RECIPIENT=$BACKUP_RECIPIENT
+BACKUP_DIR=/var/backups/forge
+BACKUP_RETENTION_DAYS=14
+# The compose set the backup needs to reach Postgres: the deploy's, minus the
+# registry overlay (it requires the image refs), with DOMAIN and friends
+# interpolated from the env the deploy ships, as the deploy itself does.
+COMPOSE_FILE=docker-compose.prod.yml:docker-compose.tls.yml
+COMPOSE_ENV_FILES=backend/.env
+# Until this is set, every archive sits on the same disk as the database.
+# An rclone remote, e.g. b2:forge-backups; rclone must be installed.
+#BACKUP_REMOTE=
+EOF
+fi
+cat > /etc/systemd/system/forge-backup.service <<EOF
+[Unit]
+Description=Encrypted Postgres backup (scripts/backup-postgres.sh)
+
+[Service]
+Type=oneshot
+User=$DEPLOY_USER
+WorkingDirectory=$APP_DIR
+EnvironmentFile=$HOME_DIR/forge-backup.env
+ExecStart=/usr/bin/bash $APP_DIR/scripts/backup-postgres.sh
+EOF
+# Persistent: a run missed while the box was off happens at the next boot
+# instead of being skipped.
+cat > /etc/systemd/system/forge-backup.timer <<EOF
+[Unit]
+Description=Daily encrypted Postgres backup
+
+[Timer]
+OnCalendar=*-*-* 03:30:00 UTC
+Persistent=true
+
+[Install]
+WantedBy=timers.target
+EOF
+systemctl daemon-reload
+systemctl enable --now forge-backup.timer >/dev/null
+
 echo
 echo "Done. Next, from docs/runbooks/new-server.md:"
 [ -f "$APP_DIR/bitwarden-values.txt" ] &&
   echo "  - copy $APP_DIR/bitwarden-values.txt into Bitwarden, then delete it"
 echo "  - add the CI deploy key and the GitHub environment secrets, then deploy"
+echo "  - after the first deploy, run the restore drill (backup-restore.md)"

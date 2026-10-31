@@ -240,6 +240,23 @@ jobs:
             docker logout ghcr.io >/dev/null
             trap - EXIT
 
+            # A restore point before the schema changes: the newest archive in
+            # /var/backups/forge is the state this migration started from
+            # (docs/runbooks/backup-restore.md). A first deploy has no schema
+            # yet, so nothing to keep. </dev/null on both: this script arrives
+            # on bash's stdin, and compose exec forwards stdin into the
+            # container, which would swallow the lines below -- the migration
+            # included -- and still exit 0.
+            schema=\$(docker compose $COMPOSE exec -T postgres \\
+              psql -U postgres -d forge -tAc "select to_regclass('public.alembic_version')" </dev/null)
+            if [ "\$schema" = alembic_version ]; then
+              if [ ! -f ~/forge-backup.env ]; then
+                echo "No ~/forge-backup.env: this box has no backups (scripts/bootstrap-hetzner-box.sh). Refusing to migrate without one." >&2
+                exit 1
+              fi
+              (set -a; . ~/forge-backup.env; set +a; bash scripts/backup-postgres.sh </dev/null)
+            fi
+
             docker compose $COMPOSE run --rm --no-deps backend python -m app.core.migrations
           EOF
 
