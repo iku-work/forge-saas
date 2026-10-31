@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# PROD-05, the half that matters: restoring one of backup-postgres.sh's
+# PROD-05, the half that matters: restoring one of backup.sh's database
 # archives.
 #
 # An untested backup is a belief, not a backup -- so this script's primary
@@ -27,7 +27,7 @@
 #                    ssh forge@<box> 'cd ~/forge && set -a && . ~/forge-backup.env &&
 #                      set +a && AGE_IDENTITY=/dev/stdin ./scripts/restore-postgres.sh <archive>' <key.txt
 #   COMPOSE_FILE   docker compose's own colon-separated variable -- see
-#                  backup-postgres.sh for why it is not a -f flag.
+#                  backup.sh for why it is not a -f flag.
 
 set -euo pipefail
 
