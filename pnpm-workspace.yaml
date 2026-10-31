@@ -252,8 +252,8 @@ auditConfig:
     # 0.5.1's decoder, and pnpm audit still matches the version number. 0.5.1
     # itself is ESM-only and query-string require()s it.
     # apps/mobile/src/test/decodeUriComponentPatch.test.ts proves the shipped
-    # copy is the fixed one. Drop these with the patch at the next Expo SDK
-    # upgrade.
+    # copy is the fixed one. The permanent fix (a react-navigation bump that
+    # drops query-string) is described at this entry in .trivyignore.yaml.
     - GHSA-qr28-fpjm-wq7f
     - GHSA-vcc3-ghjq-m6fr
     # 2026-10-30, moderate and low advisories with no fix that can be taken,
