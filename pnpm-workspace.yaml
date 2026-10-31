@@ -30,6 +30,17 @@ minimumReleaseAgeExclude:
   - "@tanstack/react-query@5.101.1"
   - '@sentry/expo-upload-sourcemaps@8.17.2'
   - '@sentry/react-native@8.17.2'
+  # 2026-10-31: security fixes taken before the one-week minimum release age
+  # (npm-update.yml) because each closes a high-severity advisory: joi
+  # CVE-2026-118772 (email-validation ReDoS) and node-forge CVE-2026-118779
+  # and four more (TLS and ASN.1 parsing DoS). Pinned to exact versions so
+  # the exemption covers these releases and nothing published after them.
+  - "joi@17.13.9"
+  - "joi@18.3.1"
+  - "node-forge@1.4.1"
+  - "node-forge@1.4.2"
+  # follow-redirects GHSA-mrwp-f3q8-3g9p (high), same reasoning.
+  - "follow-redirects@1.16.2"
 overrides:
   # Three copies of @types/node were in this tree (22, 24, 26) with nothing
   # choosing between them, so which one the Astro language server resolved
@@ -121,7 +132,9 @@ overrides:
   # http-server). Same rule: each stays on its own major.
   "vite@6": ">=6.4.4 <7"
   "vite@8": ">=8.2.4 <9"
-  "follow-redirects@1": ">=1.16.1 <2"
+  # Raised 2026-10-31 for GHSA-mrwp-f3q8-3g9p (custom credentials could
+  # follow a cross-origin redirect).
+  "follow-redirects@1": ">=1.16.2 <2"
   # 2026-10-24: GHSA-27r3-jxmh-p828 (body-parser, via @lhci/cli>express),
   # GHSA-xjj6-f33q-929c (undici 6/7/8, via @sentry/cli, jsdom and astro; 7 is
   # raised in the parent-scoped jsdom>undici entry below) and
@@ -131,6 +144,14 @@ overrides:
   "undici@6": ">=6.29.1 <7"
   "undici@8": ">=8.12.2 <9"
   "zod@4": ">=4.6.6 <5"
+  # 2026-10-31: joi CVE-2026-118772 (email-validation ReDoS; joi 17 via
+  # wait-on, joi 18 as @hookform/resolvers' peer) and node-forge
+  # CVE-2026-118779 plus four more (TLS/ASN.1 parsing DoS, via Expo CLI's
+  # dev-server certificate). The fixed releases are days old, so they are
+  # also listed in minimumReleaseAgeExclude above.
+  "joi@17": ">=17.13.9 <18"
+  "joi@18": ">=18.3.1 <19"
+  "node-forge@1": ">=1.4.1 <2"
   # Found by `pnpm audit`, which reads the GitHub advisory database and so
   # sees a different (larger) set than trivy does. Same rule as above: each
   # stays inside the major its consumers asked for.
@@ -204,10 +225,6 @@ auditConfig:
     # if the Lighthouse runner fetches a PAC file over ftp://, which it never
     # does here.
     - GHSA-c475-qrg2-pj4r
-    # node-forge, via react-native's dev-middleware>selfsigned (a local dev
-    # server certificate). The advisory names >=1.4.1; npm's latest is 1.4.0
-    # (2026-10-02). Take the fix once it is published.
-    - GHSA-86w9-cpqp-85rv
     # tmp, via @lhci/cli>inquirer>external-editor. A fix exists (0.2.6) but its
     # consumers ask for ^0.0.33 and ^0.1.0 -- in 0.x semver those are two
     # breaking jumps away, forced on a transitive dependency of a dev-only
@@ -257,6 +274,16 @@ auditConfig:
     - GHSA-gvwx-54wh-qm9j
     - GHSA-w8wr-v893-vjvp
     - GHSA-52f5-9888-hmc6
+    # 2026-10-31, moderate, fixed only in a major the consumers do not accept:
+    # - minimatch < 11.0.1 (GHSA-g3hv-75wg-m249): pattern-expansion DoS.
+    #   Every copy (3, 9, 10) belongs to build, lint and test tooling (eslint,
+    #   typescript-eslint, glob, rimraf, Expo config, @lhci/cli) matching
+    #   patterns written in this repo, never one taken from a request.
+    # - glob 9 to 14.0.1 (GHSA-3g3m-2fjr-6pw4): aborting a walk via an
+    #   AbortSignal does not stop it. Same tooling consumers, none relying on
+    #   an abort to bound a walk over untrusted input.
+    - GHSA-g3hv-75wg-m249
+    - GHSA-3g3m-2fjr-6pw4
 
 patchedDependencies:
   decode-uri-component@0.2.2: patches/decode-uri-component@0.2.2.patch
