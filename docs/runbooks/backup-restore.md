@@ -100,63 +100,45 @@ written 0600, pruned on a retention window, optionally copied off-host with
 rclone. It refuses to run rather than writing plaintext if the recipient or
 `age` is missing.
 
-**Set up the key first, and not on this box.** The point of public-key
+**The key is made on your laptop, not the box.** The point of public-key
 encryption here is that the host can write backups and cannot read them, so
 a compromise of the box does not hand over a copy of every row in the
-product:
+product. `age-keygen -o <product>-backup-key.txt` prints the public key; the
+file goes wherever `ENCRYPTION_KEY`'s recovery copy lives, because the two are
+needed together (see "Ciphertext needs its key" above).
+
+**`scripts/bootstrap-hetzner-box.sh` installs the rest**, taking the public
+key as its second argument (`new-server.md`, step 3). That script is the
+source of truth for the units; what it sets up:
+
+- `~forge/forge-backup.env`, mode 600: the recipient, `BACKUP_DIR`
+  (`/var/backups/forge`, owned by `forge`, mode 700), 14 days' retention, and
+  the compose set the script needs (`COMPOSE_FILE`, plus `COMPOSE_ENV_FILES`
+  for the hostnames compose interpolates). It sits outside the checkout, so a
+  deploy never touches it. Edit it to set `BACKUP_REMOTE`.
+- `forge-backup.service`, running the script as `forge` with that file, and
+  `forge-backup.timer`, daily at 03:30 UTC with `Persistent=true`: a backup
+  missed while the box was off runs at the next boot instead of being skipped.
+- Every deploy (`deploy-hetzner.yml`, "Migrate on the box") also runs the
+  script before it migrates, and refuses to migrate on a box without
+  `forge-backup.env`. The newest archive is therefore always the state the
+  last migration started from.
 
 ```sh
-# on your laptop, NOT the server
-age-keygen -o forge-backup-key.txt      # prints the public key
-# store forge-backup-key.txt wherever you keep ENCRYPTION_KEY's recovery
-# copy -- the two are needed together, see "Ciphertext needs its key" above
+systemctl list-timers forge-backup.timer      # the next run
+journalctl -u forge-backup.service            # the last one
+sudo systemctl start forge-backup.service     # one now
 ```
-
-Then on the server, as a systemd timer (preferred — cron swallows output):
-
-```ini
-# /etc/systemd/system/forge-backup.service
-[Service]
-Type=oneshot
-WorkingDirectory=/srv/forge
-Environment=BACKUP_AGE_RECIPIENT=age1...        # the public key
-Environment=BACKUP_DIR=/var/backups/forge
-Environment=BACKUP_RETENTION_DAYS=14
-Environment=BACKUP_REMOTE=b2:forge-backups      # omit for local-only
-# docker compose's own variable, colon-separated. Name every overlay the
-# stack was brought up with -- the base file alone is not the deployment,
-# and the script does not guess. `docker inspect <container> --format
-# '{{index .Config.Labels "com.docker.compose.project.config_files"}}'`
-# prints the set that is actually running.
-Environment=COMPOSE_FILE=docker-compose.prod.yml:docker-compose.tls.yml:docker-compose.host-build.yml
-Environment=POSTGRES_USER=postgres
-Environment=POSTGRES_DB=forge
-ExecStart=/srv/forge/scripts/backup-postgres.sh
-```
-
-```ini
-# /etc/systemd/system/forge-backup.timer
-[Timer]
-OnCalendar=*-*-* 03:30:00 UTC
-Persistent=true
-[Install]
-WantedBy=timers.target
-```
-
-```sh
-systemctl enable --now forge-backup.timer
-systemctl list-timers forge-backup.timer      # confirm the next run
-journalctl -u forge-backup.service            # confirm the last one
-```
-
-`Persistent=true` matters on a single box: it runs a missed backup after a
-reboot rather than skipping the day silently.
 
 ### `scripts/restore-postgres.sh` — and the drill
 
 ```sh
-# the drill: restores into a scratch database, times it, spot-checks it
-AGE_IDENTITY=forge-backup-key.txt   ./scripts/restore-postgres.sh /var/backups/forge/forge-<stamp>.dump.age
+# the drill, from your laptop: restores into a scratch database, times it,
+# spot-checks it. The key is streamed over ssh and read into memory; it is
+# never written to the box's disk.
+ssh forge@<box> 'cd ~/forge && set -a && . ~/forge-backup.env && set +a &&
+  AGE_IDENTITY=/dev/stdin ./scripts/restore-postgres.sh /var/backups/forge/forge-<stamp>.dump.age' \
+  < <product>-backup-key.txt
 ```
 
 It defaults to the scratch database `forge_restore_check` precisely so the
@@ -374,6 +356,26 @@ in at start, so a restarted container reuses its stale copy.
       database (only the scratch path was exercised), and the timing at any
       meaningful data volume -- 102 KB restores in 2s and tells you nothing
       about 10 GB.
+- [x] **Self-hosted drill on a bootstrapped box (2026-10-31, forge-prod-2).**
+      The first drill on a server built by `bootstrap-hetzner-box.sh` and
+      deployed by CI, and it found that path had **no backups at all**: no
+      timer, no `age`, nothing in any backup directory. The deploy also
+      migrated with no restore point. Both fixed in the same change: the
+      bootstrap now requires the backup key and schedules the backup, and
+      the deploy backs up before it migrates.
+
+      After re-running the bootstrap: `backup-postgres.sh`, run as `forge`
+      from `forge-backup.env` exactly as the unit runs it, wrote a
+      **64,867-byte** archive, mode 0600, with an age header. The restore,
+      with the key streamed from the operator's laptop over ssh and never
+      written to the box, took **3 seconds**. All **27 tables** matched the
+      live database row for row, and the five migration heads were
+      identical. The scratch database was dropped afterwards.
+
+      Not covered this time: decrypting an `EncryptedString` column, because
+      this box has never had a signup and the columns hold no rows. The
+      2026-09-29 drill covers that check. Archives are still not off-host
+      (`BACKUP_REMOTE` unset).
 - [x] **Docker-network TLS exercised end-to-end on the self-hosted path
       (2026-09-03).** `make prod-compose-tls-check` against the real
       `docker-compose.prod.yml` with `ENVIRONMENT=prod`: certificate

@@ -472,6 +472,25 @@ def test_hetzner_starts_caddy_on_its_own_before_the_backend() -> None:
         ], name
 
 
+def test_hetzner_takes_a_backup_before_it_migrates() -> None:
+    # The restore drill on 2026-10-31 found the CI deploy migrating with no
+    # restore point. The backup runs first, a box without backups refuses to
+    # migrate, and every compose exec reads /dev/null: the remote script is
+    # bash's stdin, and an exec that inherits it eats the migration line.
+    steps = _deploy_workflow("hetzner")["jobs"]["deploy"]["steps"]
+    run = next(s["run"] for s in steps if s.get("name") == "Migrate on the box")
+    backup = run.index("scripts/backup-postgres.sh")
+    assert backup < run.index("python -m app.core.migrations")
+    assert "Refusing to migrate" in run
+    execs = [m.start() for m in re.finditer(r"compose \$COMPOSE exec", run)]
+    assert execs, "the schema check moved; keep it off stdin"
+    for start in [*execs, backup]:
+        # To the end of the shell statement, following `\` continuations.
+        statement = re.match(r"(?:[^\n]*\\\\\n)*[^\n]*", run[start:])
+        assert statement
+        assert "</dev/null" in statement.group(), run[start:]
+
+
 def test_hetzner_verifies_every_service_before_declaring_success() -> None:
     # Review OCT-05: /health/ready alone passed while a worker crash-looped.
     steps = _deploy_workflow("hetzner")["jobs"]["deploy"]["steps"]

@@ -63,9 +63,21 @@ after switching DNS (`docker compose ... restart caddy`).
 
 ### 3. Run the bootstrap script
 
+First, on your own machine and never on the server, make the backup key:
+
+```bash
+age-keygen -o <product>-backup-key.txt
+```
+
+It prints the public key (`age1...`). Store the file in the Password Manager
+next to `ENCRYPTION_KEY`'s recovery copy, then delete it locally. A restored
+database needs both: the archive is encrypted to this key, and the encrypted
+columns inside it need `ENCRYPTION_KEY`. The server only ever holds the public
+key, so it can write backups but cannot read them.
+
 ```bash
 scp scripts/bootstrap-hetzner-box.sh root@<ip>:
-ssh root@<ip> bash bootstrap-hetzner-box.sh git@github.com:<owner>/<repo>.git
+ssh root@<ip> bash bootstrap-hetzner-box.sh git@github.com:<owner>/<repo>.git age1...
 ```
 
 The first run stops after printing a **read-only deploy key**. Add it on GitHub
@@ -75,10 +87,14 @@ unticked, and run the same command again. The second run:
 - checks out the repo;
 - generates the Postgres, MinIO and KMS secrets, and the internal TLS
   certificates;
-- starts the stateful services.
+- starts the stateful services;
+- installs `age` and schedules the encrypted daily backup
+  (`forge-backup.timer`, configured in `~forge/forge-backup.env`). Every deploy
+  also takes one before it migrates.
 
-Re-running it is safe: it never overwrites a generated password or
-certificate.
+Re-running it is safe: it never overwrites a generated password, certificate
+or backup config. To copy backups off the server, set `BACKUP_REMOTE` in
+`~forge/forge-backup.env` (see `backup-restore.md`).
 
 ### 4. Move the generated values into Bitwarden
 
@@ -140,6 +156,8 @@ only built once `DEPLOY_TARGET` is set.
   host serves its landing page.
 - On the server: `docker ps` shows backend, worker, scanner-worker and caddy
   next to the stateful services from step 3.
+- Backups restore: run the drill in `backup-restore.md` once against the first
+  archive. Until it has run, the backup is a belief.
 - Before anyone signs up: the Bitwarden `JWT_PRIVATE_KEY` and `ENCRYPTION_KEY`
   were generated for this product. A published key would already have stopped
   the deploy; a key shared with another product would not.

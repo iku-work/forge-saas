@@ -22,7 +22,10 @@
 #
 # Env:
 #   AGE_IDENTITY   (required) path to the age private key. Kept off the box
-#                  in normal operation -- bring it, use it, take it away.
+#                  in normal operation. /dev/stdin works, so the key can be
+#                  streamed over ssh and never written to the box's disk:
+#                    ssh forge@<box> 'cd ~/forge && set -a && . ~/forge-backup.env &&
+#                      set +a && AGE_IDENTITY=/dev/stdin ./scripts/restore-postgres.sh <archive>' <key.txt
 #   COMPOSE_FILE   docker compose's own colon-separated variable -- see
 #                  backup-postgres.sh for why it is not a -f flag.
 
@@ -50,8 +53,12 @@ fi
 archive="${1:?usage: restore-postgres.sh [--into DB] ARCHIVE}"
 [ -f "$archive" ] || die "no such archive: $archive"
 [ -n "${AGE_IDENTITY:-}" ] || die "AGE_IDENTITY is not set (path to the age private key)"
-[ -f "$AGE_IDENTITY" ] || die "no such identity file: $AGE_IDENTITY"
+[ -r "$AGE_IDENTITY" ] || die "cannot read identity file: $AGE_IDENTITY"
 command -v age >/dev/null 2>&1 || die "age is not installed"
+# Read once, up front, and kept in memory: when it is stdin, the compose
+# exec calls below would otherwise forward it into the container first.
+identity="$(cat "$AGE_IDENTITY")"
+[ -n "$identity" ] || die "identity file is empty: $AGE_IDENTITY"
 
 live_db="${POSTGRES_DB:-forge}"
 if [ "$TARGET_DB" = "$live_db" ]; then
@@ -76,7 +83,7 @@ psql_run() {
 psql_run -d postgres -c "DROP DATABASE IF EXISTS \"$TARGET_DB\";"
 psql_run -d postgres -c "CREATE DATABASE \"$TARGET_DB\";"
 
-age -d -i "$AGE_IDENTITY" "$archive" |
+age -d -i <(printf '%s\n' "$identity") "$archive" |
     docker compose exec -T postgres \
         pg_restore -U "${POSTGRES_USER:-postgres}" -d "$TARGET_DB" --no-owner --no-privileges
 
