@@ -224,7 +224,7 @@ jobs:
             "cd ~/forge && head -n1 | docker login ghcr.io -u $ACTOR --password-stdin"
           ssh -i ~/.ssh/id_deploy "$SSH_USER@$SSH_HOST" bash -euo pipefail <<EOF
             cd ~/forge
-            # --prune: a deleted branch `x` left behind blocks fetching a new `x/y`.
+            # --prune: a deleted branch "x" left behind blocks fetching a new "x/y".
             git fetch --quiet --prune origin
             git checkout --quiet $TAG
             if [ -f backend/.env.next ]; then
