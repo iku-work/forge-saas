@@ -174,10 +174,14 @@ after.
 **What R2 gives up, deliberately.** An R2 token that can write can also
 delete, so a key stolen from the box could remove archives *older* than the
 lock period; the newest 30 days stay protected. The Cloudflare account then
-also holds both DNS and backups: give it a passkey or hardware key. For a
-product holding sensitive data, use a provider with upload-only keys
-(Backblaze B2: a key without `deleteFiles`, plus Object Lock). Only the
-rclone remote changes; `backup.sh` does not care.
+also holds both DNS and backups: give it a passkey or hardware key.
+
+With `DATA_SENSITIVITY=high` (ADR-0009) R2 is refused: every deploy runs
+`scripts/check-backup-remote.sh`, which requires the box's key to fail at
+listing the bucket and at deleting. Use a provider with upload-only keys
+(Backblaze B2: an application key with `writeFiles` only, plus Object Lock).
+Not yet exercised against a real B2 key: expect `backup.sh`'s `rclone copy`
+to need `--no-check-dest`, since it may not look at what is already there.
 
 **Things that cost time here:** rclone 1.60 (Ubuntu's) verifies each upload
 with `HEAD ?versionId=...`, which R2 answers `501 Not Implemented`; the

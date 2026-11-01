@@ -661,6 +661,13 @@ class AdminImpersonationService:
         ip: str | None,
         ua: str | None,
     ) -> tuple[str, datetime]:
+        # ADR-0009: with DATA_SENSITIVITY=high, support sees what the user shows it,
+        # not everything their account can open.
+        if get_settings().DATA_SENSITIVITY == "high":
+            raise PermissionDeniedError(
+                "errors.impersonation_disabled_sensitive_data",
+                fallback="Impersonation is turned off: this product holds sensitive data",
+            )
         if target.is_superadmin:
             raise PermissionDeniedError(
                 "errors.cannot_impersonate_superadmin",

@@ -87,4 +87,5 @@ as the change" rule in step 4 is for.
 | [0006](0006-enterprise-sso.md) | Enterprise SSO — OIDC first, SAML on a trigger | Accepted | 2026-08-31 |
 | [0007](0007-tenancy-model.md) | Tenancy model — row-level, with RLS as the named next step | Accepted | 2026-08-31 |
 | [0008](0008-design-language-v2.md) | Design language v2 — one webfont, one accent token | Accepted | 2026-10-02 |
+| [0009](0009-data-sensitivity.md) | A declared data-sensitivity level that the deploy enforces | Accepted | 2026-11-01 |
 <!-- adr-index:end -->

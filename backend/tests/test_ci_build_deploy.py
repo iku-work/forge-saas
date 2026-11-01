@@ -491,6 +491,53 @@ def test_hetzner_takes_a_backup_before_it_migrates() -> None:
         assert "</dev/null" in statement.group(), run[start:]
 
 
+def test_hetzner_requires_off_box_backups_and_checks_high_sensitivity_keys() -> None:
+    # ADR-0009: every deploy needs an off-host copy before data changes, and
+    # a high-sensitivity product's key must fail to list or delete it.
+    steps = _deploy_workflow("hetzner")["jobs"]["deploy"]["steps"]
+    run = next(s["run"] for s in steps if s.get("name") == "Migrate on the box")
+    migrate = run.index("python -m app.core.migrations")
+    assert run.index("^BACKUP_REMOTE=") < migrate
+    assert "^DATA_SENSITIVITY=" in run
+    assert run.index("scripts/check-backup-remote.sh </dev/null") < migrate
+
+
+def _check_backup_remote(tmp_path: Path, *, can_list: bool, can_delete: bool) -> int:
+    """scripts/check-backup-remote.sh against a stand-in rclone with the given powers."""
+    bash = shutil.which("bash")
+    if bash is None:
+        pytest.skip("needs bash")
+    stub = tmp_path / "rclone"
+    stub.write_text(
+        "#!/usr/bin/env bash\n"
+        'case "$1" in\n'
+        "  rcat) cat >/dev/null ;;\n"
+        f"  lsf) exit {0 if can_list else 1} ;;\n"
+        f"  deletefile) exit {0 if can_delete else 1} ;;\n"
+        "esac\n",
+        newline="\n",
+    )
+    stub.chmod(0o755)
+    path = f"{tmp_path}{os.pathsep}{os.environ['PATH']}"
+    return subprocess.run(  # noqa: S603 -- fixed argv: the script under test
+        [bash, str(REPO_ROOT / "scripts" / "check-backup-remote.sh")],
+        env={**os.environ, "PATH": path, "BACKUP_REMOTE": "remote:bucket"},
+        capture_output=True,
+        check=False,
+    ).returncode
+
+
+@pytest.mark.parametrize(
+    ("can_list", "can_delete", "passes"),
+    [(False, False, True), (True, False, False), (False, True, False), (True, True, False)],
+)
+def test_check_backup_remote_passes_only_an_upload_only_key(
+    tmp_path: Path, *, can_list: bool, can_delete: bool, passes: bool
+) -> None:
+    returncode = _check_backup_remote(tmp_path, can_list=can_list, can_delete=can_delete)
+    assert (returncode == 0) is passes
+
+
 def test_hetzner_verifies_every_service_before_declaring_success() -> None:
     # Review OCT-05: /health/ready alone passed while a worker crash-looped.
     steps = _deploy_workflow("hetzner")["jobs"]["deploy"]["steps"]

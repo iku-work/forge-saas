@@ -411,6 +411,15 @@ class Settings(BaseSettings):
     # worker's memory budget a burst can claim.
     SCAN_MAX_CONCURRENCY: int = Field(default=4, ge=1)
 
+    # How sensitive this product's data is (docs/adr/0009-data-sensitivity.md).
+    # "standard": ordinary account data. "high": GDPR special-category
+    # data (health, biometrics, beliefs), financial account data, children's
+    # data, or customers' own secrets -- it turns off impersonation, and the
+    # deploy then requires a backup key that cannot list or delete backups.
+    # No default on purpose: outside dev it must be declared, so every product
+    # decides it when it starts rather than inheriting the template's answer.
+    DATA_SENSITIVITY: Literal["standard", "high"] | None = None
+
     # Superadmin (T-140) — dedicated Loguru sink admin actions are written to,
     # in addition to the normal log stream.
     ADMIN_AUDIT_LOG_PATH: str = "admin-audit.log"
@@ -499,6 +508,12 @@ class Settings(BaseSettings):
         rules = (
             ("*" in self.ALLOWED_ORIGINS, "ALLOWED_ORIGINS must not contain '*' outside dev"),
             (not self.FORCE_HTTPS, "FORCE_HTTPS must be true in non-dev environments"),
+            (
+                self.DATA_SENSITIVITY is None,
+                "DATA_SENSITIVITY must be declared outside dev: 'standard' for ordinary "
+                "account data, 'high' for health, biometric, financial, children's "
+                "data or customers' secrets. See docs/adr/0009-data-sensitivity.md.",
+            ),
             (
                 self.VIRUS_SCANNER in _NON_SCANNING_VIRUS_SCANNERS,
                 f"VIRUS_SCANNER={self.VIRUS_SCANNER!r} does not scan anything and must "

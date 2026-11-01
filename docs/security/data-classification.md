@@ -24,6 +24,26 @@ added here.
 scrubbing) and file, not just the classification — see [T-215's key
 inventory](key-management.md) for the encryption keys themselves.
 
+### The product's level: `DATA_SENSITIVITY`
+
+The levels above are per column. Separately, every deployment declares what
+the product as a whole holds (`DATA_SENSITIVITY`,
+[ADR-0009](../adr/0009-data-sensitivity.md)), and production refuses to start
+without it:
+
+- **`standard`** — the columns below and their like: accounts, names, emails,
+  files users choose to upload. Sensitive *columns* in the sense above, in an
+  ordinary product. The template itself is `standard`.
+- **`high`** — the product's own data includes GDPR Article 9
+  special-category data (health, genetic or biometric data, racial or ethnic
+  origin, political opinions, religious beliefs, trade-union membership, sex
+  life or orientation), financial account data, data about children, or
+  secrets its customers entrust to it. `high` turns off impersonation and
+  requires a backup key that cannot list or delete backups.
+
+When unsure, it is `high`: the cost of the stricter level is one more account
+and no impersonation, the cost of the wrong one is a breach report.
+
 ## 2. `app.modules.auth`
 
 | Column | Classification | Current protection | Retention |

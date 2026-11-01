@@ -17,6 +17,7 @@ from redis.asyncio import Redis
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import get_settings
 from app.modules.admin.service import AdminImpersonationService
 from app.modules.audit.models import AuditEvent
 from app.modules.auth.models import User
@@ -106,6 +107,28 @@ async def test_impersonate_another_superadmin_returns_403(
     )
 
     assert response.status_code == 403
+
+
+async def test_impersonate_is_refused_when_data_sensitivity_is_high(
+    client: httpx.AsyncClient, session: AsyncSession, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # ADR-0009: DATA_SENSITIVITY=high turns impersonation off outright,
+    # and nothing is issued or audited as started.
+    monkeypatch.setattr(get_settings(), "DATA_SENSITIVITY", "high")
+    target = await _make_user(session)
+    admin_client, _ = await _as_superadmin(client, session)
+
+    response = await admin_client.post(
+        f"/api/v1/admin/users/{target.id}/impersonate",
+        json={"reason": "Investigating a bug report", "duration_minutes": 15},
+    )
+
+    assert response.status_code == 403
+    assert response.json()["error"]["message_key"] == "errors.impersonation_disabled_sensitive_data"
+    started = await session.execute(
+        select(AuditEvent).where(AuditEvent.action == "admin.impersonate.start")
+    )
+    assert started.scalars().all() == []
 
 
 async def test_impersonate_missing_reason_returns_422(

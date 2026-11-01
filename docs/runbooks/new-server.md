@@ -26,7 +26,10 @@ Reach for this when:
   secret per `backend/.env.example` name, with your own values. Never copy a
   value from a committed `.env.*` file. Production refuses the keys that were
   once committed (`_PUBLISHED_KEY_FINGERPRINTS` in `app/core/config.py`), and
-  the others are dummies.
+  the others are dummies. It includes `DATA_SENSITIVITY`, `standard` or
+  `high`: decide it now (`docs/security/data-classification.md`). Production
+  refuses to start without it, and `high` needs an upload-only backup key,
+  which rules out R2 in step 3.
 - **A machine account** with **Can read** on that project, and an access token
   for it. The token is shown once; it goes straight into GitHub in step 5.
 
