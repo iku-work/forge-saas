@@ -54,6 +54,15 @@ def test_force_https_required_outside_dev(monkeypatch: pytest.MonkeyPatch) -> No
         Settings(_env_file=FIXTURE_ENV_FILE, ENVIRONMENT="prod", FORCE_HTTPS=False)
 
 
+def test_data_sensitivity_must_be_declared_outside_dev(monkeypatch: pytest.MonkeyPatch) -> None:
+    # ADR-0009: no default, so a product cannot inherit the template's answer.
+    _clear_settings_env(monkeypatch)
+
+    with pytest.raises(RuntimeError, match="DATA_SENSITIVITY"):
+        Settings(_env_file=FIXTURE_ENV_FILE, **{**PROD_SAFE_OVERRIDES, "DATA_SENSITIVITY": None})
+    assert Settings(_env_file=FIXTURE_ENV_FILE).DATA_SENSITIVITY is None  # dev: optional
+
+
 def test_force_https_true_in_prod_does_not_raise(monkeypatch: pytest.MonkeyPatch) -> None:
     _clear_settings_env(monkeypatch)
 

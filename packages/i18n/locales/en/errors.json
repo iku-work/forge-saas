@@ -71,6 +71,7 @@
   "superadmin_required": "Superadmin access required.",
   "token_revoked": "Token has been revoked.",
   "cannot_impersonate_superadmin": "Cannot impersonate another superadmin.",
+  "impersonation_disabled_sensitive_data": "Impersonation is turned off: this product holds sensitive data.",
   "impersonation_blocked": "This action is blocked while you're impersonating another user. End impersonation to perform it as yourself.",
   "not_impersonating": "This token is not an impersonation session.",
   "service_unavailable": "{feature} is temporarily unavailable. Please try again shortly.",

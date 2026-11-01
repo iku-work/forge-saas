@@ -70,6 +70,7 @@
   "superadmin_required": "مطلوب وصول المسؤول العام.",
   "token_revoked": "تم إلغاء الرمز.",
   "cannot_impersonate_superadmin": "لا يمكن انتحال شخصية مسؤول عام آخر.",
+  "impersonation_disabled_sensitive_data": "انتحال الشخصية معطّل: يحتوي هذا المنتج على بيانات حساسة.",
   "impersonation_blocked": "هذا الإجراء محظور أثناء انتحالك شخصية مستخدم آخر. أنهِ انتحال الشخصية لتنفيذه بنفسك.",
   "not_impersonating": "هذا الرمز ليس جلسة انتحال شخصية.",
   "service_unavailable": "{feature} غير متاحة مؤقتًا. يرجى المحاولة بعد قليل.",

@@ -70,6 +70,7 @@
   "superadmin_required": "Superadmin-Zugriff erforderlich.",
   "token_revoked": "Das Token wurde widerrufen.",
   "cannot_impersonate_superadmin": "Die Identität eines anderen Superadmins kann nicht angenommen werden.",
+  "impersonation_disabled_sensitive_data": "Identitätsübernahme ist deaktiviert: Dieses Produkt verarbeitet sensible Daten.",
   "impersonation_blocked": "Diese Aktion ist gesperrt, solange Sie die Identität eines anderen Nutzers annehmen. Beenden Sie die Identitätsübernahme, um sie selbst auszuführen.",
   "not_impersonating": "Dieses Token gehört zu keiner Identitätswechsel-Sitzung.",
   "service_unavailable": "{feature} ist vorübergehend nicht verfügbar. Bitte versuchen Sie es in Kürze erneut.",

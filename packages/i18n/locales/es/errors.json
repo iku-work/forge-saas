@@ -70,6 +70,7 @@
   "superadmin_required": "Se requiere acceso de superadministrador.",
   "token_revoked": "El token ha sido revocado.",
   "cannot_impersonate_superadmin": "No se puede suplantar a otro superadministrador.",
+  "impersonation_disabled_sensitive_data": "La suplantación está desactivada: este producto contiene datos sensibles.",
   "impersonation_blocked": "Esta acción está bloqueada mientras suplantas a otro usuario. Finaliza la suplantación para realizarla como tú mismo.",
   "not_impersonating": "Este token no corresponde a una sesión de suplantación.",
   "service_unavailable": "{feature} no está disponible temporalmente. Inténtalo de nuevo en breve.",

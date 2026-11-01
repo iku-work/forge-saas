@@ -8,6 +8,7 @@ Every new non-dev invariant adds its passing value here, once.
 PROD_SAFE_OVERRIDES: dict[str, object] = {
     "ENVIRONMENT": "prod",
     "FORCE_HTTPS": True,
+    "DATA_SENSITIVITY": "standard",
     "VIRUS_SCANNER": "clamav",
     "PASSWORD_PEPPER": "a-real-pepper",
     "DATABASE_URL": "postgresql+asyncpg://u:p@localhost:5432/db?sslmode=require",
