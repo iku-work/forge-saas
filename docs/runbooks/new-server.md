@@ -16,7 +16,8 @@ Reach for this when:
 - **a new product** built from this template needs its production (or
   staging) server;
 - **a server is replaced** (new region, new size, a rebuilt box). Run this on
-  the new one, move the data (`backup-restore.md`), then switch DNS.
+  the new one, and restore the data (`backup-restore.md`) once it has deployed.
+  DNS moves in step 2, so plan the switch: the old server stops serving then.
 
 ## Pre-checks
 
@@ -63,6 +64,10 @@ Encrypt can only reach the server once DNS points at it. On a server that DNS
 does not point at yet, Caddy retries on a growing back-off, and HTTPS stays
 down for as long as it waits. When replacing a server, restart caddy right
 after switching DNS (`docker compose ... restart caddy`).
+
+The deploy enforces this order: its verify step asks this server's own Caddy
+for the site, and fails while it has no certificate. A smoke test over public
+DNS cannot tell you this, because it passes on whichever server DNS points at.
 
 ### 3. Run the bootstrap script
 

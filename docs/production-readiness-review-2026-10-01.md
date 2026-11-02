@@ -12,7 +12,7 @@ Reviewed checkout `e8b58601` on `files-exclude-avatars-and-wordmark-link`, the S
 | OCT-02 | **Fixed.** Purge and export follow the tables that exist, not module flags. Regression test (notifications switched off after use) fails on the old code with `notification_user_id_fkey`. |
 | OCT-03 | **Fixed.** Purge deletes everything under `data-exports/<user>/`; an export orphaned mid-purge deletes its own archive; MinIO expires `data-exports/` after a day (S3/R2: `docs/runbooks/deploy-render.md` step 5). |
 | OCT-04 | **Fixed.** `forge_scan_queue_depth`, a `scanner-worker` scrape target, `ScanQueueNotDraining` and `ScannerWorkerDown`; a test requires a down alert for every scraped worker. |
-| OCT-05 | **Fixed.** The Hetzner deploy waits for backend, worker, scanner-worker and caddy to run the release image and be healthy before the smoke test; dry-run against the live box. The drill itself (C6) is still to run. Also: an unset `DEPLOY_TARGET` now deploys nothing. |
+| OCT-05 | **Fixed.** The Hetzner deploy waits for backend, worker, scanner-worker and caddy to run the release image and be healthy before the smoke test; dry-run against the live box. The drill (C6) ran on 2026-11-02. Also: an unset `DEPLOY_TARGET` now deploys nothing. |
 | OCT-06 | **Fixed.** Polling counts from `updated_at` (confirmation = scan start), now in the file DTO. |
 | Off-host backups, branch protection, CI on the release revision | **Open.** Operator decisions; see the recommended order. |
 

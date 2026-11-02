@@ -82,6 +82,7 @@ jobs:
           [[ "$TAG" =~ ^[0-9a-f]{7,40}$ ]] || { echo "image-tag must be a commit SHA, got: $TAG" >&2; exit 1; }
           [[ "$BACKEND_IMAGE" =~ ^[a-z0-9./_:-]+$ ]] || { echo "unexpected image ref: $BACKEND_IMAGE" >&2; exit 1; }
           [[ "$ACTOR" =~ ^[A-Za-z0-9-]+(\[bot\])?$ ]] || { echo "unexpected actor: $ACTOR" >&2; exit 1; }
+          [[ "$PROD_DOMAIN" =~ ^[A-Za-z0-9.-]+$ ]] || { echo "PROD_DOMAIN must be a bare hostname" >&2; exit 1; }
 
       - uses: actions/checkout@v7
 
@@ -292,38 +293,14 @@ jobs:
             docker compose $COMPOSE up -d --no-deps backend worker scanner-worker
           EOF
 
-      # Review OCT-05: `up -d` returns before healthchecks pass, and the
-      # HTTP smoke test below only proves the backend. A scan worker or
-      # worker that starts and then crash-loops (as scanner-worker did on its
-      # first production boot) would leave the deploy green. Wait until each
-      # service runs this release's image and is healthy; a failure here
-      # rolls back like any other.
+      # A failure here rolls back like any other. scripts/wait-for-release.sh
+      # says what it checks, and why the smoke test below is not enough.
       - name: Verify every service runs the release and is healthy
         id: verify
         run: |
-          ssh -i ~/.ssh/id_deploy "$SSH_USER@$SSH_HOST" bash -euo pipefail <<EOF
-            cd ~/forge
-            export BACKEND_IMAGE='$BACKEND_IMAGE'
-            export CADDY_IMAGE='$CADDY_IMAGE'
-            check() {
-              local svc=\$1 want=\$2 id image state
-              id=\$(docker compose $COMPOSE ps -q \$svc)
-              [ -n "\$id" ] || { echo "\$svc: not running"; return 1; }
-              image=\$(docker inspect --format '{{.Config.Image}}' \$id)
-              state=\$(docker inspect --format '{{if .State.Health}}{{.State.Health.Status}}{{else}}{{.State.Status}}{{end}}' \$id)
-              [ "\$image" = "\$want" ] || { echo "\$svc: runs \$image"; return 1; }
-              case "\$state" in healthy|running) return 0 ;; esac
-              echo "\$svc: \$state"; return 1
-            }
-            for _ in \$(seq 1 30); do
-              if check backend '$BACKEND_IMAGE' && check worker '$BACKEND_IMAGE' \\
-                 && check scanner-worker '$BACKEND_IMAGE' && check caddy '$CADDY_IMAGE'; then
-                echo "every service healthy on the release"; exit 0
-              fi
-              sleep 5
-            done
-            exit 1
-          EOF
+          ssh -i ~/.ssh/id_deploy "$SSH_USER@$SSH_HOST" \
+            "cd ~/forge && BACKEND_IMAGE='$BACKEND_IMAGE' CADDY_IMAGE='$CADDY_IMAGE' PROD_DOMAIN='$PROD_DOMAIN' COMPOSE='$COMPOSE' bash -s" \
+            < scripts/wait-for-release.sh
 
       - name: Smoke test
         id: smoke_test
@@ -366,4 +343,26 @@ jobs:
             docker compose $COMPOSE up -d --no-deps caddy
             docker compose $COMPOSE up -d --no-deps backend worker scanner-worker
           EOF
-          echo "rolled back to $PREVIOUS_TAG" >&2
+          # `up -d` returns before anything is healthy: the 2026-11-02 drill
+          # printed "rolled back" 12 s before the site came back. Say which it
+          # was, because a rollback that failed needs a person (runbook,
+          # Escalation).
+          if ssh -i ~/.ssh/id_deploy "$SSH_USER@$SSH_HOST" \
+            "cd ~/forge && BACKEND_IMAGE='$REPO:$PREVIOUS_TAG' CADDY_IMAGE='$REPO-caddy:$PREVIOUS_TAG' PROD_DOMAIN='$PROD_DOMAIN' COMPOSE='$COMPOSE' bash -s" \
+            < scripts/wait-for-release.sh; then
+            echo "rolled back to $PREVIOUS_TAG, healthy" >&2
+          else
+            echo "ROLLBACK FAILED: $PREVIOUS_TAG did not come back healthy. The site needs a person." >&2
+            exit 1
+          fi
+
+      # Nothing else removes old releases, and a full disk is what took
+      # production down on 2026-09-13. Safe for the rollback above: a deploy's
+      # rollback target is what is running when it starts, and images in use
+      # are never pruned. A week of others stays for rolling back by hand, and
+      # older tags can be pulled again from GHCR. Not worth failing a deploy
+      # that has already succeeded.
+      - name: Prune old images
+        continue-on-error: true
+        run: |
+          ssh -i ~/.ssh/id_deploy "$SSH_USER@$SSH_HOST" "docker image prune -af --filter until=168h | tail -n 1"
