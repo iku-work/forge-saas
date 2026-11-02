@@ -544,8 +544,82 @@ def test_hetzner_verifies_every_service_before_declaring_success() -> None:
     names = [s.get("name", "") for s in steps]
     verify = next(i for i, n in enumerate(names) if n.startswith("Verify every service"))
     assert names.index("Pull and switch") < verify < names.index("Smoke test")
-    for service in ("backend", "worker", "scanner-worker", "caddy"):
-        assert f"check {service} " in steps[verify]["run"], service
+    assert "wait-for-release.sh" in steps[verify]["run"]
+
+
+def test_hetzner_checks_that_a_rollback_came_back() -> None:
+    # The 2026-11-02 drill: "rolled back" printed before the site had returned.
+    steps = _deploy_workflow("hetzner")["jobs"]["deploy"]["steps"]
+    run = next(s["run"] for s in steps if s.get("name") == "Roll back to the previous image")
+    assert run.index("up -d --no-deps backend") < run.index("wait-for-release.sh")
+    assert "ROLLBACK FAILED" in run
+
+
+def test_hetzner_prunes_images_only_after_a_good_deploy_and_never_fails_it() -> None:
+    steps = _deploy_workflow("hetzner")["jobs"]["deploy"]["steps"]
+    names = [s.get("name", "") for s in steps]
+    prune = steps[names.index("Prune old images")]
+    assert names.index("Prune old images") > names.index("Smoke test")
+    assert "if" not in prune, "default if: success() is what keeps it off a failed deploy"
+    assert prune["continue-on-error"] is True
+    assert "--filter until=" in prune["run"], "a bare prune -a removes every other release"
+
+
+def _wait_for_release(tmp_path: Path, *, state: str, image: str, edge_ok: bool) -> str:
+    """scripts/wait-for-release.sh against stand-ins. Returns stdout; raises if it failed."""
+    bash = shutil.which("bash")
+    if bash is None:
+        pytest.skip("needs bash")
+    stubs = {
+        "docker": (
+            'case "$*" in\n'
+            "  compose*) echo some-id ;;\n"
+            f"  *Config.Image*) echo {image} ;;\n"
+            f"  *) echo {state} ;;\n"
+            "esac\n"
+        ),
+        "curl": f"exit {0 if edge_ok else 22}\n",
+        "sleep": "exit 0\n",  # the script retries for 150 s; a failing case should not
+    }
+    for name, body in stubs.items():
+        stub = tmp_path / name
+        stub.write_text(f"#!/usr/bin/env bash\n{body}", newline="\n")
+        stub.chmod(0o755)
+    return subprocess.run(  # noqa: S603 -- fixed argv: the script under test
+        [bash, str(REPO_ROOT / "scripts" / "wait-for-release.sh")],
+        env={
+            **os.environ,
+            "PATH": f"{tmp_path}{os.pathsep}{os.environ['PATH']}",
+            "BACKEND_IMAGE": "repo:new",
+            "CADDY_IMAGE": "repo:new",
+            "PROD_DOMAIN": "app.example.com",
+            "COMPOSE": "-f compose.yml",
+        },
+        capture_output=True,
+        check=True,
+        text=True,
+    ).stdout
+
+
+def test_wait_for_release_passes_when_all_is_healthy(tmp_path: Path) -> None:
+    out = _wait_for_release(tmp_path, state="healthy", image="repo:new", edge_ok=True)
+    assert "every service healthy" in out
+
+
+@pytest.mark.parametrize(
+    ("state", "image", "edge_ok", "says"),
+    [
+        ("unhealthy", "repo:new", True, "backend: unhealthy"),
+        ("healthy", "repo:old", True, "backend: runs repo:old"),
+        ("healthy", "repo:new", False, "does not serve app.example.com"),
+    ],
+)
+def test_wait_for_release_fails_and_says_why(
+    tmp_path: Path, *, state: str, image: str, edge_ok: bool, says: str
+) -> None:
+    with pytest.raises(subprocess.CalledProcessError) as failed:
+        _wait_for_release(tmp_path, state=state, image=image, edge_ok=edge_ok)
+    assert says in failed.value.stdout
 
 
 def test_module_matrix_runs_weekly_not_on_every_merge() -> None:

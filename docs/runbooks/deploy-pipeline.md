@@ -163,6 +163,9 @@ some on the old is exactly the state that most needs undoing. On Hetzner it
 also runs after a failed migration, because by then the env file and
 checkout on the box have already moved.
 
+On Hetzner it then waits for the previous release to be healthy. A red run whose
+log says `ROLLBACK FAILED` means the site is down: see Escalation.
+
 **Manual**, for anything the smoke test did not catch:
 
 ```bash
@@ -191,10 +194,21 @@ Stop and escalate when:
 - **A deploy target you did not configure ran.** Check the repository
   variable: only an explicit `DEPLOY_TARGET` deploys.
 
-**None of these workflows has run end to end.** They were written on
-2026-09-14 while the account's Actions minutes were exhausted; the pieces
-that could be validated locally were (compose overlays resolved with
-`docker compose config`, the edge image built and its contents inspected,
-all four workflows linted with actionlint), and the pieces that need a real
-runner were not. Treat the first live run as a test: use `workflow_dispatch`
-against a non-production target, or watch it with a rollback ready.
+## Failure drill
+
+**Hetzner, 2026-11-02, on forge-prod-2 (C6).** Each case deployed an older
+release by hand with one failure injected, measured from outside.
+
+| Injected | What happened | Site down |
+|---|---|---|
+| A revision alembic cannot find, added to `alembic_version` | Migration failed after the backup. Switch never ran, containers kept their start times | Never |
+| `PROD_DOMAIN` set to a host that does not exist | Release came up healthy, smoke test failed after 2 min, rolled back | Not measured: public DNS still pointed at another box |
+| `docker compose up` killed with SIGKILL 1 s into the switch | Half-created containers removed, rolled back | About 19 s |
+
+The drill found that the smoke test had been passing against a different
+server, and that the rollback did not check its own result. Both are now
+covered by `scripts/wait-for-release.sh`.
+
+**Render and AWS have never run end to end.** Treat their first live run as a
+test: use `workflow_dispatch` against a non-production target, or watch it with
+a rollback ready.
