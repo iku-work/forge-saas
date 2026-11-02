@@ -53,6 +53,8 @@ Hetzner Console → **Add Server**:
 | TCP 22 | Any | CI deploys over SSH from GitHub's changing addresses; the script makes SSH key-only |
 | TCP 80, 443 | Cloudflare's ranges ([cloudflare.com/ips](https://www.cloudflare.com/ips/)) | Nobody reaches the server around Cloudflare |
 
+Every deploy checks this from outside and goes red if 80 or 443 answers directly.
+
 ### 2. Point DNS at it, before the first deploy
 
 In Cloudflare, add A records for the app host, the marketing host and the

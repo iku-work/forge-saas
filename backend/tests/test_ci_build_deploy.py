@@ -565,6 +565,80 @@ def test_hetzner_prunes_images_only_after_a_good_deploy_and_never_fails_it() -> 
     assert "--filter until=" in prune["run"], "a bare prune -a removes every other release"
 
 
+def _github_yaml() -> list[Path]:
+    root = REPO_ROOT / ".github"
+    return [*root.glob("workflows/*.yml"), *root.glob("actions/*/action.yml")]
+
+
+def test_every_action_is_pinned_to_a_commit() -> None:
+    # Review H5: a tag can be moved, and the deploy job holds every production
+    # secret. The version comment is what Dependabot reads and bumps.
+    for path in _github_yaml():
+        text = path.read_text(encoding="utf-8")
+        for ref, rest in re.findall(r"^\s*(?:- )?uses:\s*(\S+)(.*)$", text, re.MULTILINE):
+            if ref.startswith("./"):
+                continue
+            assert re.fullmatch(r"[\w./-]+@[0-9a-f]{40}", ref), f"{path.name}: {ref}"
+            assert re.fullmatch(r" # v\d+\.\d+\.\d+", rest), f"{path.name}: {ref}{rest}"
+
+
+def test_nothing_in_ci_pipes_a_download_to_a_shell() -> None:
+    for path in _github_yaml():
+        text = path.read_text(encoding="utf-8")
+        assert not re.search(r"\|\s*(?:sudo\s+)?(?:ba|z)?sh\b", text), path.name
+
+
+def test_dependabot_can_see_the_composite_actions() -> None:
+    config = yaml.safe_load((REPO_ROOT / ".github/dependabot.yml").read_text(encoding="utf-8"))
+    actions = next(u for u in config["updates"] if u["package-ecosystem"] == "github-actions")
+    assert "/.github/actions/*" in actions["directories"]
+
+
+ORIGIN_CHECK = "Check the origin refuses direct connections"
+
+
+def test_hetzner_origin_check_comes_last_so_it_cannot_roll_back() -> None:
+    steps = _deploy_workflow("hetzner")["jobs"]["deploy"]["steps"]
+    assert steps[-1]["name"] == ORIGIN_CHECK
+    assert "continue-on-error" not in steps[-1], "a warning nobody reads left the origin open"
+
+
+@pytest.mark.parametrize(
+    ("behind_cloudflare", "port_open", "exit_code"),
+    [(True, True, 1), (True, False, 0), (False, True, 0)],
+)
+def test_hetzner_origin_check(
+    tmp_path: Path, behind_cloudflare: bool, port_open: bool, exit_code: int
+) -> None:
+    bash = shutil.which("bash")
+    if bash is None:
+        pytest.skip("needs bash")
+    stubs = {
+        "curl": "echo 'cf-ray: abc'\n" if behind_cloudflare else "echo 'server: caddy'\n",
+        "timeout": f"exit {0 if port_open else 124}\n",  # 124: the firewall dropped it
+    }
+    for name, body in stubs.items():
+        stub = tmp_path / name
+        stub.write_text(f"#!/usr/bin/env bash\n{body}", newline="\n")
+        stub.chmod(0o755)
+    steps = _deploy_workflow("hetzner")["jobs"]["deploy"]["steps"]
+    run = next(s["run"] for s in steps if s.get("name") == ORIGIN_CHECK)
+    result = subprocess.run(  # noqa: S603 -- fixed argv: the step under test
+        [bash, "-e", "-c", run],
+        env={
+            **os.environ,
+            "PATH": f"{tmp_path}{os.pathsep}{os.environ['PATH']}",
+            "PROD_DOMAIN": "app.example.com",
+            "SSH_HOST": "origin.invalid",
+        },
+        capture_output=True,
+        check=False,
+        text=True,
+    )
+    assert result.returncode == exit_code, result.stdout + result.stderr
+    assert "origin.invalid" not in result.stdout, "the address stays out of public logs"
+
+
 def _wait_for_release(tmp_path: Path, *, state: str, image: str, edge_ok: bool) -> str:
     """scripts/wait-for-release.sh against stand-ins. Returns stdout; raises if it failed."""
     bash = shutil.which("bash")

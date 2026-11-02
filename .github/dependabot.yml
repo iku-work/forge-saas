@@ -24,8 +24,12 @@
 # the Makefile's lock target.
 version: 2
 updates:
+  # Actions are pinned to commit SHAs with the version in a comment, and
+  # Dependabot bumps both. "/" alone means .github/workflows only: it never saw
+  # the composite actions, which is how the deploy's docker/login-action fell a
+  # major behind.
   - package-ecosystem: github-actions
-    directory: /
+    directories: ["/", "/.github/actions/*"]
     schedule:
       interval: weekly
     cooldown:
