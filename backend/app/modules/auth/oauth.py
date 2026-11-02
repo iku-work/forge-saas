@@ -23,11 +23,17 @@ from authlib.integrations.httpx_client import AsyncOAuth2Client
 from authlib.oauth2 import OAuth2Error
 from fastapi import APIRouter, Depends, Request, Response
 from fastapi.responses import RedirectResponse
+from redis.asyncio import Redis
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
 from app.core.db import get_session
-from app.core.dependencies import get_current_user, reject_during_impersonation
+from app.core.dependencies import (
+    get_current_user,
+    get_redis,
+    invalidate_user_cache,
+    reject_during_impersonation,
+)
 from app.core.envelope import Envelope, Meta
 from app.core.exceptions import AuthenticationError, DomainError, NotFoundError
 from app.middleware.rate_limit import api_limit, auth_limit, sensitive_limit
@@ -258,6 +264,7 @@ async def oauth_callback(  # noqa: PLR0913 -- state/code/provider/session are ea
     state: str,
     clients: Annotated[dict[str, OAuthClient], Depends(get_oauth_clients)],
     session: Annotated[AsyncSession, Depends(get_session)],
+    redis: Annotated[Redis, Depends(get_redis)],
 ) -> Envelope[LoginResponse] | Envelope[TwoFactorRequiredResponse]:
     client = _get_client_or_raise(clients, provider)
 
@@ -291,6 +298,7 @@ async def oauth_callback(  # noqa: PLR0913 -- state/code/provider/session are ea
         )
 
     access_token, refresh_plain, user = result
+    await invalidate_user_cache(redis, user.id)  # it may just have been activated
     _set_refresh_cookie(response, refresh_plain)
     response.delete_cookie(_STATE_COOKIE_NAME, path=_STATE_COOKIE_PATH)
     data = LoginResponse(access_token=access_token, user=UserPublic.model_validate(user))

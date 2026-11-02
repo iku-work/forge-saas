@@ -208,6 +208,8 @@ class AuthService:
         return {user.id: user for user in users}
 
     async def register(self, req: RegisterRequest) -> None:
+        # Before the lookup, so a known address costs the same as a new one.
+        password_hash = await _hash_password_off_loop(req.password)
         existing = await self._users.get_by_email(req.email)
         if existing is not None:
             # No enumeration: the caller replies "check your inbox" on this
@@ -217,14 +219,16 @@ class AuthService:
             if existing.email_verified_at is None:
                 # Registering again is how someone whose first verification
                 # email never arrived asks for another; without this they
-                # are stuck. The submitted password is ignored -- only the
-                # inbox owner can act on what this sends.
-                await self._send_verification_email(existing)
+                # are stuck. It may also be the real owner, finding that
+                # someone else registered their address first: the link
+                # carries this password, so clicking it means this password
+                # and never the earlier registrant's.
+                await self._send_verification_email(existing, password_hash)
             return
 
         user = await self._users.create(
             email=req.email,
-            hashed_password=await _hash_password_off_loop(req.password),
+            hashed_password=password_hash,
             is_active=False,
         )
 
@@ -238,14 +242,15 @@ class AuthService:
             org_id=None,
             actor_id=user.id,
         )
-        await self._send_verification_email(user)
+        await self._send_verification_email(user, password_hash)
 
-    async def _send_verification_email(self, user: User) -> None:
+    async def _send_verification_email(self, user: User, password_hash: str) -> None:
         plain_token, token_hash = generate_refresh_token()
         await self._email_verification_tokens.create(
             user_id=user.id,
             token_hash=token_hash,
             expires_at=utcnow() + _EMAIL_VERIFICATION_TOKEN_TTL,
+            pending_password_hash=password_hash,
         )
         await self._enqueue_verification_email(user, plain_token)
 
@@ -272,8 +277,27 @@ class AuthService:
                 "errors.invalid_verification_token",
                 fallback="Invalid or expired verification token",
             )
+        await self._email_verification_tokens.invalidate_for_user(user.id)
+        if record.pending_password_hash is not None:
+            await self._users.update(user.id, hashed_password=record.pending_password_hash)
         await self._users.mark_email_verified(record.user_id)
         return user
+
+    async def _inbox_proven(self, user: User) -> User:
+        """Activate an unverified account whose inbox owner has just shown up.
+
+        Whatever password it holds came from whoever registered the address,
+        and that need not be this person. Keeping it is an account takeover:
+        register a victim's address, wait for them to sign in with Google, then
+        log in with your own password. So it goes, along with every link that
+        would bring it back. They can set a password through a reset.
+        """
+        if user.email_verified_at is not None:
+            return user
+        await self._email_verification_tokens.invalidate_for_user(user.id)
+        return await self._users.update(
+            user.id, email_verified_at=utcnow(), is_active=True, hashed_password=None
+        )
 
     async def login(
         self, req: LoginRequest, ip: str, user_agent: str
@@ -633,6 +657,7 @@ class AuthService:
             raise AuthenticationError(
                 "errors.invalid_reset_token", fallback="Invalid or expired reset token"
             )
+        user = await self._inbox_proven(user)
         await self._users.update(
             user.id, hashed_password=await _hash_password_off_loop(new_password)
         )
@@ -686,6 +711,7 @@ class AuthService:
         # The token is spent either way: it proved control of the inbox, and
         # that is all it was ever good for. Whether that is enough to issue a
         # session is _second_factor_challenge's call, not this method's.
+        user = await self._inbox_proven(user)
         challenge = await self._second_factor_challenge(user, first_factor=amr_methods.MAGIC_LINK)
         if challenge is not None:
             return challenge
@@ -726,10 +752,10 @@ class AuthService:
                     full_name=profile.full_name,
                     avatar_url=profile.avatar_url,
                 )
-            elif user.email_verified_at is None:
+            else:
                 # A provider-verified email supersedes our own pending local
                 # verification for the same address.
-                user = await self._users.update(user.id, email_verified_at=utcnow(), is_active=True)
+                user = await self._inbox_proven(user)
 
             await self._oauth_accounts.create(
                 user_id=user.id, provider=provider, provider_user_id=profile.provider_user_id
@@ -1036,11 +1062,9 @@ class AuthService:
         # T-226: email_verified_at now reflects the *new* address -- this
         # confirm link is itself proof of control over it, the same proof
         # verify_email()/mark_email_verified() rely on for a brand-new
-        # signup. Pending Invitation rows are untouched deliberately:
-        # Invitation.email is never matched against User.email (see
-        # TenancyService.accept_invitation, which trusts the caller's
-        # session, not an email match), so a change here can't invalidate or
-        # misdirect one.
+        # signup. A pending Invitation for the old address stops matching
+        # this account (TenancyService.accept_invitation): it was sent to that
+        # address, so the inviter sends a new one.
         updated = await self._users.update(
             user.id, email=record.new_email, email_verified_at=utcnow()
         )

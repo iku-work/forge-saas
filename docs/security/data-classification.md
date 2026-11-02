@@ -60,6 +60,7 @@ and no impersonation, the cost of the wrong one is a breach report.
 | `TOTPSecret.backup_codes_hash` | sensitive (credential) | Argon2-hashed codes, JSON-encoded. | Same as above. |
 | `WebAuthnCredential.public_key` | internal | Plaintext by design — a public key, not a secret (see the model's own docstring). | Same as above. |
 | `EmailVerificationToken`/`PasswordResetToken`/`MagicLinkToken`/`EmailChangeToken`.`token_hash` | sensitive (credential) | SHA-256 hex; plain token never stored. | `cleanup_expired_tokens` (hourly) hard-deletes rows past `expires_at`. |
+| `EmailVerificationToken.pending_password_hash` | sensitive (credential) | Argon2id hash of the password submitted with that registration; applied only when that link is clicked. | Same as above. |
 | `EmailChangeToken.new_email` | sensitive | Plaintext. | Same as above (token TTL is ≤1h, so exposure window is short). |
 
 ## 3. `app.modules.tenancy`

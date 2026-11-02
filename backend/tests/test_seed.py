@@ -1,10 +1,13 @@
 from collections.abc import Generator
+from typing import Any
 
 import pytest
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core import module_loader
+from app.core import module_loader, seed_load, seed_pentest
+from app.core import seed as seed_module
+from app.core.config import get_settings
 from app.core.modules import EnabledModules, ModuleConfig
 from app.core.seed import DEMO_ORG_NAME, DEMO_ORG_SLUG, SUPERADMIN_EMAIL, seed
 from app.modules.auth.models import User
@@ -95,3 +98,15 @@ async def test_seed_skips_plans_when_billing_disabled(
         await session.execute(select(Organization).where(Organization.slug == DEMO_ORG_SLUG))
     ).scalar_one()
     assert org.name == DEMO_ORG_NAME
+
+
+@pytest.mark.parametrize("module", [seed_module, seed_pentest, seed_load])
+async def test_seed_scripts_refuse_production(
+    module: Any,  # noqa: ANN401 -- three modules, one shape
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # The first one's superadmin password is in this repo. Raised before any
+    # connection is made, so this needs no database.
+    monkeypatch.setattr(get_settings(), "ENVIRONMENT", "prod")
+    with pytest.raises(RuntimeError, match="Refusing to seed"):
+        await module._main()

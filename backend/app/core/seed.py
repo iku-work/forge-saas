@@ -10,6 +10,7 @@ from datetime import UTC, datetime
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import get_settings
 from app.core.db import async_session_factory, dispose_engine
 from app.core.module_loader import is_enabled
 from app.modules.auth.models import User
@@ -128,7 +129,17 @@ async def seed(session: AsyncSession) -> None:
     await backfill_notification_preferences_for_session(session)
 
 
+def refuse_in_production() -> None:
+    """The seed accounts have known logins, and this one is a superadmin.
+
+    For plans in production, see `make sync-plans`.
+    """
+    if get_settings().ENVIRONMENT == "prod":
+        raise RuntimeError("Refusing to seed: ENVIRONMENT is prod.")
+
+
 async def _main() -> None:
+    refuse_in_production()
     async with async_session_factory() as session:
         await seed(session)
         await session.commit()

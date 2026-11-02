@@ -51,6 +51,8 @@
   "membership_not_found": "Membership not found.",
   "invitation_not_found": "Invitation not found.",
   "invalid_invitation": "This invitation is invalid or has expired.",
+  "invitation_email_mismatch": "This invitation was sent to a different email address. Sign in with that address to accept it.",
+  "already_member": "You're already a member of this organization.",
   "cannot_demote_last_owner": "Cannot demote the last owner of an organization.",
   "cannot_remove_last_owner": "Cannot remove the last owner of an organization.",
   "cannot_leave_last_owner": "You're the only owner. Make someone else an owner before you leave.",

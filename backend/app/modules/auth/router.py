@@ -281,6 +281,7 @@ async def consume_magic_link(
     response: Response,
     body: MagicLinkConsumeRequest,
     session: Annotated[AsyncSession, Depends(get_session)],
+    redis: Annotated[Redis, Depends(get_redis)],
 ) -> Envelope[LoginResponse] | Envelope[TwoFactorRequiredResponse]:
     # impersonation-ok: the second leg of a login, gated on a token from the
     # user's inbox -- /auth/magic-link, the leg that *sends* that mail, is the
@@ -299,6 +300,7 @@ async def consume_magic_link(
         )
 
     access_token, refresh_plain, user = result
+    await invalidate_user_cache(redis, user.id)  # it may just have been activated
     _set_refresh_cookie(response, refresh_plain)
     data = LoginResponse(
         access_token=access_token,

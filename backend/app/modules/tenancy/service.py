@@ -171,7 +171,22 @@ class TenancyService:
                 "errors.invalid_invitation", fallback="Invalid or expired invitation"
             )
 
-        await self._invitations.mark_accepted(invitation.id)
+        # A link gets forwarded, and it can carry an admin role. It is good for
+        # the person it was sent to.
+        if invitation.email.casefold() != user.email.casefold():
+            raise PermissionDeniedError(
+                "errors.invitation_email_mismatch",
+                fallback="This invitation was sent to a different email address.",
+            )
+        if await self._memberships.get_by_user_and_org(user.id, invitation.org_id) is not None:
+            raise ConflictError(
+                "errors.already_member", fallback="You are already a member of this organization."
+            )
+        if not await self._invitations.mark_accepted(invitation.id):
+            # Lost the race to another request presenting the same link.
+            raise AuthenticationError(
+                "errors.invalid_invitation", fallback="Invalid or expired invitation"
+            )
         membership = await self._memberships.create(
             user_id=user.id,
             org_id=invitation.org_id,

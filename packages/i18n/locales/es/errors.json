@@ -51,6 +51,8 @@
   "membership_not_found": "Membresía no encontrada.",
   "invitation_not_found": "Invitación no encontrada.",
   "invalid_invitation": "Esta invitación no es válida o ha expirado.",
+  "invitation_email_mismatch": "Esta invitación se envió a otra dirección de correo electrónico. Inicia sesión con esa dirección para aceptarla.",
+  "already_member": "Ya eres miembro de esta organización.",
   "cannot_demote_last_owner": "No se puede degradar al último propietario de una organización.",
   "cannot_remove_last_owner": "No se puede eliminar al último propietario de una organización.",
   "notification_not_found": "Notificación no encontrada.",
