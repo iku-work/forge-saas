@@ -34,6 +34,7 @@ from sqlmodel import SQLModel
 from app.core.config import get_settings
 from app.core.db import async_session_factory, dispose_engine
 from app.core.module_loader import is_enabled
+from app.core.seed import refuse_in_production
 from app.modules.admin.service import AdminBillingOverrideService
 from app.modules.auth.models import User
 from app.modules.auth.permissions import MemberRole
@@ -195,6 +196,7 @@ async def seed_load(session: AsyncSession, redis: Redis) -> None:
 
 
 async def _main() -> None:
+    refuse_in_production()
     settings = get_settings()
     redis = Redis.from_url(str(settings.REDIS_URL))
     try:

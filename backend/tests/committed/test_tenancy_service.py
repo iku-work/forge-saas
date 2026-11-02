@@ -301,12 +301,53 @@ async def test_accept_invitation_used_twice_raises_on_second_call(
     session: AsyncSession,
 ) -> None:
     token = await _issue_invitation(invitation_repo, org, user)
-    invitee = User(email=f"invitee-{uuid4()}@example.com")
+    invitee = User(email="invitee@example.com")
     session.add(invitee)
     await session.flush()
     await service.accept_invitation(token, invitee)
 
     with pytest.raises(AuthenticationError):
+        await service.accept_invitation(token, invitee)
+
+
+async def test_accept_invitation_refuses_someone_else(
+    service: TenancyService,
+    invitation_repo: InvitationRepository,
+    org: Organization,
+    user: User,
+    session: AsyncSession,
+) -> None:
+    token = await _issue_invitation(invitation_repo, org, user, role=MemberRole.ADMIN)
+    forwarded_to = User(email="forwarded-to@example.com")
+    session.add(forwarded_to)
+    await session.flush()
+
+    with pytest.raises(PermissionDeniedError):
+        await service.accept_invitation(token, forwarded_to)
+
+    # Not spent: the person it was sent to can still use it.
+    invitee = User(email="INVITEE@example.com")
+    session.add(invitee)
+    await session.flush()
+    membership = await service.accept_invitation(token, invitee)
+    assert membership.user_id == invitee.id
+
+
+async def test_accept_invitation_when_already_a_member_conflicts(
+    service: TenancyService,
+    invitation_repo: InvitationRepository,
+    org: Organization,
+    user: User,
+    session: AsyncSession,
+) -> None:
+    token = await _issue_invitation(invitation_repo, org, user)
+    invitee = User(email="invitee@example.com")
+    session.add(invitee)
+    await session.flush()
+    session.add(Membership(user_id=invitee.id, org_id=org.id, role=MemberRole.MEMBER))
+    await session.flush()
+
+    with pytest.raises(ConflictError):
         await service.accept_invitation(token, invitee)
 
 
@@ -605,7 +646,7 @@ async def test_preview_invitation_does_not_mark_used(
     session: AsyncSession,
 ) -> None:
     token = await _issue_invitation(invitation_repo, org, user)
-    invitee = User(email=f"invitee-{uuid4()}@example.com")
+    invitee = User(email="invitee@example.com")
     session.add(invitee)
     await session.flush()
 

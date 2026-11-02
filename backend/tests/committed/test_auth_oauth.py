@@ -350,6 +350,9 @@ async def test_oauth_callback_verifies_previously_unverified_local_user(
     await session.refresh(pending)
     assert pending.email_verified_at is not None
     assert pending.is_active is True
+    # Whoever registered this address need not be who just signed in: keeping
+    # their password would let them into this person's account.
+    assert pending.hashed_password is None
 
 
 async def test_oauth_callback_sets_refresh_cookie_and_clears_state_cookie(

@@ -51,6 +51,8 @@
   "membership_not_found": "العضوية غير موجودة.",
   "invitation_not_found": "الدعوة غير موجودة.",
   "invalid_invitation": "هذه الدعوة غير صالحة أو منتهية الصلاحية.",
+  "invitation_email_mismatch": "أُرسلت هذه الدعوة إلى عنوان بريد إلكتروني آخر. سجّل الدخول بهذا العنوان لقبولها.",
+  "already_member": "أنت عضو بالفعل في هذه المؤسسة.",
   "cannot_demote_last_owner": "لا يمكن خفض رتبة المالك الأخير للمؤسسة.",
   "cannot_remove_last_owner": "لا يمكن إزالة المالك الأخير للمؤسسة.",
   "notification_not_found": "الإشعار غير موجود.",

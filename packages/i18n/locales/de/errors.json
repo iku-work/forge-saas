@@ -51,6 +51,8 @@
   "membership_not_found": "Mitgliedschaft nicht gefunden.",
   "invitation_not_found": "Einladung nicht gefunden.",
   "invalid_invitation": "Diese Einladung ist ungültig oder abgelaufen.",
+  "invitation_email_mismatch": "Diese Einladung wurde an eine andere E-Mail-Adresse gesendet. Melden Sie sich mit dieser Adresse an, um sie anzunehmen.",
+  "already_member": "Sie sind bereits Mitglied dieser Organisation.",
   "cannot_demote_last_owner": "Der letzte Owner einer Organisation kann nicht herabgestuft werden.",
   "cannot_remove_last_owner": "Der letzte Owner einer Organisation kann nicht entfernt werden.",
   "notification_not_found": "Benachrichtigung nicht gefunden.",

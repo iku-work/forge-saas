@@ -51,6 +51,8 @@
   "membership_not_found": "Jäsenyyttä ei löytynyt.",
   "invitation_not_found": "Kutsua ei löytynyt.",
   "invalid_invitation": "Tämä kutsu on virheellinen tai vanhentunut.",
+  "invitation_email_mismatch": "Tämä kutsu lähetettiin toiseen sähköpostiosoitteeseen. Hyväksy se kirjautumalla sisään kyseisellä osoitteella.",
+  "already_member": "Olet jo tämän organisaation jäsen.",
   "cannot_demote_last_owner": "Organisaation viimeistä omistajaa ei voi alentaa.",
   "cannot_remove_last_owner": "Organisaation viimeistä omistajaa ei voi poistaa.",
   "notification_not_found": "Ilmoitusta ei löytynyt.",

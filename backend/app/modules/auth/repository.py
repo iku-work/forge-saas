@@ -671,6 +671,17 @@ class _TokenRepository[T: _SingleUseToken]:
         await self.session.flush()
         return cast("CursorResult[Any]", result).rowcount == 1
 
+    async def invalidate_for_user(self, user_id: UUID) -> None:
+        """Spend every token this user still holds."""
+        m = cast("Any", self.model)
+        await self.session.execute(
+            update(self.model)
+            .where(m.user_id == user_id, m.used_at.is_(None))
+            .values(used_at=utcnow())
+            .execution_options(synchronize_session=False)
+        )
+        await self.session.flush()
+
     async def delete_expired(self) -> int:
         m = cast("Any", self.model)
         stmt = delete(self.model).where(m.expires_at < utcnow())

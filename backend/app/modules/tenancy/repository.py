@@ -16,7 +16,7 @@ from datetime import datetime
 from typing import Any, cast
 from uuid import UUID
 
-from sqlalchemy import ColumnElement, func, select, tuple_
+from sqlalchemy import ColumnElement, CursorResult, func, select, tuple_, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import InvalidCursorError, NotFoundError
@@ -347,12 +347,17 @@ class InvitationRepository:
         result = await self.session.execute(stmt)
         return result.scalar_one_or_none()
 
-    async def mark_accepted(self, invitation_id: UUID) -> None:
+    async def mark_accepted(self, invitation_id: UUID) -> bool:
+        """Spend the invitation, returning whether *this* caller was the one who did.
+
+        The condition lives in the UPDATE, as in auth's `_TokenRepository.consume`:
+        two requests racing on one link cannot both win.
+        """
         m = cast("Any", Invitation)
-        stmt = select(Invitation).where(m.id == invitation_id)
-        result = await self.session.execute(stmt)
-        invitation = result.scalar_one_or_none()
-        if invitation is None:
-            raise NotFoundError("errors.invitation_not_found", fallback="Invitation not found")
-        invitation.accepted_at = utcnow()
+        result = await self.session.execute(
+            update(Invitation)
+            .where(m.id == invitation_id, m.accepted_at.is_(None))
+            .values(accepted_at=utcnow())
+        )
         await self.session.flush()
+        return cast("CursorResult[Any]", result).rowcount == 1

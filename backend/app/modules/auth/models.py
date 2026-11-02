@@ -180,6 +180,11 @@ class EmailVerificationToken(UUIDPKMixin, TimestampMixin, SoftDeleteMixin, SQLMo
     token_hash: str = Field(unique=True)  # SHA-256 hex — never the plain token
     expires_at: datetime = Field(sa_type=_TZ_DATETIME)
     used_at: datetime | None = Field(default=None, sa_type=_TZ_DATETIME)
+    # The password submitted with the registration that sent this link, which
+    # becomes the account's only when this link is clicked. Anyone can register
+    # any address, so a password is not the account's until its inbox agrees:
+    # see AuthService.verify_email.
+    pending_password_hash: str | None = Field(default=None, repr=False)
 
 
 class PasswordResetToken(UUIDPKMixin, TimestampMixin, SoftDeleteMixin, SQLModel, table=True):

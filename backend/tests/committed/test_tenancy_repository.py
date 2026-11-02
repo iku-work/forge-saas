@@ -442,14 +442,15 @@ async def test_mark_accepted_sets_accepted_at(
         expires_at=_future(),
     )
 
-    await invitation_repo.mark_accepted(created.id)
+    assert await invitation_repo.mark_accepted(created.id) is True
 
     await session.refresh(created)
     assert created.accepted_at is not None
 
+    assert await invitation_repo.mark_accepted(created.id) is False
 
-async def test_mark_accepted_raises_not_found_for_missing(
+
+async def test_mark_accepted_is_false_for_missing(
     invitation_repo: InvitationRepository,
 ) -> None:
-    with pytest.raises(NotFoundError):
-        await invitation_repo.mark_accepted(uuid4())
+    assert await invitation_repo.mark_accepted(uuid4()) is False
