@@ -18,8 +18,8 @@ from app.modules.auth.service import AuthService
 from app.modules.auth.utils import verify_password
 
 _EMAIL = "victim@example.com"
-_ATTACKER_PASSWORD = "Attacker-Horse9-Staple"
-_OWNER_PASSWORD = "Rightful-Owner8-Battery"
+_ATTACKER_PASSWORD = "Correct-Horse9"
+_OWNER_PASSWORD = "Even-Better-Horse8"
 _RESET_PASSWORD = "Fresh-Start7-Correct"
 
 
