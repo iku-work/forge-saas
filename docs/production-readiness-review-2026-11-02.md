@@ -8,6 +8,8 @@
 |---|---|
 | H1, H4, M1 | Fixed in the auth PR that adds this file. |
 | H1's purge job | Not built. Binding the password to its link removes the security need, so old unverified rows are now a data-retention question only. |
+| H5 | Fixed in the CI pinning PR. |
+| H2 | Every Hetzner deploy now fails if the origin answers directly. The firewall itself is an operator step in the Hetzner console. |
 | Everything else | Open. |
 
 The race H1 mentions is closed by the binding: an attacker registering again cannot change what the owner's link does. One risk remains: the owner clicking a link from a signup they never made. The email's footer already tells people to ignore it in that case.

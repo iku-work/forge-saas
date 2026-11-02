@@ -110,6 +110,10 @@ because caddy carries the network alias for `STORAGE_DOMAIN` and the storage
 guard correctly refuses to reach object storage over the public internet.
 That deadlock took production down on 2026-09-14.
 
+Behind Cloudflare, Hetzner's last step connects to the origin directly and goes
+red if 80 or 443 answers. **The release has stayed live and needs no rollback.**
+Fix the firewall (`new-server.md`, step 1) and re-run the job.
+
 ### 5. Redeploy or roll forward by hand
 
 Every deploy workflow also accepts `workflow_dispatch` with an image tag, so

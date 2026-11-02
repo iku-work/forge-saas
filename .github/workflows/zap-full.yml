@@ -41,7 +41,7 @@ jobs:
       issues: write # to file/dedupe findings as issues, see "File findings" below
 
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Make report output directory
         run: mkdir -p zap-reports
@@ -54,14 +54,14 @@ jobs:
       - name: TLS version/cipher-suite scan (testssl.sh)
         if: always()
         run: |
-          docker run --rm -v "$PWD/zap-reports:/output" drwetter/testssl.sh \
+          docker run --rm -v "$PWD/zap-reports:/output" drwetter/testssl.sh:latest@sha256:9fc0395106bf1df9a20695d04d6fda09c56301cd62a63cb24aedaa27f991a1e4 \
             --severity HIGH --protocols --ciphers \
             --jsonfile /output/testssl-report.json \
             "${{ vars.STAGING_URL }}"
 
       - name: Upload testssl.sh report
         if: always()
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: testssl-report
           path: zap-reports/testssl-report.json
@@ -73,7 +73,7 @@ jobs:
       # zap-reports/ using paths relative to the repo root, same as they
       # appear in .zap/full-scan.yaml.
       - name: ZAP full active scan (Automation Framework)
-        uses: zaproxy/action-af@v0.3.0
+        uses: zaproxy/action-af@d186d5d9536d0f1380e5eaa58168432fefc8ed6d # v0.3.0
         env:
           STAGING_URL: ${{ vars.STAGING_URL }}
           ZAP_SCANNER_EMAIL: ${{ secrets.ZAP_SCANNER_EMAIL }}
@@ -88,7 +88,7 @@ jobs:
 
       - name: Upload ZAP report
         if: always()
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: zap-full-report
           path: zap-reports/

@@ -1,0 +1,17 @@
+name: Install trivy
+description: >-
+  One pinned version for the two jobs that scan with it. Bumped by hand, since
+  Dependabot does not read this; the vulnerability database updates on its own.
+
+runs:
+  using: composite
+  steps:
+    - name: Download, check and unpack
+      shell: bash
+      env:
+        TRIVY_VERSION: "0.71.2"
+        TRIVY_SHA256: 0510e71e2fd39bf863856d499c8dc19feb4e7336546394c502a8f5cc7ab27460
+      run: |
+        curl -fsSLo /tmp/trivy.tar.gz "https://github.com/aquasecurity/trivy/releases/download/v$TRIVY_VERSION/trivy_${TRIVY_VERSION}_Linux-64bit.tar.gz"
+        echo "$TRIVY_SHA256  /tmp/trivy.tar.gz" | sha256sum -c --quiet -
+        tar -xzf /tmp/trivy.tar.gz -C /usr/local/bin trivy

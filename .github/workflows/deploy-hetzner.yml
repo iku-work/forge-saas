@@ -84,7 +84,7 @@ jobs:
           [[ "$ACTOR" =~ ^[A-Za-z0-9-]+(\[bot\])?$ ]] || { echo "unexpected actor: $ACTOR" >&2; exit 1; }
           [[ "$PROD_DOMAIN" =~ ^[A-Za-z0-9.-]+$ ]] || { echo "PROD_DOMAIN must be a bare hostname" >&2; exit 1; }
 
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       # Pinned by version and checksum, like any binary that handles the
       # production secrets.
@@ -366,3 +366,26 @@ jobs:
         continue-on-error: true
         run: |
           ssh -i ~/.ssh/id_deploy "$SSH_USER@$SSH_HOST" "docker image prune -af --filter until=168h | tail -n 1"
+
+      # Behind Cloudflare, 80 and 443 answer Cloudflare only, or anyone who finds
+      # the IP skips its WAF and DDoS protection. This runner is outside
+      # Cloudflare's ranges, so it sees what they would. The runbook asked for
+      # this and nothing checked: forge-prod-2 stayed open (review H2, 2026-11-02).
+      #
+      # Last on purpose, so it cannot roll back: the release is fine, the firewall
+      # is not. A box not behind Cloudflare has nothing to check. This tests the
+      # address in SSH_HOST only, which is IPv4 on a runner without IPv6.
+      - name: Check the origin refuses direct connections
+        run: |
+          if ! curl -sI --max-time 10 "https://$PROD_DOMAIN/health/ready" | grep -i '^cf-ray:' >/dev/null; then
+            echo "$PROD_DOMAIN is not behind Cloudflare, nothing to check"
+            exit 0
+          fi
+          open=0
+          for port in 80 443; do
+            if timeout 5 bash -c "exec 3<>/dev/tcp/$SSH_HOST/$port" 2>/dev/null; then
+              echo "::error::Port $port on the origin answers around Cloudflare. Limit it to Cloudflare's ranges (docs/runbooks/new-server.md, step 1). The release stays live."
+              open=1
+            fi
+          done
+          exit "$open"
