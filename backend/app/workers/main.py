@@ -18,6 +18,7 @@ from app.core.jobs import SCAN_QUEUE_NAME
 from app.core.jobs import redis_settings as build_redis_settings
 from app.core.logging import configure_logging
 from app.core.metrics import start_worker_metrics_server
+from app.core.sentry import init_sentry
 from app.core.storage_endpoint import enforce_storage_endpoint_is_reachable_internally
 from app.workers.jobs.billing import send_dunning_email
 from app.workers.jobs.email import send_email
@@ -28,6 +29,10 @@ from app.workers.jobs.storage import hard_delete_stored_file
 from app.workers.jobs.virus_scan import virus_scan
 from app.workers.jobs.webhooks import deliver_webhook
 from app.workers.scheduler import create_scheduler
+
+# At import, not in on_startup: Sentry's arq integration wraps the job functions
+# inside create_worker, which has already run by the time on_startup does.
+init_sentry(get_settings())
 
 
 def _configure_worker_logging() -> None:
