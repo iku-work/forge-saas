@@ -158,15 +158,16 @@ jobs:
                   status[script] = outcome
 
           lines = []
-          for script in ["login-burst", "browse", "presign", "mixed"]:
+          for script in ["login-burst", "browse", "presign", "mixed", "api-key"]:
               outcome = status.get(script, "FAIL")
               p95_s, rate_s = "-", "-"
               summary_path = results_dir / f"{script}.json"
               if summary_path.exists():
                   try:
                       metrics = json.loads(summary_path.read_text()).get("metrics", {})
-                      p95 = metrics.get("http_req_duration", {}).get("values", {}).get("p(95)")
-                      rate = metrics.get("http_req_failed", {}).get("values", {}).get("rate")
+                      # --summary-export writes these flat, with no "values" level.
+                      p95 = metrics.get("http_req_duration", {}).get("p(95)")
+                      rate = metrics.get("http_req_failed", {}).get("value")
                       if p95 is not None:
                           p95_s = f"{p95:.0f}"
                       if rate is not None:

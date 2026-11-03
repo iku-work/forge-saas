@@ -9,6 +9,12 @@
 # the Automation Framework substitutes any ${VAR} it doesn't define itself
 # from the OS environment, per
 # https://www.zaproxy.org/docs/desktop/addons/automation-framework/environment/
+#
+# Every relative path in this plan resolves from this file's directory, not
+# the repo root.
+#
+# The target's rate limits have to be raised for the run (see zap-full.yml), or
+# this measures the limiter.
 
 env:
   contexts:
@@ -27,11 +33,15 @@ env:
         # T-202: internal-only; Caddy 404s this from outside already, so
         # there's nothing here for the scanner to usefully attack.
         - "${STAGING_URL}/metrics"
-        # The scanner is its own MEMBER-role user in its own org (see users
-        # below). If this endpoint is in scope, ZAP will eventually fuzz its
-        # way into calling it against itself and lock the scanner out of the
-        # rest of the run.
+        # The scanner owns its own org (see users below). The spec below hands
+        # ZAP every route, so these would end its session, delete it or take it
+        # out of the org, and lock it out of the rest of the run.
         - "${STAGING_URL}/api/v1/me$"
+        - "${STAGING_URL}/api/v1/orgs/.*/leave"
+        - "${STAGING_URL}/api/v1/auth/logout.*"
+        - "${STAGING_URL}/api/v1/auth/sessions/.*"
+        - "${STAGING_URL}/api/v1/auth/change-password"
+        - "${STAGING_URL}/api/v1/auth/2fa/enable"
       authentication:
         method: "json"
         parameters:
@@ -43,12 +53,14 @@ env:
           # Envelope on failure: {"data":null,"error":{"code":"...",...},...}
           # Starlette's JSONResponse serialises with no whitespace after ':'
           # or ',' (separators=(",", ":")), so these match literally.
+          # Only a rejected token counts as logged out. Every 404 and 422 has an
+          # error envelope too, and each one would otherwise trigger a new login.
           loggedInRegex: '\Q"access_token"\E'
-          loggedOutRegex: '\Q"error":{"code"\E'
+          loggedOutRegex: '\Q"error":{"code":"authentication_failed"\E'
       sessionManagement:
         method: "script"
         parameters:
-          script: ".zap/scripts/bearer-session.js"
+          script: "scripts/bearer-session.js"
           scriptEngine: "ECMAScript : Graal.js"
       users:
         - name: "zap-scanner"
@@ -77,12 +89,14 @@ jobs:
         method: "GET"
         responseCode: 200
 
-  - type: spider
+  # A spider finds no links in a JSON API, and production does not serve its
+  # spec, so the routes come from the copy the API client is generated from.
+  - type: openapi
     parameters:
+      apiFile: "../packages/api-client/openapi.json"
+      targetUrl: "${STAGING_URL}"
       context: "staging"
       user: "zap-scanner"
-      url: "${STAGING_URL}"
-      maxDuration: 10
 
   - type: passiveScan-wait
     parameters:
@@ -92,7 +106,8 @@ jobs:
     parameters:
       context: "staging"
       user: "zap-scanner"
-      maxScanDurationInMins: 120
+      # Inside zap-full.yml's job timeout, or the job dies before the reports.
+      maxScanDurationInMins: 30
     policyDefinition:
       defaultStrength: "medium"
       defaultThreshold: "medium"
@@ -113,8 +128,6 @@ jobs:
           threshold: "off"
         - id: 40022 # SQL Injection - PostgreSQL (Time Based)
           threshold: "off"
-        - id: 40024 # SQL Injection - SQLite (Time Based)
-          threshold: "off"
         - id: 90019 # Server Side Code Injection (includes sleep()-style payloads)
           threshold: "off"
         - id: 90020 # Remote OS Command Injection (ping/timeout-based payloads)
@@ -124,7 +137,7 @@ jobs:
   - type: report
     parameters:
       template: "traditional-json"
-      reportDir: "zap-reports"
+      reportDir: "../zap-reports"
       reportFile: "zap-full-report"
       reportTitle: "Nightly ZAP full active scan -- staging"
 
@@ -132,6 +145,6 @@ jobs:
   - type: report
     parameters:
       template: "traditional-html"
-      reportDir: "zap-reports"
+      reportDir: "../zap-reports"
       reportFile: "zap-full-report"
       reportTitle: "Nightly ZAP full active scan -- staging"

@@ -59,7 +59,9 @@ Every deploy checks this from outside and goes red if 80 or 443 answers directly
 
 In Cloudflare, add A records for the app host, the marketing host and the
 storage host (`DOMAIN`, `MARKETING_DOMAIN`, `STORAGE_DOMAIN`), set to
-**Proxied**. Set SSL/TLS to **Full (strict)**.
+**Proxied**. Set SSL/TLS to **Full (strict)**, and under SSL/TLS > Edge
+Certificates set Minimum TLS Version to **1.2**: Cloudflare's default still
+accepts 1.0 and 1.1.
 
 Why first: Caddy gets its certificates from Let's Encrypt by HTTP, and Let's
 Encrypt can only reach the server once DNS points at it. On a server that DNS

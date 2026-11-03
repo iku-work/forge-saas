@@ -10,7 +10,7 @@ import { LOAD_USER_COUNT, LOAD_USER_PASSWORD, THRESHOLDS, userEmail } from "./li
 // family, so it's the closest proxy for "would a latency regression
 // anywhere in the hot path actually get caught."
 //
-// Peak VUs is 35, not the 50 the spec sketch names -- another real capacity
+// Peak VUs is 20, not the 50 the spec sketch names -- another real capacity
 // finding, same category as login-burst.js's, not a rate-limit or config
 // workaround. docker-compose.yml's backend runs one uvicorn process (no
 // --workers, matching Dockerfile's own prod CMD -- this template has no
@@ -24,18 +24,20 @@ import { LOAD_USER_COUNT, LOAD_USER_PASSWORD, THRESHOLDS, userEmail } from "./li
 // no auth/DB work at all still showed p(95)=189ms at 50 concurrent VUs
 // hammering it continuously, confirming the remaining ceiling is
 // event-loop/connection-handling capacity for *one* process, not a
-// findable code defect. 35 VUs held comfortable headroom (p95 ~134ms)
-// across repeated runs; 50 sat right at or over budget on this same
-// hardware after every other fix. A future multi-worker/multi-replica
-// setup should raise this back toward the original 50.
+// findable code defect. Measured 2026-11-03 on the prod compose stack, with the
+// backend at ~100% of one core at 35 VUs: 20 VUs p95 216ms at 43 req/s, 25 VUs
+// 357ms, 35 VUs 632ms at 51 req/s. 35 failed its budget on all but one nightly
+// from July to October, which nobody could see, so 20 is the load this process
+// actually holds. A future multi-worker/multi-replica setup should raise this
+// back toward the original 50.
 export const options = {
   scenarios: {
     mixed: {
       executor: "ramping-vus",
       startVUs: 0,
       stages: [
-        { duration: "30s", target: 35 },
-        { duration: "3m", target: 35 },
+        { duration: "30s", target: 20 },
+        { duration: "3m", target: 20 },
         { duration: "15s", target: 0 },
       ],
     },
