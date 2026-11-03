@@ -16,6 +16,7 @@
 | M11, ZAP | Run on 3 November on a local copy of the production stack, not on forge-prod-2: through Cloudflare it would have tested the WAF and the rate limits, not the app. About 28,000 attack requests, no 5xx, nothing above Low. It reached 25 of the 102 operations, because routes with other IDs in the path stop at validation or a 404. |
 | M11, TLS | Run on the public host on 3 November: Cloudflare's defaults still accept TLS 1.0 and 1.1 and offer older CBC ciphers. `new-server.md` now sets the minimum version. Headers, the HTTP redirect and the hidden paths are right too. |
 | M11, k6 | Run on the same local stack on 3 November, with pgbouncer and TLS. One backend process holds about 43 requests a second within budget, and uses a whole core at about 50, with no errors. No deployment needs more yet; more means more uvicorn workers. On GitHub's runner, without pgbouncer or TLS, all five scripts pass: `mixed` has a 90 ms p95 at 20 users. |
+| M5, Sentry test | Found on the way: the workers never started Sentry, so no failed job or `capture_exception` in a job could reach it. Fixed in the worker Sentry PR. `check-sentry.sh` proves all three processes once forge-prod-2 has deployed it. The rest of M5 is open. |
 | Everything else | Open. |
 
 The race H1 mentions is closed by the binding: an attacker registering again cannot change what the owner's link does. One risk remains: the owner clicking a link from a signup they never made. The email's footer already tells people to ignore it in that case.
