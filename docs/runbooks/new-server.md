@@ -179,6 +179,13 @@ only built once `DEPLOY_TARGET` is set.
   R2. Until it has run, the backup is a belief.
 - Sentry shows the `forge-backup` cron monitor after the first nightly run,
   and its alert reaches you (backup-restore.md, "Alerting").
+- Application errors reach Sentry. This sends one test event from each of the
+  backend, worker and scanner-worker, and all three should appear as issues:
+
+  ```bash
+  ssh forge@<ip> 'cd ~/forge && set -a && . ~/forge-backup.env && set +a && bash scripts/check-sentry.sh'
+  ```
+
 - Before anyone signs up: the Bitwarden `JWT_PRIVATE_KEY` and `ENCRYPTION_KEY`
   were generated for this product. A published key would already have stopped
   the deploy; a key shared with another product would not.

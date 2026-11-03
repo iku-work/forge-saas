@@ -1,3 +1,8 @@
+import os
+import subprocess
+import sys
+from pathlib import Path
+
 import pytest
 import sentry_sdk
 from fastapi import FastAPI
@@ -58,6 +63,26 @@ def test_init_sentry_noop_when_dsn_unset() -> None:
     client = sentry_sdk.get_client()
     assert client.transport is None
     assert sentry_sdk.capture_exception(RuntimeError("boom")) is None
+
+
+# A fresh process, because here app.main has usually started Sentry already, and
+# the workers do not import it. Without this, every capture_exception in a job
+# did nothing.
+def test_the_worker_module_starts_sentry_with_the_arq_integration() -> None:
+    code = """
+import sentry_sdk, app.workers.main
+from sentry_sdk.integrations.arq import ArqIntegration
+assert sentry_sdk.get_client().get_integration(ArqIntegration)
+"""
+    result = subprocess.run(  # noqa: S603 -- fixed argv: the import under test
+        [sys.executable, "-c", code],
+        cwd=Path(__file__).resolve().parents[1],
+        env={**os.environ, "SENTRY_DSN": "https://public@example.com/1"},
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr
 
 
 @pytest.mark.usefixtures("restore_global_sentry_client")
