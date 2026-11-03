@@ -103,6 +103,24 @@ def _zap_full_workflow() -> dict:
     return yaml.safe_load(content)
 
 
+# ZAP resolves these from the plan's directory. A wrong one stops the plan before
+# its first request, and nothing else runs this plan on a PR.
+def test_zap_full_plan_paths_exist_relative_to_the_plan() -> None:
+    plan_dir = REPO_ROOT / ".zap"
+    plan = yaml.safe_load((plan_dir / "full-scan.yaml").read_text())
+    session = plan["env"]["contexts"][0]["sessionManagement"]["parameters"]
+    openapi = next(j for j in plan["jobs"] if j["type"] == "openapi")
+    assert (plan_dir / session["script"]).is_file()
+    assert (plan_dir / openapi["parameters"]["apiFile"]).is_file()
+
+
+def test_zap_full_scan_ends_before_its_job_does() -> None:
+    plan = yaml.safe_load((REPO_ROOT / ".zap" / "full-scan.yaml").read_text())
+    active = next(j for j in plan["jobs"] if j["type"] == "activeScan")
+    job = _zap_full_workflow()["jobs"]["zap-full-scan"]
+    assert active["parameters"]["maxScanDurationInMins"] < job["timeout-minutes"]
+
+
 # T-225/ASVS V9.1.2, V9.1.3: an independent TLS cipher/version scan of
 # STAGING_URL runs alongside the ZAP full scan, same dormant-until-configured
 # job.

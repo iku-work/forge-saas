@@ -8,9 +8,14 @@
 # variables -> Actions), same as ci.yml's `deploy` job (see
 # docs/runbooks/deploy-render.md):
 #   - STAGING_URL (variable)         -- e.g. https://staging.example.com
-#   - ZAP_SCANNER_EMAIL (secret)     -- login for a dedicated MEMBER-role
-#                                        user, its own org, synthetic data
+#   - ZAP_SCANNER_ORG_ID (variable)  -- the org below
+#   - ZAP_SCANNER_EMAIL (secret)     -- login for a dedicated user who owns
+#                                        its own org, synthetic data
 #   - ZAP_SCANNER_PASSWORD (secret)
+# The target also needs its rate limits raised for the run, with the values in
+# backend/.env.loadtest. At the default 100 requests a minute per user, the scan
+# would get little but 429s. Its email should be a sandbox, because the scan
+# calls the routes that send mail.
 # Until STAGING_URL is set the job is skipped (grey, not red). It used to run
 # and fail every night, which taught everyone to ignore this workflow -- the
 # opposite of a signal (changed 2026-10-14).
@@ -43,8 +48,12 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
+      # World-writable because testssl.sh and ZAP run as their images' own users,
+      # not as the runner that creates this. The action's chmod is not recursive.
       - name: Make report output directory
-        run: mkdir -p zap-reports
+        run: |
+          mkdir -p zap-reports
+          chmod 777 zap-reports
 
       # T-225/ASVS V9.1.2, V9.1.3: an independent scan of staging's actual
       # negotiated TLS versions/cipher suites, not just trust in Caddy's
@@ -55,7 +64,7 @@ jobs:
         if: always()
         run: |
           docker run --rm -v "$PWD/zap-reports:/output" drwetter/testssl.sh:latest@sha256:9fc0395106bf1df9a20695d04d6fda09c56301cd62a63cb24aedaa27f991a1e4 \
-            --severity HIGH --protocols --ciphers \
+            --protocols --std \
             --jsonfile /output/testssl-report.json \
             "${{ vars.STAGING_URL }}"
 
@@ -67,11 +76,16 @@ jobs:
           path: zap-reports/testssl-report.json
           retention-days: 90
 
+      # ZAP sends a path parameter as its own name, /orgs/org_id, which fails the
+      # UUID check before any handler runs. Org routes are the ones worth reaching.
+      - name: Point the API spec at the scanner's org
+        env:
+          ZAP_SCANNER_ORG_ID: ${{ vars.ZAP_SCANNER_ORG_ID }}
+        run: sed -i "s/{org_id}/$ZAP_SCANNER_ORG_ID/g" packages/api-client/openapi.json
+
       # zaproxy/action-af wraps `docker run ... zap.sh -cmd -autorun <plan>`,
-      # mounting $GITHUB_WORKSPACE as the container's /zap/wrk -- so the plan
-      # can reference .zap/scripts/bearer-session.js and write to
-      # zap-reports/ using paths relative to the repo root, same as they
-      # appear in .zap/full-scan.yaml.
+      # mounting $GITHUB_WORKSPACE as the container's /zap/wrk. Paths in the plan
+      # resolve from .zap/, the plan's own directory.
       - name: ZAP full active scan (Automation Framework)
         uses: zaproxy/action-af@d186d5d9536d0f1380e5eaa58168432fefc8ed6d # v0.3.0
         env:
@@ -142,3 +156,9 @@ jobs:
               --body "$body"
             echo "filed new issue for pluginid=$pluginid ($name)"
           done
+
+      # testssl.sh exits 0 whatever it finds, so nothing else would fail on this.
+      - name: Refuse TLS below 1.2
+        if: always()
+        run: |
+          jq -e '[.[] | select(.id == "TLS1" or .id == "TLS1_1") | select(.finding | startswith("offered"))] | length == 0'             zap-reports/testssl-report.json

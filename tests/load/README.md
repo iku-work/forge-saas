@@ -20,7 +20,7 @@ the budget it's supposed to be asserting.
 | `login-burst.js`  | A spike of logins, distinct accounts per VU, not one hammered login |
 | `browse.js`       | Authenticated list pagination: members, notifications, files        |
 | `presign.js`      | File presign -> real upload to MinIO -> confirm, the full round trip |
-| `mixed.js`        | 80% reads / 15% writes / 5% auth, ramping 0 -> 35 VUs, held 3 min    |
+| `mixed.js`        | 80% reads / 15% writes / 5% auth, ramping 0 -> 20 VUs, held 3 min    |
 | `api-key.js`      | The **key**-authenticated read path (T-350) -- a different hot path from the four above |
 
 `api-key.js` is the odd one out twice over. It is the only script whose
@@ -46,7 +46,7 @@ caching, the list/upload workloads) -- see that directory's own files for
 what each one does; there's nothing script-specific left to explain beyond
 this table.
 
-`mixed.js`'s peak is 35 VUs, not the 50 sketched in the original task --
+`mixed.js`'s peak is 20 VUs, not the 50 sketched in the original task --
 `docker-compose.yml`'s backend runs one uvicorn process (matches `Dockerfile`'s
 own prod `CMD`, no `--workers`; this template has no multi-worker/multi-replica
 story to opt into yet), and 50 fully-concurrent VUs sits right at or over this
