@@ -324,7 +324,7 @@ FIXTURE_ENV_FILE = TEST_ENV_FILE
 _PROD_SAFE_OVERRIDES: dict[str, object] = {
     **PROD_SAFE_OVERRIDES,
     "DATABASE_URL": "postgresql+asyncpg://u:p@pgbouncer:6432/forge?sslmode=require",
-    "REDIS_URL": "rediss://redis:6379/0",
+    "REDIS_URL": "rediss://:p@redis:6379/0",
 }
 
 

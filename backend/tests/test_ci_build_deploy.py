@@ -41,6 +41,58 @@ def test_docker_compose_prod_uses_hardened_dockerfile() -> None:
             assert build["context"] in (".", "./"), build
 
 
+def _prod_compose() -> dict:
+    return yaml.safe_load((REPO_ROOT / "docker-compose.prod.yml").read_text(encoding="utf-8"))
+
+
+def test_every_prod_container_starts_with_nothing() -> None:
+    for name, service in _prod_compose()["services"].items():
+        assert service["cap_drop"] == ["ALL"], name
+        assert service["security_opt"] == ["no-new-privileges:true"], name
+
+
+def test_prod_filesystems_are_read_only_unless_a_service_says_why() -> None:
+    # minio: backups go through /tmp with docker cp. clamav: /init writes its
+    # config into /etc/clamav. minio-init: a one-shot on the same image as minio.
+    writable = {
+        name
+        for name, service in _prod_compose()["services"].items()
+        if not service.get("read_only")
+    }
+    assert writable == {"minio", "minio-init", "clamav"}
+
+
+def test_the_floating_tags_in_prod_are_pinned_by_digest() -> None:
+    services = _prod_compose()["services"]
+    for name in ("postgres", "redis", "clamav"):
+        assert "@sha256:" in services[name]["image"], name
+    dependabot = yaml.safe_load((REPO_ROOT / ".github/dependabot.yml").read_text(encoding="utf-8"))
+    assert "docker-compose" in {update["package-ecosystem"] for update in dependabot["updates"]}
+
+
+def test_the_internet_facing_container_is_not_on_the_data_network() -> None:
+    compose = _prod_compose()
+    assert compose["networks"]["data"]["internal"] is True
+    services = compose["services"]
+    assert list(services["caddy"]["networks"]) == ["edge"]
+    assert list(services["minio"]["networks"]) == ["edge"]
+    for name in ("postgres", "pgbouncer", "redis", "postgres-exporter", "node-exporter"):
+        assert services[name]["networks"] == ["data"], name
+    for name in ("backend", "worker", "scanner-worker"):
+        assert services[name]["networks"] == ["edge", "data"], name
+    assert services["clamav"]["networks"] == ["data", "clamav-updates"]
+
+
+def test_redis_goes_through_the_entrypoint_that_drops_root() -> None:
+    # `sh -c 'exec redis-server'` hides redis-server from the entrypoint's check,
+    # and Redis then runs as root. It did under TLS until 2026-11-03.
+    tls = yaml.safe_load((REPO_ROOT / "docker-compose.tls.yml").read_text(encoding="utf-8"))
+    for compose in (_prod_compose(), tls):
+        assert (
+            "exec docker-entrypoint.sh redis-server" in compose["services"]["redis"]["command"][2]
+        )
+
+
 def _ci_workflow() -> dict:
     content = (REPO_ROOT / ".github" / "workflows" / "ci.yml").read_text()
     return yaml.safe_load(content)
@@ -466,11 +518,28 @@ def test_hetzner_starts_caddy_on_its_own_before_the_backend() -> None:
     steps = _deploy_workflow("hetzner")["jobs"]["deploy"]["steps"]
     for name in ("Pull and switch", "Roll back to the previous image"):
         run = next(s["run"] for s in steps if s.get("name") == name)
-        ups = [line.strip() for line in run.splitlines() if " up -d " in line]
+        ups = [line.strip() for line in run.splitlines() if " up -d --no-deps " in line]
         assert ups == [
             "docker compose $COMPOSE up -d --no-deps caddy",
             "docker compose $COMPOSE up -d --no-deps backend worker scanner-worker",
         ], name
+
+
+def test_hetzner_brings_the_data_services_up_to_date_before_it_migrates() -> None:
+    # A deploy that only recreated the app left a change to Postgres or Redis
+    # waiting for someone to run `up -d` on the box, and the app on a network its
+    # data services had not joined. A rollback puts them back with the checkout.
+    steps = _deploy_workflow("hetzner")["jobs"]["deploy"]["steps"]
+    migrate = next(s["run"] for s in steps if s.get("name") == "Migrate on the box")
+    data_services = "postgres pgbouncer redis minio clamav postgres-exporter node-exporter"
+    assert data_services in migrate
+    assert migrate.index(data_services) < migrate.index("scripts/backup.sh db")
+    assert "--wait" in migrate
+    rollback = next(s["run"] for s in steps if s.get("name") == "Roll back to the previous image")
+    assert rollback.index(data_services) < rollback.index("up -d --no-deps caddy")
+    # Everything the bootstrap starts that holds state, or the two would drift.
+    bootstrap = (REPO_ROOT / "scripts/bootstrap-hetzner-box.sh").read_text(encoding="utf-8")
+    assert "pgbouncer redis minio minio-init clamav postgres-exporter node-exporter" in bootstrap
 
 
 def test_hetzner_takes_a_backup_before_it_migrates() -> None:

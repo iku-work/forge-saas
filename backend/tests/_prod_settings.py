@@ -12,7 +12,7 @@ PROD_SAFE_OVERRIDES: dict[str, object] = {
     "VIRUS_SCANNER": "clamav",
     "PASSWORD_PEPPER": "a-real-pepper",
     "DATABASE_URL": "postgresql+asyncpg://u:p@localhost:5432/db?sslmode=require",
-    "REDIS_URL": "rediss://localhost:6379/0",
+    "REDIS_URL": "rediss://:p@localhost:6379/0",
     # The compose posture: Caddy answers /metrics with a 404 before the app
     # ever sees the request (verified for both Caddyfiles by
     # test_caddy_config.py). A deployment with no such edge -- Render, Fly,

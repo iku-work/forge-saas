@@ -5,7 +5,7 @@ a histogram, and counters for things the instrumentator can't see on its own.
 
 `/metrics` is never reachable through Caddy in either environment (see
 Caddyfile / Caddyfile.prod's `respond /metrics 404` rules, verified by
-test_caddy_config.py) -- it's scrapeable only from inside forge-net, where a
+test_caddy_config.py) -- it's scrapeable only from inside the Docker network, where a
 Prometheus instance itself would live.
 
 That is a property of the *edge*, not of this endpoint, and it stops being

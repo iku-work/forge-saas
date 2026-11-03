@@ -50,3 +50,18 @@ updates:
     groups:
       docker:
         patterns: ["*"]
+
+  # postgres, redis and clamav are pinned by digest, so that nothing changes on a
+  # restart. This is what still moves them, in a PR that CI runs.
+  - package-ecosystem: docker-compose
+    directories: [/]
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
+    groups:
+      docker-compose:
+        patterns: ["*"]

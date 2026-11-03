@@ -38,7 +38,7 @@ CN = forge-internal-ca
 
 [v3]
 # One certificate serves all three hops, so every service name the stack
-# resolves has to be present. These are compose service names on forge-net,
+# resolves has to be present. These are compose service names,
 # not public hostnames.
 subjectAltName = DNS:postgres,DNS:pgbouncer,DNS:redis,DNS:localhost,IP:127.0.0.1
 basicConstraints = critical,CA:TRUE

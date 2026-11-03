@@ -289,7 +289,7 @@ class Settings(BaseSettings):
     # "*" is worse than leaving this unset, not better.
     #
     # The proxy reaches this app over a private network in every deployment
-    # here (Render's router, Caddy on forge-net), so the private ranges are
+    # here (Render's router, Caddy on its Docker network), so the private ranges are
     # the right answer and are what .env.example ships:
     #   10.0.0.0/8,172.16.0.0/12,192.168.0.0/16
     # Add your CDN's published ranges too if one sits in front, or its egress
@@ -532,6 +532,18 @@ class Settings(BaseSettings):
                 "service behind the 'clamav' profile).",
             ),
             (not self.PASSWORD_PEPPER, "PASSWORD_PEPPER must be set outside dev"),
+            (
+                any(host["username"] == "postgres" for host in self.DATABASE_URL.hosts()),
+                "DATABASE_URL connects as postgres, the superuser, who can run programs "
+                "on the database server after an SQL injection. Connect as an account "
+                "that only reads and writes rows; see scripts/provision-db-roles.sh.",
+            ),
+            (
+                not self.REDIS_URL.password and not self.REDIS_ON_PRIVATE_NETWORK,
+                "REDIS_URL has no password, and anyone who reaches Redis can run code in "
+                "the worker through its job queue. Set one. REDIS_ON_PRIVATE_NETWORK=true "
+                "only if nothing but your own services can reach that instance.",
+            ),
             (
                 bool(published),
                 f"{' and '.join(published)} is a key that has been published (a test "

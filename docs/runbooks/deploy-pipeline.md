@@ -91,6 +91,13 @@ is about to serve traffic**, before it switches:
 **Expected:** the migration ends without error. This is the step to read
 first when a deploy fails — it tells you whether the schema moved.
 
+On Hetzner the same step first brings the data services (Postgres, pgbouncer,
+Redis, MinIO, ClamAV and the exporters) to what the checkout says, and waits for
+them to be healthy. A release that does not change them leaves them running. One
+that does, such as a Dependabot digest bump, restarts them here, so the app is
+briefly down from this point until the switch below. Changes to the `.env.*` files
+on the box take effect the same way, at the next deploy.
+
 It is always `python -m app.core.migrations`, never `alembic upgrade head`.
 This schema has branched module heads; `head` (singular) could never have
 succeeded against it.

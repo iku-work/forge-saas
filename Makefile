@@ -157,7 +157,8 @@ prod-compose-tls-check: internal-certs
 	docker compose -f docker-compose.prod.yml -f docker-compose.tls.yml run --rm minio-init
 	@for i in $$(seq 1 45); do 		docker compose -f docker-compose.prod.yml -f docker-compose.tls.yml exec -T backend 			python -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')" 			>/dev/null 2>&1 && break; 		sleep 2; 	done
 	MIGRATIONS_DATABASE_URL='postgresql+asyncpg://postgres:postgres@postgres:5432/forge?sslmode=require' 		docker compose -f docker-compose.prod.yml -f docker-compose.tls.yml run --rm --no-deps -e MIGRATIONS_DATABASE_URL backend python -m app.core.migrations
-	docker compose -f docker-compose.prod.yml -f docker-compose.tls.yml up -d --wait worker
+	docker compose -f docker-compose.prod.yml -f docker-compose.tls.yml up -d --wait worker scanner-worker
+	docker compose -f docker-compose.prod.yml -f docker-compose.tls.yml up -d --no-deps caddy
 	docker compose -f docker-compose.prod.yml -f docker-compose.tls.yml exec -T backend python -c 		"import urllib.request; r=urllib.request.urlopen('http://localhost:8000/health/ready'); print('health/ready:', r.status, r.read().decode())"
 	@echo "--- both hops must report TLS, not just the one the app can see ---"
 	docker compose -f docker-compose.prod.yml -f docker-compose.tls.yml exec -T postgres 		psql -U postgres -d forge -tAc 		"SELECT 'pgbouncer->postgres ssl=' || s.ssl || ' ' || coalesce(s.version,'') FROM pg_stat_ssl s JOIN pg_stat_activity a USING (pid) WHERE a.datname='forge' AND a.backend_type='client backend' AND a.client_addr IS NOT NULL LIMIT 1"

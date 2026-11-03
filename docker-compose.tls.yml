@@ -45,6 +45,7 @@ services:
     # `su` from BusyBox, not su-exec or gosu (neither is in this image) and not
     # setpriv (BusyBox's build has no --reuid).
     user: root
+    cap_add: [CHOWN, DAC_OVERRIDE, FOWNER, SETGID, SETUID]
     entrypoint:
       [
         "sh",
@@ -73,13 +74,13 @@ services:
 
   redis:
     # --port 0 closes the cleartext listener. Leaving it open would mean
-    # `rediss://` satisfies the startup invariant while anything on forge-net
+    # `rediss://` satisfies the startup invariant while anything on its network
     # could still connect in the clear.
     command:
       [
         "sh",
         "-c",
-        "cp /certs/server.crt /certs/server.key /certs/ca.crt /tmp/ && chown redis:redis /tmp/server.crt /tmp/server.key /tmp/ca.crt && chmod 600 /tmp/server.key && exec redis-server --requirepass \"$${REDIS_PASSWORD:?missing from .env.redis}\" --port 0 --tls-port 6379 --tls-cert-file /tmp/server.crt --tls-key-file /tmp/server.key --tls-ca-cert-file /tmp/ca.crt --tls-auth-clients no",
+        "cp /certs/server.crt /certs/server.key /certs/ca.crt /tmp/ && chown redis:redis /tmp/server.crt /tmp/server.key /tmp/ca.crt && chmod 600 /tmp/server.key && exec docker-entrypoint.sh redis-server --requirepass \"$${REDIS_PASSWORD:?missing from .env.redis}\" --port 0 --tls-port 6379 --tls-cert-file /tmp/server.crt --tls-key-file /tmp/server.key --tls-ca-cert-file /tmp/ca.crt --tls-auth-clients no",
       ]
     # The stock healthcheck speaks cleartext to a port that no longer exists.
     healthcheck:
