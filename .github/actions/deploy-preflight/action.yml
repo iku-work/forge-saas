@@ -4,14 +4,10 @@ description: >-
   log in to the registry, materialise the production env, and refuse an
   unsafe one.
 
-# Extracted so the three deploy workflows cannot drift from each other.
-#
 # It no longer migrates (C4, 2026-09-29). It used to run the new image here,
 # on the GitHub runner, against the production database -- which meant that
-# database had to be reachable from GitHub's network. Each platform now
-# migrates on its own infrastructure, from the image about to serve traffic,
-# before it switches: over SSH on Hetzner, as a one-off ECS task on AWS, as
-# Render's pre-deploy command.
+# database had to be reachable from GitHub's network. The deploy now migrates
+# over SSH on the box, from the image about to serve traffic, before it switches.
 
 inputs:
   image:

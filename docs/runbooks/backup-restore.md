@@ -4,11 +4,10 @@
 > database and uploaded files, encrypted, copied off-host to a locked
 > Cloudflare R2 bucket, restored from the copy fetched back, and watched by a
 > Sentry cron monitor. See "Verification status" at the bottom for the
-> numbers. The Render path is still written but unexecuted.
+> numbers.
 
-Covers the two deployment paths this repo supports: Render (managed
-Postgres/Redis, `docs/runbooks/deploy-render.md`) and self-hosted
-(`docker-compose.prod.yml`, Postgres/Redis as containers on its `data` network).
+Covers the deployment this repo supports: `docker-compose.prod.yml`, with
+Postgres and Redis as containers on its `data` network.
 
 ## Trigger
 
@@ -19,21 +18,19 @@ Postgres/Redis, `docs/runbooks/deploy-render.md`) and self-hosted
   bottom exists. Running this on purpose, on a schedule, is the only thing
   that makes it trustworthy in an emergency.
 
-Not this runbook: Redis loss (see the note at the end of the Render section —
-it holds no system of record), a single accidentally-deleted row where the
+Not this runbook: Redis loss (it holds no system of record:
+`Session`/`RefreshToken` rows live in Postgres, and Redis only holds derived
+state such as rate-limit counters, cached counts and SSE fan-out, so losing it
+logs users out and resets limits but loses no data), a single accidentally-deleted row where the
 application has its own undo (a soft-deleted org, a GDPR export), or key
 rotation, which is `encryption-key-rotation.md`.
 
 ## Pre-checks
 
-- **Know which deployment path you are on.** Render-managed and self-hosted
-  share nothing below except the verification step.
 - **Know the target time**, and how much data loss it implies. Daily snapshot
   or PITR timestamp — write the number down before you start, because it is
   the number you will be asked for afterwards.
-- **Credentials**: the Render dashboard (or `psql` plus the backup archive on
-  the self-hosted path), and access to update `PROD_ENV_FILE` in GitHub
-  Actions secrets for the cutover.
+- **Credentials**: SSH to the box, and the backup private key from Bitwarden.
 - **Confirm the backup exists and covers the target time** before touching the
   live instance. A restore procedure started against a backup that turns out
   not to be there is how a recoverable incident becomes an unrecoverable one.
@@ -43,39 +40,6 @@ rotation, which is `encryption-key-rotation.md`.
   columns come back unreadable. See `encryption-key-rotation.md`.
 
 ## Steps
-
-### Render (managed Postgres)
-
-Render's managed PostgreSQL takes automatic daily backups and retains them
-for a period set by the instance's plan (7 days on the cheapest paid tier at
-the time of writing — confirm against the current plan on the Render
-dashboard, this changes independently of this repo). Point-in-time recovery
-(PITR) within the retention window is also available on paid plans.
-
-**Restore procedure** (Dashboard → the Postgres instance → **Backups**):
-
-1. Pick a backup (daily snapshot) or a specific timestamp (PITR, if enabled
-   on the plan).
-2. Render restores into a **new** Postgres instance — it does not overwrite
-   the live one in place. This is deliberate: it gives you a chance to
-   verify the restored data before cutting traffic over.
-3. Verify the restored instance: connect with `psql` and spot-check recent
-   rows in a few tables that change often (`session`, `audit_log`,
-   `notification`), and run `alembic current` against it to confirm the
-   schema version matches what's expected for that point in time.
-4. Cut over: update `DATABASE_URL` (the `PROD_ENV_FILE` GitHub Actions
-   secret, per `deploy-render.md`) to the restored instance's connection
-   string, then redeploy the backend/worker services so they pick it up.
-5. Decommission the old instance once the new one has been serving
-   correctly for a reasonable soak period — don't delete it immediately
-   after cutover.
-
-Render's managed Redis (Key Value) is a cache/rate-limit/session-lookup
-layer in this app, not a system of record — `Session`/`RefreshToken` rows
-live in Postgres, and Redis only holds derived/ephemeral state (rate-limit
-counters, cached counts, SSE fan-out). Losing it is a availability blip
-(users get logged out, rate limits reset), not a data-loss event, so it's
-intentionally not covered by a restore procedure here.
 
 ### Self-hosted (`docker-compose.prod.yml`)
 
@@ -248,8 +212,9 @@ column as unreadable ciphertext while every row count looks correct.
 **Emergency restore**: stop `backend` and `worker` first (`docker compose -f
 docker-compose.prod.yml stop backend worker`) so nothing writes underneath
 the restore, then `--into` the live database name, then bring them back and
-verify with the same `psql`/`alembic current` spot-check as the Render path
-above before resuming traffic. Restore the files archive from the same run
+verify before resuming traffic: connect with `psql`, spot-check recent rows in
+tables that change often (`session`, `audit_log`, `notification`), and run
+`alembic current` to confirm the schema version. Restore the files archive from the same run
 with `restore-files.sh --into <bucket>`: a database and a bucket from
 different days disagree about which files exist.
 
@@ -281,14 +246,8 @@ any traffic points at it:
 
 ## Rollback
 
-The Render path is built to be rolled back: the restore lands in a **new**
-instance and the old one keeps running, so "rollback" is pointing
-`DATABASE_URL` back at the original and redeploying. That property is the
-whole reason step 5 says not to decommission immediately — the soak period is
-the rollback window, and deleting the old instance is the point of no return.
-
-The self-hosted path has no such window by default: restoring a volume in
-place overwrites it. **Copy the current volume aside before restoring over
+There is no rollback window by default: restoring a volume in place overwrites
+it. **Copy the current volume aside before restoring over
 it** (the same `tar` command above, into a differently-named archive), even
 when the data in it is believed to be corrupt — it is the only copy of
 whatever was written since the last backup.
@@ -322,8 +281,7 @@ writes. Decide how long the soak is before starting, not while deciding.
 `REDIS_URL` outside `dev` — the app refuses to boot otherwise. Since T-244 the
 same requirement covers `MIGRATIONS_DATABASE_URL`: that is a second,
 independent hop to Postgres (it bypasses pgbouncer), so `DATABASE_URL`'s own
-TLS setting says nothing about it. Render's managed Postgres satisfies this on
-its connection string, so this section is the self-hosted path only.
+TLS setting says nothing about it.
 
 **This is now one command, not a manual checklist.**
 
@@ -418,9 +376,6 @@ in at start, so a restarted container reuses its stale copy.
 
 ## Verification status
 
-- [ ] Render restore drill executed against a real (non-template) Render
-      account, confirming the dashboard flow above matches Render's current
-      UI/API and that a restored instance actually boots the app correctly.
 - [x] **Self-hosted backup/restore exercised end to end (2026-09-29.)**
       Against the live single-box deployment, stack assembled from
       `prod + tls + host-build`.
@@ -515,7 +470,3 @@ in at start, so a restarted container reuses its stale copy.
       Not covered: any certificate other than the self-signed one the
       generator writes, and rotation under sustained load (the restarts drop
       connections; only the verification window is closed).
-
-The first two are not checked off — this repo is a template with no live
-deployment yet (see `docs/runbooks/deploy-render.md`). Check one off (with the
-date and who ran it) the first time each path is actually exercised for real.

@@ -44,8 +44,8 @@ no default, so the app refuses to boot without them.
   `backend/app/core/config.py`'s `Settings` — never read from `os.environ`
   directly elsewhere in the codebase (enforced by the semgrep
   `no-os-environ` custom rule).
-- In staging/prod they live in the hosting platform's secret store (see
-  [`docs/runbooks/deploy-render.md`](../runbooks/deploy-render.md)), not
+- In staging/prod they live in Bitwarden Secrets Manager (see
+  [`docs/runbooks/deploy-pipeline.md`](../runbooks/deploy-pipeline.md)), not
   in a dedicated vault/KMS — that gap is T-225's, not this document's.
 - Holders: whoever has access to the hosting platform's secret-store UI/
   API. This template doesn't prescribe a specific access-control model

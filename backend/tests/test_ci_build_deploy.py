@@ -165,7 +165,7 @@ def test_build_job_generates_sbom_before_pushing() -> None:
     assert sbom_index < push_index
 
 
-DEPLOY_TARGETS = ("render", "hetzner", "aws")
+DEPLOY_TARGETS = ("hetzner",)
 
 
 def _deploy_workflow(target: str) -> dict:
@@ -178,11 +178,8 @@ def _preflight_action() -> dict:
     return yaml.safe_load(path.read_text(encoding="utf-8"))
 
 
-# These four used to assert the shape of one inline `deploy` job in ci.yml.
-# That job was split into a workflow per platform on 2026-09-14, and the
-# invariants it guarded matter more now, not less: there are three ways to
-# ship instead of one, and only one of them was ever covered. So they are
-# parameterised over all three.
+# Parameterised over DEPLOY_TARGETS so that a fork adding a second platform gets
+# every one of these checks for it.
 @pytest.mark.parametrize("target", DEPLOY_TARGETS)
 def test_deploy_only_runs_on_main_and_needs_the_full_gate(target: str) -> None:
     job = _ci_workflow()["jobs"][f"deploy-{target}"]
@@ -201,7 +198,7 @@ def test_deploy_only_runs_on_main_and_needs_the_full_gate(target: str) -> None:
 def test_caller_grants_every_permission_the_deploy_job_asks_for(target: str) -> None:
     # C3: a reusable workflow can only narrow its caller's grant. A permission
     # the called job declares but the caller does not grant is silently
-    # absent -- which is how deploy-aws's OIDC `id-token: write` never worked.
+    # absent.
     caller = _ci_workflow()["jobs"][f"deploy-{target}"].get("permissions", {})
     wanted = _deploy_workflow(target)["jobs"]["deploy"].get("permissions", {})
     for scope, level in wanted.items():
@@ -228,21 +225,12 @@ def test_preflight_does_not_migrate() -> None:
 
 # The step that migrates *on the target*, and the first step that changes
 # anything a user can reach, per platform.
-MIGRATE_STEP = {
-    "render": "Confirm Render migrates in pre-deploy",
-    "hetzner": "Migrate on the box",
-    "aws": "Run migrations as a one-off task",
-}
-SWITCH_STEP = {
-    "render": "Trigger Render deploy",
-    "hetzner": "Pull and switch",
-    "aws": "Deploy the backend service",
-}
+MIGRATE_STEP = {"hetzner": "Migrate on the box"}
+SWITCH_STEP = {"hetzner": "Pull and switch"}
 
 
 def _step_text(step: dict) -> str:
-    """A step's script plus its env -- Render's migration command is in the
-    job env, checked against the service by the script."""
+    """A step's script plus its env."""
     env = " ".join(str(v) for v in step.get("env", {}).values())
     return f"{step.get('run', '')} {env}"
 
@@ -257,8 +245,7 @@ def test_every_deploy_migrates_on_the_target_before_it_switches(target: str) -> 
     assert migrate < switch, "a failed migration must abort before traffic moves"
 
     text = _step_text(steps[migrate]) + " " + " ".join(str(v) for v in job["env"].values())
-    # AWS spells the command as a JSON array for the container override.
-    text = " ".join(re.sub(r"[\[\]\",]", " ", text).split())
+    text = " ".join(text.split())
     # `python -m app.core.migrations`, not `alembic upgrade head`: every
     # optional module keeps its migrations on its own branch (T-062), so this
     # tree always has several heads and a bare `head` is ambiguous -- alembic
@@ -266,8 +253,7 @@ def test_every_deploy_migrates_on_the_target_before_it_switches(target: str) -> 
     # what stops it coming back.
     assert "python -m app.core.migrations" in text
     assert "alembic upgrade head" not in text
-    # On the target: over SSH, as an ECS task, or as Render's pre-deploy --
-    # never `docker run` on the runner.
+    # On the target, over SSH: never `docker run` on the runner.
     assert "docker run" not in steps[migrate].get("run", "")
 
 
@@ -286,7 +272,7 @@ def test_every_deploy_can_roll_back_and_only_does_so_on_failure(target: str) -> 
 # C5: `outcome == 'success'` skipped the rollback for a switch that failed
 # halfway -- some containers on the new image, some on the old -- which is
 # the state that most needs undoing.
-@pytest.mark.parametrize("target", ["hetzner", "aws"])
+@pytest.mark.parametrize("target", DEPLOY_TARGETS)
 def test_rollback_also_covers_a_half_finished_switch(target: str) -> None:
     steps = _deploy_workflow(target)["jobs"]["deploy"]["steps"]
     rollback = next(s for s in steps if "Roll back" in s.get("name", ""))

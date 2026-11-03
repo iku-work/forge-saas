@@ -34,7 +34,7 @@ Reach for this when:
 already handled by circuit breakers — see `docs/runbooks/degraded-mode.md`,
 and do not reach for a kill switch for something the breaker is already
 degrading gracefully. A slow database is `docs/runbooks/slow-queries.md`. A
-deploy that needs rolling back is `docs/runbooks/deploy-render.md`;
+deploy that needs rolling back is `docs/runbooks/deploy-pipeline.md`;
 maintenance mode is not a substitute for a rollback, it only buys time for one.
 
 ## Pre-checks

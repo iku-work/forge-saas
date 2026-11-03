@@ -45,7 +45,7 @@ fixed by the repo as it stands, and they are the substance of the choice:
    framework's content pipeline (collections, frontmatter typing, feed
    generation) is doing real work rather than being a checkbox.
 4. **It deploys as static files.** The rest of this repo terminates at Caddy
-   in front of a container (`Caddyfile.prod`, `docs/runbooks/deploy-render.md`).
+   in front of a container (`Caddyfile.prod`, `docs/runbooks/deploy-pipeline.md`).
    A framework that needs a Node server at runtime, or a specific hosting
    platform's edge, is a second deployment topology to operate — the thing
    ADR-0002's consequences section calls "one more thing that can be down".

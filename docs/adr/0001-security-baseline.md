@@ -455,8 +455,8 @@ questionnaire) — evidence links point at real files, not at task IDs.
 | V8.1.2 | Cached/temp server-side copies purged after use | met | `no-store` prevents proxy caching; presigned download URLs expire after 1 hour (`backend/app/modules/storage/service.py`, `_DOWNLOAD_EXPIRES_IN_SECONDS`). |
 | V8.1.3 | Minimal parameters per request (no hidden fields) | met | `backend/app/core/schemas.py` — JSON API with explicitly declared schema fields only, no hidden-form-field pattern. |
 | V8.1.4 | Detect/alert on abnormal request volume | met | `RequestVolumeAnomaly` (`docs/grafana/alerts.yml`, T-225) pages when a route's rate-limit-rejection rate (`http_requests_total{status="429"}`, already produced by `prometheus-fastapi-instrumentator`) sustains over 1/sec for 5 minutes. Deliberately per-route, not per-user/per-IP — true per-IP cardinality in Prometheus is itself a metrics-storage/PII risk. |
-| V8.1.5 | Regular backups with tested restores | partial | `docs/runbooks/backup-restore.md` (T-225) documents the restore procedure for both the Render-managed and self-hosted paths in detail. Still `partial`: the "tested" half requires executing a restore against a live instance, which doesn't exist for this template yet — the runbook's own "Verification status" checklist tracks this explicitly rather than claiming it silently. |
-| V8.1.6 | Backups stored securely | partial | Same runbook as V8.1.5 — Render's managed backups are provider-secured by default; the self-hosted path's operator-owned backup archive isn't independently verified here. |
+| V8.1.5 | Regular backups with tested restores | met | `scripts/backup.sh` runs daily from a systemd timer, and `docs/runbooks/backup-restore.md` records the restore drill run end to end on 2026-10-31, from the off-host copy. |
+| V8.1.6 | Backups stored securely | met | Encrypted with `age` before leaving the box and copied to a locked Cloudflare R2 bucket; the private key is not on the server (`docs/runbooks/backup-restore.md`). |
 
 #### V8.2 Client-side Data Protection
 
