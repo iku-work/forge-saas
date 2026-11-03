@@ -335,13 +335,17 @@ def _clear_settings_env(monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.delenv(name, raising=False)
 
 
-def test_pgbouncer_without_a_migrations_dsn_refuses_to_start(
+def test_pgbouncer_without_a_migrations_dsn_starts_but_refuses_to_migrate(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    # A running app must not need it: it is a superuser's password. Falling back
+    # to DATABASE_URL here would run migrations through the pooler.
     _clear_settings_env(monkeypatch)
 
+    settings = Settings(_env_file=FIXTURE_ENV_FILE, PGBOUNCER_ENABLED=True)
+
     with pytest.raises(RuntimeError, match="MIGRATIONS_DATABASE_URL must be set"):
-        Settings(_env_file=FIXTURE_ENV_FILE, PGBOUNCER_ENABLED=True)
+        _ = settings.migrations_database_url
 
 
 def test_migrations_dsn_pointing_back_at_the_pooler_refuses_to_start(
@@ -494,8 +498,9 @@ def test_ci_migrates_after_the_app_is_already_serving_pooled_traffic() -> None:
 def test_ci_env_file_routes_the_app_through_pgbouncer_and_alembic_around_it() -> None:
     env = dotenv_values(REPO_ROOT / "backend" / ".env.prod-compose")
     assert env["PGBOUNCER_ENABLED"] == "true"
+    assert "forge_app:" in (env["DATABASE_URL"] or "")
     assert "pgbouncer:6432" in (env["DATABASE_URL"] or "")
-    assert "postgres:5432" in (env["MIGRATIONS_DATABASE_URL"] or "")
+    assert "MIGRATIONS_DATABASE_URL" not in env
 
 
 def test_dev_compose_stays_direct_to_postgres() -> None:

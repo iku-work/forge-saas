@@ -108,10 +108,17 @@ services:
   redis:
     image: redis:7-alpine
     restart: unless-stopped
+    # Optional only so that compose can load this file on a server that has not
+    # got it yet, for a service it is not touching. Redis itself refuses to start
+    # without the password. Its own env file for the same reason as postgres above.
+    env_file:
+      - path: ./.env.redis
+        required: false
+    command: ["sh", "-c", 'exec redis-server --requirepass "$${REDIS_PASSWORD:?missing from .env.redis}"']
     volumes:
       - redis_data:/data
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: ["CMD-SHELL", 'REDISCLI_AUTH="$$REDIS_PASSWORD" redis-cli ping | grep -q PONG']
       interval: 5s
       timeout: 5s
       retries: 10
@@ -358,22 +365,17 @@ services:
     networks:
       - forge-net
 
-  # Creates the bucket once, then exits. `--ignore-existing` so a restart of
-  # the stack is a no-op rather than an error. Also sets the bucket's
-  # lifecycle: incoming/ objects expire after a day (review R1 -- see the
-  # same service in docker-compose.yml for why, and why `ilm import`).
+  # Creates the bucket, its lifecycle and the application's own user, then
+  # exits. Safe to run again.
   minio-init:
     image: pgsty/minio:RELEASE.2026-08-04T00-00-00Z
     restart: "no"
     logging: *default-logging
     env_file:
       - ./.env.minio
-    entrypoint:
-      [
-        "sh",
-        "-c",
-        "mc alias set local http://minio:9000 \"$$MINIO_ROOT_USER\" \"$$MINIO_ROOT_PASSWORD\" && mc mb --ignore-existing \"local/$$MINIO_BUCKET\" && echo '{\"Rules\":[{\"ID\":\"expire-incoming\",\"Status\":\"Enabled\",\"Filter\":{\"Prefix\":\"incoming/\"},\"Expiration\":{\"Days\":1}},{\"ID\":\"expire-data-exports\",\"Status\":\"Enabled\",\"Filter\":{\"Prefix\":\"data-exports/\"},\"Expiration\":{\"Days\":1}}]}' | mc ilm import \"local/$$MINIO_BUCKET\"",
-      ]
+    entrypoint: ["sh", "/minio-init.sh"]
+    volumes:
+      - ./scripts/minio-init.sh:/minio-init.sh:ro
     depends_on:
       minio:
         condition: service_healthy

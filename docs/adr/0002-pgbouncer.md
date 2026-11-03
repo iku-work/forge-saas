@@ -76,10 +76,13 @@ migrations are incompatible for two independent reasons:
 
 The setting defaults to `None`, meaning "same as `DATABASE_URL`" — dev,
 `.env.test`, and the Render deployment (no pooler in the path) are unaffected.
-Once `PGBOUNCER_ENABLED=true`, `Settings` refuses to start unless
-`MIGRATIONS_DATABASE_URL` is set *and differs from* `DATABASE_URL`: a
-deployment that turns the pooler on and forgets this fails at boot rather than
-halfway through a production migration.
+Once `PGBOUNCER_ENABLED=true`, `Settings` refuses to start if
+`MIGRATIONS_DATABASE_URL` equals `DATABASE_URL`, and migrating without it is an
+error rather than a fallback through the pooler.
+
+Updated 2026-11-03: it used to be required at boot. It now holds the superuser's
+password, which a running app has no use for, so the Hetzner deploy supplies it
+to the migration container only.
 
 Outside dev the migration DSN carries the same `sslmode=require` requirement
 as `DATABASE_URL` (ASVS V9.2.2) — it is a second, independent hop to Postgres,
@@ -172,9 +175,9 @@ in order of preference:
 - Postgres backend count is now a function of `default_pool_size`, not replica
   count. Scaling the backend no longer risks `FATAL: sorry, too many clients
   already`.
-- Two DSNs to keep in sync in production (`DATABASE_URL` at the pooler,
-  `MIGRATIONS_DATABASE_URL` at Postgres). Startup validation makes getting
-  this wrong loud instead of subtle.
+- Two DSNs in production (`DATABASE_URL` at the pooler,
+  `MIGRATIONS_DATABASE_URL` at Postgres). Validation makes getting this wrong
+  loud instead of subtle.
 - One more service in the prod stack, and one more thing that can be down —
   mitigated by the end-to-end healthcheck plus `depends_on:
   service_healthy`, so the backend never starts against a pooler that can't

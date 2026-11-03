@@ -904,7 +904,8 @@ jobs:
           node scripts/gen-test-secrets.mjs >> backend/.env
           sed 's/change-me/postgres/' .env.postgres.example > .env.postgres
           sed 's/change-me/postgres/' .env.pgbouncer.example > .env.pgbouncer
-          cp .env.postgres-exporter.example .env.postgres-exporter
+          sed 's/change-me/postgres/' .env.postgres-exporter.example > .env.postgres-exporter
+          sed 's/change-me/postgres/' .env.redis.example > .env.redis
 
       # `up` blocks on the depends_on conditions, so reaching the next step at
       # all already proves pgbouncer passed a healthcheck that opens a real
@@ -912,8 +913,10 @@ jobs:
       # none of them are what this job is about.
       - name: Boot postgres + pgbouncer + redis + backend
         run: |
+          docker compose -f docker-compose.prod.yml up -d --wait postgres
+          bash scripts/provision-db-roles.sh
           docker compose -f docker-compose.prod.yml up -d --build \
-            postgres pgbouncer redis backend
+            pgbouncer redis backend
 
       - name: Wait for the backend (every query it makes goes through pgbouncer)
         run: |
@@ -932,8 +935,14 @@ jobs:
       # Succeeding here means alembic reached Postgres over
       # MIGRATIONS_DATABASE_URL: session-level advisory locks and
       # multi-statement DDL do not survive transaction pooling.
+      #
+      # In a container of its own, as the deploy does it: the running backend does
+      # not hold that password, and the tables it creates reach forge_app only
+      # through the default privileges.
       - name: Migrate over the direct DSN while pooled traffic flows
-        run: docker compose -f docker-compose.prod.yml exec -T backend python -m app.core.migrations
+        env:
+          MIGRATIONS_DATABASE_URL: postgresql+asyncpg://postgres:postgres@postgres:5432/forge
+        run: docker compose -f docker-compose.prod.yml run --rm --no-deps -e MIGRATIONS_DATABASE_URL backend python -m app.core.migrations
 
       - name: pgbouncer is actually pooling, in transaction mode
         run: |

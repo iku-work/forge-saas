@@ -70,10 +70,9 @@ openssl x509 -in "$OUT_DIR/server.crt" -noout -subject -enddate -ext subjectAltN
 cat <<EOF
 
 Next:
-  1. Point the three DSNs at TLS (see backend/.env.example):
+  1. Point the DSNs at TLS (see backend/.env.example):
        DATABASE_URL=postgresql+asyncpg://USER:PASS@pgbouncer:6432/forge?sslmode=require
-       MIGRATIONS_DATABASE_URL=postgresql+asyncpg://USER:PASS@postgres:5432/forge?sslmode=require
-       REDIS_URL=rediss://redis:6379/0?ssl_ca_certs=/certs/ca.crt
+       REDIS_URL=rediss://:PASS@redis:6379/0?ssl_ca_certs=/certs/ca.crt
   2. Bring the stack up with the TLS overlay:
        docker compose -f docker-compose.prod.yml -f docker-compose.tls.yml up -d
 

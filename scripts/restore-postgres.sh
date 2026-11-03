@@ -87,6 +87,9 @@ age -d -i <(printf '%s\n' "$identity") "$archive" |
     docker compose exec -T postgres \
         pg_restore -U "${POSTGRES_USER:-postgres}" -d "$TARGET_DB" --no-owner --no-privileges
 
+# --no-privileges leaves a database the application's account cannot read.
+bash "$(dirname "$0")/provision-db-roles.sh" "$TARGET_DB"
+
 elapsed="$(($(date -u +%s) - started))"
 echo "restore-postgres: restored in ${elapsed}s"
 

@@ -104,42 +104,7 @@ fi
 [ -d "$APP_DIR/.git" ] || as_user "git clone -q '$REPO' '$APP_DIR'"
 
 echo "== Infrastructure passwords (generated once, never overwritten)"
-as_user '
-  cd ~/forge
-  umask 077
-  if [ ! -f .env.postgres ]; then
-    pg=$(openssl rand -hex 24)
-    minio=$(openssl rand -hex 24)
-    kms="forge-prod:$(openssl rand -base64 32)"
-    sed "s|change-me|$pg|" .env.postgres.example > .env.postgres
-    sed "s|change-me|$pg|g" .env.pgbouncer.example > .env.pgbouncer
-    sed "s|postgres:postgres@|postgres:$pg@|" .env.postgres-exporter.example > .env.postgres-exporter
-    sed -e "s|^MINIO_ROOT_PASSWORD=.*|MINIO_ROOT_PASSWORD=$minio|" \
-        -e "s|^MINIO_KMS_SECRET_KEY=.*|MINIO_KMS_SECRET_KEY=$kms|" \
-        .env.minio.example > .env.minio
-    user=$(sed -n "s/^MINIO_ROOT_USER=//p" .env.minio)
-    bucket=$(sed -n "s/^MINIO_BUCKET=//p" .env.minio)
-    # What the app needs to reach these services. Copy each line into the
-    # Bitwarden project, then delete this file.
-    cat > bitwarden-values.txt <<EOF
-DATABASE_URL=postgresql+asyncpg://postgres:$pg@pgbouncer:6432/forge?sslmode=require
-MIGRATIONS_DATABASE_URL=postgresql+asyncpg://postgres:$pg@postgres:5432/forge?sslmode=require
-PGBOUNCER_ENABLED=true
-REDIS_URL=rediss://redis:6379/0?ssl_ca_certs=/certs/ca.crt
-STORAGE_BACKEND=minio
-AWS_ACCESS_KEY_ID=$user
-AWS_SECRET_ACCESS_KEY=$minio
-AWS_BUCKET_NAME=$bucket
-VIRUS_SCANNER=clamav
-CLAMAV_HOST=clamav
-CLAMAV_PORT=3310
-
-# Not for the Bitwarden deploy project: back this up somewhere off the box.
-# It decrypts every uploaded file, the way ENCRYPTION_KEY decrypts the columns.
-MINIO_KMS_SECRET_KEY=$kms
-EOF
-  fi
-'
+as_user 'cd ~/forge && bash scripts/gen-infra-secrets.sh'
 
 echo "== Internal TLS certificates"
 as_user 'cd ~/forge && [ -f certs/server.crt ] || bash scripts/gen-internal-certs.sh ./certs >/dev/null'
@@ -147,10 +112,16 @@ as_user 'cd ~/forge && [ -f certs/server.crt ] || bash scripts/gen-internal-cert
 echo "== Stateful services"
 # DOMAIN only satisfies compose's interpolation of the caddy service, which is
 # not started here; the deploy brings caddy and the app up with the real env.
+#
+# Postgres on its own first: pgbouncer's healthcheck logs in as forge_app, which
+# has to exist by then.
 as_user '
   cd ~/forge
-  DOMAIN=bootstrap docker compose -f docker-compose.prod.yml -f docker-compose.tls.yml --profile clamav \
-    up -d --quiet-pull postgres pgbouncer redis minio minio-init clamav postgres-exporter node-exporter
+  export DOMAIN=bootstrap COMPOSE_FILE=docker-compose.prod.yml:docker-compose.tls.yml
+  docker compose up -d --wait --quiet-pull postgres
+  bash scripts/provision-db-roles.sh
+  docker compose --profile clamav \
+    up -d --quiet-pull pgbouncer redis minio minio-init clamav postgres-exporter node-exporter
 '
 
 echo "== Encrypted daily backup (docs/runbooks/backup-restore.md)"

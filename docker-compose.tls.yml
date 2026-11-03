@@ -79,14 +79,14 @@ services:
       [
         "sh",
         "-c",
-        "cp /certs/server.crt /certs/server.key /certs/ca.crt /tmp/ && chown redis:redis /tmp/server.crt /tmp/server.key /tmp/ca.crt && chmod 600 /tmp/server.key && exec redis-server --port 0 --tls-port 6379 --tls-cert-file /tmp/server.crt --tls-key-file /tmp/server.key --tls-ca-cert-file /tmp/ca.crt --tls-auth-clients no",
+        "cp /certs/server.crt /certs/server.key /certs/ca.crt /tmp/ && chown redis:redis /tmp/server.crt /tmp/server.key /tmp/ca.crt && chmod 600 /tmp/server.key && exec redis-server --requirepass \"$${REDIS_PASSWORD:?missing from .env.redis}\" --port 0 --tls-port 6379 --tls-cert-file /tmp/server.crt --tls-key-file /tmp/server.key --tls-ca-cert-file /tmp/ca.crt --tls-auth-clients no",
       ]
     # The stock healthcheck speaks cleartext to a port that no longer exists.
     healthcheck:
       test:
         [
           "CMD-SHELL",
-          "redis-cli --tls --cacert /tmp/ca.crt --cert /tmp/server.crt --key /tmp/server.key ping | grep -q PONG",
+          "REDISCLI_AUTH=\"$$REDIS_PASSWORD\" redis-cli --tls --cacert /tmp/ca.crt --cert /tmp/server.crt --key /tmp/server.key ping | grep -q PONG",
         ]
       interval: 5s
       timeout: 5s

@@ -140,9 +140,10 @@ ALTER ROLE <user> WITH PASSWORD '<new>';
    uses SCRAM here (`AUTH_TYPE=scram-sha-256`), so the userlist holds a
    SCRAM verifier, not the plaintext — copy it from
    `SELECT rolname, rolpassword FROM pg_authid WHERE rolname = '<user>'`.
-3. Update `DATABASE_URL` (and `MIGRATIONS_DATABASE_URL`, and
-   `READ_REPLICA_URL` if set — they are separate values and all three must
-   change together) in `PROD_ENV_FILE`.
+3. Update `DATABASE_URL` (and `READ_REPLICA_URL` if set) in `PROD_ENV_FILE`.
+   Self-hosted, the application logs in as `forge_app`: change its password in
+   `.env.pgbouncer` too, then run `scripts/provision-db-roles.sh` and recreate
+   pgbouncer. The superuser's password is in `.env.postgres` only.
 4. Redeploy.
 
 **Expected:** `/health/ready` passes, and `docker compose logs pgbouncer`

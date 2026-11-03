@@ -7,6 +7,7 @@ from pathlib import Path
 
 import pytest
 import yaml
+from dotenv import dotenv_values
 
 REPO_ROOT = Path(__file__).parent.parent.parent
 
@@ -563,6 +564,102 @@ def test_hetzner_prunes_images_only_after_a_good_deploy_and_never_fails_it() -> 
     assert "if" not in prune, "default if: success() is what keeps it off a failed deploy"
     assert prune["continue-on-error"] is True
     assert "--filter until=" in prune["run"], "a bare prune -a removes every other release"
+
+
+def test_hetzner_keeps_the_superuser_password_out_of_the_running_app() -> None:
+    steps = _deploy_workflow("hetzner")["jobs"]["deploy"]["steps"]
+    run = next(s["run"] for s in steps if s.get("id") == "migrate")
+    assert "-e MIGRATIONS_DATABASE_URL backend" in run
+    assert "POSTGRES_PASSWORD" in run
+    writer = next(s["run"] for s in steps if s.get("name") == "Write prod.env from Bitwarden")
+    assert "MIGRATIONS_DATABASE_URL" in writer
+
+
+def test_a_restore_gives_the_application_its_grants_back() -> None:
+    # pg_restore --no-privileges: without this the app cannot read a restored table.
+    script = (REPO_ROOT / "scripts" / "restore-postgres.sh").read_text(encoding="utf-8")
+    assert script.index("--no-privileges") < script.index('provision-db-roles.sh" "$TARGET_DB"')
+
+
+def test_the_bootstrap_creates_the_accounts_before_pgbouncer_needs_them() -> None:
+    script = (REPO_ROOT / "scripts" / "bootstrap-hetzner-box.sh").read_text(encoding="utf-8")
+    assert script.index("--wait --quiet-pull postgres") < script.index("provision-db-roles.sh")
+    assert script.index("provision-db-roles.sh") < script.index("up -d --quiet-pull pgbouncer")
+    assert "MIGRATIONS_DATABASE_URL" not in (
+        REPO_ROOT / "scripts" / "gen-infra-secrets.sh"
+    ).read_text(encoding="utf-8")
+
+
+def _gen_infra_secrets(workspace: Path) -> str:
+    bash = shutil.which("bash")
+    if bash is None:
+        pytest.skip("needs bash")
+    for name in ("postgres", "pgbouncer", "postgres-exporter", "minio", "redis"):
+        shutil.copy(REPO_ROOT / f".env.{name}.example", workspace)
+    (workspace / "scripts").mkdir(exist_ok=True)
+    shutil.copy(REPO_ROOT / "scripts" / "gen-infra-secrets.sh", workspace / "scripts")
+    return subprocess.run(  # noqa: S603 -- fixed argv: the script under test
+        [bash, str(workspace / "scripts" / "gen-infra-secrets.sh")],
+        capture_output=True,
+        check=True,
+        text=True,
+    ).stdout
+
+
+def test_infra_secrets_give_every_account_its_own_password(tmp_path: Path) -> None:
+    _gen_infra_secrets(tmp_path)
+
+    names = ("postgres", "pgbouncer", "postgres-exporter", "minio", "redis")
+    files = [f".env.{name}" for name in names]
+    assert not any("change-me" in (tmp_path / f).read_text() for f in files)
+    env = {f: dotenv_values(tmp_path / f) for f in files}
+    passwords = {
+        env[".env.postgres"]["POSTGRES_PASSWORD"],
+        env[".env.pgbouncer"]["PGPASSWORD"],
+        env[".env.minio"]["MINIO_ROOT_PASSWORD"],
+        env[".env.minio"]["MINIO_APP_SECRET_KEY"],
+        env[".env.redis"]["REDIS_PASSWORD"],
+    }
+    assert len(passwords) == 5
+    assert "://forge_monitor:" in (env[".env.postgres-exporter"]["DATA_SOURCE_NAME"] or "")
+
+    values = dotenv_values(tmp_path / "bitwarden-values.txt")
+    assert "forge_app:" in (values["DATABASE_URL"] or "")
+    assert f":{env['.env.redis']['REDIS_PASSWORD']}@redis" in (values["REDIS_URL"] or "")
+    assert values["AWS_ACCESS_KEY_ID"] == "forge-app"
+    assert "MIGRATIONS_DATABASE_URL" not in values
+
+
+def test_infra_secrets_never_change_a_password_on_a_second_run(tmp_path: Path) -> None:
+    _gen_infra_secrets(tmp_path)
+    first = (tmp_path / ".env.pgbouncer").read_text()
+    (tmp_path / "bitwarden-values.txt").unlink()
+
+    _gen_infra_secrets(tmp_path)
+
+    assert (tmp_path / ".env.pgbouncer").read_text() == first
+    assert not (tmp_path / "bitwarden-values.txt").exists(), "nothing new to copy"
+
+
+def test_infra_secrets_move_an_older_box_to_its_own_accounts(tmp_path: Path) -> None:
+    # What forge-prod-2 had: the app on the superuser, and the MinIO root user.
+    (tmp_path / ".env.postgres").write_text("POSTGRES_PASSWORD=keep-this\n")
+    (tmp_path / ".env.pgbouncer").write_text("DB_USER=postgres\nPGPASSWORD=keep-this\n")
+    (tmp_path / ".env.postgres-exporter").write_text("DATA_SOURCE_NAME=as-the-superuser\n")
+    (tmp_path / ".env.minio").write_text(
+        "MINIO_ROOT_USER=forge\nMINIO_ROOT_PASSWORD=keep-root\n"
+        "MINIO_KMS_SECRET_KEY=keep-kms\nMINIO_BUCKET=forge\n"
+    )
+
+    _gen_infra_secrets(tmp_path)
+
+    assert (tmp_path / ".env.postgres").read_text() == "POSTGRES_PASSWORD=keep-this\n"
+    minio = dotenv_values(tmp_path / ".env.minio")
+    assert minio["MINIO_KMS_SECRET_KEY"] == "keep-kms", "it decrypts every uploaded file"
+    assert minio["MINIO_ROOT_PASSWORD"] == "keep-root"
+    assert minio["MINIO_APP_SECRET_KEY"]
+    assert dotenv_values(tmp_path / ".env.pgbouncer")["DB_USER"] == "forge_app"
+    assert (tmp_path / ".env.pgbouncer.prev").read_text().startswith("DB_USER=postgres")
 
 
 def _github_yaml() -> list[Path]:

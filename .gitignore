@@ -69,6 +69,8 @@ web-build/
 .env.pgbouncer
 .env.postgres-exporter
 .env.minio
+.env.redis
+bitwarden-values.txt
 
 # OS
 .DS_Store

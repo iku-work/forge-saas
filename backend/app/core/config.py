@@ -477,9 +477,17 @@ class Settings(BaseSettings):
         Falls back to DATABASE_URL so every existing env file (dev, .env.test,
         Render) keeps its current single-DSN behaviour untouched; only a
         deployment that actually puts a transaction-mode pooler in front of
-        Postgres has to set MIGRATIONS_DATABASE_URL, and _enforce_startup_
-        invariants below makes that non-optional once PGBOUNCER_ENABLED is on.
+        Postgres has to set MIGRATIONS_DATABASE_URL.
+
+        Checked here rather than at startup, because a running app must not hold
+        it: it is a superuser's password, and only the migration step gets it.
         """
+        if self.PGBOUNCER_ENABLED and self.MIGRATIONS_DATABASE_URL is None:
+            raise RuntimeError(
+                "MIGRATIONS_DATABASE_URL must be set when PGBOUNCER_ENABLED is true — "
+                "migrations must connect directly to Postgres, not through the pooler "
+                "(see docs/adr/0002-pgbouncer.md)"
+            )
         return str(self.MIGRATIONS_DATABASE_URL or self.DATABASE_URL)
 
     def _non_dev_violations(self) -> list[str]:
@@ -552,19 +560,12 @@ class Settings(BaseSettings):
         # the failure mode (an advisory lock silently taken on a connection
         # the next statement no longer holds) is far cheaper to catch at
         # startup than halfway through a DDL migration.
-        if self.PGBOUNCER_ENABLED:
-            if self.MIGRATIONS_DATABASE_URL is None:
-                raise RuntimeError(
-                    "MIGRATIONS_DATABASE_URL must be set when PGBOUNCER_ENABLED is true — "
-                    "migrations must connect directly to Postgres, not through the pooler "
-                    "(see docs/adr/0002-pgbouncer.md)"
-                )
-            if self.MIGRATIONS_DATABASE_URL == self.DATABASE_URL:
-                raise RuntimeError(
-                    "MIGRATIONS_DATABASE_URL is identical to DATABASE_URL while "
-                    "PGBOUNCER_ENABLED is true — it must point directly at Postgres, "
-                    "bypassing pgbouncer (see docs/adr/0002-pgbouncer.md)"
-                )
+        if self.PGBOUNCER_ENABLED and self.MIGRATIONS_DATABASE_URL == self.DATABASE_URL:
+            raise RuntimeError(
+                "MIGRATIONS_DATABASE_URL is identical to DATABASE_URL while "
+                "PGBOUNCER_ENABLED is true — it must point directly at Postgres, "
+                "bypassing pgbouncer (see docs/adr/0002-pgbouncer.md)"
+            )
         if self.ENVIRONMENT != "dev":
             violations = self._non_dev_violations()
             if violations:
