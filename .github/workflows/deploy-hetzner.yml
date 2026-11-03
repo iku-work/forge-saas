@@ -103,7 +103,9 @@ jobs:
       # One line of backend/.env per secret the machine account can read,
       # except those meant for other consumers: backups and the Grafana agent
       # on the box, and the client builds (VITE_, EXPO_PUBLIC_). The backend
-      # gets what it reads and nothing more.
+      # gets what it reads and nothing more. That rules out
+      # MIGRATIONS_DATABASE_URL too, a superuser's password that a running app has
+      # no use for: the migrate step below builds it from the box's .env.postgres.
       #
       # Values are cleaned of what pasting adds and the value never had: the
       # quotes it wore in a .env file, and the trailing newline -- which,
@@ -151,7 +153,7 @@ jobs:
           fi
           jq -r '.[].value | split("\n")[] | select(length >= 8) | "::add-mask::" + .' <<<"$secrets"
           jq -r '.[]
-            | select(.key | test("^(BACKUP|GRAFANA|VITE|EXPO_PUBLIC)_") | not)
+            | select(.key | test("^((BACKUP|GRAFANA|VITE|EXPO_PUBLIC)_|MIGRATIONS_DATABASE_URL$)") | not)
             | .key + "=" + (if .value | contains("\n") then "\"" + .value + "\"" else .value end)' <<<"$secrets" > prod.env
 
       # Guards and the registry login -- nothing that touches production.
@@ -265,7 +267,10 @@ jobs:
               (set -a; . ~/forge-backup.env; set +a; bash scripts/backup.sh db </dev/null)
             fi
 
-            docker compose $COMPOSE run --rm --no-deps backend python -m app.core.migrations
+            # -e with no value: from this shell's environment, so never in an argv.
+            pg_password=\$(sed -n 's/^POSTGRES_PASSWORD=//p' .env.postgres)
+            export MIGRATIONS_DATABASE_URL="postgresql+asyncpg://postgres:\$pg_password@postgres:5432/forge?sslmode=require"
+            docker compose $COMPOSE run --rm --no-deps -e MIGRATIONS_DATABASE_URL backend python -m app.core.migrations
           EOF
 
       # Idempotent: the images are already pulled and the env is already in

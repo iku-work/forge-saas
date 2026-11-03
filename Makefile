@@ -97,21 +97,27 @@ load-test: seed-load
 # job does. Overwrites backend/.env, same as `cp .env.e2e .env` does for the
 # E2E stack; restore your own afterwards. The driver-level coverage lives in
 # backend/tests/test_pgbouncer.py and needs none of this.
+LOCAL_REDIS_PASSWORD := postgres
+
 prod-compose-check:
 	cp backend/.env.prod-compose backend/.env
 	node scripts/gen-test-secrets.mjs >> backend/.env
 	sed 's/change-me/postgres/' .env.postgres.example > .env.postgres
 	sed 's/change-me/postgres/' .env.pgbouncer.example > .env.pgbouncer
-	cp .env.postgres-exporter.example .env.postgres-exporter
-	sed 's/change-me/a-real-password-here/' .env.minio.example > .env.minio
-	docker compose -f docker-compose.prod.yml up -d --build postgres pgbouncer redis backend
+	sed 's/change-me/postgres/' .env.postgres-exporter.example > .env.postgres-exporter
+	sed -e "s|^MINIO_KMS_SECRET_KEY=.*|MINIO_KMS_SECRET_KEY=local-check:$$(openssl rand -base64 32)|" -e 's/change-me/a-real-password-here/' .env.minio.example > .env.minio
+	sed 's/change-me/$(LOCAL_REDIS_PASSWORD)/' .env.redis.example > .env.redis
+	docker compose -f docker-compose.prod.yml up -d --wait postgres
+	bash scripts/provision-db-roles.sh
+	docker compose -f docker-compose.prod.yml up -d --build pgbouncer redis backend
 	@for i in $$(seq 1 30); do \
 		docker compose -f docker-compose.prod.yml exec -T backend \
 			python -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')" \
 			>/dev/null 2>&1 && break; \
 		sleep 2; \
 	done
-	docker compose -f docker-compose.prod.yml exec -T backend python -m app.core.migrations
+	MIGRATIONS_DATABASE_URL='postgresql+asyncpg://postgres:postgres@postgres:5432/forge' \
+		docker compose -f docker-compose.prod.yml run --rm --no-deps -e MIGRATIONS_DATABASE_URL backend python -m app.core.migrations
 	docker compose -f docker-compose.prod.yml exec -T backend python -c \
 		"import urllib.request; r=urllib.request.urlopen('http://localhost:8000/health/ready'); print(r.status, r.read().decode())"
 	docker compose -f docker-compose.prod.yml exec -T pgbouncer sh -c \
@@ -138,19 +144,26 @@ check-certs:
 # isolate pgbouncer's pooling behaviour; this one proves the configuration a
 # self-hosted deployment really uses, which nothing did until now.
 prod-compose-tls-check: internal-certs
-	sed -e 's|^ENVIRONMENT=.*|ENVIRONMENT=prod|' 	    -e 's|^FORCE_HTTPS=.*|FORCE_HTTPS=true|' 	    -e 's|^VIRUS_SCANNER=.*|VIRUS_SCANNER=clamav|' 	    -e 's|^PASSWORD_PEPPER=.*|PASSWORD_PEPPER=local-check-pepper|' 	    -e 's|^DATABASE_URL=.*|DATABASE_URL=postgresql+asyncpg://postgres:postgres@pgbouncer:6432/forge?sslmode=require|' 	    -e 's|^MIGRATIONS_DATABASE_URL=.*|MIGRATIONS_DATABASE_URL=postgresql+asyncpg://postgres:postgres@postgres:5432/forge?sslmode=require|' 	    -e 's|^REDIS_URL=.*|REDIS_URL=rediss://redis:6379/0?ssl_ca_certs=/certs/ca.crt|' 	    backend/.env.prod-compose > backend/.env
+	sed -e 's|^ENVIRONMENT=.*|ENVIRONMENT=prod|' 	    -e 's|^FORCE_HTTPS=.*|FORCE_HTTPS=true|' 	    -e 's|^VIRUS_SCANNER=.*|VIRUS_SCANNER=clamav|' 	    -e 's|^PASSWORD_PEPPER=.*|PASSWORD_PEPPER=local-check-pepper|' 	    -e 's|^DATABASE_URL=.*|DATABASE_URL=postgresql+asyncpg://forge_app:postgres@pgbouncer:6432/forge?sslmode=require|' 	    -e 's|^REDIS_URL=.*|REDIS_URL=rediss://:$(LOCAL_REDIS_PASSWORD)@redis:6379/0?ssl_ca_certs=/certs/ca.crt|' 	    backend/.env.prod-compose > backend/.env
 	node scripts/gen-test-secrets.mjs >> backend/.env
 	sed 's/change-me/postgres/' .env.postgres.example > .env.postgres
 	sed 's/change-me/postgres/' .env.pgbouncer.example > .env.pgbouncer
-	cp .env.postgres-exporter.example .env.postgres-exporter
-	sed 's/change-me/a-real-password-here/' .env.minio.example > .env.minio
-	docker compose -f docker-compose.prod.yml -f docker-compose.tls.yml up -d --build 		postgres pgbouncer redis backend
+	sed 's/change-me/postgres/' .env.postgres-exporter.example > .env.postgres-exporter
+	sed -e "s|^MINIO_KMS_SECRET_KEY=.*|MINIO_KMS_SECRET_KEY=local-check:$$(openssl rand -base64 32)|" -e 's/change-me/a-real-password-here/' .env.minio.example > .env.minio
+	sed 's/change-me/$(LOCAL_REDIS_PASSWORD)/' .env.redis.example > .env.redis
+	docker compose -f docker-compose.prod.yml -f docker-compose.tls.yml up -d --wait postgres
+	COMPOSE_FILE=docker-compose.prod.yml:docker-compose.tls.yml bash scripts/provision-db-roles.sh
+	docker compose -f docker-compose.prod.yml -f docker-compose.tls.yml up -d --build 		pgbouncer redis minio backend
+	docker compose -f docker-compose.prod.yml -f docker-compose.tls.yml run --rm minio-init
 	@for i in $$(seq 1 45); do 		docker compose -f docker-compose.prod.yml -f docker-compose.tls.yml exec -T backend 			python -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')" 			>/dev/null 2>&1 && break; 		sleep 2; 	done
-	docker compose -f docker-compose.prod.yml -f docker-compose.tls.yml exec -T backend 		python -m app.core.migrations
+	MIGRATIONS_DATABASE_URL='postgresql+asyncpg://postgres:postgres@postgres:5432/forge?sslmode=require' 		docker compose -f docker-compose.prod.yml -f docker-compose.tls.yml run --rm --no-deps -e MIGRATIONS_DATABASE_URL backend python -m app.core.migrations
+	docker compose -f docker-compose.prod.yml -f docker-compose.tls.yml up -d --wait worker
 	docker compose -f docker-compose.prod.yml -f docker-compose.tls.yml exec -T backend python -c 		"import urllib.request; r=urllib.request.urlopen('http://localhost:8000/health/ready'); print('health/ready:', r.status, r.read().decode())"
 	@echo "--- both hops must report TLS, not just the one the app can see ---"
 	docker compose -f docker-compose.prod.yml -f docker-compose.tls.yml exec -T postgres 		psql -U postgres -d forge -tAc 		"SELECT 'pgbouncer->postgres ssl=' || s.ssl || ' ' || coalesce(s.version,'') FROM pg_stat_ssl s JOIN pg_stat_activity a USING (pid) WHERE a.datname='forge' AND a.backend_type='client backend' AND a.client_addr IS NOT NULL LIMIT 1"
-	docker compose -f docker-compose.prod.yml -f docker-compose.tls.yml exec -T pgbouncer 		psql "postgres://postgres:postgres@127.0.0.1:6432/pgbouncer?sslmode=require" -tAc "SHOW POOLS"
+	docker compose -f docker-compose.prod.yml -f docker-compose.tls.yml exec -T pgbouncer 		sh -c 'psql "postgres://$$DB_USER:$$PGPASSWORD@127.0.0.1:6432/pgbouncer?sslmode=require" -tAc "SHOW POOLS"'
+	@echo "--- the application's accounts can do what it needs, and no more ---"
+	COMPOSE_FILE=docker-compose.prod.yml:docker-compose.tls.yml bash scripts/check-least-privilege.sh
 	docker compose -f docker-compose.prod.yml -f docker-compose.tls.yml down -v
 
 # T-251: all of the logic lives in Python -- validation, substitution, and the

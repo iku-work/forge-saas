@@ -95,8 +95,11 @@ under **Settings → Deploy keys → Add deploy key**, with write access left
 unticked, and run the same command again. The second run:
 
 - checks out the repo;
-- generates the Postgres, MinIO and KMS secrets, and the internal TLS
+- generates the Postgres, MinIO, Redis and KMS secrets, and the internal TLS
   certificates;
+- gives the application its own accounts, `forge_app` in Postgres and `forge-app`
+  in MinIO. The superuser's password and the MinIO root user stay on the server,
+  for migrations and backups;
 - starts the stateful services;
 - installs `age` and schedules the encrypted daily backup
   (`forge-backup.timer`, configured in `~forge/forge-backup.env`). Every deploy
@@ -177,6 +180,13 @@ only built once `DEPLOY_TARGET` is set.
 - Before anyone signs up: the Bitwarden `JWT_PRIVATE_KEY` and `ENCRYPTION_KEY`
   were generated for this product. A published key would already have stopped
   the deploy; a key shared with another product would not.
+
+Confirm the application is on its limited accounts. This also uploads a real file
+with its storage credentials, and removes it:
+
+```bash
+ssh forge@<ip> 'cd ~/forge && set -a && . ~/forge-backup.env && set +a && bash scripts/check-least-privilege.sh'
+```
 
 ## Rollback
 

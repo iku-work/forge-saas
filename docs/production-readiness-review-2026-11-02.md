@@ -9,7 +9,9 @@
 | H1, H4, M1 | Fixed in the auth PR that adds this file. |
 | H1's purge job | Not built. Binding the password to its link removes the security need, so old unverified rows are now a data-retention question only. |
 | H5 | Fixed in the CI pinning PR. |
-| H2 | Every Hetzner deploy now fails if the origin answers directly. The firewall itself is an operator step in the Hetzner console. |
+| H2 | Closed on forge-prod-2: the firewall is attached, and every Hetzner deploy now fails if the origin answers directly. |
+| H6 | Closed: secret scanning and push protection are on. |
+| H3, Redis password from M3 | Built in the least-privilege PR. Proven once forge-prod-2 has switched over. |
 | Everything else | Open. |
 
 The race H1 mentions is closed by the binding: an attacker registering again cannot change what the owner's link does. One risk remains: the owner clicking a link from a signup they never made. The email's footer already tells people to ignore it in that case.
