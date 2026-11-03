@@ -1356,9 +1356,7 @@ jobs:
       - name: Push image
         run: docker push "$IMAGE:$GITHUB_SHA"
 
-      # The edge, with the SPA and marketing bundles inside it. Only the
-      # compose-on-a-VPS deploy uses this (Render serves the frontend itself;
-      # on AWS the bundle belongs in S3+CloudFront) -- but it is built on
+      # The edge, with the SPA and marketing bundles inside it. It is built on
       # every main build so the tag always exists for a rollback to reach
       # back to. Only when DEPLOY_TARGET is hetzner, though: its URLs come from
       # repository variables set alongside that target, and without them
@@ -1706,33 +1704,10 @@ jobs:
         if: always()
         run: docker compose down -v
 
-  # Dormant until RENDER_API_KEY / RENDER_BACKEND_SERVICE_ID /
-  # RENDER_WORKER_SERVICE_ID / PROD_ENV_FILE / PROD_DATABASE_URL / PROD_DOMAIN
-  # secrets are configured on the repo (see docs/runbooks/deploy-render.md).
-  # Until then this job simply fails fast on the first curl, on push to main.
-  # The deploy itself lives in one workflow per platform, so a product can
-  # pick its target without editing this file and so each can be run by hand
-  # (workflow_dispatch) to redeploy or roll forward without pushing a commit.
-  #
   # DEPLOY_TARGET is a repository *variable*, not a secret, and it must be
   # set explicitly: unset deploys nothing (review 2026-10-01). It used to mean
   # render, so a repository with no variables at all was one push to main
   # away from a deploy nobody had chosen.
-  deploy-render:
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && vars.DEPLOY_TARGET == 'render'
-    # C2: E2E and the ZAP baseline gate the deploy, not only the image build
-    # (test and security arrive through build). A red e2e-web blocks it.
-    needs: [build, e2e-web, zap-baseline]
-    # A called workflow can only narrow what its caller grants, so the
-    # grant lives here as well as inside the called job.
-    permissions:
-      contents: read
-      packages: read
-    uses: ./.github/workflows/deploy-render.yml
-    secrets: inherit
-    with:
-      image-tag: ${{ github.sha }}
-
   deploy-hetzner:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main' && vars.DEPLOY_TARGET == 'hetzner'
     # C2: E2E and the ZAP baseline gate the deploy, not only the image build
@@ -1744,24 +1719,6 @@ jobs:
       contents: read
       packages: read
     uses: ./.github/workflows/deploy-hetzner.yml
-    secrets: inherit
-    with:
-      image-tag: ${{ github.sha }}
-
-  deploy-aws:
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && vars.DEPLOY_TARGET == 'aws'
-    # C2: E2E and the ZAP baseline gate the deploy, not only the image build
-    # (test and security arrive through build). A red e2e-web blocks it.
-    needs: [build, e2e-web, zap-baseline]
-    # C3: a called workflow can only narrow what its caller grants. With no
-    # grant here the job got the repository default token, which carries
-    # no id-token -- so deploy-aws.yml's own `id-token: write` could never
-    # take effect and the OIDC role assumption failed.
-    permissions:
-      contents: read
-      packages: read
-      id-token: write
-    uses: ./.github/workflows/deploy-aws.yml
     secrets: inherit
     with:
       image-tag: ${{ github.sha }}

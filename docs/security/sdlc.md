@@ -114,7 +114,7 @@ it's pushed (`.github/workflows/ci.yml` `build` job).
   (`needs: [test, security]` in `.github/workflows/ci.yml`) — there is no
   path to a pushed image that skipped the security gates.
 - Deploys are documented in
-  [`docs/runbooks/deploy-render.md`](../runbooks/deploy-render.md).
+  [`docs/runbooks/deploy-pipeline.md`](../runbooks/deploy-pipeline.md).
 
 ## 7. Ongoing
 

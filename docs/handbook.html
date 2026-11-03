@@ -1637,7 +1637,9 @@ $C exec -T backend python -c   "from app.modules.billing.dependencies import _FR
 
       <h3>Deploying to a managed platform</h3>
       <p>
-        <code>docs/runbooks/deploy-render.md</code> is the worked example. The shape is:
+        The template's one proven path is a Hetzner server (<code>docs/runbooks/new-server.md</code>).
+        Render and AWS workflows existed until 2026-11-03 but had never run, so they were removed;
+        git history has them. Moving to a managed platform is yours to build and prove. The shape is:
       </p>
       <ol>
         <li>CI builds and pushes an image to the GitHub container registry on every green <code>main</code>.</li>

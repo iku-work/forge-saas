@@ -151,7 +151,7 @@
 		#     origins is known here: STORAGE_DOMAIN is a local MinIO in one
 		#     deployment and s3.amazonaws.com in the next. A deployment that
 		#     knows its own origins should narrow these two to them -- see
-		#     docs/runbooks/deploy-render.md.
+		#     docs/runbooks/deploy-pipeline.md.
 		Content-Security-Policy "default-src 'self'; script-src 'self' 'sha256-NWbEgzfTTy2SXvcSkaP7K75HFoDqMsZtwB5CL4bD6Ag='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; font-src 'self' data:; connect-src 'self' https:; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'"
 	}
 }

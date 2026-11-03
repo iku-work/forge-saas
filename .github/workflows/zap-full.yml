@@ -5,8 +5,7 @@
 # somewhere nothing else depends on, on a schedule instead of every PR.
 #
 # Dormant until these are configured on the repo (Settings -> Secrets and
-# variables -> Actions), same as ci.yml's `deploy` job (see
-# docs/runbooks/deploy-render.md):
+# variables -> Actions):
 #   - STAGING_URL (variable)         -- e.g. https://staging.example.com
 #   - ZAP_SCANNER_ORG_ID (variable)  -- the org below
 #   - ZAP_SCANNER_EMAIL (secret)     -- login for a dedicated user who owns

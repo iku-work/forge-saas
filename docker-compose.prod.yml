@@ -499,7 +499,7 @@ services:
     # through as the empty string, and Caddy then uses "" rather than the
     # `{$VAR:default}` fallback -- which for MARKETING_DOMAIN produces a site
     # block with no address and stops the whole edge, app host included. See
-    # docs/runbooks/deploy-render.md.
+    # docs/runbooks/deploy-pipeline.md.
     environment:
       DOMAIN: ${DOMAIN:?DOMAIN must be set — see backend/.env.example}
       MARKETING_DOMAIN: ${MARKETING_DOMAIN:-marketing.localhost}
