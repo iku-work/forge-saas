@@ -8,7 +8,7 @@
 
 Covers the two deployment paths this repo supports: Render (managed
 Postgres/Redis, `docs/runbooks/deploy-render.md`) and self-hosted
-(`docker-compose.prod.yml`, Postgres/Redis as containers on `forge-net`).
+(`docker-compose.prod.yml`, Postgres/Redis as containers on its `data` network).
 
 ## Trigger
 
@@ -361,7 +361,7 @@ results and leave **zero** rows in `pg_prepared_statements`.
   `--reuid`.
 - **`--port 0` on Redis matters.** Without it the cleartext listener stays open
   alongside the TLS one, so `rediss://` satisfies the startup invariant while
-  anything on `forge-net` can still connect in the clear.
+  anything on the `data` network can still connect in the clear.
 - **Never write these commands as a YAML `>` folded scalar.** Continuation
   lines indented further than the first keep their newlines, so
   `exec redis-server 

@@ -217,7 +217,32 @@ def test_redis_url_wrong_scheme_outside_dev_raises(monkeypatch: pytest.MonkeyPat
     with pytest.raises(RuntimeError, match="REDIS_URL"):
         Settings(
             _env_file=FIXTURE_ENV_FILE,
-            **{**PROD_SAFE_OVERRIDES, "REDIS_URL": "redis://localhost:6379/0"},
+            **{**PROD_SAFE_OVERRIDES, "REDIS_URL": "redis://:p@localhost:6379/0"},
+        )
+
+
+def test_redis_without_a_password_outside_dev_raises(monkeypatch: pytest.MonkeyPatch) -> None:
+    _clear_settings_env(monkeypatch)
+
+    with pytest.raises(RuntimeError, match="REDIS_URL has no password"):
+        Settings(
+            _env_file=FIXTURE_ENV_FILE,
+            **{**PROD_SAFE_OVERRIDES, "REDIS_URL": "rediss://localhost:6379/0"},
+        )
+
+
+def test_the_app_connecting_as_the_superuser_outside_dev_raises(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _clear_settings_env(monkeypatch)
+
+    with pytest.raises(RuntimeError, match="connects as postgres"):
+        Settings(
+            _env_file=FIXTURE_ENV_FILE,
+            **{
+                **PROD_SAFE_OVERRIDES,
+                "DATABASE_URL": "postgresql+asyncpg://postgres:p@db:5432/forge?sslmode=require",
+            },
         )
 
 

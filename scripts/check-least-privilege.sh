@@ -42,6 +42,50 @@ case "$noauth" in
   *) report FAILED "Redis refuses a client with no password" ;;
 esac
 
+if [ "$(docker compose exec -T redis stat -c %U /proc/1 </dev/null)" = redis ]; then
+  report ok "Redis does not run as root"
+else
+  report FAILED "Redis does not run as root"
+fi
+
+# What each side of the network split can reach, from inside. Every "cannot" has
+# a matching "can", so that a missing nc does not read as a pass.
+can() { docker compose exec -T "$1" nc -z -w 3 "$2" "$3" </dev/null >/dev/null 2>&1; }
+
+if can caddy backend 8000 && can caddy 1.1.1.1 443; then
+  report ok "Caddy can reach the app and the internet"
+else
+  report FAILED "Caddy can reach the app and the internet"
+fi
+if can caddy postgres 5432 || can caddy pgbouncer 6432 || can caddy redis 6379; then
+  report FAILED "Caddy cannot reach Postgres, pgbouncer or Redis"
+else
+  report ok "Caddy cannot reach Postgres, pgbouncer or Redis"
+fi
+if can redis pgbouncer 6432 && ! can redis 1.1.1.1 443 && ! can postgres 1.1.1.1 443; then
+  report ok "the data network has no way out"
+else
+  report FAILED "the data network has no way out"
+fi
+# The bootstrap always starts ClamAV. CI does not, since it is 1 GB of signatures.
+if [ -n "$(docker compose ps -q clamav)" ]; then
+  if docker compose exec -T scanner-worker python -c \
+    "import socket; socket.create_connection(('clamav', 3310), 3)" </dev/null >/dev/null 2>&1 \
+    && can clamav 1.1.1.1 443; then
+    report ok "ClamAV can reach the scanner and fetch signature updates"
+  else
+    report FAILED "ClamAV can reach the scanner and fetch signature updates"
+  fi
+fi
+
+for service in backend caddy; do
+  if docker compose exec -T "$service" touch /least-privilege-probe </dev/null >/dev/null 2>&1; then
+    report FAILED "$service cannot write to its filesystem"
+  else
+    report ok "$service cannot write to its filesystem"
+  fi
+done
+
 if docker compose exec -T backend python - <scripts/check-storage-access.py; then
   report ok "the storage account does what the app needs, and no more"
 else

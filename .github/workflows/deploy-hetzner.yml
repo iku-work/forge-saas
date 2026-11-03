@@ -243,6 +243,12 @@ jobs:
             docker logout ghcr.io >/dev/null
             trap - EXIT
 
+            # The data services, to what this checkout says they are, before
+            # anything talks to them. Starts nothing that is already right, and
+            # the app's containers cannot reach them on a network they have left.
+            docker compose $COMPOSE up -d --wait --wait-timeout 300 --quiet-pull \\
+              postgres pgbouncer redis minio clamav postgres-exporter node-exporter </dev/null
+
             # Backups leave the box before any data changes (ADR-0009): every
             # product needs an off-host copy, and a high-sensitivity one needs a key
             # that cannot list or delete it (scripts/check-backup-remote.sh).
@@ -344,6 +350,10 @@ jobs:
             git checkout --quiet $PREVIOUS_TAG
             export BACKEND_IMAGE='$REPO:$PREVIOUS_TAG'
             export CADDY_IMAGE='$REPO-caddy:$PREVIOUS_TAG'
+            # No --wait: getting the app back must not depend on these. The check
+            # below says whether it worked.
+            docker compose $COMPOSE up -d --quiet-pull \\
+              postgres pgbouncer redis minio clamav postgres-exporter node-exporter </dev/null
             # Caddy first, for the reason given in "Pull and switch".
             docker compose $COMPOSE up -d --no-deps caddy
             docker compose $COMPOSE up -d --no-deps backend worker scanner-worker

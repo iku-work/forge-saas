@@ -78,7 +78,7 @@ def test_prod_compose_aliases_caddy_to_the_storage_hostname() -> None:
     internet. Nothing else in the suite would notice."""
     compose = yaml.safe_load((REPO_ROOT / "docker-compose.prod.yml").read_text())
 
-    aliases = compose["services"]["caddy"]["networks"]["forge-net"]["aliases"]
+    aliases = compose["services"]["caddy"]["networks"]["edge"]["aliases"]
 
     # Interpolated, not hardcoded -- and from the compose project's own .env,
     # which is why .env.example at the repo root exists and says so.

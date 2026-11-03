@@ -11,7 +11,8 @@
 | H5 | Fixed in the CI pinning PR. |
 | H2 | Closed on forge-prod-2: the firewall is attached, and every Hetzner deploy now fails if the origin answers directly. |
 | H6 | Closed: secret scanning and push protection are on. |
-| H3, Redis password from M3 | Built in the least-privilege PR. Proven once forge-prod-2 has switched over. |
+| H3, Redis password from M3 | Closed on forge-prod-2: the app runs on its limited accounts, and `check-least-privilege.sh` passed there on 3 November. |
+| M3's network split, M4 | Built in the container isolation PR. The same script proves them on forge-prod-2 once it has deployed. |
 | Everything else | Open. |
 
 The race H1 mentions is closed by the binding: an attacker registering again cannot change what the owner's link does. One risk remains: the owner clicking a link from a signup they never made. The email's footer already tells people to ignore it in that case.

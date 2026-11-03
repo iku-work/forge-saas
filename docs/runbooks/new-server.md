@@ -181,8 +181,8 @@ only built once `DEPLOY_TARGET` is set.
   were generated for this product. A published key would already have stopped
   the deploy; a key shared with another product would not.
 
-Confirm the application is on its limited accounts. This also uploads a real file
-with its storage credentials, and removes it:
+Confirm the application is on its limited accounts and the network split holds.
+This also uploads a real file with its storage credentials, and removes it:
 
 ```bash
 ssh forge@<ip> 'cd ~/forge && set -a && . ~/forge-backup.env && set +a && bash scripts/check-least-privilege.sh'

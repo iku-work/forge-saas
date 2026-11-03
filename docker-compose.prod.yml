@@ -20,8 +20,30 @@ x-logging: &default-logging
     max-size: "10m"
     max-file: "3"
 
+# Review M4: what every container starts without. A service adds back only the
+# capabilities it was measured to need, and those are on the service. The
+# entrypoints that start as root to fix ownership and then drop to their own user
+# need CHOWN, DAC_OVERRIDE, FOWNER, SETGID and SETUID. no-new-privileges does not
+# stop them: going from root to a lesser user gains nothing.
+x-hardening: &hardening
+  cap_drop: [ALL]
+  security_opt: ["no-new-privileges:true"]
+
+# Review M3: Caddy is the container the internet talks to, so it must not be able
+# to reach Redis, where ARQ's pickled jobs mean code execution in the worker, or
+# the database.
 networks:
-  forge-net:
+  # Caddy, the app and MinIO, which Caddy fronts. It has a route out, which the
+  # app needs for email, Stripe and Sentry.
+  edge:
+    driver: bridge
+  # Everything holding data or looking at it. No route out and Caddy is not on it.
+  # An external Prometheus scrapes from here.
+  data:
+    driver: bridge
+    internal: true
+  # ClamAV alone needs to leave the data network, for signature updates.
+  clamav-updates:
     driver: bridge
 
 volumes:
@@ -33,8 +55,14 @@ volumes:
 
 services:
   postgres:
-    image: postgres:16-alpine
+    <<: *hardening
+    image: postgres:16-alpine@sha256:0cefaabd882e42bcb2a2f3dc56d3ce4770560ba62fd7f197f1a2e008fd5731ab
     restart: unless-stopped
+    cap_add: [CHOWN, DAC_OVERRIDE, FOWNER, SETGID, SETUID]
+    read_only: true
+    tmpfs:
+      - /var/run/postgresql
+      - /tmp:size=16m
     # T-205: pg_stat_statements must be preloaded at postmaster start -- see
     # the identical comment on docker-compose.yml's postgres service.
     command:
@@ -63,7 +91,7 @@ services:
     logging: *default-logging
     mem_limit: 768m
     networks:
-      - forge-net
+      - data
 
   # T-244: every backend/worker connection goes through here, never straight
   # to postgres -- that's what keeps the Postgres backend count flat as
@@ -77,8 +105,13 @@ services:
   # prepared-statement handling are exactly the semantics that change between
   # minor versions (1.21 added server-side prepared statement support).
   pgbouncer:
+    <<: *hardening
     image: edoburu/pgbouncer:v1.25.2-p0
     restart: unless-stopped
+    read_only: true
+    # The entrypoint writes pgbouncer.ini and the userlist here, as uid 70.
+    tmpfs:
+      - /etc/pgbouncer:uid=70,gid=70,mode=0750,size=4m
     # Its own env file (copied from .env.pgbouncer.example) for the same
     # reason as postgres above: none of pgbouncer's settings are Settings
     # fields. The entrypoint parses its DATABASE_URL into the [databases]
@@ -103,18 +136,26 @@ services:
     logging: *default-logging
     mem_limit: 64m
     networks:
-      - forge-net
+      - data
 
   redis:
-    image: redis:7-alpine
+    <<: *hardening
+    image: redis:7-alpine@sha256:8da19c7399dca900c6822a1cf30f9d2285585e2c4b457ff4095b0f4500054d3f
     restart: unless-stopped
+    cap_add: [CHOWN, DAC_OVERRIDE, FOWNER, SETGID, SETUID]
+    read_only: true
+    tmpfs:
+      - /tmp:size=4m
     # Optional only so that compose can load this file on a server that has not
     # got it yet, for a service it is not touching. Redis itself refuses to start
     # without the password. Its own env file for the same reason as postgres above.
     env_file:
       - path: ./.env.redis
         required: false
-    command: ["sh", "-c", 'exec redis-server --requirepass "$${REDIS_PASSWORD:?missing from .env.redis}"']
+    # Through the image's entrypoint, which drops to the redis user. It only does
+    # that when it is handed redis-server itself, so `sh -c` alone would run Redis
+    # as root.
+    command: ["sh", "-c", 'exec docker-entrypoint.sh redis-server --requirepass "$${REDIS_PASSWORD:?missing from .env.redis}"']
     volumes:
       - redis_data:/data
     healthcheck:
@@ -125,14 +166,21 @@ services:
     logging: *default-logging
     mem_limit: 256m
     networks:
-      - forge-net
+      - data
 
   # backend/.env must point DATABASE_URL at the pgbouncer service
   # (postgresql+asyncpg://<user>:<pass>@pgbouncer:6432/<db>), set
-  # PGBOUNCER_ENABLED=true, and set MIGRATIONS_DATABASE_URL at postgres:5432 --
-  # see backend/.env.example's "Connection pooling" block. Settings refuses to
-  # boot if PGBOUNCER_ENABLED is on without a distinct migration DSN.
+  # and set PGBOUNCER_ENABLED=true -- see backend/.env.example's "Connection
+  # pooling" block.
+  #
+  # The app's three services are on both networks: data for Postgres, Redis and
+  # ClamAV, edge for Caddy and the outside world. They reach storage through
+  # Caddy's alias, below.
   backend:
+    <<: *hardening
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m
     build:
       # Repo root, not ./backend: backend/Dockerfile COPYs both
       # backend/pyproject.toml and packages/i18n/locales (see its own header
@@ -160,9 +208,14 @@ services:
     logging: *default-logging
     mem_limit: 768m
     networks:
-      - forge-net
+      - edge
+      - data
 
   worker:
+    <<: *hardening
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m
     build:
       context: .
       dockerfile: backend/Dockerfile
@@ -194,7 +247,8 @@ services:
     logging: *default-logging
     mem_limit: 768m
     networks:
-      - forge-net
+      - edge
+      - data
 
   # Review R4: virus scans, on their own queue (app.core.jobs.SCAN_QUEUE_NAME)
   # and in their own container, so a burst of uploads fills scan slots and
@@ -207,6 +261,10 @@ services:
   # 100 MiB scans added ~102 MiB, so ~210 MiB peak. 384m is ~1.8x that.
   # Re-measure if SCAN_MAX_CONCURRENCY or MAX_UPLOAD_BYTES goes up.
   scanner-worker:
+    <<: *hardening
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m
     image: ${BACKEND_IMAGE:-forge-saas-backend}
     restart: unless-stopped
     env_file:
@@ -226,15 +284,18 @@ services:
     logging: *default-logging
     mem_limit: 384m
     networks:
-      - forge-net
+      - edge
+      - data
 
   # T-205: exports pg_stat_statements so an external Prometheus (scraping
-  # inside forge-net, same internal-only reachability model as backend's
+  # inside the data network, same internal-only reachability model as backend's
   # /metrics -- see app/core/metrics.py) can page on sustained slow queries
   # via docs/grafana/alerts.yml. Always on, unlike the dev-only
   # docker-compose.yml copy which sits behind the `observability` profile:
   # there's no local Prometheus/Grafana pair here to gate it behind.
   postgres-exporter:
+    <<: *hardening
+    read_only: true
     image: prometheuscommunity/postgres-exporter:v0.15.0
     restart: unless-stopped
     # Its own env file (copied from .env.postgres-exporter.example), not
@@ -252,7 +313,7 @@ services:
     logging: *default-logging
     mem_limit: 64m
     networks:
-      - forge-net
+      - data
 
   # T-113: only started when explicitly requested (`docker compose --profile
   # clamav up`) -- settings.VIRUS_SCANNER must also be set to "clamav" (and
@@ -263,7 +324,7 @@ services:
   # segment -- at which point the product is down and the fix is slow.
   #
   # node-exporter is here purely so docs/grafana/alerts.yml's DiskSpaceLow
-  # has a metric to read. Scraped inside forge-net exactly like
+  # has a metric to read. Scraped inside the data network exactly like
   # postgres-exporter; it publishes no ports of its own.
   #
   # The mounts are read-only and the pid namespace is shared with the host
@@ -271,6 +332,8 @@ services:
   # rather than its own container's. `--path.rootfs=/host` tells it where
   # they were mounted.
   node-exporter:
+    <<: *hardening
+    read_only: true
     image: prom/node-exporter:v1.8.2
     restart: unless-stopped
     command:
@@ -282,11 +345,15 @@ services:
     logging: *default-logging
     mem_limit: 64m
     networks:
-      - forge-net
+      - data
 
   clamav:
-    image: clamav/clamav:stable
+    <<: *hardening
+    image: clamav/clamav:stable@sha256:6d87c712e3391e13c1ba6e05dfb074d4b1ddb5a6834b23bb9da990d2a4ef042a
     restart: unless-stopped
+    # Not read-only: /init writes the CLAMD_CONF_ settings below into
+    # /etc/clamav, beside files in the image that a tmpfs there would hide.
+    cap_add: [CHOWN, DAC_OVERRIDE, FOWNER, SETGID, SETUID]
     profiles: ["clamav"]
     # freshclam logs every signature update; unbounded, that is the largest
     # log producer in the stack.
@@ -337,7 +404,8 @@ services:
       CLAMD_CONF_AlertExceedsMax: "yes"
       CLAMD_CONF_StreamMaxLength: "101M"
     networks:
-      - forge-net
+      - data
+      - clamav-updates
 
   # Object storage on the same box, for a deployment that is not using S3 or
   # R2. Deliberately publishes no ports: Caddy fronts it on {$STORAGE_DOMAIN}
@@ -346,6 +414,10 @@ services:
   # against has to be the one the browser can reach. The console (9001) is
   # deliberately not exposed at all.
   minio:
+    <<: *hardening
+    # Not read-only: backup.sh and restore-files.sh move files through /tmp with
+    # `docker cp`, which refuses a read-only container, and they would not fit in
+    # a tmpfs.
     image: pgsty/minio:RELEASE.2026-08-04T00-00-00Z
     restart: unless-stopped
     command: server /data
@@ -363,11 +435,12 @@ services:
     logging: *default-logging
     mem_limit: 256m
     networks:
-      - forge-net
+      - edge
 
   # Creates the bucket, its lifecycle and the application's own user, then
   # exits. Safe to run again.
   minio-init:
+    <<: *hardening
     image: pgsty/minio:RELEASE.2026-08-04T00-00-00Z
     restart: "no"
     logging: *default-logging
@@ -380,7 +453,7 @@ services:
       minio:
         condition: service_healthy
     networks:
-      - forge-net
+      - edge
 
   caddy:
     # The edge image, and the *only* thing that decides what the browser
@@ -399,8 +472,16 @@ services:
     # mount, and a leftover bind of ./apps/web/dist would shadow the bundle
     # inside the image with whatever happened to be on disk. Measured with
     # `docker compose config`, not assumed.
+    <<: *hardening
     image: ${CADDY_IMAGE:-caddy:2-alpine}
     restart: unless-stopped
+    cap_add: [NET_BIND_SERVICE]
+    read_only: true
+    # Certificates are in the caddy_data volume. /config only holds Caddy's copy
+    # of the config it loaded, and the Caddyfile is in the image.
+    tmpfs:
+      - /config:size=4m
+      - /tmp:size=4m
     # An explicit allowlist, never `env_file: ./backend/.env`. That file holds
     # JWT_PRIVATE_KEY, ENCRYPTION_KEY, DATABASE_URL, STRIPE_SECRET_KEY and
     # every other application secret, and handing the whole of it to the one
@@ -436,7 +517,7 @@ services:
       backend:
         condition: service_healthy
     networks:
-      forge-net:
+      edge:
         aliases:
           # The backend and worker reach MinIO through this same public
           # hostname, because there is only one AWS_ENDPOINT_URL and the
