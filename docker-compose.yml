@@ -285,7 +285,7 @@ services:
   # Same observability profile as prometheus/grafana above -- never started
   # by `make dev`.
   postgres-exporter:
-    image: prometheuscommunity/postgres-exporter:v0.15.0
+    image: prometheuscommunity/postgres-exporter:v0.20.1
     profiles: ["observability"]
     environment:
       DATA_SOURCE_NAME: "postgresql://postgres:postgres@postgres:5432/forge?sslmode=disable"
@@ -320,7 +320,7 @@ services:
       - forge-net
 
   grafana:
-    image: grafana/grafana:11.3.1
+    image: grafana/grafana:11.6.16
     profiles: ["observability"]
     environment:
       # Anonymous admin access is a dev-only convenience (same class of
