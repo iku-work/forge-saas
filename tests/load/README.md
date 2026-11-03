@@ -100,9 +100,10 @@ exactly the noise nightly-not-per-PR (below) exists to keep out.
 see `backend/app/core/seed_load.py`'s own docstring for what it seeds and
 why), then each script via `docker compose run --rm k6 ...`, one script at a
 time so a budget failure in one doesn't obscure whether the others also
-failed. Results land as JSON summaries in `tests/load/results/`, gitignored
--- `RESULTS.md` in this directory is the durable trend log; the nightly CI
-job appends one line to it per run (see that workflow for the exact format).
+failed. Results land as JSON summaries in `tests/load/results/`, gitignored.
+The CI job writes each script's p95 and error rate to the run's summary page,
+and keeps the JSON as an artifact for 90 days. It cannot commit them: `main`
+only takes pull requests.
 
 Login-capable accounts: `load-user-0@example.com` .. `load-user-49@example.com`,
 password `LoadTestPass123!`, all members of "Load Test Org". Everything else

@@ -26,10 +26,7 @@ jobs:
       COMPOSE_PROJECT_NAME: forge-loadtest
 
     permissions:
-      # Needs write to append this run's numbers to tests/load/RESULTS.md
-      # (T-223's own "a trend note is appended ... per run") -- every other
-      # job in this repo's workflows only ever reads.
-      contents: write
+      contents: read
 
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -138,17 +135,13 @@ jobs:
           path: tests/load/results/*.json
           retention-days: 90
 
-      - name: Append trend note to RESULTS.md
+      - name: Write the numbers to the run's summary
         if: always()
         run: |
-          python3 - <<'PY'
+          python3 - >> "$GITHUB_STEP_SUMMARY" <<'PY'
           import json
           import pathlib
-          import datetime
-          import subprocess
 
-          commit = subprocess.check_output(["git", "rev-parse", "--short", "HEAD"]).decode().strip()
-          date = datetime.date.today().isoformat()
           results_dir = pathlib.Path("tests/load/results")
           status = {}
           status_file = results_dir / "status.txt"
@@ -157,7 +150,8 @@ jobs:
                   script, outcome = line.split()
                   status[script] = outcome
 
-          lines = []
+          print("| Script | p95 (ms) | Error rate | Result |")
+          print("| ------ | -------- | ---------- | ------ |")
           for script in ["login-burst", "browse", "presign", "mixed", "api-key"]:
               outcome = status.get(script, "FAIL")
               p95_s, rate_s = "-", "-"
@@ -174,25 +168,8 @@ jobs:
                           rate_s = f"{rate:.2%}"
                   except (json.JSONDecodeError, AttributeError):
                       pass
-              lines.append(f"| {date} | {commit} | {script} | {p95_s} | {rate_s} | {outcome} |")
-
-          results_path = pathlib.Path("tests/load/RESULTS.md")
-          content = results_path.read_text().rstrip("\n") + "\n" + "\n".join(lines) + "\n"
-          results_path.write_text(content)
+              print(f"| {script} | {p95_s} | {rate_s} | {outcome} |")
           PY
-
-      - name: Commit RESULTS.md trend update
-        if: always()
-        run: |
-          git config user.name "forge-load-test-bot"
-          git config user.email "load-test-bot@users.noreply.github.com"
-          git add tests/load/RESULTS.md
-          if git diff --cached --quiet; then
-            echo "No RESULTS.md changes to commit"
-          else
-            git commit -m "chore(load-test): append nightly trend results [skip ci]"
-            git push
-          fi
 
       - name: Tear down stack
         if: always()
