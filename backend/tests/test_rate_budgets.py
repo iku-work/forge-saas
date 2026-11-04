@@ -133,7 +133,10 @@ def test_the_window_slides() -> None:
     boundary almost nothing is left. (It rounds the weighted count down, so
     "almost nothing" is one request, not zero.)"""
     item = parse("5/minute")
-    start = datetime(2026, 9, 29, 12, 0, 0, tzinfo=UTC)
+    # A future date on purpose. MemoryStorage clears expired entries from a timer
+    # thread, and freezegun leaves threads on the real clock. With a date in the
+    # past, that thread empties the window whenever this test takes over 10 ms.
+    start = datetime(2099, 9, 29, 12, 0, 0, tzinfo=UTC)
 
     def allowed_across_the_boundary(strategy: RateLimiter) -> int:
         # One request opens the window; four more arrive just before it
