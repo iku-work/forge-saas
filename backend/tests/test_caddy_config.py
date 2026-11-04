@@ -308,6 +308,15 @@ def test_the_app_csp_keeps_script_src_strict() -> None:
     assert "'unsafe-eval'" not in script_src
 
 
+def test_the_app_csp_only_sends_data_to_hosts_it_names() -> None:
+    # M7: with `connect-src https:`, an XSS could post anything anywhere.
+    csp = next(line for line in _app_site_block().splitlines() if "Content-Security-Policy" in line)
+    for directive in ("connect-src", "img-src"):
+        sources = csp.split(directive)[1].split(";")[0].split()
+        assert "https:" not in sources, directive
+        assert "https://{$STORAGE_DOMAIN:storage.localhost}" in sources, directive
+
+
 def test_caddy_gets_no_application_secrets() -> None:
     """PROD-02: the edge container's environment is an allowlist.
 

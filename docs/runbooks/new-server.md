@@ -158,7 +158,9 @@ screen.
 | `PROD_DOMAIN` | the app host, used by the smoke test |
 
 Then add these repository variables: `PUBLIC_SITE_URL`, `PUBLIC_APP_URL`,
-`PUBLIC_API_URL` (the app host, https), and last, `DEPLOY_TARGET=hetzner`.
+`PUBLIC_API_URL` (the app host, https), `VITE_SENTRY_DSN` (the browser project's
+DSN, which is public by design; leave it out and browser errors go nowhere), and
+last, `DEPLOY_TARGET=hetzner`.
 
 ### 6. First deploy
 
@@ -179,6 +181,10 @@ only built once `DEPLOY_TARGET` is set.
   R2. Until it has run, the backup is a belief.
 - Sentry shows the `forge-backup` cron monitor after the first nightly run,
   and its alert reaches you (backup-restore.md, "Alerting").
+- Security updates install by themselves. When one needs a reboot, the server
+  reboots at 04:30 server time, with about two minutes of downtime. To change the
+  time, edit `/etc/apt/apt.conf.d/52forge-reboot`, and keep it after the 03:30
+  backup.
 - Application errors reach Sentry. This sends one test event from each of the
   backend, worker and scanner-worker, and all three should appear as issues:
 

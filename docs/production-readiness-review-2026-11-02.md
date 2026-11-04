@@ -18,6 +18,7 @@
 | M11, k6 | Run on the same local stack on 3 November, with pgbouncer and TLS. One backend process holds about 43 requests a second within budget, and uses a whole core at about 50, with no errors. No deployment needs more yet; more means more uvicorn workers. On GitHub's runner, without pgbouncer or TLS, all five scripts pass: `mixed` has a 90 ms p95 at 20 users. |
 | M5, Sentry test | Found on the way: the workers never started Sentry, so no failed job or `capture_exception` in a job could reach it. Fixed in the worker Sentry PR. `check-sentry.sh` proves all three processes once forge-prod-2 has deployed it. The rest of M5 is open. |
 | M10 | Closed: the Render and AWS deploys are removed. Hetzner is the one path, and it has run. |
+| M6, M7 | Built in the reboot and CSP PR. M6 applies to new servers through the bootstrap; forge-prod-2 has not re-run it. |
 | Everything else | Open. |
 
 The race H1 mentions is closed by the binding: an attacker registering again cannot change what the owner's link does. One risk remains: the owner clicking a link from a signup they never made. The email's footer already tells people to ignore it in that case.

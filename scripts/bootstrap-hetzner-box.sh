@@ -16,9 +16,9 @@
 # the script again.
 #
 # What the deploy workflow does not do, because it only updates a server that
-# already runs: harden SSH, install Docker, add swap and the `forge` user,
-# check out the repo, generate the infrastructure passwords and internal TLS
-# certificates, start the stateful services (Postgres, pgbouncer, Redis,
+# already runs: harden SSH, turn on security updates, install Docker, add swap
+# and the `forge` user, check out the repo, generate the infrastructure
+# passwords and internal TLS certificates, start the stateful services (Postgres, pgbouncer, Redis,
 # MinIO, ClamAV, the exporters) and schedule the encrypted daily backup.
 # Written down from the first deploy to a fresh box on 2026-10-26, which
 # needed every one of these by hand -- and got no backup at all, found by
@@ -46,6 +46,22 @@ printf 'PasswordAuthentication no\nKbdInteractiveAuthentication no\nPermitRootLo
   > /etc/ssh/sshd_config.d/00-forge-hardening.conf
 sshd -t
 systemctl reload ssh
+
+echo "== Security updates, with a reboot when one needs it"
+# Kernel patches do nothing until a reboot, and without this one never comes. An
+# hour after the backup starts. The time is the server's own, and Hetzner's Ubuntu
+# images run on UTC. Every service has a restart policy, so the stack comes back.
+export DEBIAN_FRONTEND=noninteractive
+apt-get update -qq
+apt-get install -y -qq unattended-upgrades >/dev/null
+cat > /etc/apt/apt.conf.d/20auto-upgrades <<'EOF'
+APT::Periodic::Update-Package-Lists "1";
+APT::Periodic::Unattended-Upgrade "1";
+EOF
+cat > /etc/apt/apt.conf.d/52forge-reboot <<'EOF'
+Unattended-Upgrade::Automatic-Reboot "true";
+Unattended-Upgrade::Automatic-Reboot-Time "04:30";
+EOF
 
 echo "== Docker, from Docker's own repository"
 if ! command -v docker >/dev/null; then
