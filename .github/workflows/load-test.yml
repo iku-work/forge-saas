@@ -39,7 +39,7 @@ jobs:
       - name: Verify every script asserts the shared budget thresholds
         run: |
           for script in tests/load/login-burst.js tests/load/browse.js tests/load/presign.js tests/load/mixed.js tests/load/api-key.js; do
-            grep -q 'thresholds: THRESHOLDS' "$script" || {
+            grep -Eq 'thresholds: (\{ \.\.\.)?THRESHOLDS' "$script" || {
               echo "$script does not use the shared THRESHOLDS (tests/load/lib/config.js)" >&2
               exit 1
             }

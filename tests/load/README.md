@@ -11,9 +11,10 @@ thresholds: {
 ```
 
 Every script in this directory (`login-burst.js`, `browse.js`, `presign.js`,
-`mixed.js`, `api-key.js`) declares the identical two thresholds above -- checked by a CI
+`mixed.js`, `api-key.js`) declares the two thresholds above -- checked by a CI
 grep (see `.github/workflows/load-test.yml`) so a script can't quietly drop
-the budget it's supposed to be asserting.
+the budget it's supposed to be asserting. `login-burst.js` alone allows 1000ms,
+and its header says why.
 
 | Script            | Models                                                              |
 | ------------------ | -------------------------------------------------------------------- |
@@ -63,9 +64,10 @@ Per-PR CI runs on shared, differently-loaded GitHub runners -- the same
 `docker compose` stack can be 3x slower on a noisy runner than a quiet one
 for reasons that have nothing to do with the code in the PR. A `p(95)<300ms`
 budget on that kind of runner produces flaky failures on unrelated PRs (or,
-worse, gets loosened until it stops catching anything). Running nightly on
-its own dedicated runner class instead means a red run means something
-regressed, not that the runner was busy.
+worse, gets loosened until it stops catching anything). Running nightly keeps
+that noise off PRs, but it does not remove it: this job also runs on a shared
+`ubuntu-latest` runner, so one red night can be the runner. A red run that
+repeats is what means something regressed.
 
 This also keeps the ~4-minute `mixed.js` stage (plus the other three scripts
 and a 1k-member/10k-notification seed) off the critical path of every PR --
