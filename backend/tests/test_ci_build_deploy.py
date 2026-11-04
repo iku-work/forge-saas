@@ -1,6 +1,7 @@
 import json
 import os
 import re
+import shlex
 import shutil
 import subprocess
 from pathlib import Path
@@ -664,6 +665,138 @@ def test_the_bootstrap_reboots_for_patches_after_the_backup() -> None:
     assert reboot
     assert backup
     assert reboot.group(1) > backup.group(1)
+
+
+def _script_in(tmp_path: Path, name: str) -> list[str]:
+    bash = shutil.which("bash")
+    if bash is None:
+        pytest.skip("needs bash")
+    (tmp_path / "scripts").mkdir(exist_ok=True)
+    source = (REPO_ROOT / "scripts" / name).read_bytes().replace(b"\r\n", b"\n")
+    (tmp_path / "scripts" / name).write_bytes(source)
+    return [bash, f"{tmp_path.as_posix()}/scripts/{name}"]
+
+
+def _box_health(tmp_path: Path, disk: str, containers: str, *args: str) -> tuple[int, str]:
+    """The real script against a fake df, docker and curl. Returns (exit, what curl got)."""
+    command = _script_in(tmp_path, "check-box-health.sh")
+    (tmp_path / "backend").mkdir(exist_ok=True)
+    (tmp_path / "backend" / ".env").write_text("SENTRY_DSN=https://k@sentry.invalid/7\n")
+    stubs = tmp_path / "bin"
+    stubs.mkdir(exist_ok=True)
+    sent = tmp_path / "sent"
+    sent.write_text("")
+    fakes = {
+        "df": f"printf 'Filesystem Size Used Avail Use%% Mounted\\n/dev/sda1 1 1 1 {disk}%% /\\n'",
+        "docker": f"printf '%s\\n' {shlex.quote(containers)}",
+        "curl": f"printf '%s\\n' \"$*\" >> {shlex.quote(sent.as_posix())}; cat >> {shlex.quote(sent.as_posix())}",
+    }
+    for name, body in fakes.items():
+        (stubs / name).write_bytes(f"#!/usr/bin/env bash\n{body}\n".encode())
+    env = {**os.environ, "PATH": f"{stubs.as_posix()}{os.pathsep}{os.environ['PATH']}"}
+    result = subprocess.run(  # noqa: S603 -- fixed argv: the script under test
+        [*command, *args], env=env, capture_output=True, text=True, check=False
+    )
+    return result.returncode, sent.read_text()
+
+
+HEALTHY = "forge-backend-1|Up 3 minutes (healthy)\nforge-minio-init-1|Exited (0) 2 days ago"
+
+
+def test_box_health_sends_nothing_while_all_is_well(tmp_path: Path) -> None:
+    assert _box_health(tmp_path, "40", HEALTHY) == (0, "")
+
+
+@pytest.mark.parametrize(
+    ("disk", "containers", "expected"),
+    [
+        ("91", HEALTHY, "disk 91% full"),
+        ("40", "forge-worker-1|Up 3 minutes (unhealthy)", "forge-worker-1"),
+        ("40", "forge-redis-1|Restarting (1) 4 seconds ago", "forge-redis-1"),
+        ("40", "forge-caddy-1|Exited (137) 1 minute ago", "forge-caddy-1"),
+    ],
+)
+def test_box_health_reports_trouble_to_sentry(
+    tmp_path: Path, disk: str, containers: str, expected: str
+) -> None:
+    code, sent = _box_health(tmp_path, disk, containers)
+    assert code == 0
+    assert "https://sentry.invalid/api/7/envelope/" in sent
+    assert "sentry_key=k" in sent
+    assert expected in sent
+    # Every line after the headers is JSON, or Sentry drops the envelope.
+    for line in sent.splitlines()[1:]:
+        json.loads(line)
+
+
+def test_box_health_can_send_a_test_event(tmp_path: Path) -> None:
+    _, sent = _box_health(tmp_path, "40", HEALTHY, "--test")
+    assert "test event" in sent
+
+
+def _identity_fixture(tmp_path: Path, *, name: str, email: str, origin: str, legal: str) -> None:
+    for path, content in {
+        "product.config.ts": f'  name: "{name}",\n  supportEmail: "{email}",\n',
+        "backend/product/config.py": f'APP_NAME = "{name}"\nSUPPORT_EMAIL = "{email}"\n',
+        "apps/marketing/src/config/indexing.ts": f'export const PRODUCTION_ORIGIN = "{origin}";\n',
+        "apps/marketing/src/content/legal/en/terms.mdx": legal,
+    }.items():
+        target = tmp_path / path
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(content)
+
+
+def _check_identity(tmp_path: Path, site: str) -> subprocess.CompletedProcess[str]:
+    command = _script_in(tmp_path, "check-product-identity.sh")
+    return subprocess.run(  # noqa: S603 -- fixed argv: the script under test
+        [*command, site], capture_output=True, text=True, check=False
+    )
+
+
+def test_identity_check_passes_a_real_product(tmp_path: Path) -> None:
+    _identity_fixture(
+        tmp_path, name="Acme", email="help@acme.test", origin="https://acme.test", legal="Terms."
+    )
+    result = _check_identity(tmp_path, "https://acme.test/")
+    assert (result.returncode, result.stderr) == (0, "")
+
+
+def test_identity_check_refuses_every_template_default(tmp_path: Path) -> None:
+    _identity_fixture(
+        tmp_path,
+        name="ForgeSaaS",
+        email="support@example.com",
+        origin="https://mycalendar.party",
+        legal="> Have a lawyer write or review the version you publish\n",
+    )
+    result = _check_identity(tmp_path, "https://acme.test")
+    assert result.returncode == 1
+    assert result.stderr.count("refused:") == 6
+
+
+def test_identity_check_ignores_the_site_when_there_is_no_marketing(tmp_path: Path) -> None:
+    _identity_fixture(
+        tmp_path,
+        name="Acme",
+        email="help@acme.test",
+        origin="https://mycalendar.party",
+        legal="> Have a lawyer\n",
+    )
+    assert _check_identity(tmp_path, "").returncode == 0
+
+
+def test_a_fork_cannot_deploy_the_template_identity() -> None:
+    steps = _deploy_workflow("hetzner")["jobs"]["deploy"]["steps"]
+    names = [s.get("name", "") for s in steps]
+    guard = names.index("Refuse the template's identity")
+    assert guard < names.index("Migrate on the box")
+    assert steps[guard]["if"] == "github.repository != 'iku-work/forge-saas'"
+    assert "check-product-identity.sh" in steps[guard]["run"]
+
+
+def test_minio_has_no_admin_console_in_prod() -> None:
+    minio = _prod_compose()["services"]["minio"]
+    assert minio["environment"]["MINIO_BROWSER"] == "off"
 
 
 def test_the_edge_image_build_is_given_the_browser_sentry_dsn() -> None:

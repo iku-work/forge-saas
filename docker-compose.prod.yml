@@ -421,6 +421,10 @@ services:
     image: pgsty/minio:RELEASE.2026-08-04T00-00-00Z
     restart: unless-stopped
     command: server /data
+    # No admin console. Nothing here uses it, and with it on, a browser opening the
+    # public storage host is redirected to the console's port.
+    environment:
+      MINIO_BROWSER: "off"
     # Its own env file (copied from .env.minio.example) for the same reason as
     # postgres and pgbouncer above -- MINIO_* are not Settings fields.
     env_file:

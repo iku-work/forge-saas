@@ -1,7 +1,7 @@
 # New server runbook
 
 How to take a fresh Hetzner server from nothing to a product deployed on it by
-CI. `scripts/bootstrap-hetzner-box.sh` does the server half;
+CI. Starting a product from the template? `first-product.md` comes first. `scripts/bootstrap-hetzner-box.sh` does the server half;
 `.github/workflows/deploy-hetzner.yml` does every deploy after that. The deploy
 side is in `deploy-pipeline.md`. This file covers what happens once, before the
 first deploy.
@@ -192,6 +192,19 @@ only built once `DEPLOY_TARGET` is set.
   ssh forge@<ip> 'cd ~/forge && set -a && . ~/forge-backup.env && set +a && bash scripts/check-sentry.sh'
   ```
 
+- Add an uptime monitor on `https://<app host>/health/ready`, so that a server
+  that is off still tells you. Sentry has one (its free plan appeared to include
+  one in 2026; check), and any other service works. Stop the backend once to
+  confirm that the alert reaches you.
+- Server trouble reaches Sentry. An hourly timer reports a disk over 85% or a failing
+  container. This sends a test event, and it should appear as an issue:
+
+  ```bash
+  ssh forge@<ip> 'cd ~/forge && bash scripts/check-box-health.sh --test'
+  ```
+
+  The exporters run but nothing scrapes them. For graphs, point Prometheus at them
+  and import `docs/grafana/`.
 - Before anyone signs up: the Bitwarden `JWT_PRIVATE_KEY` and `ENCRYPTION_KEY`
   were generated for this product. A published key would already have stopped
   the deploy; a key shared with another product would not.

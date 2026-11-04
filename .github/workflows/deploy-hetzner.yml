@@ -88,6 +88,14 @@ jobs:
 
       # Pinned by version and checksum, like any binary that handles the
       # production secrets.
+      # Every product but the template itself, whose own deployment is the only
+      # one allowed to look like the template.
+      - name: Refuse the template's identity
+        if: github.repository != 'iku-work/forge-saas'
+        env:
+          PUBLIC_SITE_URL: ${{ vars.PUBLIC_SITE_URL }}
+        run: bash scripts/check-product-identity.sh "$PUBLIC_SITE_URL"
+
       - name: Install the Bitwarden Secrets Manager CLI
         env:
           BWS_VERSION: "2.1.0"

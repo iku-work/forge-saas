@@ -190,6 +190,29 @@ EOF
 systemctl daemon-reload
 systemctl enable --now forge-backup.timer >/dev/null
 
+cat > /etc/systemd/system/forge-box-health.service <<EOF
+[Unit]
+Description=Report a full disk or a failing container to Sentry (scripts/check-box-health.sh)
+
+[Service]
+Type=oneshot
+User=$DEPLOY_USER
+WorkingDirectory=$APP_DIR
+ExecStart=/usr/bin/bash $APP_DIR/scripts/check-box-health.sh
+EOF
+cat > /etc/systemd/system/forge-box-health.timer <<EOF
+[Unit]
+Description=Hourly server health check
+
+[Timer]
+OnCalendar=hourly
+
+[Install]
+WantedBy=timers.target
+EOF
+systemctl daemon-reload
+systemctl enable --now forge-box-health.timer >/dev/null
+
 echo
 echo "Done. Next, from docs/runbooks/new-server.md:"
 [ -f "$APP_DIR/bitwarden-values.txt" ] &&
