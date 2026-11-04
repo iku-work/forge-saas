@@ -27,6 +27,12 @@ import { LOAD_USER_COUNT, LOAD_USER_PASSWORD, THRESHOLDS, userEmail } from "./li
 // margin for a green check mark, which is the wrong trade -- the fix for
 // a genuine login spike beyond one replica's capacity is more replicas,
 // same as any other CPU-bound endpoint.
+//
+// Its budget is 1000ms rather than the shared 300ms for the same reason. Argon2
+// is meant to cost CPU, so its p95 follows whatever else a shared runner is doing:
+// 73ms and 516ms on consecutive days with no code change, and 64 of 65 nightlies
+// red before that. A second is still fast for a login, and still catches argon2
+// going back onto the event loop.
 export const options = {
   scenarios: {
     login_burst: {
@@ -39,7 +45,7 @@ export const options = {
       ],
     },
   },
-  thresholds: THRESHOLDS,
+  thresholds: { ...THRESHOLDS, http_req_duration: ["p(95)<1000"] },
 };
 
 export default function () {
