@@ -50,5 +50,5 @@ default ignore := false
 ignore if {
 	input.PkgName == "tar"
 	input.InstalledVersion == "6.2.1"
-	time.now_ns() < time.parse_rfc3339_ns("2026-11-01T00:00:00Z")
+	time.now_ns() < time.parse_rfc3339_ns("2027-01-01T00:00:00Z")
 }

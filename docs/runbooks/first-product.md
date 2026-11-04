@@ -83,6 +83,10 @@ Follow `new-server.md`, including everything in its verification list.
   test (`pentest-prep.md`).
 - **Recovery keys:** keep a second copy of the backup private key and anything else
   only one person holds.
+- **Mobile:** if you ship it, upgrade Expo first, with a Maestro run on a Mac. The app
+  is on SDK 52, and `.trivyignore.rego` and `.trivyignore.yaml` list what that clears.
+  `security` goes red from 2027-01-01 until that is done or the dates are moved, even
+  if you do not ship mobile.
 
 **Expected:** each has a date and a result written down.
 
