@@ -686,10 +686,11 @@ def _box_health(tmp_path: Path, disk: str, containers: str, *args: str) -> tuple
     stubs.mkdir(exist_ok=True)
     sent = tmp_path / "sent"
     sent.write_text("")
+    log = shlex.quote(sent.as_posix())
     fakes = {
         "df": f"printf 'Filesystem Size Used Avail Use%% Mounted\\n/dev/sda1 1 1 1 {disk}%% /\\n'",
         "docker": f"printf '%s\\n' {shlex.quote(containers)}",
-        "curl": f"printf '%s\\n' \"$*\" >> {shlex.quote(sent.as_posix())}; cat >> {shlex.quote(sent.as_posix())}",
+        "curl": f"printf '%s\\n' \"$*\" >> {log}; cat >> {log}",
     }
     for name, body in fakes.items():
         (stubs / name).write_bytes(f"#!/usr/bin/env bash\n{body}\n".encode())
