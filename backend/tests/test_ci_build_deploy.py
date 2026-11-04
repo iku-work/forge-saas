@@ -694,6 +694,7 @@ def _box_health(tmp_path: Path, disk: str, containers: str, *args: str) -> tuple
     }
     for name, body in fakes.items():
         (stubs / name).write_bytes(f"#!/usr/bin/env bash\n{body}\n".encode())
+        (stubs / name).chmod(0o755)  # or Linux skips it and runs the real command
     env = {**os.environ, "PATH": f"{stubs.as_posix()}{os.pathsep}{os.environ['PATH']}"}
     result = subprocess.run(  # noqa: S603 -- fixed argv: the script under test
         [*command, *args], env=env, capture_output=True, text=True, check=False
