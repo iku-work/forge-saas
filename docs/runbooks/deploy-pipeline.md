@@ -165,7 +165,10 @@ the process reached Postgres and Redis:
   never sees the SPA's HTML.
 - **Then open the app with the browser console visible and use it.** The CSP is
   enforced, not report-only, and a blocked upload is silent apart from the
-  console. `script-src` is `'self'` plus one hash, which covers the inline
+  console. `img-src` and `connect-src` name the storage host, the Google and
+  GitHub picture hosts and Sentry, so a storage host that is not
+  `STORAGE_DOMAIN` needs adding in `Caddyfile.prod`. `script-src` is `'self'`
+  plus one hash, which covers the inline
   theme-boot script in `apps/web/index.html`. Editing that script changes its
   hash and blocks it; the symptom is a white flash into a dark app, and
   `backend/tests/test_caddy_config.py` fails the build before it can reach you.

@@ -654,6 +654,29 @@ def test_a_restore_gives_the_application_its_grants_back() -> None:
     assert script.index("--no-privileges") < script.index('provision-db-roles.sh" "$TARGET_DB"')
 
 
+# M6: a kernel patch does nothing until a reboot. After the backup has had time to
+# finish, because a reboot would cut one short.
+def test_the_bootstrap_reboots_for_patches_after_the_backup() -> None:
+    script = (REPO_ROOT / "scripts" / "bootstrap-hetzner-box.sh").read_text(encoding="utf-8")
+    assert 'Unattended-Upgrade::Automatic-Reboot "true";' in script
+    reboot = re.search(r'Automatic-Reboot-Time "(\d\d:\d\d)"', script)
+    backup = re.search(r"OnCalendar=\*-\*-\* (\d\d:\d\d):00 UTC", script)
+    assert reboot
+    assert backup
+    assert reboot.group(1) > backup.group(1)
+
+
+def test_the_edge_image_build_is_given_the_browser_sentry_dsn() -> None:
+    # Only what the image build receives ends up in the bundle, so without this
+    # initSentry() returns early in production and browser errors go nowhere.
+    dockerfile = (REPO_ROOT / "Dockerfile.caddy").read_text(encoding="utf-8")
+    assert "ARG VITE_SENTRY_DSN" in dockerfile
+    assert "VITE_SENTRY_DSN=$VITE_SENTRY_DSN" in dockerfile
+    steps = _ci_workflow()["jobs"]["build"]["steps"]
+    edge = next(s for s in steps if s.get("name") == "Build and push the edge image")
+    assert "VITE_SENTRY_DSN=${{ vars.VITE_SENTRY_DSN }}" in edge["with"]["build-args"]
+
+
 def test_the_bootstrap_creates_the_accounts_before_pgbouncer_needs_them() -> None:
     script = (REPO_ROOT / "scripts" / "bootstrap-hetzner-box.sh").read_text(encoding="utf-8")
     assert script.index("--wait --quiet-pull postgres") < script.index("provision-db-roles.sh")
