@@ -16,9 +16,9 @@ export function userEmail(i) {
   return `load-user-${i}@example.com`;
 }
 
-// T-223: "p95 < 300ms and error rate < 1% are asserted, not eyeballed" --
-// identical in every script in this directory (enforced by a CI grep, see
-// tests/load/README.md).
+// T-223: "p95 < 300ms and error rate < 1% are asserted, not eyeballed" -- in
+// every script in this directory (enforced by a CI grep, see
+// tests/load/README.md). login-burst.js alone widens the first.
 export const THRESHOLDS = {
   http_req_duration: ["p(95)<300"],
   http_req_failed: ["rate<0.01"],
