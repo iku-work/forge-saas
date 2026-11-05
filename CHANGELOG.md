@@ -6,6 +6,10 @@ template keep their own changes in `CHANGELOG.product.md` (see
 
 ## [Unreleased]
 ### Added
+- **Bundle budgets for the web app (T-242).** `pnpm --filter web bundle:check` and
+  a CI job fail when the initial JS, a route, a locale catalog or the CSS outgrows
+  `apps/web/bundle-budgets.json`, or when a new route has no budget. Each CI run
+  uploads a treemap. See `docs/runbooks/bundle-budget.md`.
 - **Phase 4 acceptance runbook, and the checks it leans on (T-350).**
   `docs/runbooks/phase4-verification.md` is the integrated pass for everything
   Phase 4 added — eleven numbered steps in the shape of the phase 1–3 runbooks,

@@ -1038,6 +1038,8 @@ was found doing it. The laws in AGENTS.md §0 still bind. -->
 
 > needs: T-040
 
+**Built 2026-11-05, three months late:** the first attempt sat on a branch and never reached main, though this task was counted as built. It uses `apps/web/scripts/check-bundle-budget.mjs` instead of `size-limit`; the script's header says why. Initial JS is 164 KB, above the 150 KB this spec aimed for, and is budgeted at today's size + 10%.
+
 **Goal** Bundle growth is a reviewed decision, not an accident discovered in Lighthouse six months later.
 
 **Build**

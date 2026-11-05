@@ -24,6 +24,7 @@
 | M9 | Built in the first-product PR: `first-product.md` is the checklist, and a deploy from any repository but the template refuses the template's name, support address, indexing origin and legal pages. That check is skipped in this repository, so it is only proven by tests until the first fork deploys. |
 | Storage console | Found on the way: browsers opening the storage host's root were redirected to MinIO's console, which exposed an internal port number. The console is now off, and on 4 November that address answered 403 on forge-prod-2. |
 | M8 | Corrected: the 2026-12-01 dates would have stopped nothing, because `.trivyignore.rego` matches tar 6.2.1 by itself. The policy now carries the date, 2027-01-01, when the image-size entries expire too. Tested in CI: with a past date, `security` fails on tar. The Expo upgrade itself is still to do, and `first-product.md` lists it for any product shipping mobile. |
+| T-242 | Found on the way: the bundle size check was listed as built but only ever lived on a branch. Built in the bundle budgets PR. Initial JS is 164 KB gzipped against the plan's 150 KB aim, so the budget holds today's size rather than meeting that aim. |
 | Everything else | Open. |
 
 The race H1 mentions is closed by the binding: an attacker registering again cannot change what the owner's link does. One risk remains: the owner clicking a link from a signup they never made. The email's footer already tells people to ignore it in that case.
