@@ -82,6 +82,8 @@ Follow `new-server.md`, including everything in its verification list.
   429s real traffic gets.
 - **Security review:** before real customers' money or data, pay for a penetration
   test (`pentest-prep.md`).
+- **Bundle budgets:** your screens will replace the template's, so reset the numbers
+  with `pnpm --filter web bundle:check --update` and review the diff (`bundle-budget.md`).
 - **Recovery keys:** keep a second copy of the backup private key and anything else
   only one person holds.
 - **Mobile:** if you ship it, upgrade Expo first, with a Maestro run on a Mac. The app
