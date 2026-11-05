@@ -329,6 +329,7 @@ async def _fill_free_plan_seats(
     await session.commit()  # a refusal rolls back anything only flushed
 
 
+@pytest.mark.module_dependent  # the limit comes from billing, off in the minimal leg
 async def test_a_full_org_refuses_a_new_person(
     session: AsyncSession, api_client: ClientFactory, idp: _MockIdp
 ) -> None:
