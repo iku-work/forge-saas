@@ -19,6 +19,7 @@ from app.core.exceptions import (
     ConflictError,
     NotFoundError,
     PermissionDeniedError,
+    PlanLimitError,
     UnprocessableEntityError,
 )
 from app.core.module_loader import is_enabled
@@ -30,6 +31,7 @@ from app.modules.auth.permissions import ROLE_PERMISSIONS, MemberRole, Permissio
 from app.modules.auth.repository import UserRepository
 from app.modules.auth.service import AuthService
 from app.modules.auth.utils import hash_token, sign_url_token, verify_url_token
+from app.modules.feature_flags.service import FeatureFlagService
 from app.modules.notifications.service import NotificationService
 from app.modules.tenancy.models import Invitation, Membership, Organization
 from app.modules.tenancy.repository import (
@@ -87,6 +89,8 @@ class TenancyService:
         # the invitee may not have an account yet. (T-233's _invitee_locale
         # does look one up, but only to pick a language, and treats "no such
         # user" as an ordinary case rather than an error.)
+        org = await self._org_or_raise(org_id)
+        await self._require_seat_to_invite(org, redis)
         invitation_id = uuid4()
         plain_token = sign_url_token({"invitation_id": str(invitation_id)}, _INVITATION_TTL_SECONDS)
         await self._invitations.create(
@@ -98,7 +102,6 @@ class TenancyService:
             invited_by=inviter.user_id,
             expires_at=utcnow() + _INVITATION_TTL,
         )
-        org = await self._org_or_raise(org_id)
         await self._enqueue_invitation_email(
             org.name, email, plain_token, await self._invitee_locale(email, inviter.user_id)
         )
@@ -118,6 +121,47 @@ class TenancyService:
             EventType.MEMBER_INVITED,
             MemberPayload(email=email, role=role.value),
         )
+
+    async def _seat_limit(self, org: Organization, redis: Redis) -> int | None:
+        """The org's member limit, or None when its plan sets none.
+
+        With a limit, this locks the org's row until the transaction ends, so
+        two people joining at once cannot both take the last seat. No limit
+        also covers billing being off: plan_features is then empty.
+        """
+        features = await FeatureFlagService(self._session, redis).plan_features(org)
+        limit = features.get("seats")
+        if limit is not None:
+            await self._orgs.lock(org.id)
+        return limit
+
+    async def _require_seat_to_invite(self, org: Organization, redis: Redis) -> None:
+        # Pending invitations count here so that an admin hears about the limit
+        # while inviting, not from the invitee. They do not count in
+        # require_seat_to_join, which is the check that actually holds the line.
+        limit = await self._seat_limit(org, redis)
+        if limit is None:
+            return
+        members = await self._memberships.count_by_org(org.id)
+        pending = await self._invitations.count_unexpired_for_org(org.id)
+        if members + pending >= limit:
+            raise PlanLimitError(
+                "errors.seat_limit_reached",
+                fallback="Your plan's member limit has been reached.",
+            )
+
+    async def require_seat_to_join(self, org: Organization, redis: Redis) -> None:
+        """For someone becoming a member now: by invitation, or at first SSO sign-in.
+
+        Existing members are never removed. An org over its limit after a
+        downgrade keeps them and cannot add anyone until it is back under.
+        """
+        limit = await self._seat_limit(org, redis)
+        if limit is not None and await self._memberships.count_by_org(org.id) >= limit:
+            raise PlanLimitError(
+                "errors.seat_limit_reached_to_join",
+                fallback="This organization has reached its plan's member limit.",
+            )
 
     async def resend_invitation(
         self, org_id: UUID, invitation_id: UUID, sender: Membership
@@ -159,7 +203,7 @@ class TenancyService:
             raise NotFoundError("errors.org_not_found", fallback="Organization not found")
         return org
 
-    async def accept_invitation(self, token: str, user: User) -> Membership:
+    async def accept_invitation(self, token: str, user: User, redis: Redis) -> Membership:
         # Two independent checks: the itsdangerous signature + embedded TTL
         # (cryptographic, survives DB tampering) and the DB row's own
         # accepted_at/expires_at (catches single-use and any drift between
@@ -182,6 +226,9 @@ class TenancyService:
             raise ConflictError(
                 "errors.already_member", fallback="You are already a member of this organization."
             )
+        # Before the invitation is spent, so the link still works once a seat
+        # is free.
+        await self.require_seat_to_join(await self._org_or_raise(invitation.org_id), redis)
         if not await self._invitations.mark_accepted(invitation.id):
             # Lost the race to another request presenting the same link.
             raise AuthenticationError(

@@ -53,6 +53,7 @@ from app.modules.auth.repository import UserRepository
 from app.modules.auth.service import AuthService
 from app.modules.auth.utils import sign_url_token, verify_url_token
 from app.modules.tenancy.repository import MembershipRepository
+from app.modules.tenancy.service import TenancyService
 
 from . import discovery as discovery_module
 from . import oidc
@@ -373,6 +374,7 @@ class SsoLoginService:
                 "errors.sso_not_a_member",
                 fallback="That identity is not a member of this organization",
             )
+        await TenancyService(self._session).require_seat_to_join(organization, self._redis)
         role = _role_for(connection, identity.groups)
         await self._memberships.create(user_id=user.id, org_id=organization.id, role=role)
         await self._audit.log(

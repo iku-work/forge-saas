@@ -65,6 +65,8 @@
   "upload_reservation_expired": "Tätä latausta ei vahvistettu ajoissa. Aloita se uudelleen.",
   "storage_quota_exceeded": "Tämä ylittäisi tilauksesi {storage_gb} Gt:n tallennustilan rajan.",
   "file_count_quota_exceeded": "Tämä ylittäisi tilauksesi {max_files} tiedoston rajan.",
+  "seat_limit_reached": "Tilauksesi jäsenraja on täynnä, ja odottavat kutsut lasketaan mukaan. Päivitä tilaus tai poista jäsen tai kutsu, jotta voit kutsua jonkun muun.",
+  "seat_limit_reached_to_join": "Tämä organisaatio on saavuttanut tilauksensa jäsenrajan. Pyydä sen ylläpitäjää päivittämään tilaus tai poistamaan jäsen.",
   "file_not_uploaded": "Esiallekirjoitetusta osoitteesta ei löytynyt ladattua tiedostoa.",
   "file_size_mismatch": "Ladatun tiedoston koko ei vastaa ilmoitettua kokoa.",
   "upload_changed": "Latausta muutettiin vahvistuksen aikana. Vahvista se uudelleen.",

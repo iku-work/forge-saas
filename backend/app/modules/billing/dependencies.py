@@ -69,7 +69,7 @@ _FREE_PLAN = Plan(
     stripe_price_id_yearly="",
     price_monthly=0,
     price_yearly=0,
-    features={"storage_gb": 1, "max_upload_mb": 10},
+    features={"seats": 3, "storage_gb": 1, "max_upload_mb": 10},
 )
 
 

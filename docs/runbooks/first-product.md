@@ -37,6 +37,7 @@ Create the new repository, and keep the template as a remote for updates, as
 | `apps/marketing/src/config/indexing.ts` | `PRODUCTION_ORIGIN`, your site's exact origin |
 | `apps/mobile/app.json` | the app's name, scheme and bundle identifiers, if you ship mobile |
 | `apps/marketing/src/config/` and `src/content/` | the landing page, pricing and blog copy |
+| `PLANS` in `backend/product/config.py`, `_FREE_PLAN` in `backend/app/modules/billing/dependencies.py` | each plan's limits, matching the pricing page. `seats` and storage are enforced, and a plan with no `seats` is unlimited. Nothing enforces the sample `api_calls` and `advanced_reports`, so promise them only once your product does |
 
 Turn modules on and off in the same two config files, then run the module matrix on
 that pull request by adding the `module-matrix` label.

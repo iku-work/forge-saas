@@ -286,36 +286,38 @@ async def test_invite_then_accept_round_trip(  # noqa: PLR0913 -- redis on top o
     invitee = User(email="invitee@example.com")
     session.add(invitee)
     await session.flush()
-    membership = await service.accept_invitation(token, invitee)
+    membership = await service.accept_invitation(token, invitee, redis)
 
     assert membership.org_id == org.id
     assert membership.user_id == invitee.id
     assert membership.role == MemberRole.MEMBER
 
 
-async def test_accept_invitation_used_twice_raises_on_second_call(
+async def test_accept_invitation_used_twice_raises_on_second_call(  # noqa: PLR0913 -- redis on top of the usual service/org/user params
     service: TenancyService,
     invitation_repo: InvitationRepository,
     org: Organization,
     user: User,
     session: AsyncSession,
+    redis: Redis,
 ) -> None:
     token = await _issue_invitation(invitation_repo, org, user)
     invitee = User(email="invitee@example.com")
     session.add(invitee)
     await session.flush()
-    await service.accept_invitation(token, invitee)
+    await service.accept_invitation(token, invitee, redis)
 
     with pytest.raises(AuthenticationError):
-        await service.accept_invitation(token, invitee)
+        await service.accept_invitation(token, invitee, redis)
 
 
-async def test_accept_invitation_refuses_someone_else(
+async def test_accept_invitation_refuses_someone_else(  # noqa: PLR0913 -- redis on top of the usual service/org/user params
     service: TenancyService,
     invitation_repo: InvitationRepository,
     org: Organization,
     user: User,
     session: AsyncSession,
+    redis: Redis,
 ) -> None:
     token = await _issue_invitation(invitation_repo, org, user, role=MemberRole.ADMIN)
     forwarded_to = User(email="forwarded-to@example.com")
@@ -323,22 +325,23 @@ async def test_accept_invitation_refuses_someone_else(
     await session.flush()
 
     with pytest.raises(PermissionDeniedError):
-        await service.accept_invitation(token, forwarded_to)
+        await service.accept_invitation(token, forwarded_to, redis)
 
     # Not spent: the person it was sent to can still use it.
     invitee = User(email="INVITEE@example.com")
     session.add(invitee)
     await session.flush()
-    membership = await service.accept_invitation(token, invitee)
+    membership = await service.accept_invitation(token, invitee, redis)
     assert membership.user_id == invitee.id
 
 
-async def test_accept_invitation_when_already_a_member_conflicts(
+async def test_accept_invitation_when_already_a_member_conflicts(  # noqa: PLR0913 -- redis on top of the usual service/org/user params
     service: TenancyService,
     invitation_repo: InvitationRepository,
     org: Organization,
     user: User,
     session: AsyncSession,
+    redis: Redis,
 ) -> None:
     token = await _issue_invitation(invitation_repo, org, user)
     invitee = User(email="invitee@example.com")
@@ -348,15 +351,16 @@ async def test_accept_invitation_when_already_a_member_conflicts(
     await session.flush()
 
     with pytest.raises(ConflictError):
-        await service.accept_invitation(token, invitee)
+        await service.accept_invitation(token, invitee, redis)
 
 
-async def test_accept_invitation_expired_raises(
+async def test_accept_invitation_expired_raises(  # noqa: PLR0913 -- redis on top of the usual service/org/user params
     service: TenancyService,
     invitation_repo: InvitationRepository,
     org: Organization,
     user: User,
     session: AsyncSession,
+    redis: Redis,
 ) -> None:
     token = await _issue_invitation(invitation_repo, org, user, expires_at=_past())
     invitee = User(email=f"invitee-{uuid4()}@example.com")
@@ -364,12 +368,14 @@ async def test_accept_invitation_expired_raises(
     await session.flush()
 
     with pytest.raises(AuthenticationError):
-        await service.accept_invitation(token, invitee)
+        await service.accept_invitation(token, invitee, redis)
 
 
-async def test_accept_invitation_unknown_token_raises(service: TenancyService, user: User) -> None:
+async def test_accept_invitation_unknown_token_raises(
+    service: TenancyService, user: User, redis: Redis
+) -> None:
     with pytest.raises(AuthenticationError):
-        await service.accept_invitation("not-a-real-token", user)
+        await service.accept_invitation("not-a-real-token", user, redis)
 
 
 # --- change_role ---------------------------------------------------------------
@@ -638,12 +644,13 @@ async def test_preview_invitation_returns_invitation_and_org(
     assert returned_org.id == org.id
 
 
-async def test_preview_invitation_does_not_mark_used(
+async def test_preview_invitation_does_not_mark_used(  # noqa: PLR0913 -- redis on top of the usual service/org/user params
     service: TenancyService,
     invitation_repo: InvitationRepository,
     org: Organization,
     user: User,
     session: AsyncSession,
+    redis: Redis,
 ) -> None:
     token = await _issue_invitation(invitation_repo, org, user)
     invitee = User(email="invitee@example.com")
@@ -651,7 +658,7 @@ async def test_preview_invitation_does_not_mark_used(
     await session.flush()
 
     await service.preview_invitation(token)
-    membership = await service.accept_invitation(token, invitee)
+    membership = await service.accept_invitation(token, invitee, redis)
 
     assert membership.org_id == org.id
 

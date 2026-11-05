@@ -315,6 +315,55 @@ async def test_a_new_person_is_provisioned_with_the_default_role(
     assert membership.role is MemberRole.MEMBER
 
 
+async def _fill_free_plan_seats(
+    session: AsyncSession, org: Organization, *, emails: tuple[str, str]
+) -> None:
+    """The owner from _make_org, plus two more: the free plan's three seats."""
+    for email in emails:
+        user = await UserRepository(session).create(
+            email=email, hashed_password=None, email_verified_at=datetime.now(UTC)
+        )
+        await MembershipRepository(session).create(
+            user_id=user.id, org_id=org.id, role=MemberRole.MEMBER
+        )
+    await session.commit()  # a refusal rolls back anything only flushed
+
+
+async def test_a_full_org_refuses_a_new_person(
+    session: AsyncSession, api_client: ClientFactory, idp: _MockIdp
+) -> None:
+    org, _ = await _make_org(session)
+    org_id, slug = org.id, org.slug
+    await _connect(session, org)
+    await _fill_free_plan_seats(
+        session, org, emails=(f"{uuid4()}@example.com", f"{uuid4()}@example.com")
+    )
+    client = api_client()
+
+    state, idp.nonce = await _start(client, slug)
+    response = await client.get(f"{_PREFIX}/callback", params={"code": "c", "state": state})
+
+    assert response.status_code == 402, response.text
+    assert response.json()["error"]["message_key"] == "errors.seat_limit_reached_to_join"
+    assert await MembershipRepository(session).count_by_org(org_id) == 3
+
+
+async def test_a_full_org_still_lets_its_members_sign_in(
+    session: AsyncSession, api_client: ClientFactory, idp: _MockIdp
+) -> None:
+    org, _ = await _make_org(session)
+    await _connect(session, org)
+    await _fill_free_plan_seats(
+        session, org, emails=(f"newcomer@{_DOMAIN}", f"{uuid4()}@example.com")
+    )
+    client = api_client()
+
+    state, idp.nonce = await _start(client, org.slug)
+    response = await client.get(f"{_PREFIX}/callback", params={"code": "c", "state": state})
+
+    assert response.status_code == 200, response.text
+
+
 async def test_an_existing_person_is_linked_rather_than_duplicated(
     session: AsyncSession, api_client: ClientFactory, idp: _MockIdp
 ) -> None:
