@@ -44,9 +44,9 @@
     "permission_denied": "No tienes permiso para ver la facturación de esta organización.",
     "checkout_failed": "No se pudo iniciar el proceso de pago.",
     "portal_failed": "No se pudo abrir el portal de facturación.",
-    "feature_unavailable": "La función '{feature}' no está disponible en tu plan.",
-    "plan_limit_reached": "Has alcanzado el límite de tu plan para '{feature}'.",
-    "plan_not_found": "No se pudo encontrar el plan '{plan_slug}'."
+    "feature_unavailable": "La función «{feature}» no está disponible en tu plan.",
+    "plan_limit_reached": "Has alcanzado el límite de tu plan para «{feature}».",
+    "plan_not_found": "No se pudo encontrar el plan «{plan_slug}»."
   },
   "checkout": {
     "canceled": "Se cancelo el pago. No se te ha cobrado nada."

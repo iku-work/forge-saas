@@ -5,7 +5,7 @@ from fastapi.testclient import TestClient
 from pydantic import BaseModel
 from sqlalchemy.exc import DBAPIError
 
-from app.core.exceptions import NotFoundError
+from app.core.exceptions import NotFoundError, PermissionDeniedError, PlanLimitError
 from app.core.handlers import register_exception_handlers
 
 
@@ -67,6 +67,7 @@ def test_domain_error_returns_envelope_with_status_and_code() -> None:
         "code": "not_found",
         "message_key": "errors.widget_not_found",
         "message": "widget not found",
+        "params": None,
         "details": {"id": "abc"},
     }
     assert body["meta"]["request_id"]
@@ -128,6 +129,39 @@ def test_domain_error_translates_using_request_state_locale() -> None:
     response = client.get("/raise-known-error-key")
 
     assert response.json()["error"]["message"] == "Organisaatiota ei löytynyt."
+
+
+def test_only_the_params_the_message_shows_reach_the_client() -> None:
+    test_app = _build_test_app()
+
+    @test_app.get("/sso-required")
+    async def sso_required() -> None:
+        raise PermissionDeniedError(
+            "errors.sso_required", params={"provider": "Okta", "org_slug": "acme-internal"}
+        )
+
+    response = TestClient(test_app).get("/sso-required")
+
+    assert response.json()["error"]["params"] == {"provider": "Okta"}
+    assert "acme-internal" not in response.text
+
+
+def test_a_params_value_goes_out_as_a_string() -> None:
+    test_app = _build_test_app()
+
+    @test_app.get("/limit")
+    async def limit() -> None:
+        raise PlanLimitError("errors.api_key_limit_reached", params={"limit": 50})
+
+    response = TestClient(test_app).get("/limit")
+
+    assert response.json()["error"]["params"] == {"limit": "50"}
+
+
+def test_an_error_without_params_sends_null() -> None:
+    response = TestClient(_build_test_app()).get("/raise-known-error-key")
+
+    assert response.json()["error"]["params"] is None
 
 
 def test_validation_error_returns_422_envelope() -> None:

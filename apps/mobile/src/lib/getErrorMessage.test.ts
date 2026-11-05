@@ -20,6 +20,36 @@ describe("getErrorMessage", () => {
     );
   });
 
+  it("fills a catalog placeholder from the error's params", () => {
+    const error = {
+      error: {
+        code: "plan_limit_reached",
+        message_key: "errors.api_key_limit_reached",
+        message: "unused",
+        params: { limit: "50" },
+      },
+    };
+
+    expect(getErrorMessage(error, "errors.fallback")).toBe(
+      "This organization is limited to 50 API keys.",
+    );
+  });
+
+  it("fills a placeholder that the catalog puts in quotation marks", () => {
+    const error = {
+      error: {
+        code: "plan_limit_reached",
+        message_key: "errors.feature_unavailable",
+        message: "unused",
+        params: { feature: "storage_gb" },
+      },
+    };
+
+    expect(getErrorMessage(error, "errors.fallback")).toBe(
+      "The “storage_gb” feature is not available on your plan.",
+    );
+  });
+
   it("falls back to code when message_key has no catalog entry", () => {
     const error = {
       error: { code: "conflict", message_key: "errors.not_a_real_key", message: "unused" },

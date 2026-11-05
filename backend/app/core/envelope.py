@@ -25,6 +25,9 @@ class ErrorBody(BaseModel):
     # back to `code` only if no specific translation exists for it.
     message_key: str
     message: str
+    # The values `message` was filled in with, because a client re-translates
+    # `message_key` in its own locale and the catalog entry may need them.
+    params: dict[str, str] | None = None
     details: dict[str, Any] | None = None
 
 

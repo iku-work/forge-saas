@@ -2503,6 +2503,20 @@
           "message_key": {
             "title": "Message Key",
             "type": "string"
+          },
+          "params": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "type": "string"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Params"
           }
         },
         "required": [

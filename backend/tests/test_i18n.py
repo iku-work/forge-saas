@@ -94,11 +94,11 @@ def test_t_raises_key_error_when_missing_from_both_locales() -> None:
 
 
 def test_t_interpolates_a_plain_placeholder() -> None:
-    assert i18n.t("errors.plan_not_found", plan_slug="pro") == "Plan 'pro' could not be found."
+    assert i18n.t("errors.plan_not_found", plan_slug="pro") == "Plan “pro” could not be found."
 
 
 def test_t_interpolation_leaves_unmatched_placeholders_untouched() -> None:
-    assert i18n.t("errors.plan_not_found") == "Plan '{plan_slug}' could not be found."
+    assert i18n.t("errors.plan_not_found") == "Plan “{plan_slug}” could not be found."
 
 
 def test_t_returns_message_unchanged_when_no_params_and_no_placeholders() -> None:
