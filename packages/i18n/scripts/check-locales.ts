@@ -75,6 +75,18 @@ export function compareLocale(
   };
 }
 
+// ICU reads a quote straight before `{` as the start of literal text, so the
+// user would see the raw {name}. The backend's t() doesn't, which hides this.
+function quotedPlaceholderError(locale: string, values: ReadonlyMap<string, string>): string[] {
+  const keys = [...values.entries()]
+    .filter(([, value]) => value.includes("'{"))
+    .map(([key]) => key)
+    .sort();
+  return keys.length > 0
+    ? [`locales/${locale} has a quote straight before a placeholder: ${keys.join(", ")}`]
+    : [];
+}
+
 export interface CheckLocalesReport {
   emptyEnKeys: string[];
   results: LocaleCheckResult[];
@@ -108,11 +120,14 @@ export function checkLocales(localesDir: string = LOCALES_DIR): CheckLocalesRepo
     );
   }
 
+  errors.push(...quotedPlaceholderError(EN_LOCALE, enValues));
+
   for (const locale of localeCodes) {
     if (locale === EN_LOCALE) continue;
     const values = collectKeyValues(join(localesDir, locale));
     const result = compareLocale(locale, enKeys, values);
     results.push(result);
+    errors.push(...quotedPlaceholderError(locale, values));
 
     if (result.orphanKeys.length > 0) {
       errors.push(

@@ -44,9 +44,9 @@
     "permission_denied": "You don't have permission to view billing for this organization.",
     "checkout_failed": "Unable to start checkout.",
     "portal_failed": "Unable to open the billing portal.",
-    "feature_unavailable": "The '{feature}' feature isn't available on your plan.",
-    "plan_limit_reached": "You've reached your plan's limit for '{feature}'.",
-    "plan_not_found": "Plan '{plan_slug}' could not be found."
+    "feature_unavailable": "The “{feature}” feature isn't available on your plan.",
+    "plan_limit_reached": "You've reached your plan's limit for “{feature}”.",
+    "plan_not_found": "Plan “{plan_slug}” could not be found."
   },
   "checkout": {
     "canceled": "Checkout was cancelled. You have not been charged."

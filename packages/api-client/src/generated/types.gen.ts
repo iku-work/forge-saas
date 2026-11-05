@@ -949,6 +949,12 @@ export type ErrorBody = {
      * Message Key
      */
     message_key: string;
+    /**
+     * Params
+     */
+    params?: {
+        [key: string]: string;
+    } | null;
 };
 
 /**

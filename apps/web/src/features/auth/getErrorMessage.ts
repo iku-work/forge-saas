@@ -12,6 +12,7 @@ interface ApiErrorEnvelope {
     code?: string;
     message_key?: string;
     message?: string;
+    params?: Record<string, string> | null;
   } | null;
 }
 
@@ -45,13 +46,13 @@ function hasErrorCode(value: unknown): value is ApiErrorEnvelope {
 // too, they just weren't reachable from here before this field existed.
 export function getErrorMessage(error: unknown, fallbackKey: string): string {
   if (hasErrorCode(error)) {
-    const { code, message_key: messageKey } = error.error ?? {};
+    const { code, message_key: messageKey, params } = error.error ?? {};
     if (messageKey && i18next.exists(messageKey)) {
-      return i18next.t(messageKey);
+      return i18next.t(messageKey, params ?? {});
     }
     const codeKey = `errors.${code ?? ""}`;
     if (code && i18next.exists(codeKey)) {
-      return i18next.t(codeKey);
+      return i18next.t(codeKey, params ?? {});
     }
   }
   if (error instanceof Error && error.message) {

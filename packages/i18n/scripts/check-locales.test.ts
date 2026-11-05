@@ -87,6 +87,29 @@ describe("checkLocales end-to-end against a synthetic locale tree", () => {
     }
   });
 
+  it("reports a quote straight before a placeholder, in any locale", async () => {
+    const { mkdtempSync, writeFileSync, mkdirSync, rmSync } = await import("node:fs");
+    const { tmpdir } = await import("node:os");
+    const { join } = await import("node:path");
+
+    const root = mkdtempSync(join(tmpdir(), "forge-i18n-check-"));
+    try {
+      mkdirSync(join(root, "en"));
+      mkdirSync(join(root, "de"));
+      writeFileSync(join(root, "en", "common.json"), JSON.stringify({ a: "It's {x}", b: "'{x}'" }));
+      writeFileSync(join(root, "de", "common.json"), JSON.stringify({ a: "'{x}'", b: "{x}" }));
+
+      const { errors } = checkLocales(root);
+
+      expect(errors.filter((e) => e.includes("quote"))).toEqual([
+        "locales/en has a quote straight before a placeholder: common.b",
+        "locales/de has a quote straight before a placeholder: common.a",
+      ]);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
   it("reports an error when an en value is empty", async () => {
     const { mkdtempSync, writeFileSync, mkdirSync, rmSync } = await import("node:fs");
     const { tmpdir } = await import("node:os");

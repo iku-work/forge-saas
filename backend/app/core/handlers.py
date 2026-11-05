@@ -51,8 +51,15 @@ def _translate_or_fallback(message_key: str, locale: str, fallback: str, **param
 async def domain_error_handler(request: Request, exc: Exception) -> JSONResponse:
     assert isinstance(exc, DomainError)  # noqa: S101 — Starlette dispatches by registered class
     message = _translate_or_fallback(exc.message_key, _locale(request), exc.fallback, **exc.params)
+    # Only values already in the message go out, so this field can't reveal
+    # more than the message does: sso_required's org_slug stays server-side.
+    params = {name: str(value) for name, value in exc.params.items() if str(value) in message}
     error = ErrorBody(
-        code=exc.code, message_key=exc.message_key, message=message, details=exc.details
+        code=exc.code,
+        message_key=exc.message_key,
+        message=message,
+        params=params or None,
+        details=exc.details,
     )
     # T-312: a 429 carries Retry-After and the X-RateLimit-* trio. They are
     # part of the error's meaning and are read by the client's HTTP layer
