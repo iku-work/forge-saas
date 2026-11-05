@@ -65,6 +65,8 @@
   "upload_reservation_expired": "Esta subida no se confirmó a tiempo. Vuelve a empezarla.",
   "storage_quota_exceeded": "Esto superaría la cuota de almacenamiento de {storage_gb} GB de tu plan.",
   "file_count_quota_exceeded": "Esto superaría el límite de {max_files} archivos de tu plan.",
+  "seat_limit_reached": "Se ha alcanzado el límite de miembros de tu plan, y las invitaciones pendientes cuentan. Mejora tu plan o elimina un miembro o una invitación para invitar a otra persona.",
+  "seat_limit_reached_to_join": "Esta organización ha alcanzado el límite de miembros de su plan. Pide a un administrador que mejore el plan o elimine a un miembro.",
   "file_not_uploaded": "No se encontró ningún archivo subido en la ubicación prefirmada.",
   "file_size_mismatch": "El tamaño del archivo subido no coincide con el tamaño declarado.",
   "upload_changed": "La subida cambió mientras se confirmaba. Vuelve a confirmarla.",

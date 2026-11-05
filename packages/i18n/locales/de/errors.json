@@ -65,6 +65,8 @@
   "upload_reservation_expired": "Dieser Upload wurde nicht rechtzeitig bestätigt. Bitte starten Sie ihn erneut.",
   "storage_quota_exceeded": "Dies würde das {storage_gb}-GB-Speicherkontingent Ihres Tarifs überschreiten.",
   "file_count_quota_exceeded": "Dies würde das Limit von {max_files} Dateien in Ihrem Tarif überschreiten.",
+  "seat_limit_reached": "Das Mitgliederlimit Ihres Tarifs ist erreicht, und ausstehende Einladungen zählen mit. Führen Sie ein Upgrade durch oder entfernen Sie ein Mitglied oder eine Einladung, um weitere Personen einzuladen.",
+  "seat_limit_reached_to_join": "Diese Organisation hat das Mitgliederlimit ihres Tarifs erreicht. Bitten Sie eine Administratorin oder einen Administrator, ein Upgrade durchzuführen oder ein Mitglied zu entfernen.",
   "file_not_uploaded": "Am vorsignierten Speicherort wurde kein Upload gefunden.",
   "file_size_mismatch": "Die Größe der hochgeladenen Datei stimmt nicht mit der angegebenen Größe überein.",
   "upload_changed": "Der Upload wurde während der Bestätigung geändert. Bestätigen Sie ihn erneut.",

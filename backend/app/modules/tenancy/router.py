@@ -522,8 +522,9 @@ async def accept_invitation(
     token: str,
     user: Annotated[User, Depends(get_current_user)],
     session: Annotated[AsyncSession, Depends(get_session)],
+    redis: Annotated[Redis, Depends(get_redis)],
 ) -> Envelope[MembershipPublic]:
-    membership = await TenancyService(session).accept_invitation(token, user)
+    membership = await TenancyService(session).accept_invitation(token, user, redis)
     await session.commit()
     return Envelope(
         data=MembershipPublic.model_validate(membership),

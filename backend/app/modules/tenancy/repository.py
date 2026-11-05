@@ -116,6 +116,18 @@ class OrganizationRepository:
         result = await self.session.execute(stmt)
         return list(result.scalars().all())
 
+    async def lock(self, org_id: UUID) -> None:
+        """Hold this org's row until the transaction ends.
+
+        FOR NO KEY UPDATE, not FOR UPDATE: a foreign key to this row takes a
+        KEY SHARE lock, so FOR UPDATE would also block every unrelated insert
+        that names this org.
+        """
+        m = cast("Any", Organization)
+        await self.session.execute(
+            select(m.id).where(m.id == org_id).with_for_update(key_share=True)
+        )
+
     async def get_or_raise(self, org_id: UUID) -> Organization:
         org = await self.get_by_id(org_id)
         if org is None:
@@ -313,6 +325,16 @@ class InvitationRepository:
         # `page` guards a non-positive capped_limit -- see list_for_org.
         next_cursor = page[-1].id if page and len(items) > capped_limit else None
         return page, next_cursor
+
+    async def count_unexpired_for_org(self, org_id: UUID) -> int:
+        m = cast("Any", Invitation)
+        stmt = (
+            select(func.count())
+            .select_from(Invitation)
+            .where(m.org_id == org_id, m.accepted_at.is_(None), m.expires_at > utcnow())
+        )
+        result = await self.session.execute(stmt)
+        return result.scalar_one()
 
     async def get_pending_in_org(self, org_id: UUID, invitation_id: UUID) -> Invitation | None:
         """A not-yet-accepted invitation, only if it belongs to `org_id`."""

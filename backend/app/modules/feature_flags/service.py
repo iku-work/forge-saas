@@ -70,7 +70,7 @@ class FeatureFlagService:
         # disabled (plan_features is always {} then), even one an override
         # explicitly grants.
         billing_gated = is_module_enabled("billing")
-        plan_features = await self._plan_features(org)
+        plan_features = await self.plan_features(org)
         overrides = await OrgFeatureFlagRepository(self._session, org.id).get_overrides()
         # A flag absent from the plan is False regardless of an override
         # (see module docstring) -- still included in the map (rather than
@@ -108,10 +108,10 @@ class FeatureFlagService:
     async def _plan_allows(self, org: Organization, flag: str) -> bool:
         if not is_module_enabled("billing"):
             return True
-        plan_features = await self._plan_features(org)
+        plan_features = await self.plan_features(org)
         return bool(plan_features.get(flag))
 
-    async def _plan_features(self, org: Organization) -> dict[str, int]:
+    async def plan_features(self, org: Organization) -> dict[str, int]:
         if not is_module_enabled("billing"):
             return {}
         # Lazy import: see module docstring on avoiding a circular import
