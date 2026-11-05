@@ -5,6 +5,17 @@ template keep their own changes in `CHANGELOG.product.md` (see
 [TEMPLATE.md](TEMPLATE.md)).
 
 ## [Unreleased]
+### Fixed
+- **Google, GitHub and SSO sign-in on the web now end in the app.** Their callbacks
+  returned a raw JSON page, with the access token on it, because they were written
+  as API responses but are reached by a browser navigation. They now redirect: into
+  the app when signed in, to the two-factor screen when the account has a second
+  factor, and to the login page with a readable message when cancelled or refused.
+  A failed callback no longer returns 4xx JSON, and both now accept a missing `code`.
+- **The sign-up page offers Google and GitHub**, the same buttons as the login page.
+- **`signup_disabled` also stops a first sign-in with Google or GitHub**, which
+  creates an account. Existing users still get in, and so do SSO and invitations.
+
 ### Added
 - **Bundle budgets for the web app (T-242).** `pnpm --filter web bundle:check` and
   a CI job fail when the initial JS, a route, a locale catalog or the CSS outgrows

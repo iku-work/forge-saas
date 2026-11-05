@@ -616,18 +616,6 @@ export type EnvelopeTwoFactorRequiredResponse = {
 };
 
 /**
- * Envelope[Union[LoginResponse, TwoFactorRequiredResponse]]
- */
-export type EnvelopeUnionLoginResponseTwoFactorRequiredResponse = {
-    /**
-     * Data
-     */
-    data?: LoginResponse | TwoFactorRequiredResponse | null;
-    error?: ErrorBody | null;
-    meta: Meta;
-};
-
-/**
  * Envelope[Union[SsoConnectionPublic, NoneType]]
  */
 export type EnvelopeUnionSsoConnectionPublicNoneType = {
@@ -3229,15 +3217,19 @@ export type OauthCallbackApiV1AuthOauthProviderCallbackGetData = {
          */
         provider: string;
     };
-    query: {
+    query?: {
         /**
          * Code
          */
-        code: string;
+        code?: string | null;
         /**
          * State
          */
-        state: string;
+        state?: string | null;
+        /**
+         * Error
+         */
+        error?: string | null;
     };
     url: '/api/v1/auth/oauth/{provider}/callback';
 };
@@ -3253,14 +3245,10 @@ export type OauthCallbackApiV1AuthOauthProviderCallbackGetError = OauthCallbackA
 
 export type OauthCallbackApiV1AuthOauthProviderCallbackGetResponses = {
     /**
-     * Response Oauth Callback Api V1 Auth Oauth  Provider  Callback Get
-     *
      * Successful Response
      */
-    200: EnvelopeLoginResponse | EnvelopeTwoFactorRequiredResponse;
+    200: unknown;
 };
-
-export type OauthCallbackApiV1AuthOauthProviderCallbackGetResponse = OauthCallbackApiV1AuthOauthProviderCallbackGetResponses[keyof OauthCallbackApiV1AuthOauthProviderCallbackGetResponses];
 
 export type OauthUnlinkApiV1AuthOauthProviderUnlinkPostData = {
     body?: never;
@@ -3419,15 +3407,19 @@ export type RevokeSessionApiV1AuthSessionsSessionIdDeleteResponse = RevokeSessio
 export type SsoCallbackApiV1AuthSsoCallbackGetData = {
     body?: never;
     path?: never;
-    query: {
+    query?: {
         /**
          * Code
          */
-        code: string;
+        code?: string | null;
         /**
          * State
          */
-        state: string;
+        state?: string | null;
+        /**
+         * Error
+         */
+        error?: string | null;
     };
     url: '/api/v1/auth/sso/callback';
 };
@@ -3445,10 +3437,8 @@ export type SsoCallbackApiV1AuthSsoCallbackGetResponses = {
     /**
      * Successful Response
      */
-    200: EnvelopeUnionLoginResponseTwoFactorRequiredResponse;
+    200: unknown;
 };
-
-export type SsoCallbackApiV1AuthSsoCallbackGetResponse = SsoCallbackApiV1AuthSsoCallbackGetResponses[keyof SsoCallbackApiV1AuthSsoCallbackGetResponses];
 
 export type DeleteSsoConnectionApiV1AuthSsoConnectionDeleteData = {
     body?: never;

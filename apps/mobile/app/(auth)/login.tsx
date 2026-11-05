@@ -16,12 +16,11 @@ import { login, TwoFactorRequiredError } from "../../src/lib/auth";
 import { getErrorMessage } from "../../src/lib/getErrorMessage";
 
 // No "Continue with Google/GitHub" buttons here yet: the backend's OAuth
-// callback (backend/app/modules/auth/oauth.py) always returns a JSON
-// envelope to whatever browser hit it, the same way it does for web. Web
-// gets away with this because the call also sets the session cookie the SPA
-// already shares with that browser; mobile's in-app browser session has no
-// such shared channel back to this app's own fetch client, so there is
-// nothing useful for a button here to do until the backend can redirect a
+// callback (backend/app/modules/auth/oauth.py) always redirects into the web
+// app. That works for web because the call also sets the session cookie the
+// SPA shares with that browser; mobile's in-app browser session has no such
+// shared channel back to this app's own fetch client, so there is nothing
+// useful for a button here to do until the backend can redirect a
 // mobile-initiated login to a deep link with tokens attached.
 export default function LoginScreen() {
   const { t } = useTranslation();

@@ -376,8 +376,10 @@ export const revokeSessionApiV1AuthSessionsSessionIdDelete = <ThrowOnError exten
 
 /**
  * Sso Callback
+ *
+ * The page the browser lands on, so every outcome redirects into the app.
  */
-export const ssoCallbackApiV1AuthSsoCallbackGet = <ThrowOnError extends boolean = false>(options: Options<SsoCallbackApiV1AuthSsoCallbackGetData, ThrowOnError>): RequestResult<SsoCallbackApiV1AuthSsoCallbackGetResponses, SsoCallbackApiV1AuthSsoCallbackGetErrors, ThrowOnError> => (options.client ?? client).get<SsoCallbackApiV1AuthSsoCallbackGetResponses, SsoCallbackApiV1AuthSsoCallbackGetErrors, ThrowOnError>({ url: '/api/v1/auth/sso/callback', ...options });
+export const ssoCallbackApiV1AuthSsoCallbackGet = <ThrowOnError extends boolean = false>(options?: Options<SsoCallbackApiV1AuthSsoCallbackGetData, ThrowOnError>): RequestResult<SsoCallbackApiV1AuthSsoCallbackGetResponses, SsoCallbackApiV1AuthSsoCallbackGetErrors, ThrowOnError> => (options?.client ?? client).get<SsoCallbackApiV1AuthSsoCallbackGetResponses, SsoCallbackApiV1AuthSsoCallbackGetErrors, ThrowOnError>({ url: '/api/v1/auth/sso/callback', ...options });
 
 /**
  * Delete Sso Connection

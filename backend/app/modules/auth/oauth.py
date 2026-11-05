@@ -6,7 +6,8 @@ cookie against the echoed `state` query param (CSRF protection -- this is a
 classic login-CSRF defense, not just signature verification), exchanges the
 code, fetches the provider's profile, and hands the result to
 AuthService.oauth_login() to link-or-create a User exactly like every other
-flow in this module.
+flow in this module. The callback is the page the browser lands on, so every
+outcome is a redirect into the app, never a JSON body.
 
 State is verified with app.modules.auth.utils.sign_url_token /
 verify_url_token (the same itsdangerous primitive password-reset and
@@ -21,7 +22,7 @@ from typing import Annotated, Any, Protocol
 import httpx
 from authlib.integrations.httpx_client import AsyncOAuth2Client
 from authlib.oauth2 import OAuth2Error
-from fastapi import APIRouter, Depends, Request, Response
+from fastapi import APIRouter, Depends, Request
 from fastapi.responses import RedirectResponse
 from redis.asyncio import Redis
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -38,16 +39,16 @@ from app.core.envelope import Envelope, Meta
 from app.core.exceptions import AuthenticationError, DomainError, NotFoundError
 from app.middleware.rate_limit import api_limit, auth_limit, sensitive_limit
 from app.modules.auth.models import User
-from app.modules.auth.router import _client_ip, _request_id, _set_refresh_cookie
-from app.modules.auth.schemas import (
-    LoginResponse,
-    OAuthAccountPublic,
-    OAuthProfile,
-    TwoFactorRequiredResponse,
-    UserPublic,
+from app.modules.auth.router import (
+    _client_ip,
+    _request_id,
+    browser_sign_in_failed,
+    browser_sign_in_redirect,
 )
+from app.modules.auth.schemas import OAuthAccountPublic, OAuthProfile
 from app.modules.auth.service import AuthService, TwoFactorChallenge
 from app.modules.auth.utils import sign_url_token, verify_url_token
+from app.modules.product_settings.service import is_signup_disabled, read_settings
 
 _STATE_COOKIE_NAME = "oauth_state"
 _STATE_COOKIE_PATH = "/api/v1/auth/oauth"
@@ -207,6 +208,14 @@ def _get_client_or_raise(clients: dict[str, OAuthClient], provider: str) -> OAut
     return client
 
 
+def _verify_state(cookie_state: str | None, state: str, provider: str) -> None:
+    if cookie_state is None or cookie_state != state:
+        raise DomainError("errors.oauth_state_mismatch", fallback="OAuth state mismatch")
+    payload = verify_url_token(state, max_age=_STATE_TTL_SECONDS)
+    if payload.get("provider") != provider:
+        raise DomainError("errors.oauth_state_mismatch", fallback="OAuth state mismatch")
+
+
 router = APIRouter(prefix="/auth/oauth", tags=["auth"])
 
 
@@ -258,51 +267,52 @@ async def oauth_start(
 @auth_limit
 async def oauth_callback(  # noqa: PLR0913 -- state/code/provider/session are each independently required
     request: Request,
-    response: Response,
     provider: str,
-    code: str,
-    state: str,
     clients: Annotated[dict[str, OAuthClient], Depends(get_oauth_clients)],
     session: Annotated[AsyncSession, Depends(get_session)],
     redis: Annotated[Redis, Depends(get_redis)],
-) -> Envelope[LoginResponse] | Envelope[TwoFactorRequiredResponse]:
+    code: str | None = None,
+    state: str | None = None,
+    error: str | None = None,
+) -> RedirectResponse:
     client = _get_client_or_raise(clients, provider)
 
-    cookie_state = request.cookies.get(_STATE_COOKIE_NAME)
-    if cookie_state is None or cookie_state != state:
-        raise DomainError("errors.oauth_state_mismatch", fallback="OAuth state mismatch")
-    payload = verify_url_token(state, max_age=_STATE_TTL_SECONDS)
-    if payload.get("provider") != provider:
-        raise DomainError("errors.oauth_state_mismatch", fallback="OAuth state mismatch")
+    if code is None or state is None:
+        # Both providers send `error=access_denied` when someone presses cancel.
+        reason = "cancelled" if error == "access_denied" else "failed"
+        redirect = browser_sign_in_failed(request, reason)
+        redirect.delete_cookie(_STATE_COOKIE_NAME, path=_STATE_COOKIE_PATH)
+        return redirect
 
-    redirect_uri = str(request.url_for("oauth_callback", provider=provider))
-    profile = await client.fetch_profile(code=code, redirect_uri=redirect_uri)
+    try:
+        _verify_state(request.cookies.get(_STATE_COOKIE_NAME), state, provider)
 
-    result = await AuthService(session).oauth_login(
-        provider, profile, _client_ip(request), request.headers.get("user-agent", "")
-    )
-    await session.commit()
+        redirect_uri = str(request.url_for("oauth_callback", provider=provider))
+        profile = await client.fetch_profile(code=code, redirect_uri=redirect_uri)
 
-    if isinstance(result, TwoFactorChallenge):
-        # A verified social identity is one factor. An account whose owner
-        # enrolled a second one here gets asked for it here, whatever the
-        # provider may or may not have checked upstream -- see
-        # AuthService._second_factor_challenge.
-        #
-        # No refresh cookie is set on this path: there is no session yet, and
-        # the temp token is the only thing the holder has earned.
-        response.delete_cookie(_STATE_COOKIE_NAME, path=_STATE_COOKIE_PATH)
-        return Envelope(
-            data=TwoFactorRequiredResponse(temp_token=result.temp_token),
-            meta=Meta(request_id=_request_id(request)),
+        runtime_settings = await read_settings(redis, session)
+        result = await AuthService(session).oauth_login(
+            provider,
+            profile,
+            _client_ip(request),
+            request.headers.get("user-agent", ""),
+            signups_open=not is_signup_disabled(runtime_settings),
         )
+        await session.commit()
+    except DomainError as exc:
+        # Handled here, so get_session's rollback-on-exception never runs.
+        await session.rollback()
+        redirect = browser_sign_in_failed(request, exc.message_key)
+    else:
+        # A verified social identity is one factor. An account whose owner
+        # enrolled a second one gets asked for it here, whatever the provider
+        # may have checked upstream -- see AuthService._second_factor_challenge.
+        if not isinstance(result, TwoFactorChallenge):
+            await invalidate_user_cache(redis, result[2].id)  # it may just have been activated
+        redirect = browser_sign_in_redirect(request, result)
 
-    access_token, refresh_plain, user = result
-    await invalidate_user_cache(redis, user.id)  # it may just have been activated
-    _set_refresh_cookie(response, refresh_plain)
-    response.delete_cookie(_STATE_COOKIE_NAME, path=_STATE_COOKIE_PATH)
-    data = LoginResponse(access_token=access_token, user=UserPublic.model_validate(user))
-    return Envelope(data=data, meta=Meta(request_id=_request_id(request)))
+    redirect.delete_cookie(_STATE_COOKIE_NAME, path=_STATE_COOKIE_PATH)
+    return redirect
 
 
 @router.post(

@@ -8,9 +8,9 @@ import { Banner } from "../../src/components/Banner";
 import { setStoredTokens } from "../../src/lib/api";
 
 // backend/app/modules/auth/oauth.py's callback endpoint does not redirect
-// here yet -- it returns a JSON envelope straight to whatever browser hit
-// it, same as it does for web (see app/(auth)/login.tsx's comment on why
-// there are no OAuth buttons there yet). This route exists so the
+// here yet -- it always sends the browser to the web app (see
+// app/(auth)/login.tsx's comment on why there are no OAuth buttons here
+// yet). This route exists so the
 // `forge://oauth/callback` deep link itself resolves to a screen, and so it
 // is ready to finish the job the moment the backend learns to redirect a
 // mobile-initiated login here with `access_token`/`refresh_token` attached.
