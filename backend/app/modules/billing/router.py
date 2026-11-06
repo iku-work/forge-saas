@@ -102,7 +102,7 @@ async def create_portal_session(
     membership: Annotated[  # noqa: ARG001 — required to gate on BILLING_MANAGE
         Membership, Depends(require_permission(Permission.BILLING_MANAGE))
     ],
-    _recent_auth: Annotated[None, Depends(require_recent_auth(max_age_minutes=5))],
+    _recent_auth: Annotated[None, Depends(require_recent_auth())],
     session: Annotated[AsyncSession, Depends(get_session)],
     redis: Annotated[Redis, Depends(get_redis)],
 ) -> Envelope[PortalSessionResponse]:

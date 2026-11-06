@@ -267,7 +267,16 @@ async def require_superadmin(
     return user
 
 
-def require_recent_auth(max_age_minutes: int) -> Callable[..., Awaitable[None]]:
+# How recent "recent" is, for every route gated below. 5 minutes until
+# 2026-11-06: long enough to sign in and act at once, too short to sign in,
+# look around and then act, which is what people do. GitHub's sudo mode
+# allows 2 hours.
+STEP_UP_MAX_AGE_MINUTES = 45
+
+
+def require_recent_auth(
+    max_age_minutes: int = STEP_UP_MAX_AGE_MINUTES,
+) -> Callable[..., Awaitable[None]]:
     """T-218/ASVS V3.7.1/V4.3.3: gates a sensitive action on the caller's
     session having been established (or refreshed via a *real*
     re-authentication -- see Session.auth_time's docstring) within

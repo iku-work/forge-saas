@@ -92,7 +92,7 @@ def _auth_header(user: User) -> dict[str, str]:
 
 def _stale_auth_header(user: User) -> dict[str, str]:
     # T-218: auth_time well outside require_recent_auth's step-up window.
-    stale_auth_time = datetime.now(UTC) - timedelta(minutes=30)
+    stale_auth_time = datetime.now(UTC) - timedelta(hours=1)
     token = create_access_token(user.id, None, (), auth_time=stale_auth_time)
     return {"Authorization": f"Bearer {token}"}
 

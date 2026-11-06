@@ -773,9 +773,9 @@ function ChangeEmailCard() {
   const [success, setSuccess] = useState(false);
 
   // The backend gates this request on require_recent_auth, so a session
-  // idling past that window surfaces as errors.step_up_auth_required here --
-  // shown via getErrorMessage's normal code->copy mapping, same as any other
-  // error, rather than a dedicated re-auth prompt. current_password is
+  // idling past that window gets ReauthDialog first (the api-client replays
+  // the request after it), and errors.step_up_auth_required only if the
+  // person cancels. current_password is
   // re-verified server-side too (T-226); an OAuth-only account submits it
   // blank and the backend skips that check for them (AuthService.
   // request_email_change).

@@ -1290,6 +1290,38 @@
         "title": "Envelope[PushTokenPublic]",
         "type": "object"
       },
+      "Envelope_ReauthResponse_": {
+        "properties": {
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ReauthResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "error": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ErrorBody"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "meta": {
+            "$ref": "#/components/schemas/Meta"
+          }
+        },
+        "required": [
+          "meta"
+        ],
+        "title": "Envelope[ReauthResponse]",
+        "type": "object"
+      },
       "Envelope_RefreshResponse_": {
         "properties": {
           "data": {
@@ -3502,6 +3534,51 @@
         "title": "PushTokenRegisterRequest",
         "type": "object"
       },
+      "ReauthRequest": {
+        "description": "Proof, for require_recent_auth, that the person at the keyboard is the\naccount's owner: the password, or a TOTP or backup code. Exactly one.",
+        "properties": {
+          "code": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "minLength": 6,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Code"
+          },
+          "password": {
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Password"
+          }
+        },
+        "title": "ReauthRequest",
+        "type": "object"
+      },
+      "ReauthResponse": {
+        "properties": {
+          "access_token": {
+            "title": "Access Token",
+            "type": "string"
+          }
+        },
+        "required": [
+          "access_token"
+        ],
+        "title": "ReauthResponse",
+        "type": "object"
+      },
       "RecordConsentRequest": {
         "properties": {
           "consent_type": {
@@ -4373,6 +4450,11 @@
               }
             ],
             "title": "Full Name"
+          },
+          "has_password": {
+            "default": false,
+            "title": "Has Password",
+            "type": "boolean"
           },
           "has_uploaded_avatar": {
             "default": false,
@@ -6204,6 +6286,26 @@
               "title": "Provider",
               "type": "string"
             }
+          },
+          {
+            "in": "query",
+            "name": "reauth",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Reauth",
+              "type": "boolean"
+            }
+          },
+          {
+            "in": "query",
+            "name": "next",
+            "required": false,
+            "schema": {
+              "default": "/",
+              "title": "Next",
+              "type": "string"
+            }
           }
         ],
         "responses": {
@@ -6362,6 +6464,53 @@
           }
         ],
         "summary": "Oauth Unlink",
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/api/v1/auth/reauth": {
+      "post": {
+        "description": "Answers require_recent_auth's 403 without signing out: the password or\na 2FA code renews this session's auth_time. Accounts with neither use\nGET /auth/oauth/{provider}?reauth=true instead.",
+        "operationId": "reauthenticate_api_v1_auth_reauth_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReauthRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_ReauthResponse_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_NoneType_"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Reauthenticate",
         "tags": [
           "auth"
         ]

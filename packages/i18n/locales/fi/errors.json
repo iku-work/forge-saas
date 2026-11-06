@@ -78,7 +78,7 @@
   "impersonation_blocked": "Tämä toiminto on estetty, kun esiinnyt toisena käyttäjänä. Lopeta esiintyminen suorittaaksesi sen omana itsenäsi.",
   "not_impersonating": "Tämä tunnus ei ole esiintymisistunto.",
   "service_unavailable": "{feature} ei ole tilapäisesti käytettävissä. Yritä hetken kuluttua uudelleen.",
-  "step_up_auth_required": "Tämä toiminto edellyttää, että olet kirjautunut sisään äskettäin. Kirjaudu sisään uudelleen jatkaaksesi.",
+  "step_up_auth_required": "Tämä toiminto edellyttää tuoretta kirjautumista. Vahvista henkilöllisyytesi jatkaaksesi.",
   "superadmin_2fa_required": "Pääkäyttäjätilien on otettava käyttöön kaksivaiheinen tunnistautuminen (autentikointisovellus tai suojausavain) ennen pääkäyttäjätoimintojen käyttöä.",
   "superadmin_mfa_session_required": "Kirjaudu uudelleen käyttäen toista tunnistautumistapaasi käyttääksesi pääkäyttäjätoimintoja. Tätä istuntoa ei avattu sillä.",
   "email_unchanged": "Tämä on jo nykyinen sähköpostiosoitteesi.",
@@ -104,5 +104,7 @@
   "file_not_ready": "Tämän tiedoston lataus ei ole vielä valmis.",
   "file_scan_pending": "Tiedostoa tarkistetaan vielä haittaohjelmien varalta. Yritä hetken kuluttua uudelleen.",
   "file_scan_failed": "Tiedostoa ei voitu tarkistaa haittaohjelmien varalta, joten sitä ei voi ladata.",
-  "file_infected": "Tiedostosta löytyi haittaohjelma, eikä se ole enää saatavilla."
+  "file_infected": "Tiedostosta löytyi haittaohjelma, eikä se ole enää saatavilla.",
+  "reauth_failed": "Salasana tai koodi on väärä.",
+  "reauth_wrong_account": "Tämä tili ei ole se, jolla olet kirjautunut sisään."
 }

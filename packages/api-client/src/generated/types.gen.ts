@@ -562,6 +562,15 @@ export type EnvelopePushTokenPublic = {
 };
 
 /**
+ * Envelope[ReauthResponse]
+ */
+export type EnvelopeReauthResponse = {
+    data?: ReauthResponse | null;
+    error?: ErrorBody | null;
+    meta: Meta;
+};
+
+/**
  * Envelope[RefreshResponse]
  */
 export type EnvelopeRefreshResponse = {
@@ -1614,6 +1623,33 @@ export type PushTokenRegisterRequest = {
 };
 
 /**
+ * ReauthRequest
+ *
+ * Proof, for require_recent_auth, that the person at the keyboard is the
+ * account's owner: the password, or a TOTP or backup code. Exactly one.
+ */
+export type ReauthRequest = {
+    /**
+     * Code
+     */
+    code?: string | null;
+    /**
+     * Password
+     */
+    password?: string | null;
+};
+
+/**
+ * ReauthResponse
+ */
+export type ReauthResponse = {
+    /**
+     * Access Token
+     */
+    access_token: string;
+};
+
+/**
  * RecordConsentRequest
  */
 export type RecordConsentRequest = {
@@ -2145,6 +2181,10 @@ export type UserPublic = {
      * Full Name
      */
     full_name: string | null;
+    /**
+     * Has Password
+     */
+    has_password?: boolean;
     /**
      * Has Uploaded Avatar
      */
@@ -3189,7 +3229,16 @@ export type OauthStartApiV1AuthOauthProviderGetData = {
          */
         provider: string;
     };
-    query?: never;
+    query?: {
+        /**
+         * Reauth
+         */
+        reauth?: boolean;
+        /**
+         * Next
+         */
+        next?: string;
+    };
     url: '/api/v1/auth/oauth/{provider}';
 };
 
@@ -3279,6 +3328,31 @@ export type OauthUnlinkApiV1AuthOauthProviderUnlinkPostResponses = {
 };
 
 export type OauthUnlinkApiV1AuthOauthProviderUnlinkPostResponse = OauthUnlinkApiV1AuthOauthProviderUnlinkPostResponses[keyof OauthUnlinkApiV1AuthOauthProviderUnlinkPostResponses];
+
+export type ReauthenticateApiV1AuthReauthPostData = {
+    body: ReauthRequest;
+    path?: never;
+    query?: never;
+    url: '/api/v1/auth/reauth';
+};
+
+export type ReauthenticateApiV1AuthReauthPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: EnvelopeNoneType;
+};
+
+export type ReauthenticateApiV1AuthReauthPostError = ReauthenticateApiV1AuthReauthPostErrors[keyof ReauthenticateApiV1AuthReauthPostErrors];
+
+export type ReauthenticateApiV1AuthReauthPostResponses = {
+    /**
+     * Successful Response
+     */
+    200: EnvelopeReauthResponse;
+};
+
+export type ReauthenticateApiV1AuthReauthPostResponse = ReauthenticateApiV1AuthReauthPostResponses[keyof ReauthenticateApiV1AuthReauthPostResponses];
 
 export type RefreshApiV1AuthRefreshPostData = {
     /**

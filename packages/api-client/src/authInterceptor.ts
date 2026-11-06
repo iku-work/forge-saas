@@ -27,6 +27,9 @@ const SESSION_INDEPENDENT_PATHS = [
   "/api/v1/auth/2fa/login",
   "/api/v1/auth/webauthn/login",
   "/api/v1/auth/webauthn/login/options",
+  // A wrong password or code. Refreshing and replaying it would count the
+  // same wrong answer twice toward the account lockout.
+  "/api/v1/auth/reauth",
 ];
 
 function isSessionIndependentRequest(url: string): boolean {
@@ -85,6 +88,48 @@ function notifySessionExpired(): void {
   }
 }
 
+// Who asks the person to confirm it's them when an action needs a recent
+// sign-in (the backend's require_recent_auth). Resolves to an access token
+// carrying the renewed sign-in time, or null if they gave up. Registered by
+// the web app's ReauthDialog; with none registered the 403 goes to the
+// caller unchanged.
+type ReauthHandler = () => Promise<string | null>;
+let reauthHandler: ReauthHandler | null = null;
+
+export function setReauthHandler(handler: ReauthHandler | null): void {
+  reauthHandler = handler;
+}
+
+async function isStepUpRefusal(response: Response): Promise<boolean> {
+  if (response.status !== 403) {
+    return false;
+  }
+  try {
+    const body = (await response.clone().json()) as {
+      error?: { code?: string } | null;
+    };
+    return body.error?.code === "step_up_auth_required";
+  } catch {
+    return false;
+  }
+}
+
+function replay(
+  request: Request,
+  options: ResolvedRequestOptions,
+  token: string,
+): Promise<Response> {
+  const retryHeaders = new Headers(request.headers);
+  retryHeaders.set("Authorization", `Bearer ${token}`);
+  retryHeaders.set(RETRY_HEADER, "1");
+  return fetch(request.url, {
+    method: request.method,
+    headers: retryHeaders,
+    body: options.serializedBody,
+    credentials: request.credentials,
+  });
+}
+
 // The access token is short-lived (15 min) and kept only in memory, so a 401
 // is the normal outcome of an ordinary session, not an error path: refresh
 // it from the httpOnly cookie and transparently replay the original request.
@@ -95,6 +140,20 @@ export async function authRetryInterceptor(
   request: Request,
   options: ResolvedRequestOptions,
 ): Promise<Response> {
+  if (
+    reauthHandler &&
+    !request.headers.has(RETRY_HEADER) &&
+    (await isStepUpRefusal(response))
+  ) {
+    // Ask, then send the same request again: the person confirms and their
+    // click goes through, instead of being told to sign in while signed in.
+    const token = await reauthHandler();
+    if (!token) {
+      return response;
+    }
+    setAccessToken(token);
+    return replay(request, options, token);
+  }
   if (response.status !== 401) {
     return response;
   }
@@ -114,15 +173,5 @@ export async function authRetryInterceptor(
   }
 
   setAccessToken(newToken);
-
-  const retryHeaders = new Headers(request.headers);
-  retryHeaders.set("Authorization", `Bearer ${newToken}`);
-  retryHeaders.set(RETRY_HEADER, "1");
-
-  return fetch(request.url, {
-    method: request.method,
-    headers: retryHeaders,
-    body: options.serializedBody,
-    credentials: request.credentials,
-  });
+  return replay(request, options, newToken);
 }

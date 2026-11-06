@@ -1,10 +1,11 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
   authRetryInterceptor,
   getAccessToken,
   onSessionExpired,
   setAccessToken,
+  setReauthHandler,
 } from "@forge/api-client";
 
 const REFRESH_URL = "http://localhost:8000/api/v1/auth/refresh";
@@ -174,9 +175,12 @@ describe("authRetryInterceptor", () => {
     const listener = vi.fn();
     const unsubscribe = onSessionExpired(listener);
 
-    const request = new Request("http://localhost:8000/api/v1/auth/2fa/verify", {
-      method: "POST",
-    });
+    const request = new Request(
+      "http://localhost:8000/api/v1/auth/2fa/verify",
+      {
+        method: "POST",
+      },
+    );
     const original401 = new Response(null, { status: 401 });
 
     const result = await authRetryInterceptor(
@@ -223,5 +227,85 @@ describe("authRetryInterceptor", () => {
     expect(refreshCalls).toHaveLength(1);
 
     vi.unstubAllGlobals();
+  });
+});
+
+describe("authRetryInterceptor on a step-up refusal", () => {
+  const PORTAL = "http://localhost:8000/api/v1/billing/portal-session";
+  const stepUp = () =>
+    jsonResponse(403, {
+      data: null,
+      error: { code: "step_up_auth_required" },
+    });
+
+  afterEach(() => {
+    setReauthHandler(null);
+    vi.unstubAllGlobals();
+  });
+
+  it("asks the registered handler, then replays the request with its token", async () => {
+    setAccessToken("stale-token");
+    const fetchMock = vi.fn<
+      (url: string, init?: RequestInit) => Promise<Response>
+    >(() => Promise.resolve(jsonResponse(200, { data: { url: "x" } })));
+    vi.stubGlobal("fetch", fetchMock);
+    setReauthHandler(() => Promise.resolve("fresh-token"));
+
+    const result = await authRetryInterceptor(
+      stepUp(),
+      new Request(PORTAL, { method: "POST" }),
+      fakeOptions,
+    );
+
+    expect(result.status).toBe(200);
+    expect(getAccessToken()).toBe("fresh-token");
+    expect(fetchMock.mock.calls[0]?.[0]).toBe(PORTAL);
+    const headers = fetchMock.mock.calls[0]?.[1]?.headers as Headers;
+    expect(headers.get("Authorization")).toBe("Bearer fresh-token");
+  });
+
+  it("hands back the 403 when the person cancels", async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+    setReauthHandler(() => Promise.resolve(null));
+
+    const result = await authRetryInterceptor(
+      stepUp(),
+      new Request(PORTAL),
+      fakeOptions,
+    );
+
+    expect(result.status).toBe(403);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("leaves any other 403 alone", async () => {
+    const handler = vi.fn(() => Promise.resolve("fresh-token"));
+    setReauthHandler(handler);
+
+    const result = await authRetryInterceptor(
+      jsonResponse(403, { data: null, error: { code: "permission_denied" } }),
+      new Request(PORTAL),
+      fakeOptions,
+    );
+
+    expect(result.status).toBe(403);
+    expect(handler).not.toHaveBeenCalled();
+  });
+
+  it("does not refresh-and-replay a wrong password at /auth/reauth", async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+
+    const result = await authRetryInterceptor(
+      new Response(null, { status: 401 }),
+      new Request("http://localhost:8000/api/v1/auth/reauth", {
+        method: "POST",
+      }),
+      fakeOptions,
+    );
+
+    expect(result.status).toBe(401);
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 });

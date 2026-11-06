@@ -8,7 +8,7 @@ from datetime import datetime
 from typing import Any, Self
 from uuid import UUID
 
-from pydantic import ConfigDict, EmailStr, Field, field_validator, model_validator
+from pydantic import AliasChoices, ConfigDict, EmailStr, Field, field_validator, model_validator
 
 from app.core.schemas import AppBaseModel
 from app.modules.notifications.preferences import effective as effective_preferences
@@ -1079,6 +1079,12 @@ class UserPublic(AppBaseModel):
     theme: str = "system"
     email_verified_at: datetime | None
     totp_enabled: bool
+    # Whether this account can confirm itself with a password (an OAuth-only
+    # account has none). Read from `hashed_password` and turned into a bool
+    # before validation, so the hash itself never reaches the schema.
+    has_password: bool = Field(
+        default=False, validation_alias=AliasChoices("has_password", "hashed_password")
+    )
     # T-143: the web app needs this to decide whether to render the "Admin"
     # link / gate the _admin route tree -- purely a UI convenience, the
     # backend's own require_superadmin dependency (T-140) is the real
@@ -1094,6 +1100,11 @@ class UserPublic(AppBaseModel):
 
     # The resolved matrix, not the stored one: see preferences.effective.
     _effective_preferences = field_validator("notification_preferences")(effective_preferences)
+
+    @field_validator("has_password", mode="before")
+    @classmethod
+    def _password_is_set(cls, value: object) -> bool:
+        return bool(value)
 
 
 # Long enough for any real name (the longest legally recorded ones run to
@@ -1319,6 +1330,24 @@ class Disable2FARequest(AppBaseModel):
 class TwoFactorRequiredResponse(AppBaseModel):
     pending_2fa: bool = True
     temp_token: str
+
+
+class ReauthRequest(AppBaseModel):
+    """Proof, for require_recent_auth, that the person at the keyboard is the
+    account's owner: the password, or a TOTP or backup code. Exactly one."""
+
+    password: str | None = Field(default=None, max_length=_PASSWORD_MAX_LENGTH)
+    code: str | None = Field(default=None, min_length=6, max_length=64)
+
+    @model_validator(mode="after")
+    def _exactly_one(self) -> Self:
+        if (self.password is None) == (self.code is None):
+            raise ValueError("Send either password or code.")
+        return self
+
+
+class ReauthResponse(AppBaseModel):
+    access_token: str
 
 
 class TwoFactorLoginRequest(AppBaseModel):

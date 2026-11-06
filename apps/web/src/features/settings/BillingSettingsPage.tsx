@@ -229,11 +229,10 @@ export function BillingSettingsPage({
   // into). The portal is the surface worth protecting: payment instrument,
   // invoice history, cancellation.
   //
-  // So a session idling past five minutes surfaces here as
-  // errors.step_up_auth_required, shown through getErrorMessage's normal
-  // code->copy mapping like any other error rather than a dedicated re-auth
-  // prompt -- the same convention SecuritySettingsPage's change-email flow
-  // already follows.
+  // A session older than the step-up window gets 403 step_up_auth_required
+  // here. The api-client then opens ReauthDialog and, once the person has
+  // confirmed, replays this request, so the mutation sees the portal URL.
+  // Cancelling leaves the 403, shown through getErrorMessage.
   const portal = useMutation({
     mutationFn: async () => {
       const { data } = await createPortalSessionApiV1BillingPortalSessionPost({

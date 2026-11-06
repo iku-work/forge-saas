@@ -225,6 +225,19 @@ class SessionRepository:
         )
         await self.session.execute(stmt)
 
+    async def set_auth_time(self, session_id: UUID, at: datetime) -> None:
+        """The session's owner just proved themselves again (a re-auth for
+        require_recent_auth). refresh() copies auth_time to each successor,
+        so the new value survives rotation."""
+        m = cast("Any", SessionModel)
+        stmt = (
+            update(SessionModel)
+            .where(m.id == session_id)
+            .values(auth_time=at)
+            .execution_options(synchronize_session="fetch")
+        )
+        await self.session.execute(stmt)
+
     async def get_by_token_hash(self, token_hash: str) -> SessionModel | None:
         m = cast("Any", SessionModel)
         stmt = select(SessionModel).where(m.refresh_token_hash == token_hash)

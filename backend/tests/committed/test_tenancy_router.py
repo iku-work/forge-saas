@@ -95,7 +95,7 @@ def _stale_auth_header(user: User) -> dict[str, str]:
     # require_recent_auth's window -- simulates a long-idle-but-still-valid
     # session (silent refresh keeps minting new access tokens without ever
     # re-verifying credentials, so auth_time doesn't move with them).
-    stale_auth_time = datetime.now(UTC) - timedelta(minutes=30)
+    stale_auth_time = datetime.now(UTC) - timedelta(hours=1)
     token = create_access_token(user.id, None, (), auth_time=stale_auth_time)
     return {"Authorization": f"Bearer {token}"}
 

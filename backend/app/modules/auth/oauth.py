@@ -18,7 +18,10 @@ endpoint instead.
 """
 
 import logging
+import re
 from typing import Annotated, Any, Protocol
+from urllib.parse import quote
+from uuid import UUID
 
 import httpx
 from authlib.integrations.base_client.errors import OAuthError
@@ -42,6 +45,7 @@ from app.core.exceptions import AuthenticationError, DomainError, NotFoundError
 from app.middleware.rate_limit import api_limit, auth_limit, sensitive_limit
 from app.modules.auth.models import User
 from app.modules.auth.router import (
+    _REFRESH_COOKIE_NAME,
     _client_ip,
     _request_id,
     browser_sign_in_failed,
@@ -57,6 +61,15 @@ logger = logging.getLogger(__name__)
 _STATE_COOKIE_NAME = "oauth_state"
 _STATE_COOKIE_PATH = "/api/v1/auth/oauth"
 _STATE_TTL_SECONDS = 600  # 10 minutes -- §T-023
+# Where a re-auth returns to: an app path such as /en/settings/billing, never
+# a URL, so the redirect cannot be pointed at another site.
+_REAUTH_NEXT = re.compile(r"/[A-Za-z0-9/_-]*")
+
+
+def _reauth_redirect(next_path: str, error_key: str | None = None) -> RedirectResponse:
+    """Back to the page that asked for the re-auth, with the reason if it failed."""
+    query = f"?reauth_error={quote(error_key, safe='')}" if error_key else ""
+    return RedirectResponse(f"{get_settings().FRONTEND_URL}{next_path}{query}", status_code=302)
 
 
 class OAuthClient(Protocol):
@@ -212,12 +225,13 @@ def _get_client_or_raise(clients: dict[str, OAuthClient], provider: str) -> OAut
     return client
 
 
-def _verify_state(cookie_state: str | None, state: str, provider: str) -> None:
+def _verify_state(cookie_state: str | None, state: str, provider: str) -> dict[str, Any]:
     if cookie_state is None or cookie_state != state:
         raise DomainError("errors.oauth_state_mismatch", fallback="OAuth state mismatch")
     payload = verify_url_token(state, max_age=_STATE_TTL_SECONDS)
     if payload.get("provider") != provider:
         raise DomainError("errors.oauth_state_mismatch", fallback="OAuth state mismatch")
+    return payload
 
 
 router = APIRouter(prefix="/auth/oauth", tags=["auth"])
@@ -240,13 +254,29 @@ async def list_oauth_accounts(
 
 @router.get("/{provider}")
 @auth_limit
-async def oauth_start(
+async def oauth_start(  # noqa: PLR0913 -- reauth/next ride on the same start route
     request: Request,
     provider: str,
     clients: Annotated[dict[str, OAuthClient], Depends(get_oauth_clients)],
+    session: Annotated[AsyncSession, Depends(get_session)],
+    reauth: bool = False,
+    next: str = "/",  # noqa: A002 -- the query parameter's name
 ) -> RedirectResponse:
     client = _get_client_or_raise(clients, provider)
-    state = sign_url_token({"provider": provider}, _STATE_TTL_SECONDS)
+    claims: dict[str, str] = {"provider": provider}
+    if reauth:
+        # Re-proving the signed-in session for require_recent_auth rather
+        # than signing in: the state names that session, and the callback
+        # renews it instead of creating a new one.
+        next_path = next if _REAUTH_NEXT.fullmatch(next) else "/"
+        try:
+            sid = await AuthService(session).reauth_session_id(
+                request.cookies.get(_REFRESH_COOKIE_NAME)
+            )
+        except DomainError as exc:
+            return _reauth_redirect(next_path, exc.message_key)
+        claims |= {"reauth_sid": str(sid), "next": next_path}
+    state = sign_url_token(claims, _STATE_TTL_SECONDS)
     redirect_uri = str(request.url_for("oauth_callback", provider=provider))
 
     response = RedirectResponse(
@@ -289,8 +319,17 @@ async def oauth_callback(  # noqa: PLR0913 -- state/code/provider/session are ea
         return redirect
 
     try:
-        _verify_state(request.cookies.get(_STATE_COOKIE_NAME), state, provider)
+        claims = _verify_state(request.cookies.get(_STATE_COOKIE_NAME), state, provider)
+    except DomainError as exc:
+        redirect = browser_sign_in_failed(request, exc.message_key)
+        redirect.delete_cookie(_STATE_COOKIE_NAME, path=_STATE_COOKIE_PATH)
+        return redirect
+    if "reauth_sid" in claims:
+        redirect = await _finish_reauth(request, provider, client, session, code, claims)
+        redirect.delete_cookie(_STATE_COOKIE_NAME, path=_STATE_COOKIE_PATH)
+        return redirect
 
+    try:
         redirect_uri = str(request.url_for("oauth_callback", provider=provider))
         profile = await client.fetch_profile(code=code, redirect_uri=redirect_uri)
 
@@ -321,6 +360,36 @@ async def oauth_callback(  # noqa: PLR0913 -- state/code/provider/session are ea
 
     redirect.delete_cookie(_STATE_COOKIE_NAME, path=_STATE_COOKIE_PATH)
     return redirect
+
+
+async def _finish_reauth(  # noqa: PLR0913 -- the callback's own inputs, passed on
+    request: Request,
+    provider: str,
+    client: OAuthClient,
+    session: AsyncSession,
+    code: str,
+    claims: dict[str, Any],
+) -> RedirectResponse:
+    next_path = str(claims["next"])
+    try:
+        redirect_uri = str(request.url_for("oauth_callback", provider=provider))
+        profile = await client.fetch_profile(code=code, redirect_uri=redirect_uri)
+        await AuthService(session).oauth_reauthenticate(
+            provider,
+            profile,
+            UUID(str(claims["reauth_sid"])),
+            _client_ip(request),
+            request.headers.get("user-agent", ""),
+        )
+        await session.commit()
+    except DomainError as exc:
+        await session.rollback()
+        if exc.__cause__ is not None:
+            logger.warning("%s re-auth failed: %r", provider, exc.__cause__)
+        return _reauth_redirect(next_path, exc.message_key)
+    # No cookie to set: the session is the same one, and the app's refresh on
+    # load mints a token carrying the renewed auth_time.
+    return _reauth_redirect(next_path)
 
 
 @router.post(
