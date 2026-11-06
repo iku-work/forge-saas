@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { lazy, Suspense, useEffect } from "react";
 import { QueryClientProvider, type QueryClient } from "@tanstack/react-query";
 import { RouterProvider } from "@tanstack/react-router";
 import { useTranslation } from "react-i18next";
@@ -6,7 +6,6 @@ import { useTranslation } from "react-i18next";
 import { onSessionExpired } from "@forge/api-client";
 import { useAuth } from "@forge/hooks";
 
-import { ReauthDialog } from "./features/auth/ReauthDialog";
 import { detectPreferredLocale } from "./i18n";
 import { AppErrorBoundary } from "./layouts/AppErrorBoundary";
 import { ImpersonationBanner } from "./layouts/ImpersonationBanner";
@@ -16,6 +15,15 @@ import { startThemeSync } from "./lib/theme";
 import { useServerThemeSync } from "./lib/useTheme";
 import { useConsentSync } from "./lib/useConsentSync";
 import type { AppRouter } from "./router";
+
+// Lazy: the dialog brings the dialog, input and password components, which
+// would otherwise all land in the initial bundle (bundle-budget, 2026-11-06).
+// It registers its handler once loaded, moments after the app mounts.
+const ReauthDialog = lazy(() =>
+  import("./features/auth/ReauthDialog").then((module) => ({
+    default: module.ReauthDialog,
+  })),
+);
 
 interface AppRootProps {
   router: AppRouter;
@@ -121,7 +129,11 @@ export function AppRoot({ router, queryClient }: AppRootProps) {
             {/* After loading, never during: its first request must not race
                 the session restore's refresh, which would read as a stolen
                 refresh token. */}
-            {user ? <ReauthDialog /> : null}
+            {user ? (
+              <Suspense fallback={null}>
+                <ReauthDialog />
+              </Suspense>
+            ) : null}
           </>
         )}
       </QueryClientProvider>

@@ -31,5 +31,6 @@
   "$locale.verify-email.tsx": 12450,
   "CSS": 12456,
   "initial JS": 180113,
-  "largest locale catalog": 6032
+  "largest locale catalog": 6032,
+  "src/features/auth/ReauthDialog.tsx": 35011
 }
