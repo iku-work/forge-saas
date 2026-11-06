@@ -4,6 +4,8 @@ from typing import Literal, Self
 
 from argon2.profiles import RFC_9106_LOW_MEMORY
 from cryptography.fernet import Fernet
+from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives.asymmetric import rsa
 from pydantic import Field, PostgresDsn, RedisDsn, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -584,6 +586,7 @@ class Settings(BaseSettings):
                 raise RuntimeError(violations[0])
             self._validate_transport_tls()
         self._validate_encryption_key()
+        self._validate_jwt_keys()
         return self
 
     def _validate_transport_tls(self) -> None:
@@ -622,6 +625,26 @@ class Settings(BaseSettings):
                 "REDIS_ON_PRIVATE_NETWORK=true only if that instance is reachable from "
                 "nothing but your own services -- see that field's docstring."
             )
+
+    def _validate_jwt_keys(self) -> None:
+        # Fingerprints ignore the PEM's BEGIN/END lines, so on 2026-11-05 a
+        # key pasted without them matched its fingerprint, deployed healthy,
+        # and failed every sign-in. Parsing it here fails the deploy instead.
+        try:
+            private = serialization.load_pem_private_key(
+                self.JWT_PRIVATE_KEY.encode(), password=None
+            )
+            public = serialization.load_pem_public_key(self.JWT_PUBLIC_KEY.encode())
+        except ValueError as exc:
+            raise OSError(
+                "JWT_PRIVATE_KEY or JWT_PUBLIC_KEY is not a PEM key. Include the "
+                "-----BEGIN ...----- and -----END ...----- lines."
+            ) from exc
+        spki = (serialization.Encoding.DER, serialization.PublicFormat.SubjectPublicKeyInfo)
+        if not isinstance(private, rsa.RSAPrivateKey) or private.public_key().public_bytes(
+            *spki
+        ) != public.public_bytes(*spki):
+            raise OSError("JWT_PUBLIC_KEY is not the public half of JWT_PRIVATE_KEY (RSA).")
 
     def _validate_encryption_key(self) -> None:
         try:

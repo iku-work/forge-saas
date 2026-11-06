@@ -1,6 +1,8 @@
-from collections.abc import Generator
+from collections.abc import Callable, Generator
 
 import pytest
+from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives.asymmetric import rsa
 from pydantic import ValidationError
 
 from app.core import config, module_loader
@@ -310,6 +312,38 @@ def test_invalid_encryption_key_raises_environment_error(
 
     with pytest.raises(EnvironmentError, match="ENCRYPTION_KEY"):
         Settings(_env_file=FIXTURE_ENV_FILE, ENCRYPTION_KEY="not-a-valid-fernet-key")
+
+
+def _pem_without_frame(pem: str) -> str:
+    return "\n".join(line for line in pem.splitlines() if not line.startswith("-----"))
+
+
+def _other_public_key() -> str:
+    key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    return (
+        key.public_key()
+        .public_bytes(serialization.Encoding.PEM, serialization.PublicFormat.SubjectPublicKeyInfo)
+        .decode()
+    )
+
+
+@pytest.mark.parametrize(
+    "overrides",
+    [
+        # forge-prod-2 on 2026-11-05: right fingerprint, no BEGIN/END lines.
+        lambda: {"JWT_PRIVATE_KEY": _pem_without_frame(KEYS["JWT_PRIVATE_KEY"])},
+        lambda: {"JWT_PUBLIC_KEY": _pem_without_frame(KEYS["JWT_PUBLIC_KEY"])},
+        lambda: {"JWT_PUBLIC_KEY": _other_public_key()},
+    ],
+    ids=["private-no-frame", "public-no-frame", "mismatched-pair"],
+)
+def test_unusable_jwt_keys_refuse_to_start(
+    monkeypatch: pytest.MonkeyPatch, overrides: Callable[[], dict[str, str]]
+) -> None:
+    _clear_settings_env(monkeypatch)
+
+    with pytest.raises(EnvironmentError, match="JWT_"):
+        Settings(_env_file=FIXTURE_ENV_FILE, **overrides())
 
 
 def test_get_settings_loads_from_env_test_fixture(monkeypatch: pytest.MonkeyPatch) -> None:
