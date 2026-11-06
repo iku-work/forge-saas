@@ -20,6 +20,8 @@ const SIGN_IN_ERROR_KEYS = new Map([
   ["errors.oauth_no_email", "errors.oauth_no_email"],
   ["errors.seat_limit_reached_to_join", "errors.seat_limit_reached_to_join"],
   ["errors.signup_disabled", "auth.register.signup_closed"],
+  // Not from a callback: AppRoot sends it when an action needed a newer sign-in.
+  ["errors.step_up_auth_required", "errors.step_up_auth_required"],
 ]);
 
 export function signInErrorKey(reason: string): string {

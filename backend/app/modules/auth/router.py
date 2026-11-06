@@ -468,7 +468,7 @@ async def request_email_change(
     request: Request,
     body: RequestEmailChangeRequest,
     user: Annotated[User, Depends(get_current_user)],
-    _recent_auth: Annotated[None, Depends(require_recent_auth(max_age_minutes=5))],
+    _recent_auth: Annotated[None, Depends(require_recent_auth())],
     session: Annotated[AsyncSession, Depends(get_session)],
     redis: Annotated[Redis, Depends(get_redis)],
 ) -> Envelope[None]:

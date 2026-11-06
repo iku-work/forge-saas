@@ -2,6 +2,7 @@ import type { ResolvedRequestOptions } from "./generated/client/types.gen";
 import { getApiBaseUrl, setAccessToken } from "./client";
 
 const REFRESH_PATH = "/api/v1/auth/refresh";
+const LOGOUT_PATH = "/api/v1/auth/logout";
 // Marks a request as already having gone through one refresh-and-retry
 // cycle, so a 401 on the retry itself is reported as-is instead of looping.
 const RETRY_HEADER = "X-Auth-Retried";
@@ -67,21 +68,42 @@ function refreshAccessTokenOnce(): Promise<string | null> {
   return refreshPromise;
 }
 
-const sessionExpiredListeners = new Set<() => void>();
+// "expired": the session is over. "reauth": the session is fine but too old
+// for the action just tried (the backend's require_recent_auth), and only a
+// new sign-in gets a newer one.
+export type SessionEndReason = "expired" | "reauth";
+
+const sessionExpiredListeners = new Set<(reason: SessionEndReason) => void>();
 
 // Lets @forge/hooks's useAuth (and the web app's router) react when a
 // refresh-and-retry cycle determines the session is genuinely over, without
 // this package depending on either of them.
-export function onSessionExpired(listener: () => void): () => void {
+export function onSessionExpired(
+  listener: (reason: SessionEndReason) => void,
+): () => void {
   sessionExpiredListeners.add(listener);
   return () => {
     sessionExpiredListeners.delete(listener);
   };
 }
 
-function notifySessionExpired(): void {
+function notifySessionExpired(reason: SessionEndReason = "expired"): void {
   for (const listener of sessionExpiredListeners) {
-    listener();
+    listener(reason);
+  }
+}
+
+async function isStepUpRefusal(response: Response): Promise<boolean> {
+  if (response.status !== 403) {
+    return false;
+  }
+  try {
+    const body = (await response.clone().json()) as {
+      error?: { code?: string } | null;
+    };
+    return body.error?.code === "step_up_auth_required";
+  } catch {
+    return false;
   }
 }
 
@@ -95,6 +117,20 @@ export async function authRetryInterceptor(
   request: Request,
   options: ResolvedRequestOptions,
 ): Promise<Response> {
+  if (await isStepUpRefusal(response)) {
+    // Telling the user to "sign in again" while they are visibly signed in
+    // read as a bug (2026-11-06), so sign them out and send them to the
+    // login page instead. Logout ends the session server-side and clears the
+    // refresh cookie; without that, the login page would bounce a still
+    // signed-in user straight back into the app.
+    await fetch(`${getApiBaseUrl()}${LOGOUT_PATH}`, {
+      method: "POST",
+      credentials: "include",
+    }).catch(() => undefined);
+    setAccessToken(null);
+    notifySessionExpired("reauth");
+    return response;
+  }
   if (response.status !== 401) {
     return response;
   }

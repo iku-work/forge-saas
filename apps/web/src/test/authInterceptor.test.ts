@@ -174,9 +174,12 @@ describe("authRetryInterceptor", () => {
     const listener = vi.fn();
     const unsubscribe = onSessionExpired(listener);
 
-    const request = new Request("http://localhost:8000/api/v1/auth/2fa/verify", {
-      method: "POST",
-    });
+    const request = new Request(
+      "http://localhost:8000/api/v1/auth/2fa/verify",
+      {
+        method: "POST",
+      },
+    );
     const original401 = new Response(null, { status: 401 });
 
     const result = await authRetryInterceptor(
@@ -221,6 +224,59 @@ describe("authRetryInterceptor", () => {
       url.includes("/auth/refresh"),
     );
     expect(refreshCalls).toHaveLength(1);
+
+    vi.unstubAllGlobals();
+  });
+});
+
+describe("authRetryInterceptor on a step-up refusal", () => {
+  const stepUp = () =>
+    jsonResponse(403, {
+      data: null,
+      error: { code: "step_up_auth_required" },
+    });
+
+  it("signs out and tells listeners to send the user to sign in again", async () => {
+    setAccessToken("current-token");
+    const fetchMock = vi.fn<
+      (url: string, init?: RequestInit) => Promise<Response>
+    >(() => Promise.resolve(jsonResponse(200, { data: null, error: null })));
+    vi.stubGlobal("fetch", fetchMock);
+    const listener = vi.fn();
+    const unsubscribe = onSessionExpired(listener);
+
+    const result = await authRetryInterceptor(
+      stepUp(),
+      new Request("http://localhost:8000/api/v1/billing/portal-session"),
+      fakeOptions,
+    );
+
+    expect(result.status).toBe(403);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock.mock.calls[0]?.[0]).toBe(
+      "http://localhost:8000/api/v1/auth/logout",
+    );
+    expect(getAccessToken()).toBeNull();
+    expect(listener).toHaveBeenCalledWith("reauth");
+
+    unsubscribe();
+    vi.unstubAllGlobals();
+  });
+
+  it("leaves any other 403 alone", async () => {
+    setAccessToken("current-token");
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+
+    const result = await authRetryInterceptor(
+      jsonResponse(403, { data: null, error: { code: "permission_denied" } }),
+      new Request("http://localhost:8000/api/v1/billing/portal-session"),
+      fakeOptions,
+    );
+
+    expect(result.status).toBe(403);
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(getAccessToken()).toBe("current-token");
 
     vi.unstubAllGlobals();
   });

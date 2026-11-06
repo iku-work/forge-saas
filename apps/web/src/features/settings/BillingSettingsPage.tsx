@@ -229,7 +229,7 @@ export function BillingSettingsPage({
   // into). The portal is the surface worth protecting: payment instrument,
   // invoice history, cancellation.
   //
-  // So a session idling past five minutes surfaces here as
+  // So a session idling past the step-up window surfaces here as
   // errors.step_up_auth_required, shown through getErrorMessage's normal
   // code->copy mapping like any other error rather than a dedicated re-auth
   // prompt -- the same convention SecuritySettingsPage's change-email flow

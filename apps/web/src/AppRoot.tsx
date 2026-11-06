@@ -42,8 +42,14 @@ export function AppRoot({ router, queryClient }: AppRootProps) {
   // beforeLoad. Force that navigation here instead of waiting for one.
   useEffect(
     () =>
-      onSessionExpired(() => {
-        void router.navigate({ href: currentLocaleHref(router, "/login") });
+      onSessionExpired((reason) => {
+        // "reauth" says why on the login page, through the same parameter
+        // the OAuth callbacks use.
+        const path =
+          reason === "reauth"
+            ? "/login?sign_in_error=errors.step_up_auth_required"
+            : "/login";
+        void router.navigate({ href: currentLocaleHref(router, path) });
       }),
     [router],
   );

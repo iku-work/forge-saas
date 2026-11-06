@@ -368,7 +368,7 @@ async def remove_member(
     request: Request,
     membership_id: UUID,
     actor: Annotated[Membership, Depends(require_org_permission(Permission.MEMBERS_MANAGE))],
-    _recent_auth: Annotated[None, Depends(require_recent_auth(max_age_minutes=5))],
+    _recent_auth: Annotated[None, Depends(require_recent_auth())],
     session: Annotated[AsyncSession, Depends(get_session)],
     redis: Annotated[Redis, Depends(get_redis)],
 ) -> Envelope[None]:
