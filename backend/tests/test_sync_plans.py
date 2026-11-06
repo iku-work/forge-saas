@@ -24,8 +24,9 @@ pytestmark = pytest.mark.module_dependent  # billing tables
 
 
 class _FakeProduct:
-    def __init__(self, name: str) -> None:
+    def __init__(self, name: str, *, active: bool = True) -> None:
         self.name = name
+        self.active = active
 
 
 class _FakeRecurring:
@@ -99,6 +100,25 @@ async def test_writes_the_resolved_ids_and_keeps_entitlements_local(
     assert plan.features == {"seats": 25, "storage_gb": 50}
     # Stripe's, not a guess. Before this column every consumer assumed USD.
     assert plan.currency == "usd"
+
+
+async def test_a_price_on_an_archived_product_is_refused(
+    session: AsyncSession, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monthly = _FakePrice("price_m", 4900, "Pro")
+    monthly.product = _FakeProduct("Pro", active=False)
+    _stub_stripe(
+        monkeypatch,
+        {
+            "pro_monthly": monthly,
+            "pro_yearly": _FakePrice("price_y", 30000, "Pro", interval="year"),
+        },
+    )
+
+    with pytest.raises(PlanSyncError, match="archived"):
+        await sync_plans(session, [PRO])
+
+    assert await PlanRepository(session).get_by_slug("pro") is None
 
 
 async def test_a_missing_lookup_key_writes_nothing_at_all(

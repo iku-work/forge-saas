@@ -46,6 +46,7 @@ decorated unit) and then their own decorated single-call helper, rather than
 wrapping the whole method a second time, to avoid nested retry storms.
 """
 
+import hashlib
 import logging
 from datetime import UTC, datetime
 from typing import Any, Literal, cast
@@ -533,8 +534,15 @@ class BillingService:
         if org.stripe_customer_id is not None:
             return org.stripe_customer_id
 
+        # The id below is saved in the caller's transaction, which a failed
+        # checkout rolls back, so without a key every retry made another
+        # customer (2026-11-06). Stripe replays the first one for 24 hours. The
+        # name is in the key because Stripe refuses a key reused with new params.
+        name_digest = hashlib.sha256(org.name.encode()).hexdigest()[:16]
         customer = await stripe.Customer.create_async(
-            name=org.name, metadata={"org_id": str(org.id)}
+            name=org.name,
+            metadata={"org_id": str(org.id)},
+            idempotency_key=f"customer-{org.id}-{name_digest}",
         )
         # Written through the repository, not by mutating `org` and flushing:
         # since T-240 this org may have been hydrated from the cache, and a

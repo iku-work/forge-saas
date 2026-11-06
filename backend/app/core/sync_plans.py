@@ -79,6 +79,15 @@ def _resolve(lookup_key: str) -> _ResolvedPrice | None:
         raise PlanSyncError(f"lookup_key {lookup_key!r} matches more than one active price")
     price = prices[0]
     product = price.product
+    if getattr(product, "active", True) is False:
+        # Stripe keeps an archived product's prices active, and refuses to
+        # sell them only at checkout (2026-11-06), so the lookup alone passes.
+        raise PlanSyncError(
+            f"lookup_key {lookup_key!r} is on price {price.id}, whose product "
+            f"{getattr(product, 'name', product)!r} is archived, so it cannot be bought. "
+            "Unarchive the product in the Stripe dashboard, or move the lookup key "
+            "to a price on an active product."
+        )
     recurring = price.recurring
     return _ResolvedPrice(
         price_id=price.id,
