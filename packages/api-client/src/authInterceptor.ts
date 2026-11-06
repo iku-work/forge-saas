@@ -2,7 +2,6 @@ import type { ResolvedRequestOptions } from "./generated/client/types.gen";
 import { getApiBaseUrl, setAccessToken } from "./client";
 
 const REFRESH_PATH = "/api/v1/auth/refresh";
-const LOGOUT_PATH = "/api/v1/auth/logout";
 // Marks a request as already having gone through one refresh-and-retry
 // cycle, so a 401 on the retry itself is reported as-is instead of looping.
 const RETRY_HEADER = "X-Auth-Retried";
@@ -28,6 +27,9 @@ const SESSION_INDEPENDENT_PATHS = [
   "/api/v1/auth/2fa/login",
   "/api/v1/auth/webauthn/login",
   "/api/v1/auth/webauthn/login/options",
+  // A wrong password or code. Refreshing and replaying it would count the
+  // same wrong answer twice toward the account lockout.
+  "/api/v1/auth/reauth",
 ];
 
 function isSessionIndependentRequest(url: string): boolean {
@@ -68,29 +70,34 @@ function refreshAccessTokenOnce(): Promise<string | null> {
   return refreshPromise;
 }
 
-// "expired": the session is over. "reauth": the session is fine but too old
-// for the action just tried (the backend's require_recent_auth), and only a
-// new sign-in gets a newer one.
-export type SessionEndReason = "expired" | "reauth";
-
-const sessionExpiredListeners = new Set<(reason: SessionEndReason) => void>();
+const sessionExpiredListeners = new Set<() => void>();
 
 // Lets @forge/hooks's useAuth (and the web app's router) react when a
 // refresh-and-retry cycle determines the session is genuinely over, without
 // this package depending on either of them.
-export function onSessionExpired(
-  listener: (reason: SessionEndReason) => void,
-): () => void {
+export function onSessionExpired(listener: () => void): () => void {
   sessionExpiredListeners.add(listener);
   return () => {
     sessionExpiredListeners.delete(listener);
   };
 }
 
-function notifySessionExpired(reason: SessionEndReason = "expired"): void {
+function notifySessionExpired(): void {
   for (const listener of sessionExpiredListeners) {
-    listener(reason);
+    listener();
   }
+}
+
+// Who asks the person to confirm it's them when an action needs a recent
+// sign-in (the backend's require_recent_auth). Resolves to an access token
+// carrying the renewed sign-in time, or null if they gave up. Registered by
+// the web app's ReauthDialog; with none registered the 403 goes to the
+// caller unchanged.
+type ReauthHandler = () => Promise<string | null>;
+let reauthHandler: ReauthHandler | null = null;
+
+export function setReauthHandler(handler: ReauthHandler | null): void {
+  reauthHandler = handler;
 }
 
 async function isStepUpRefusal(response: Response): Promise<boolean> {
@@ -107,6 +114,22 @@ async function isStepUpRefusal(response: Response): Promise<boolean> {
   }
 }
 
+function replay(
+  request: Request,
+  options: ResolvedRequestOptions,
+  token: string,
+): Promise<Response> {
+  const retryHeaders = new Headers(request.headers);
+  retryHeaders.set("Authorization", `Bearer ${token}`);
+  retryHeaders.set(RETRY_HEADER, "1");
+  return fetch(request.url, {
+    method: request.method,
+    headers: retryHeaders,
+    body: options.serializedBody,
+    credentials: request.credentials,
+  });
+}
+
 // The access token is short-lived (15 min) and kept only in memory, so a 401
 // is the normal outcome of an ordinary session, not an error path: refresh
 // it from the httpOnly cookie and transparently replay the original request.
@@ -117,19 +140,19 @@ export async function authRetryInterceptor(
   request: Request,
   options: ResolvedRequestOptions,
 ): Promise<Response> {
-  if (await isStepUpRefusal(response)) {
-    // Telling the user to "sign in again" while they are visibly signed in
-    // read as a bug (2026-11-06), so sign them out and send them to the
-    // login page instead. Logout ends the session server-side and clears the
-    // refresh cookie; without that, the login page would bounce a still
-    // signed-in user straight back into the app.
-    await fetch(`${getApiBaseUrl()}${LOGOUT_PATH}`, {
-      method: "POST",
-      credentials: "include",
-    }).catch(() => undefined);
-    setAccessToken(null);
-    notifySessionExpired("reauth");
-    return response;
+  if (
+    reauthHandler &&
+    !request.headers.has(RETRY_HEADER) &&
+    (await isStepUpRefusal(response))
+  ) {
+    // Ask, then send the same request again: the person confirms and their
+    // click goes through, instead of being told to sign in while signed in.
+    const token = await reauthHandler();
+    if (!token) {
+      return response;
+    }
+    setAccessToken(token);
+    return replay(request, options, token);
   }
   if (response.status !== 401) {
     return response;
@@ -150,15 +173,5 @@ export async function authRetryInterceptor(
   }
 
   setAccessToken(newToken);
-
-  const retryHeaders = new Headers(request.headers);
-  retryHeaders.set("Authorization", `Bearer ${newToken}`);
-  retryHeaders.set(RETRY_HEADER, "1");
-
-  return fetch(request.url, {
-    method: request.method,
-    headers: retryHeaders,
-    body: options.serializedBody,
-    credentials: request.credentials,
-  });
+  return replay(request, options, newToken);
 }

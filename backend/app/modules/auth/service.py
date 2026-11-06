@@ -1327,6 +1327,135 @@ class AuthService:
 
         raise AuthenticationError("errors.invalid_totp_code", fallback="Invalid two-factor code")
 
+    async def reauthenticate(  # noqa: PLR0913 -- the two proofs plus who, which session, ip, ua
+        self,
+        user: User,
+        session_id: UUID | None,
+        *,
+        password: str | None,
+        code: str | None,
+        ip: str,
+        user_agent: str,
+    ) -> str:
+        """Re-proves a signed-in session for require_recent_auth, in place.
+
+        The answer is the password, or a TOTP or backup code, whichever the
+        account has. A wrong one counts toward the same lockout as a wrong
+        password at login, so a stolen session is not an unthrottled way to
+        guess the password. Returns an access token carrying the new
+        auth_time; the session row gets it too, so refreshes keep it.
+        """
+        if session_id is None:
+            # An impersonation token, or one minted before `sid`: there is no
+            # session to mark, and an impersonator must not re-prove anyone.
+            raise _session_invalid()
+        if user.locked_until is not None and user.locked_until > utcnow():
+            raise AuthenticationError(
+                "errors.account_locked",
+                fallback="Your account is temporarily locked due to too many failed attempts.",
+            )
+        method = await self._reauth_method(user, password, code)
+        if method is None:
+            user_id = user.id
+            await persist_then_reject(
+                self._db,
+                lambda: self._record_failed_login(user_id, ip, user_agent),
+                AuthenticationError(
+                    "errors.reauth_failed", fallback="That password or code is not right."
+                ),
+            )
+        if method == amr_methods.PASSWORD:
+            # The same rule as login: an organization that signs in with SSO
+            # does not accept its members' passwords for anything.
+            blocked = await sso_enforcement.password_login_blocked(self._db, user.id)
+            if blocked is not None:
+                raise PermissionDeniedError(
+                    "errors.sso_required",
+                    fallback=(
+                        f"Your organization signs in with {blocked.provider_label}. "
+                        "Use single sign-on instead of a password."
+                    ),
+                    params={"provider": blocked.provider_label, "org_slug": blocked.org_slug},
+                )
+        await self._users.reset_failed_login(user.id)
+        return await self._mark_reauthenticated(user.id, session_id, str(method), ip, user_agent)
+
+    async def _reauth_method(
+        self, user: User, password: str | None, code: str | None
+    ) -> str | None:
+        """Which method `password` or `code` just passed, or None.
+        ReauthRequest sends exactly one of them."""
+        if code is None:
+            check = await _check_password_off_loop(
+                password or "", user.hashed_password or _DUMMY_PASSWORD_HASH
+            )
+            return amr_methods.PASSWORD if check.ok and user.hashed_password else None
+        record = await self._totp_secrets.get_by_user_id(user.id)
+        if record is None or record.enabled_at is None:
+            return None
+        if await self._verify_totp_and_track_replay(user, record, code):
+            return amr_methods.TOTP
+        if await self._consume_backup_code(record, code):
+            return amr_methods.BACKUP_CODE
+        return None
+
+    async def reauth_session_id(self, refresh_token_plain: str | None) -> UUID:
+        """The session a browser's refresh cookie names, for an OAuth re-auth.
+
+        Read when the re-auth starts, because the provider's redirect back is
+        cross-site and the SameSite=Strict refresh cookie does not come with it.
+        """
+        session = (
+            await self._sessions.get_by_token_hash(hash_token(refresh_token_plain))
+            if refresh_token_plain
+            else None
+        )
+        if session is None or not is_session_usable(session):
+            raise _session_invalid()
+        return session.id
+
+    async def oauth_reauthenticate(
+        self, provider: str, profile: OAuthProfile, session_id: UUID, ip: str, user_agent: str
+    ) -> None:
+        """The provider vouched for an identity: if it is the one linked to the
+        session's own user, that session counts as recently authenticated.
+
+        Google publishes no `auth_time`, so whether it asked for a password is
+        Google's call. What counts here is that the person just completed a
+        sign-in with that account, which a stolen session alone cannot do.
+        """
+        session = await self._sessions.get_usable_by_id(session_id)
+        if session is None:
+            raise _session_invalid()
+        account = await self._oauth_accounts.get_by_provider_account(
+            provider, profile.provider_user_id
+        )
+        if account is None or account.user_id != session.user_id:
+            raise AuthenticationError(
+                "errors.reauth_wrong_account",
+                fallback="That account is not the one you are signed in with.",
+            )
+        await self._mark_reauthenticated(
+            session.user_id, session.id, amr_methods.SOCIAL_OAUTH, ip, user_agent
+        )
+
+    async def _mark_reauthenticated(
+        self, user_id: UUID, session_id: UUID, method: str, ip: str, user_agent: str
+    ) -> str:
+        now = utcnow()
+        await self._sessions.set_auth_time(session_id, now)
+        await self._sessions.add_amr(session_id, method)
+        await self._audit.log(
+            action="user.reauthenticated",
+            resource_type="user",
+            resource_id=str(user_id),
+            org_id=None,
+            actor_id=user_id,
+            ip=ip,
+            ua=user_agent,
+        )
+        return create_access_token(user_id, None, (), auth_time=now, sid=session_id)
+
     async def _verify_totp_and_track_replay(
         self, user: User, record: TOTPSecret, code: str
     ) -> bool:

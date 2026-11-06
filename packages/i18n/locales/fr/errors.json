@@ -78,7 +78,7 @@
   "impersonation_blocked": "Cette action est bloquée pendant que vous empruntez l'identité d'un autre utilisateur. Mettez fin à l'emprunt d'identité pour l'effectuer vous-même.",
   "not_impersonating": "Ce jeton ne correspond pas à une session d'emprunt d'identité.",
   "service_unavailable": "{feature} est temporairement indisponible. Veuillez réessayer dans un instant.",
-  "step_up_auth_required": "Cette action nécessite que vous vous soyez connecté récemment. Veuillez vous reconnecter pour continuer.",
+  "step_up_auth_required": "Cette action nécessite une connexion récente. Confirmez qu'il s'agit bien de vous pour continuer.",
   "superadmin_2fa_required": "Les comptes super-administrateur doivent activer l'authentification à deux facteurs (une application d'authentification ou une clé de sécurité) avant d'accéder aux fonctionnalités d'administration.",
   "superadmin_mfa_session_required": "Reconnectez-vous avec votre second facteur pour utiliser les fonctionnalités d'administration. Cette session n'a pas été ouverte avec lui.",
   "email_unchanged": "Il s'agit déjà de votre adresse e-mail actuelle.",
@@ -131,5 +131,7 @@
   "file_not_ready": "L'envoi de ce fichier n'est pas encore terminé.",
   "file_scan_pending": "Ce fichier est encore en cours d'analyse antivirus. Réessayez dans un instant.",
   "file_scan_failed": "Ce fichier n'a pas pu être analysé pour détecter des logiciels malveillants, il ne peut donc pas être téléchargé.",
-  "file_infected": "Ce fichier contient un logiciel malveillant et n'est plus disponible."
+  "file_infected": "Ce fichier contient un logiciel malveillant et n'est plus disponible.",
+  "reauth_failed": "Le mot de passe ou le code est incorrect.",
+  "reauth_wrong_account": "Ce compte n'est pas celui avec lequel vous êtes connecté."
 }

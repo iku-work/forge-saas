@@ -6,6 +6,7 @@ import { useTranslation } from "react-i18next";
 import { onSessionExpired } from "@forge/api-client";
 import { useAuth } from "@forge/hooks";
 
+import { ReauthDialog } from "./features/auth/ReauthDialog";
 import { detectPreferredLocale } from "./i18n";
 import { AppErrorBoundary } from "./layouts/AppErrorBoundary";
 import { ImpersonationBanner } from "./layouts/ImpersonationBanner";
@@ -42,14 +43,8 @@ export function AppRoot({ router, queryClient }: AppRootProps) {
   // beforeLoad. Force that navigation here instead of waiting for one.
   useEffect(
     () =>
-      onSessionExpired((reason) => {
-        // "reauth" says why on the login page, through the same parameter
-        // the OAuth callbacks use.
-        const path =
-          reason === "reauth"
-            ? "/login?sign_in_error=errors.step_up_auth_required"
-            : "/login";
-        void router.navigate({ href: currentLocaleHref(router, path) });
+      onSessionExpired(() => {
+        void router.navigate({ href: currentLocaleHref(router, "/login") });
       }),
     [router],
   );
@@ -121,7 +116,13 @@ export function AppRoot({ router, queryClient }: AppRootProps) {
             </span>
           </div>
         ) : (
-          <RouterProvider router={router} context={{ auth: { user } }} />
+          <>
+            <RouterProvider router={router} context={{ auth: { user } }} />
+            {/* After loading, never during: its first request must not race
+                the session restore's refresh, which would read as a stolen
+                refresh token. */}
+            {user ? <ReauthDialog /> : null}
+          </>
         )}
       </QueryClientProvider>
     </AppErrorBoundary>

@@ -47,6 +47,8 @@ from app.modules.auth.schemas import (
     MagicLinkRequest,
     PasswordResetConfirmRequest,
     PasswordResetRequest,
+    ReauthRequest,
+    ReauthResponse,
     RefreshRequest,
     RefreshResponse,
     RegisterRequest,
@@ -460,6 +462,31 @@ async def change_password(
     # change-password call for the rest of the TTL.
     await invalidate_user_cache(redis, user.id)
     return Envelope(data=None, meta=Meta(request_id=_request_id(request)))
+
+
+@router.post("/reauth", dependencies=[Depends(reject_during_impersonation("data_mutation"))])
+@sensitive_limit
+async def reauthenticate(
+    request: Request,
+    body: ReauthRequest,
+    user: Annotated[User, Depends(get_current_user)],
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> Envelope[ReauthResponse]:
+    """Answers require_recent_auth's 403 without signing out: the password or
+    a 2FA code renews this session's auth_time. Accounts with neither use
+    GET /auth/oauth/{provider}?reauth=true instead."""
+    access_token = await AuthService(session).reauthenticate(
+        user,
+        getattr(request.state, "session_id", None),
+        password=body.password,
+        code=body.code,
+        ip=_client_ip(request),
+        user_agent=request.headers.get("user-agent", ""),
+    )
+    await session.commit()
+    return Envelope(
+        data=ReauthResponse(access_token=access_token), meta=Meta(request_id=_request_id(request))
+    )
 
 
 @router.post("/change-email", dependencies=[Depends(reject_during_impersonation("data_mutation"))])

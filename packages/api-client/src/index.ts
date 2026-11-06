@@ -16,7 +16,11 @@ export {
   setCurrentOrgId,
   getImpersonatorId,
 } from "./client";
-export { authRetryInterceptor, onSessionExpired } from "./authInterceptor";
+export {
+  authRetryInterceptor,
+  onSessionExpired,
+  setReauthHandler,
+} from "./authInterceptor";
 export { orgIdRequestInterceptor } from "./orgInterceptor";
 export { HTTP_STATUS, httpStatusOf, attachHttpStatus } from "./httpStatus";
 export * from "./admin";
