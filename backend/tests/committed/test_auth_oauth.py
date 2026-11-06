@@ -971,3 +971,42 @@ async def test_social_login_still_signs_in_an_account_with_no_second_factor(
     )
 
     _assert_signed_in(response)
+
+
+@pytest.mark.parametrize("client_class", [GoogleOAuthClient, GitHubOAuthClient])
+async def test_oauth_client_refused_code_raises_authentication_error(
+    client_class: type[GoogleOAuthClient | GitHubOAuthClient],
+) -> None:
+    # What a real provider sends for a bad, reused or expired code. authlib
+    # raises its client-side OAuthError for it, not OAuth2Error, and that once
+    # escaped as a 500 page instead of the login page's message.
+    def handler(_request: httpx.Request) -> httpx.Response:
+        return httpx.Response(400, json={"error": "invalid_grant", "error_description": "Bad"})
+
+    client = client_class("id", "secret", transport=httpx.MockTransport(handler))
+
+    with pytest.raises(AuthenticationError):
+        await client.fetch_profile(
+            code="auth-code", redirect_uri="https://app.example.com/callback"
+        )
+
+
+async def test_oauth_callback_with_a_code_google_refuses_returns_to_login(
+    client: httpx.AsyncClient, oauth_clients: dict[str, OAuthClient]
+) -> None:
+    # The live 500 of 2026-11-06, through the real client rather than a fake.
+    def handler(_request: httpx.Request) -> httpx.Response:
+        return httpx.Response(400, json={"error": "invalid_grant", "error_description": "Bad"})
+
+    oauth_clients["google"] = GoogleOAuthClient(
+        "id", "secret", transport=httpx.MockTransport(handler)
+    )
+    state = await _start_oauth_flow(client)
+
+    response = await client.get(
+        "/api/v1/auth/oauth/google/callback",
+        params={"code": "x", "state": state},
+        cookies={"oauth_state": state},
+    )
+
+    _assert_refused(response, "errors.oauth_exchange_failed")

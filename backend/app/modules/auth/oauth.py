@@ -17,9 +17,11 @@ this module (see router.py's refresh-token cookie) is set explicitly per
 endpoint instead.
 """
 
+import logging
 from typing import Annotated, Any, Protocol
 
 import httpx
+from authlib.integrations.base_client.errors import OAuthError
 from authlib.integrations.httpx_client import AsyncOAuth2Client
 from authlib.oauth2 import OAuth2Error
 from fastapi import APIRouter, Depends, Request
@@ -49,6 +51,8 @@ from app.modules.auth.schemas import OAuthAccountPublic, OAuthProfile
 from app.modules.auth.service import AuthService, TwoFactorChallenge
 from app.modules.auth.utils import sign_url_token, verify_url_token
 from app.modules.product_settings.service import is_signup_disabled, read_settings
+
+logger = logging.getLogger(__name__)
 
 _STATE_COOKIE_NAME = "oauth_state"
 _STATE_COOKIE_PATH = "/api/v1/auth/oauth"
@@ -124,7 +128,7 @@ class GoogleOAuthClient(_AuthlibOAuthClient):
                     full_name=data.get("name"),
                     avatar_url=data.get("picture"),
                 )
-            except (httpx.HTTPError, OAuth2Error, KeyError) as exc:
+            except (httpx.HTTPError, OAuth2Error, OAuthError, KeyError) as exc:
                 raise AuthenticationError(
                     "errors.oauth_exchange_failed",
                     fallback="Google OAuth exchange failed",
@@ -175,7 +179,7 @@ class GitHubOAuthClient(_AuthlibOAuthClient):
                     full_name=user_data.get("name"),
                     avatar_url=user_data.get("avatar_url"),
                 )
-            except (httpx.HTTPError, OAuth2Error, KeyError) as exc:
+            except (httpx.HTTPError, OAuth2Error, OAuthError, KeyError) as exc:
                 raise AuthenticationError(
                     "errors.oauth_exchange_failed",
                     fallback="GitHub OAuth exchange failed",
@@ -302,6 +306,10 @@ async def oauth_callback(  # noqa: PLR0913 -- state/code/provider/session are ea
     except DomainError as exc:
         # Handled here, so get_session's rollback-on-exception never runs.
         await session.rollback()
+        if exc.__cause__ is not None:
+            # The provider's own reason (invalid_grant, invalid_client, ...),
+            # the one thing that tells an operator which setting is wrong.
+            logger.warning("%s sign-in failed: %r", provider, exc.__cause__)
         redirect = browser_sign_in_failed(request, exc.message_key)
     else:
         # A verified social identity is one factor. An account whose owner
