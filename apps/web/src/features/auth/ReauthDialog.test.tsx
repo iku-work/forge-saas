@@ -20,6 +20,8 @@ const hooks = vi.hoisted(() => ({
   })),
 }));
 vi.mock("@forge/hooks", () => hooks);
+const webauthnBrowser = vi.hoisted(() => ({ startAuthentication: vi.fn() }));
+vi.mock("@simplewebauthn/browser", () => webauthnBrowser);
 
 const { ReauthDialog } = await import("./ReauthDialog");
 const { requestReauth } = await import("./reauthPrompt");
@@ -140,5 +142,78 @@ describe("ReauthDialog", () => {
     expect(
       screen.getByRole("heading", { name: t("auth.reauth.title") }),
     ).toBeInTheDocument();
+  });
+
+  describe("with a passkey or security key", () => {
+    const withKey = () => {
+      server.use(
+        http.get(`${API}/api/v1/auth/oauth/accounts`, () =>
+          HttpResponse.json(envelope([])),
+        ),
+        http.get(`${API}/api/v1/auth/webauthn/credentials`, () =>
+          HttpResponse.json(envelope([{ id: "key-1" }])),
+        ),
+        http.post(`${API}/api/v1/auth/webauthn/reauth/options`, () =>
+          HttpResponse.json(
+            envelope({
+              options: { challenge: "Y2hhbGxlbmdl", allowCredentials: [] },
+              challenge_token: "reauth-challenge",
+            }),
+          ),
+        ),
+      );
+    };
+
+    it("confirms with the key, then lets the blocked request through", async () => {
+      let sent: unknown = null;
+      withKey();
+      server.use(
+        http.post(`${API}/api/v1/auth/webauthn/reauth`, async ({ request }) => {
+          sent = await request.json();
+          return HttpResponse.json(envelope({ access_token: "key-token" }));
+        }),
+        http.post(PORTAL, ({ request }) =>
+          request.headers.get("Authorization") === "Bearer key-token"
+            ? HttpResponse.json(envelope({ url: "https://portal.example" }))
+            : HttpResponse.json(errorEnvelope("no"), { status: 403 }),
+        ),
+      );
+      webauthnBrowser.startAuthentication.mockResolvedValueOnce({
+        id: "assertion",
+      });
+      render(<ReauthDialog />);
+
+      const result = portalRequest();
+      await userEvent.click(
+        await screen.findByRole("button", {
+          name: t("auth.reauth.use_security_key"),
+        }),
+      );
+
+      expect((await result).status).toBe(200);
+      expect(sent).toEqual({
+        challenge_token: "reauth-challenge",
+        credential: { id: "assertion" },
+      });
+    });
+
+    it("says so in its own words when the key prompt is cancelled", async () => {
+      withKey();
+      webauthnBrowser.startAuthentication.mockRejectedValueOnce(
+        new Error("The operation either timed out or was not allowed."),
+      );
+      render(<ReauthDialog />);
+
+      void portalRequest();
+      await userEvent.click(
+        await screen.findByRole("button", {
+          name: t("auth.reauth.use_security_key"),
+        }),
+      );
+
+      expect(
+        await screen.findByText(t("auth.reauth.error_security_key")),
+      ).toBeInTheDocument();
+    });
   });
 });

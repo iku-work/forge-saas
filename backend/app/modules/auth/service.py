@@ -27,6 +27,7 @@ from webauthn.helpers.exceptions import WebAuthnException
 from webauthn.helpers.structs import (
     AuthenticatorSelectionCriteria,
     PublicKeyCredentialDescriptor,
+    PublicKeyCredentialRequestOptions,
     ResidentKeyRequirement,
     UserVerificationRequirement,
 )
@@ -148,6 +149,7 @@ _BACKUP_CODE_COUNT = 10
 _WEBAUTHN_RP_NAME = "ForgeSaaS"
 _WEBAUTHN_REGISTER_PURPOSE = "webauthn_register"
 _WEBAUTHN_LOGIN_PURPOSE = "webauthn_login"
+_WEBAUTHN_REAUTH_PURPOSE = "webauthn_reauth"
 # Registration/assertion ceremonies involve a user physically touching a
 # security key -- longer-lived than the TOTP login window since a hardware
 # key fumbled on the first try shouldn't force the whole flow to restart.
@@ -1625,21 +1627,7 @@ class AuthService:
             )
 
         user_id = UUID(payload["user_id"])
-        credentials = await self._webauthn_credentials.list_for_user(user_id)
-        if not credentials:
-            raise AuthenticationError(
-                "errors.webauthn_not_registered", fallback="No security key registered"
-            )
-
-        settings = get_settings()
-        options = webauthn.generate_authentication_options(
-            rp_id=settings.DOMAIN,
-            allow_credentials=[
-                PublicKeyCredentialDescriptor(id=base64url_to_bytes(c.credential_id))
-                for c in credentials
-            ],
-            user_verification=UserVerificationRequirement.PREFERRED,
-        )
+        options = await self._webauthn_assertion_options(user_id)
         challenge_token = sign_url_token(
             {
                 "user_id": str(user_id),
@@ -1664,8 +1652,103 @@ class AuthService:
 
         user_id = UUID(payload["user_id"])
         user = await self._users.get_by_id(user_id)
+        if user is None:
+            raise AuthenticationError(
+                "errors.invalid_webauthn_response", fallback="Could not verify security key"
+            )
+        await self._verify_webauthn_assertion(
+            user_id, payload["challenge"], credential, ip, user_agent
+        )
+        first_factor = str(payload.get("amr", amr_methods.PASSWORD))
+        return await self._create_session(
+            user, ip, user_agent, amr=[first_factor, amr_methods.SECURITY_KEY]
+        )
+
+    async def begin_webauthn_reauth(
+        self, user: User, session_id: UUID | None
+    ) -> tuple[dict[str, Any], str]:
+        """The passkey or security key way to answer require_recent_auth.
+
+        The challenge names the session, so an assertion made for one
+        session cannot renew another.
+        """
+        if session_id is None:
+            # An impersonation token, or one minted before `sid`.
+            raise _session_invalid()
+        options = await self._webauthn_assertion_options(user.id)
+        challenge_token = sign_url_token(
+            {
+                "user_id": str(user.id),
+                "sid": str(session_id),
+                "purpose": _WEBAUTHN_REAUTH_PURPOSE,
+                "challenge": bytes_to_base64url(options.challenge),
+            },
+            _WEBAUTHN_CHALLENGE_TTL_SECONDS,
+        )
+        return options_to_json_dict(options), challenge_token
+
+    async def webauthn_reauthenticate(  # noqa: PLR0913 -- who, which session, the ceremony, ip, ua
+        self,
+        user: User,
+        session_id: UUID | None,
+        challenge_token: str,
+        credential: dict[str, Any],
+        ip: str,
+        user_agent: str,
+    ) -> str:
+        """Completes begin_webauthn_reauth; returns the renewed access token.
+
+        Unlike a password, a failed assertion is not counted toward the
+        lockout, and a locked account may still use its key: there is no
+        secret here to guess, only a private key the authenticator never
+        hands out.
+        """
+        payload = verify_url_token(challenge_token, max_age=_WEBAUTHN_CHALLENGE_TTL_SECONDS)
+        if (
+            session_id is None
+            or payload.get("purpose") != _WEBAUTHN_REAUTH_PURPOSE
+            or payload.get("user_id") != str(user.id)
+            or payload.get("sid") != str(session_id)
+        ):
+            raise AuthenticationError(
+                "errors.invalid_webauthn_challenge",
+                fallback="Invalid or expired WebAuthn challenge",
+            )
+        await self._verify_webauthn_assertion(
+            user.id, payload["challenge"], credential, ip, user_agent
+        )
+        return await self._mark_reauthenticated(
+            user.id, session_id, amr_methods.SECURITY_KEY, ip, user_agent
+        )
+
+    async def _webauthn_assertion_options(self, user_id: UUID) -> PublicKeyCredentialRequestOptions:
+        credentials = await self._webauthn_credentials.list_for_user(user_id)
+        if not credentials:
+            raise AuthenticationError(
+                "errors.webauthn_not_registered", fallback="No security key registered"
+            )
+        return webauthn.generate_authentication_options(
+            rp_id=get_settings().DOMAIN,
+            allow_credentials=[
+                PublicKeyCredentialDescriptor(id=base64url_to_bytes(c.credential_id))
+                for c in credentials
+            ],
+            user_verification=UserVerificationRequirement.PREFERRED,
+        )
+
+    async def _verify_webauthn_assertion(
+        self,
+        user_id: UUID,
+        challenge: str,
+        credential: dict[str, Any],
+        ip: str,
+        user_agent: str,
+    ) -> None:
+        """Checks an assertion from one of `user_id`'s credentials against
+        `challenge` and records its new sign count. A counter that went
+        backwards signs the user out everywhere before refusing."""
         record = await self._webauthn_credentials.get_by_credential_id(credential.get("id", ""))
-        if user is None or record is None or record.user_id != user_id:
+        if record is None or record.user_id != user_id:
             raise AuthenticationError(
                 "errors.invalid_webauthn_response", fallback="Could not verify security key"
             )
@@ -1674,7 +1757,7 @@ class AuthService:
         try:
             verified = webauthn.verify_authentication_response(
                 credential=credential,
-                expected_challenge=base64url_to_bytes(payload["challenge"]),
+                expected_challenge=base64url_to_bytes(challenge),
                 expected_rp_id=settings.DOMAIN,
                 expected_origin=settings.FRONTEND_URL,
                 credential_public_key=base64url_to_bytes(record.public_key),
@@ -1729,10 +1812,6 @@ class AuthService:
             ) from exc
 
         await self._webauthn_credentials.update_sign_count(record.id, verified.new_sign_count)
-        first_factor = str(payload.get("amr", amr_methods.PASSWORD))
-        return await self._create_session(
-            user, ip, user_agent, amr=[first_factor, amr_methods.SECURITY_KEY]
-        )
 
     async def _enqueue_verification_email(self, user: User, token: str) -> None:
         await jobs.enqueue_job(

@@ -9,6 +9,10 @@ WebAuthn counterpart to app.modules.auth.totp's /2fa/login -- AuthService.
 login() (T-018) hands back the same TwoFactorChallenge whether the user
 enrolled TOTP or a security key; whichever ceremony the client completes
 trades that temp_token for real tokens.
+
+POST /auth/webauthn/reauth/options and POST /auth/webauthn/reauth answer
+require_recent_auth with a passkey or security key, the way /auth/reauth
+does with a password or code.
 """
 
 from typing import Annotated
@@ -30,6 +34,7 @@ from app.modules.auth.router import (
 )
 from app.modules.auth.schemas import (
     LoginResponse,
+    ReauthResponse,
     UserPublic,
     WebAuthnCredentialPublic,
     WebAuthnLoginOptionsRequest,
@@ -149,3 +154,46 @@ async def login(
         user=UserPublic.model_validate(user),
     )
     return Envelope(data=data, meta=Meta(request_id=_request_id(request)))
+
+
+# The options and challenge shapes are the login ceremony's: the same
+# navigator.credentials.get() call, only bound to a session, not a temp_token.
+@router.post(
+    "/reauth/options", dependencies=[Depends(reject_during_impersonation("data_mutation"))]
+)
+@api_limit
+async def reauth_options(
+    request: Request,
+    user: Annotated[User, Depends(get_current_user)],
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> Envelope[WebAuthnLoginOptionsResponse]:
+    options, challenge_token = await AuthService(session).begin_webauthn_reauth(
+        user, getattr(request.state, "session_id", None)
+    )
+    return Envelope(
+        data=WebAuthnLoginOptionsResponse(options=options, challenge_token=challenge_token),
+        meta=Meta(request_id=_request_id(request)),
+    )
+
+
+@router.post("/reauth", dependencies=[Depends(reject_during_impersonation("data_mutation"))])
+@sensitive_limit
+async def reauth(
+    request: Request,
+    body: WebAuthnLoginRequest,
+    user: Annotated[User, Depends(get_current_user)],
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> Envelope[ReauthResponse]:
+    access_token = await AuthService(session).webauthn_reauthenticate(
+        user,
+        getattr(request.state, "session_id", None),
+        body.challenge_token,
+        body.credential,
+        _client_ip(request),
+        request.headers.get("user-agent", ""),
+    )
+    await session.commit()
+    return Envelope(
+        data=ReauthResponse(access_token=access_token),
+        meta=Meta(request_id=_request_id(request)),
+    )

@@ -3781,6 +3781,47 @@ export type LoginOptionsApiV1AuthWebauthnLoginOptionsPostResponses = {
 
 export type LoginOptionsApiV1AuthWebauthnLoginOptionsPostResponse = LoginOptionsApiV1AuthWebauthnLoginOptionsPostResponses[keyof LoginOptionsApiV1AuthWebauthnLoginOptionsPostResponses];
 
+export type ReauthApiV1AuthWebauthnReauthPostData = {
+    body: WebAuthnLoginRequest;
+    path?: never;
+    query?: never;
+    url: '/api/v1/auth/webauthn/reauth';
+};
+
+export type ReauthApiV1AuthWebauthnReauthPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: EnvelopeNoneType;
+};
+
+export type ReauthApiV1AuthWebauthnReauthPostError = ReauthApiV1AuthWebauthnReauthPostErrors[keyof ReauthApiV1AuthWebauthnReauthPostErrors];
+
+export type ReauthApiV1AuthWebauthnReauthPostResponses = {
+    /**
+     * Successful Response
+     */
+    200: EnvelopeReauthResponse;
+};
+
+export type ReauthApiV1AuthWebauthnReauthPostResponse = ReauthApiV1AuthWebauthnReauthPostResponses[keyof ReauthApiV1AuthWebauthnReauthPostResponses];
+
+export type ReauthOptionsApiV1AuthWebauthnReauthOptionsPostData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/v1/auth/webauthn/reauth/options';
+};
+
+export type ReauthOptionsApiV1AuthWebauthnReauthOptionsPostResponses = {
+    /**
+     * Successful Response
+     */
+    200: EnvelopeWebAuthnLoginOptionsResponse;
+};
+
+export type ReauthOptionsApiV1AuthWebauthnReauthOptionsPostResponse = ReauthOptionsApiV1AuthWebauthnReauthOptionsPostResponses[keyof ReauthOptionsApiV1AuthWebauthnReauthOptionsPostResponses];
+
 export type RegisterApiV1AuthWebauthnRegisterPostData = {
     body: WebAuthnRegisterRequest;
     path?: never;

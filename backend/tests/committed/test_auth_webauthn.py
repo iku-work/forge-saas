@@ -15,8 +15,9 @@ testcontainers pattern as test_auth_totp.py.
 import hashlib
 import json
 import secrets
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any
+from uuid import UUID, uuid4
 
 import cbor2
 import httpx
@@ -39,7 +40,13 @@ from app.modules.auth.repository import (
 )
 from app.modules.auth.schemas import LoginRequest
 from app.modules.auth.service import AuthService, TwoFactorChallenge
-from app.modules.auth.utils import create_access_token, hash_password, sign_url_token
+from app.modules.auth.utils import (
+    create_access_token,
+    hash_password,
+    hash_token,
+    sign_url_token,
+    verify_access_token,
+)
 
 _VALID_PASSWORD = "Correct-Horse9"
 _IP = "127.0.0.1"
@@ -721,3 +728,126 @@ async def test_a_cloned_key_signs_its_owner_out_everywhere_over_http(
     assert (await client.get("/api/v1/auth/me", headers=bearer)).status_code == 401
     async with session_factory() as fresh:
         assert await SessionRepository(fresh).list_active_for_user(verified_user.id) == []
+
+
+# --- re-auth: a passkey or security key answers require_recent_auth -----------
+
+_LONG_AGO = datetime.now(UTC) - timedelta(hours=3)
+
+
+async def _old_session(session: AsyncSession, user: User) -> UUID:
+    row = await SessionRepository(session).create(
+        user_id=user.id,
+        token_hash=hash_token(str(uuid4())),
+        device_label=None,
+        ip_address=_IP,
+        user_agent=_USER_AGENT,
+        expires_at=datetime.now(UTC) + timedelta(days=1),
+        auth_time=_LONG_AGO,
+    )
+    await session.commit()
+    return row.id
+
+
+def _is_recent(moment: datetime) -> bool:
+    return datetime.now(UTC) - moment < timedelta(minutes=1)
+
+
+async def test_a_key_renews_the_session(
+    service: AuthService,
+    session: AsyncSession,
+    verified_user: User,
+    webauthn_repo: WebAuthnCredentialRepository,
+) -> None:
+    authenticator, record = await _register(service, verified_user)
+    sid = await _old_session(session, verified_user)
+    options, challenge_token = await service.begin_webauthn_reauth(verified_user, sid)
+    settings = get_settings()
+    assertion = authenticator.get(
+        rp_id=settings.DOMAIN, origin=settings.FRONTEND_URL, challenge=_challenge_from(options)
+    )
+
+    token = await service.webauthn_reauthenticate(
+        verified_user, sid, challenge_token, assertion, _IP, _USER_AGENT
+    )
+
+    assert _is_recent(verify_access_token(token).auth_time)
+    row = await SessionRepository(session).get_by_id(sid)
+    assert row is not None
+    await session.refresh(row)
+    assert _is_recent(row.auth_time)
+    assert "hwk" in row.amr
+    refetched = await webauthn_repo.get_by_id(record.id)
+    assert refetched is not None
+    assert refetched.sign_count == 1
+
+
+async def test_a_challenge_only_renews_the_session_it_was_made_for(
+    service: AuthService, session: AsyncSession, verified_user: User
+) -> None:
+    authenticator, _ = await _register(service, verified_user)
+    sid = await _old_session(session, verified_user)
+    other_sid = await _old_session(session, verified_user)
+    options, challenge_token = await service.begin_webauthn_reauth(verified_user, sid)
+    settings = get_settings()
+    assertion = authenticator.get(
+        rp_id=settings.DOMAIN, origin=settings.FRONTEND_URL, challenge=_challenge_from(options)
+    )
+    # A login challenge for the same user is not a re-auth one either.
+    login_token = sign_url_token(
+        {"user_id": str(verified_user.id), "purpose": "webauthn_login", "challenge": "x"}, 300
+    )
+
+    for target_sid, token in (
+        (other_sid, challenge_token),
+        (None, challenge_token),
+        (sid, login_token),
+    ):
+        with pytest.raises(AuthenticationError) as exc_info:
+            await service.webauthn_reauthenticate(
+                verified_user, target_sid, token, assertion, _IP, _USER_AGENT
+            )
+        assert exc_info.value.message_key == "errors.invalid_webauthn_challenge"
+
+
+async def test_reauth_options_need_a_session_and_a_key(
+    service: AuthService, session: AsyncSession, verified_user: User
+) -> None:
+    sid = await _old_session(session, verified_user)
+
+    with pytest.raises(AuthenticationError) as no_key:
+        await service.begin_webauthn_reauth(verified_user, sid)
+    with pytest.raises(AuthenticationError) as no_session:
+        await service.begin_webauthn_reauth(verified_user, None)
+
+    assert no_key.value.message_key == "errors.webauthn_not_registered"
+    assert no_session.value.message_key == "errors.session_invalid"
+
+
+async def test_the_reauth_routes_return_a_fresh_token(
+    client: httpx.AsyncClient, session: AsyncSession, verified_user: User
+) -> None:
+    authenticator, _ = await _register_via_http(client, verified_user)
+    sid = await _old_session(session, verified_user)
+    stale = create_access_token(verified_user.id, None, (), auth_time=_LONG_AGO, sid=sid)
+    headers = {"Authorization": f"Bearer {stale}"}
+
+    options_response = await client.post("/api/v1/auth/webauthn/reauth/options", headers=headers)
+    assert options_response.status_code == 200, options_response.text
+    options_data = options_response.json()["data"]
+    settings = get_settings()
+    assertion = authenticator.get(
+        rp_id=settings.DOMAIN,
+        origin=settings.FRONTEND_URL,
+        challenge=_challenge_from(options_data["options"]),
+    )
+    response = await client.post(
+        "/api/v1/auth/webauthn/reauth",
+        json={"challenge_token": options_data["challenge_token"], "credential": assertion},
+        headers=headers,
+    )
+
+    assert response.status_code == 200, response.text
+    fresh = response.json()["data"]["access_token"]
+    assert _is_recent(verify_access_token(fresh).auth_time)
+    assert "set-cookie" not in response.headers
