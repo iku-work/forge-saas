@@ -101,6 +101,27 @@ async def test_creates_customer_when_org_has_none(
     assert call_count == 1
 
 
+async def test_a_retry_after_a_rollback_reuses_the_same_stripe_customer(
+    service: BillingService, org: Organization, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # A failed checkout rolls back the saved customer id; the retry must ask
+    # Stripe with the same key so Stripe returns the first customer.
+    keys: list[object] = []
+
+    async def _create(**kwargs: object) -> _FakeCustomer:
+        keys.append(kwargs["idempotency_key"])
+        return _FakeCustomer(customer_id="cus_new")
+
+    monkeypatch.setattr(stripe.Customer, "create_async", _create)
+
+    await service.get_or_create_stripe_customer(org)
+    org.stripe_customer_id = None  # what the rollback leaves
+    await service.get_or_create_stripe_customer(org)
+
+    assert len(keys) == 2
+    assert keys[0] == keys[1]
+
+
 async def test_reuses_existing_customer_without_calling_stripe(
     service: BillingService, org: Organization, monkeypatch: pytest.MonkeyPatch
 ) -> None:
