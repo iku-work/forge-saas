@@ -2,12 +2,16 @@
 The one ProductSettings switch that is enforced on a route rather than in the
 maintenance middleware (T-263).
 
-`signup_disabled` guards exactly one endpoint -- `POST /api/v1/auth/register`
--- and the middleware has no business knowing that. A path literal in a
+`signup_disabled` guards `POST /api/v1/auth/register` here -- and the
+middleware has no business knowing that. A path literal in a
 middleware is a rule nobody finds from the route it governs, and it silently
 stops applying the day the route moves; a dependency sits on the route, moves
 with it, and shows up in the same place a reader looks for every other gate on
 that endpoint.
+
+A first sign-in with Google or GitHub also creates an account, so
+`AuthService.oauth_login` refuses that too. It only knows whether the person
+is new once the provider has answered, which is why it isn't a dependency.
 
 Not extended to invitation acceptance on purpose: an existing customer adding
 a colleague is not "signup", and an operator who closes public registration

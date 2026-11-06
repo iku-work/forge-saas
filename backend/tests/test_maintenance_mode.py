@@ -13,6 +13,7 @@ the test's containers -- see that fixture's comment. So the middleware under
 test here is the real one, in its real position in the stack.
 """
 
+from urllib.parse import parse_qs, urlsplit
 from uuid import uuid4
 
 import httpx
@@ -24,8 +25,10 @@ from app.core import cache, cache_keys
 from app.main import app, check_database_ready, check_redis_ready
 from app.middleware import maintenance
 from app.middleware.maintenance import MAINTENANCE_CODE
+from app.modules.auth.oauth import get_oauth_clients
 from app.modules.auth.permissions import MemberRole
 from app.modules.auth.repository import UserRepository
+from app.modules.auth.schemas import OAuthProfile
 from app.modules.auth.utils import hash_password
 from app.modules.product_settings import keys
 from app.modules.product_settings.repository import ProductSettingsRepository
@@ -343,6 +346,36 @@ async def test_signup_disabled_closes_registration_only(
     # customers who already have accounts.
     login = await client.post("/api/v1/auth/login", json={"email": "x@y.z", "password": "nope"})
     assert login.status_code != 403
+
+
+async def test_signup_disabled_also_stops_a_first_google_sign_in(
+    client: httpx.AsyncClient, session: AsyncSession, redis: Redis
+) -> None:
+    class _Google:
+        def authorization_url(self, *, redirect_uri: str, state: str) -> str:  # noqa: ARG002
+            return f"https://provider.example/authorize?state={state}"
+
+        async def fetch_profile(self, *, code: str, redirect_uri: str) -> OAuthProfile:  # noqa: ARG002
+            return OAuthProfile(
+                provider_user_id=f"g-{uuid4()}",
+                email=f"new-{uuid4()}@example.com",
+                email_verified=True,
+            )
+
+    app.dependency_overrides[get_oauth_clients] = lambda: {"google": _Google()}
+    await _store(session, redis, {keys.SIGNUP_DISABLED: True})
+    state = parse_qs(
+        urlsplit((await client.get("/api/v1/auth/oauth/google")).headers["location"]).query
+    )["state"][0]
+
+    response = await client.get(
+        "/api/v1/auth/oauth/google/callback",
+        params={"code": "x", "state": state},
+        cookies={"oauth_state": state},
+    )
+
+    assert response.status_code == 302
+    assert "sign_in_error=errors.signup_disabled" in response.headers["location"]
 
 
 # ---- degradation -------------------------------------------------------------

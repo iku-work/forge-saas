@@ -59,7 +59,7 @@ processors, then replace both files.
 |---|---|---|
 | Resend | Sign-up: nobody can verify an email | `RESEND_API_KEY`, and verify your domain with Resend |
 | Stripe, live mode | Taking money | `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `stripe-usage-pricing.md`, `billing-drift.md` |
-| Google and GitHub sign-in | Those buttons | The OAuth client IDs and secrets, with your domain as the redirect |
+| Google and GitHub sign-in | Those buttons | The OAuth client IDs and secrets, with `https://<your app host>/api/v1/auth/oauth/<google or github>/callback` as the redirect |
 | Sentry | Finding out about errors | One project for the backend and one for the browser |
 
 Use a separate staging environment to try these before live mode.

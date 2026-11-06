@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Link, useNavigate } from "@tanstack/react-router";
 import { useForm } from "react-hook-form";
@@ -8,12 +8,7 @@ import {
   ssoHintApiV1AuthSsoHintPost,
   type UserPublic,
 } from "@forge/api-client";
-import {
-  TwoFactorRequiredError,
-  useAuth,
-  useModules,
-  useOAuthProviders,
-} from "@forge/hooks";
+import { TwoFactorRequiredError, useAuth, useModules } from "@forge/hooks";
 import {
   Alert,
   AlertDescription,
@@ -26,7 +21,6 @@ import {
   FormMessage,
   Input,
   PasswordInput,
-  Separator,
 } from "@forge/ui";
 import { loginSchema, type LoginInput } from "@forge/validation";
 
@@ -34,7 +28,12 @@ import { useRouteLocale } from "../../lib/useRouteLocale";
 
 import { AuthLayout } from "./AuthLayout";
 import { getErrorMessage } from "./getErrorMessage";
-import { getOAuthStartUrl, OAUTH_PROVIDER_LABEL_KEYS } from "./oauth";
+import {
+  readTempTokenFromHash,
+  removeTempTokenFromHash,
+  signInErrorKey,
+} from "./oauth";
+import { OAuthOptions } from "./OAuthOptions";
 import { getSsoStartUrl } from "./sso";
 import { TwoFactorChallenge } from "./TwoFactorChallenge";
 
@@ -43,21 +42,22 @@ interface SsoHint {
   providerLabel: string;
 }
 
-export function LoginPage() {
+export function LoginPage({
+  signInError,
+}: {
+  signInError?: string | undefined;
+}) {
   const { t } = useTranslation();
   const locale = useRouteLocale();
   const { login, completeTwoFactorLogin } = useAuth();
   const modules = useModules();
-  // UX-01: rendered from the providers /config says are actually
-  // configured, not from `modules.oauth` -- see useOAuthProviders. The
-  // filter drops any provider this build has no label for, so adding one
-  // server-side cannot render a blank button before its string lands.
-  const oauthProviders = useOAuthProviders().filter(
-    (provider: string) => provider in OAUTH_PROVIDER_LABEL_KEYS,
-  );
   const navigate = useNavigate();
-  const [formError, setFormError] = useState<string | null>(null);
-  const [tempToken, setTempToken] = useState<string | null>(null);
+  const [formError, setFormError] = useState<string | null>(() =>
+    signInError ? t(signInErrorKey(signInError)) : null,
+  );
+  const [tempToken, setTempToken] = useState<string | null>(
+    readTempTokenFromHash,
+  );
   const [ssoHint, setSsoHint] = useState<SsoHint | null>(null);
   const [isCheckingSso, setIsCheckingSso] = useState(false);
   // Set by "use a password instead", and never cleared by a hint arriving --
@@ -149,6 +149,8 @@ export function LoginPage() {
       void navigate({ to: "/$locale", params: { locale } });
     }, 0);
   };
+
+  useEffect(removeTempTokenFromHash, []);
 
   const showSso = ssoHint !== null && !passwordRequested;
 
@@ -318,34 +320,13 @@ export function LoginPage() {
       </Form>
 
       {showSso ? null : (
-        <>
-          <div className="my-6 flex items-center gap-3 text-xs text-muted-foreground">
-            <Separator className="flex-1" />
-            {t("auth.login.oauth_separator")}
-            <Separator className="flex-1" />
-          </div>
-          <div className="grid gap-2">
-            {oauthProviders.map((provider: string) => (
-              <Button
-                key={provider}
-                type="button"
-                variant="outline"
-                size="lg"
-                className="w-full"
-                onClick={() => {
-                  window.location.href = getOAuthStartUrl(provider);
-                }}
-              >
-                {t(OAUTH_PROVIDER_LABEL_KEYS[provider] ?? "")}
-              </Button>
-            ))}
-            <Button asChild variant="ghost" size="lg" className="w-full">
-              <Link to="/$locale/magic-link" params={{ locale }}>
-                {t("auth.login.magic_link_cta")}
-              </Link>
-            </Button>
-          </div>
-        </>
+        <OAuthOptions>
+          <Button asChild variant="ghost" size="lg" className="w-full">
+            <Link to="/$locale/magic-link" params={{ locale }}>
+              {t("auth.login.magic_link_cta")}
+            </Link>
+          </Button>
+        </OAuthOptions>
       )}
     </AuthLayout>
   );

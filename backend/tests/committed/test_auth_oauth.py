@@ -19,6 +19,7 @@ authlib plumbing, which the router-level fakes never touch.
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Any
+from urllib.parse import parse_qs, urlsplit
 
 import httpx
 import pytest
@@ -27,7 +28,7 @@ from sqlalchemy.ext.asyncio import (
 )
 
 from app.core.config import get_settings
-from app.core.exceptions import AuthenticationError
+from app.core.exceptions import AuthenticationError, PermissionDeniedError
 from app.main import app
 from app.models._mixins import utcnow
 from app.modules.auth.models import User
@@ -39,7 +40,7 @@ from app.modules.auth.oauth import (
 )
 from app.modules.auth.repository import OAuthAccountRepository, UserRepository
 from app.modules.auth.schemas import OAuthProfile
-from app.modules.auth.service import AuthService
+from app.modules.auth.service import AuthService, TwoFactorChallenge
 from app.modules.auth.utils import create_access_token, hash_password
 
 _VALID_PASSWORD = "Correct-Horse9"
@@ -131,6 +132,108 @@ async def test_oauth_start_redirects_and_sets_state_cookie(
 # --- GET /auth/oauth/{provider}/callback --------------------------------------
 
 
+def _assert_signed_in(response: httpx.Response) -> None:
+    """The browser lands in the app, holding the cookie the app restores from."""
+    assert response.status_code == 302
+    assert urlsplit(response.headers["location"]).path == "/en/"
+    assert "__Host-refresh_token=" in str(response.headers.get_list("set-cookie"))
+
+
+def _assert_refused(response: httpx.Response, reason: str) -> None:
+    """The browser lands on the login page, told why, with no session."""
+    assert response.status_code == 302
+    location = urlsplit(response.headers["location"])
+    assert location.path == "/en/login"
+    assert parse_qs(location.query) == {"sign_in_error": [reason]}
+    assert "__Host-refresh_token=" not in str(response.headers.get_list("set-cookie"))
+
+
+async def test_oauth_callback_goes_to_the_frontend_origin_not_the_api(
+    client: httpx.AsyncClient, oauth_clients: dict[str, OAuthClient]
+) -> None:
+    oauth_clients["google"] = _FakeOAuthClient(
+        profile=OAuthProfile(
+            provider_user_id="g-origin", email="origin@example.com", email_verified=True
+        )
+    )
+    state = await _start_oauth_flow(client)
+
+    response = await client.get(
+        "/api/v1/auth/oauth/google/callback",
+        params={"code": "x", "state": state},
+        cookies={"oauth_state": state},
+    )
+
+    assert response.headers["location"] == f"{get_settings().FRONTEND_URL}/en/"
+
+
+async def test_oauth_callback_cancelling_at_the_provider_returns_to_login(
+    client: httpx.AsyncClient, oauth_clients: dict[str, OAuthClient]
+) -> None:
+    oauth_clients["google"] = _FakeOAuthClient(
+        profile=OAuthProfile(provider_user_id="g-1", email="x@example.com", email_verified=True)
+    )
+    state = await _start_oauth_flow(client)
+
+    response = await client.get(
+        "/api/v1/auth/oauth/google/callback",
+        params={"error": "access_denied", "state": state},
+        cookies={"oauth_state": state},
+    )
+
+    _assert_refused(response, "cancelled")
+    assert "oauth_state=" in str(response.headers.get_list("set-cookie"))
+
+
+async def test_oauth_callback_any_other_provider_error_returns_to_login(
+    client: httpx.AsyncClient, oauth_clients: dict[str, OAuthClient]
+) -> None:
+    oauth_clients["google"] = _FakeOAuthClient(
+        profile=OAuthProfile(provider_user_id="g-1", email="x@example.com", email_verified=True)
+    )
+
+    response = await client.get(
+        "/api/v1/auth/oauth/google/callback", params={"error": "<script>alert(1)</script>"}
+    )
+
+    # The provider's text is never echoed: the page only ever gets our reasons.
+    _assert_refused(response, "failed")
+
+
+async def test_closed_signups_refuse_a_new_person_and_create_nothing(
+    session: AsyncSession, user_repo: UserRepository
+) -> None:
+    with pytest.raises(PermissionDeniedError):
+        await AuthService(session).oauth_login(
+            "google",
+            OAuthProfile(
+                provider_user_id="g-closed", email="closed@example.com", email_verified=True
+            ),
+            "127.0.0.1",
+            "pytest",
+            signups_open=False,
+        )
+
+    assert await user_repo.get_by_email("closed@example.com") is None
+
+
+async def test_closed_signups_still_let_an_existing_person_in(
+    session: AsyncSession, user_repo: UserRepository
+) -> None:
+    existing = await user_repo.create(email="already-here@example.com", email_verified_at=utcnow())
+
+    result = await AuthService(session).oauth_login(
+        "google",
+        OAuthProfile(provider_user_id="g-open", email=existing.email, email_verified=True),
+        "127.0.0.1",
+        "pytest",
+        signups_open=False,
+    )
+
+    assert not isinstance(result, TwoFactorChallenge)
+    assert result[2].id == existing.id
+
+
 async def test_oauth_callback_unknown_provider_returns_404(client: httpx.AsyncClient) -> None:
     response = await client.get(
         "/api/v1/auth/oauth/does-not-exist/callback", params={"code": "x", "state": "y"}
@@ -139,7 +242,7 @@ async def test_oauth_callback_unknown_provider_returns_404(client: httpx.AsyncCl
     assert response.status_code == 404
 
 
-async def test_oauth_callback_missing_state_cookie_returns_400(
+async def test_oauth_callback_missing_state_cookie_is_refused(
     client: httpx.AsyncClient, oauth_clients: dict[str, OAuthClient]
 ) -> None:
     oauth_clients["google"] = _FakeOAuthClient(
@@ -150,11 +253,10 @@ async def test_oauth_callback_missing_state_cookie_returns_400(
         "/api/v1/auth/oauth/google/callback", params={"code": "x", "state": "whatever"}
     )
 
-    assert response.status_code == 400
-    assert response.json()["data"] is None
+    _assert_refused(response, "errors.oauth_state_mismatch")
 
 
-async def test_oauth_callback_state_mismatch_returns_400(
+async def test_oauth_callback_state_mismatch_is_refused(
     client: httpx.AsyncClient, oauth_clients: dict[str, OAuthClient]
 ) -> None:
     oauth_clients["google"] = _FakeOAuthClient(
@@ -168,10 +270,10 @@ async def test_oauth_callback_state_mismatch_returns_400(
         cookies={"oauth_state": real_state},
     )
 
-    assert response.status_code == 400
+    _assert_refused(response, "errors.oauth_state_mismatch")
 
 
-async def test_oauth_callback_state_signed_for_a_different_provider_returns_400(
+async def test_oauth_callback_state_signed_for_a_different_provider_is_refused(
     client: httpx.AsyncClient, oauth_clients: dict[str, OAuthClient]
 ) -> None:
     # The state cookie's Path (/api/v1/auth/oauth) covers every provider's
@@ -192,7 +294,7 @@ async def test_oauth_callback_state_signed_for_a_different_provider_returns_400(
         cookies={"oauth_state": google_state},
     )
 
-    assert response.status_code == 400
+    _assert_refused(response, "errors.oauth_state_mismatch")
 
 
 async def test_oauth_callback_new_email_creates_user_with_no_password(
@@ -216,11 +318,7 @@ async def test_oauth_callback_new_email_creates_user_with_no_password(
         cookies={"oauth_state": state},
     )
 
-    assert response.status_code == 200
-    data = response.json()["data"]
-    assert data["access_token"]
-    assert data["user"]["email"] == "new-oauth@example.com"
-    assert response.headers.get_list("set-cookie")  # refresh_token cookie
+    _assert_signed_in(response)
 
     user = await user_repo.get_by_email("new-oauth@example.com")
     assert user is not None
@@ -254,8 +352,7 @@ async def test_oauth_callback_existing_verified_email_links_account(
         cookies={"oauth_state": state},
     )
 
-    assert response.status_code == 200
-    assert response.json()["data"]["user"]["email"] == "linked@example.com"
+    _assert_signed_in(response)
     linked = await oauth_account_repo.get_by_provider_account("google", "g-200")
     assert linked is not None
     assert linked.user_id == existing.id
@@ -294,13 +391,13 @@ async def test_oauth_callback_reuses_existing_oauth_account_on_second_login(
     # A second link attempt for the same (provider, provider_user_id) would
     # hit the unique constraint and 500 if oauth_login() failed to recognize
     # the already-linked account -- both calls succeeding is the assertion.
-    assert first.status_code == second.status_code == 200
-    assert first.json()["data"]["user"]["email"] == second.json()["data"]["user"]["email"]
+    _assert_signed_in(first)
+    _assert_signed_in(second)
     user = await user_repo.get_by_email("repeat@example.com")
     assert user is not None
 
 
-async def test_oauth_callback_unverified_provider_email_returns_401(
+async def test_oauth_callback_unverified_provider_email_is_refused(
     client: httpx.AsyncClient, oauth_clients: dict[str, OAuthClient]
 ) -> None:
     oauth_clients["google"] = _FakeOAuthClient(
@@ -316,7 +413,7 @@ async def test_oauth_callback_unverified_provider_email_returns_401(
         cookies={"oauth_state": state},
     )
 
-    assert response.status_code == 401
+    _assert_refused(response, "errors.oauth_email_not_verified")
 
 
 async def test_oauth_callback_verifies_previously_unverified_local_user(
@@ -343,7 +440,7 @@ async def test_oauth_callback_verifies_previously_unverified_local_user(
         cookies={"oauth_state": state},
     )
 
-    assert response.status_code == 200
+    _assert_signed_in(response)
     # The callback committed the update through a *different* session (the
     # router's request-scoped one) -- refresh, or this session's identity map
     # just hands back the pre-update `pending` object untouched.
@@ -572,6 +669,7 @@ async def test_oauth_login_linking_to_existing_user_enqueues_security_notificati
         ),
         "127.0.0.1",
         "pytest",
+        signups_open=True,
     )
 
     email_jobs = [kwargs for name, kwargs in enqueued_jobs if name == "send_email"]
@@ -593,6 +691,7 @@ async def test_oauth_login_brand_new_user_does_not_enqueue_security_notification
         ),
         "127.0.0.1",
         "pytest",
+        signups_open=True,
     )
 
     email_jobs = [kwargs for name, kwargs in enqueued_jobs if name == "send_email"]
@@ -629,6 +728,7 @@ async def test_oauth_login_with_orphaned_account_raises_authentication_error(
             ),
             "127.0.0.1",
             "pytest",
+            signups_open=True,
         )
 
 
@@ -839,12 +939,13 @@ async def test_social_login_does_not_bypass_an_enrolled_authenticator(
         cookies={"oauth_state": state},
     )
 
-    assert response.status_code == 200
-    data = response.json()["data"]
-    assert data["temp_token"]
-    assert "access_token" not in data
+    assert response.status_code == 302
+    location = urlsplit(response.headers["location"])
+    assert location.path == "/en/login"
+    assert location.fragment.startswith("temp_token=")
+    assert not location.query  # a query string would reach access logs
     # No session was issued, so nothing should have been set to resume one.
-    assert "refresh_token" not in response.cookies
+    assert "__Host-refresh_token" not in response.cookies
 
 
 async def test_social_login_still_signs_in_an_account_with_no_second_factor(
@@ -869,5 +970,4 @@ async def test_social_login_still_signs_in_an_account_with_no_second_factor(
         cookies={"oauth_state": state},
     )
 
-    assert response.status_code == 200
-    assert response.json()["data"]["access_token"]
+    _assert_signed_in(response)

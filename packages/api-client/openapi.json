@@ -1482,42 +1482,6 @@
         "title": "Envelope[TwoFactorRequiredResponse]",
         "type": "object"
       },
-      "Envelope_Union_LoginResponse__TwoFactorRequiredResponse__": {
-        "properties": {
-          "data": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/LoginResponse"
-              },
-              {
-                "$ref": "#/components/schemas/TwoFactorRequiredResponse"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Data"
-          },
-          "error": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/ErrorBody"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "meta": {
-            "$ref": "#/components/schemas/Meta"
-          }
-        },
-        "required": [
-          "meta"
-        ],
-        "title": "Envelope[Union[LoginResponse, TwoFactorRequiredResponse]]",
-        "type": "object"
-      },
       "Envelope_Union_SsoConnectionPublic__NoneType__": {
         "properties": {
           "data": {
@@ -6284,19 +6248,49 @@
           {
             "in": "query",
             "name": "code",
-            "required": true,
+            "required": false,
             "schema": {
-              "title": "Code",
-              "type": "string"
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Code"
             }
           },
           {
             "in": "query",
             "name": "state",
-            "required": true,
+            "required": false,
             "schema": {
-              "title": "State",
-              "type": "string"
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "State"
+            }
+          },
+          {
+            "in": "query",
+            "name": "error",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Error"
             }
           }
         ],
@@ -6304,17 +6298,7 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {
-                  "anyOf": [
-                    {
-                      "$ref": "#/components/schemas/Envelope_LoginResponse_"
-                    },
-                    {
-                      "$ref": "#/components/schemas/Envelope_TwoFactorRequiredResponse_"
-                    }
-                  ],
-                  "title": "Response Oauth Callback Api V1 Auth Oauth  Provider  Callback Get"
-                }
+                "schema": {}
               }
             },
             "description": "Successful Response"
@@ -6589,24 +6573,55 @@
     },
     "/api/v1/auth/sso/callback": {
       "get": {
+        "description": "The page the browser lands on, so every outcome redirects into the app.",
         "operationId": "sso_callback_api_v1_auth_sso_callback_get",
         "parameters": [
           {
             "in": "query",
             "name": "code",
-            "required": true,
+            "required": false,
             "schema": {
-              "title": "Code",
-              "type": "string"
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Code"
             }
           },
           {
             "in": "query",
             "name": "state",
-            "required": true,
+            "required": false,
             "schema": {
-              "title": "State",
-              "type": "string"
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "State"
+            }
+          },
+          {
+            "in": "query",
+            "name": "error",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Error"
             }
           }
         ],
@@ -6614,9 +6629,7 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Envelope_Union_LoginResponse__TwoFactorRequiredResponse__"
-                }
+                "schema": {}
               }
             },
             "description": "Successful Response"

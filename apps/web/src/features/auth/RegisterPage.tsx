@@ -28,6 +28,7 @@ import { useRouteLocale } from "../../lib/useRouteLocale";
 
 import { AuthLayout } from "./AuthLayout";
 import { getErrorMessage } from "./getErrorMessage";
+import { OAuthOptions } from "./OAuthOptions";
 
 export function RegisterPage() {
   const { t } = useTranslation();
@@ -227,6 +228,8 @@ export function RegisterPage() {
           </Button>
         </form>
       </Form>
+
+      <OAuthOptions />
     </AuthLayout>
   );
 }

@@ -28,7 +28,8 @@ import time
 from collections.abc import AsyncIterator, Callable
 from datetime import UTC, datetime
 from typing import Any
-from uuid import uuid4
+from urllib.parse import parse_qs, urlsplit
+from uuid import UUID, uuid4
 
 import httpx
 import pytest
@@ -286,6 +287,28 @@ async def _start(client: httpx.AsyncClient, slug: str) -> tuple[str, str]:
     return state, nonce
 
 
+def _assert_signed_in(response: httpx.Response) -> None:
+    """The browser lands in the app, holding the cookie the app restores from."""
+    assert response.status_code == 302, response.text
+    assert urlsplit(response.headers["location"]).path == "/en/"
+    assert "__Host-refresh_token=" in str(response.headers.get_list("set-cookie"))
+
+
+def _assert_refused(response: httpx.Response, reason: str) -> None:
+    """The browser lands on the login page, told why, with no session."""
+    assert response.status_code == 302, response.text
+    location = urlsplit(response.headers["location"])
+    assert location.path == "/en/login"
+    assert parse_qs(location.query) == {"sign_in_error": [reason]}
+    assert "__Host-refresh_token=" not in str(response.headers.get_list("set-cookie"))
+
+
+async def _only_link_id(session: AsyncSession, user_id: UUID) -> UUID:
+    return (
+        await session.execute(select(OAuthAccount.id).where(OAuthAccount.user_id == user_id))
+    ).scalar_one()
+
+
 # --- the happy path ----------------------------------------------------------
 
 
@@ -300,10 +323,7 @@ async def test_a_new_person_is_provisioned_with_the_default_role(
     idp.nonce = nonce
     response = await client.get(f"{_PREFIX}/callback", params={"code": "c", "state": _state})
 
-    assert response.status_code == 200, response.text
-    body = response.json()["data"]
-    assert body["access_token"]
-    assert body["user"]["email"] == f"newcomer@{_DOMAIN}"
+    _assert_signed_in(response)
 
     user = await UserRepository(session).get_by_email(f"newcomer@{_DOMAIN}")
     assert user is not None
@@ -344,8 +364,7 @@ async def test_a_full_org_refuses_a_new_person(
     state, idp.nonce = await _start(client, slug)
     response = await client.get(f"{_PREFIX}/callback", params={"code": "c", "state": state})
 
-    assert response.status_code == 402, response.text
-    assert response.json()["error"]["message_key"] == "errors.seat_limit_reached_to_join"
+    _assert_refused(response, "errors.seat_limit_reached_to_join")
     assert await MembershipRepository(session).count_by_org(org_id) == 3
 
 
@@ -362,7 +381,7 @@ async def test_a_full_org_still_lets_its_members_sign_in(
     state, idp.nonce = await _start(client, org.slug)
     response = await client.get(f"{_PREFIX}/callback", params={"code": "c", "state": state})
 
-    assert response.status_code == 200, response.text
+    _assert_signed_in(response)
 
 
 async def test_an_existing_person_is_linked_rather_than_duplicated(
@@ -382,8 +401,8 @@ async def test_an_existing_person_is_linked_rather_than_duplicated(
     idp.nonce = nonce
     response = await client.get(f"{_PREFIX}/callback", params={"code": "c", "state": state})
 
-    assert response.status_code == 200, response.text
-    assert response.json()["data"]["user"]["id"] == str(existing.id)
+    _assert_signed_in(response)
+    assert await _only_link_id(session, existing.id)
     users = (
         (await session.execute(select(User).where(User.email == f"newcomer@{_DOMAIN}")))
         .scalars()
@@ -419,7 +438,7 @@ async def test_a_group_mapping_beats_the_default_role(
     idp.claims_override = {"groups": ["everyone", "platform-admins"]}
     response = await client.get(f"{_PREFIX}/callback", params={"code": "c", "state": state})
 
-    assert response.status_code == 200, response.text
+    _assert_signed_in(response)
     user = await UserRepository(session).get_by_email(f"newcomer@{_DOMAIN}")
     assert user is not None
     membership = await MembershipRepository(session).get_by_user_and_org(user.id, org.id)
@@ -442,8 +461,7 @@ async def test_a_wrong_nonce_is_refused(
     idp.nonce = "a-nonce-from-somebody-elses-login"
     response = await client.get(f"{_PREFIX}/callback", params={"code": "c", "state": state})
 
-    assert response.status_code == 401
-    assert response.json()["error"]["message_key"] == "errors.sso_bad_nonce"
+    _assert_refused(response, "errors.sso_bad_nonce")
 
 
 async def test_a_wrong_audience_is_refused(
@@ -459,8 +477,7 @@ async def test_a_wrong_audience_is_refused(
     idp.claims_override = {"aud": "somebody-elses-client"}
     response = await client.get(f"{_PREFIX}/callback", params={"code": "c", "state": state})
 
-    assert response.status_code == 401
-    assert response.json()["error"]["message_key"] == "errors.sso_bad_audience"
+    _assert_refused(response, "errors.sso_bad_audience")
 
 
 async def test_an_expired_token_is_refused(
@@ -477,8 +494,7 @@ async def test_an_expired_token_is_refused(
     idp.claims_override = {"exp": int(time.time()) - oidc.CLOCK_SKEW_SECONDS - 60}
     response = await client.get(f"{_PREFIX}/callback", params={"code": "c", "state": state})
 
-    assert response.status_code == 401
-    assert response.json()["error"]["message_key"] == "errors.sso_expired"
+    _assert_refused(response, "errors.sso_expired")
 
 
 async def test_a_token_signed_by_the_wrong_key_is_refused(
@@ -494,8 +510,7 @@ async def test_a_token_signed_by_the_wrong_key_is_refused(
     idp.sign_with = RSAKey.generate_key(2048, parameters={"kid": "idp-1"})
     response = await client.get(f"{_PREFIX}/callback", params={"code": "c", "state": state})
 
-    assert response.status_code == 401
-    assert response.json()["error"]["message_key"] == "errors.sso_bad_signature"
+    _assert_refused(response, "errors.sso_bad_signature")
 
 
 async def test_a_wrong_issuer_is_refused(
@@ -510,8 +525,7 @@ async def test_a_wrong_issuer_is_refused(
     idp.claims_override = {"iss": "https://not-the-configured-issuer.test"}
     response = await client.get(f"{_PREFIX}/callback", params={"code": "c", "state": state})
 
-    assert response.status_code == 401
-    assert response.json()["error"]["message_key"] == "errors.sso_bad_issuer"
+    _assert_refused(response, "errors.sso_bad_issuer")
 
 
 # --- the check that makes per-org SSO safe -----------------------------------
@@ -540,8 +554,7 @@ async def test_an_idp_cannot_assert_an_identity_outside_its_own_domain(
     idp.claims_override = {"email": "ceo@rival.test"}
     response = await client.get(f"{_PREFIX}/callback", params={"code": "c", "state": state})
 
-    assert response.status_code == 401
-    assert response.json()["error"]["message_key"] == "errors.sso_foreign_domain"
+    _assert_refused(response, "errors.sso_foreign_domain")
     # And nothing was linked to the account it tried to take.
     links = (
         (await session.execute(select(OAuthAccount).where(OAuthAccount.user_id == victim.id)))
@@ -573,8 +586,7 @@ async def test_a_token_endpoint_that_returns_no_id_token_says_so(
     state, _ = await _start(client, org.slug)
     response = await client.get(f"{_PREFIX}/callback", params={"code": "c", "state": state})
 
-    assert response.status_code == 401
-    assert response.json()["error"]["message_key"] == "errors.sso_no_id_token"
+    _assert_refused(response, "errors.sso_no_id_token")
 
 
 async def test_a_token_endpoint_that_refuses_the_code_is_reported_as_such(
@@ -588,8 +600,7 @@ async def test_a_token_endpoint_that_refuses_the_code_is_reported_as_such(
     state, _ = await _start(client, org.slug)
     response = await client.get(f"{_PREFIX}/callback", params={"code": "c", "state": state})
 
-    assert response.status_code == 401
-    assert response.json()["error"]["message_key"] == "errors.sso_exchange_failed"
+    _assert_refused(response, "errors.sso_exchange_failed")
 
 
 @pytest.mark.parametrize(
@@ -619,8 +630,7 @@ async def test_a_token_missing_an_identity_claim_is_refused(
     idp.claims_override = override
     response = await client.get(f"{_PREFIX}/callback", params={"code": "c", "state": state})
 
-    assert response.status_code == 401
-    assert response.json()["error"]["message_key"] == expected
+    _assert_refused(response, expected)
 
 
 async def test_a_token_issued_in_the_future_is_refused(
@@ -638,8 +648,7 @@ async def test_a_token_issued_in_the_future_is_refused(
     idp.claims_override = {"iat": int(time.time()) + oidc.CLOCK_SKEW_SECONDS + 120}
     response = await client.get(f"{_PREFIX}/callback", params={"code": "c", "state": state})
 
-    assert response.status_code == 401
-    assert response.json()["error"]["message_key"] == "errors.sso_expired"
+    _assert_refused(response, "errors.sso_expired")
 
 
 async def test_an_audience_array_containing_this_client_is_accepted(
@@ -657,7 +666,7 @@ async def test_an_audience_array_containing_this_client_is_accepted(
     idp.claims_override = {"aud": ["someone-else", _CLIENT_ID]}
     response = await client.get(f"{_PREFIX}/callback", params={"code": "c", "state": state})
 
-    assert response.status_code == 200, response.text
+    _assert_signed_in(response)
 
 
 async def test_an_audience_of_the_wrong_shape_is_refused(
@@ -674,8 +683,7 @@ async def test_an_audience_of_the_wrong_shape_is_refused(
     idp.claims_override = {"aud": {"client": _CLIENT_ID}}
     response = await client.get(f"{_PREFIX}/callback", params={"code": "c", "state": state})
 
-    assert response.status_code == 401
-    assert response.json()["error"]["message_key"] == "errors.sso_bad_audience"
+    _assert_refused(response, "errors.sso_bad_audience")
 
 
 async def test_an_amr_claim_naming_a_second_factor_satisfies_totp(
@@ -686,7 +694,7 @@ async def test_an_amr_claim_naming_a_second_factor_satisfies_totp(
     send, and it must not be the reason somebody is asked twice."""
     org, _ = await _make_org(session)
     await _connect(session, org)
-    user = await UserRepository(session).create(
+    await UserRepository(session).create(
         email=f"newcomer@{_DOMAIN}",
         hashed_password=hash_password("Correct-Horse9"),
         email_verified_at=datetime.now(UTC),
@@ -700,11 +708,8 @@ async def test_an_amr_claim_naming_a_second_factor_satisfies_totp(
     idp.claims_override = {"amr": ["pwd", "otp"]}
     response = await client.get(f"{_PREFIX}/callback", params={"code": "c", "state": state})
 
-    assert response.status_code == 200, response.text
-    body = response.json()["data"]
     # A session, not a challenge: the IdP already did the second factor.
-    assert body["access_token"]
-    assert body["user"]["id"] == str(user.id)
+    _assert_signed_in(response)
 
 
 async def test_sso_challenges_a_user_whose_only_second_factor_is_a_security_key(
@@ -745,10 +750,11 @@ async def test_sso_challenges_a_user_whose_only_second_factor_is_a_security_key(
     idp.nonce = nonce
     response = await client.get(f"{_PREFIX}/callback", params={"code": "c", "state": state})
 
-    assert response.status_code == 200, response.text
-    body = response.json()["data"]
-    assert body["temp_token"]
-    assert "access_token" not in body
+    assert response.status_code == 302, response.text
+    location = urlsplit(response.headers["location"])
+    assert location.path == "/en/login"
+    assert location.fragment.startswith("temp_token=")
+    assert "__Host-refresh_token=" not in str(response.headers.get_list("set-cookie"))
 
 
 async def test_a_discovery_document_missing_a_required_field_names_it(
@@ -839,7 +845,7 @@ async def test_a_group_claim_is_read_in_every_shape_an_idp_sends_it(
     idp.claims_override = {"groups": groups_claim}
     response = await client.get(f"{_PREFIX}/callback", params={"code": "c", "state": state})
 
-    assert response.status_code == 200, response.text
+    _assert_signed_in(response)
     user = await UserRepository(session).get_by_email(f"newcomer@{_DOMAIN}")
     assert user is not None
     membership = await MembershipRepository(session).get_by_user_and_org(user.id, org.id)
@@ -909,11 +915,32 @@ async def test_a_callback_for_a_connection_disabled_mid_flight_is_refused(
 
     response = await client.get(f"{_PREFIX}/callback", params={"code": "c", "state": state})
 
-    assert response.status_code == 401
-    assert response.json()["error"]["message_key"] == "errors.sso_not_configured"
+    _assert_refused(response, "errors.sso_not_configured")
 
 
 # --- CSRF, state and the module toggle ---------------------------------------
+
+
+async def test_declining_at_the_idp_comes_back_to_the_login_page(
+    api_client: ClientFactory,
+) -> None:
+    client = api_client()
+
+    response = await client.get(
+        f"{_PREFIX}/callback", params={"error": "access_denied", "state": "s"}
+    )
+
+    _assert_refused(response, "cancelled")
+
+
+async def test_a_callback_with_neither_code_nor_a_known_error_comes_back_too(
+    api_client: ClientFactory,
+) -> None:
+    client = api_client()
+
+    response = await client.get(f"{_PREFIX}/callback", params={"error": "server_error"})
+
+    _assert_refused(response, "failed")
 
 
 async def test_a_callback_without_the_state_cookie_is_refused(
@@ -930,8 +957,7 @@ async def test_a_callback_without_the_state_cookie_is_refused(
     client.cookies.clear()
     response = await client.get(f"{_PREFIX}/callback", params={"code": "c", "state": state})
 
-    assert response.status_code == 400
-    assert response.json()["error"]["message_key"] == "errors.sso_state_mismatch"
+    _assert_refused(response, "errors.sso_state_mismatch")
 
 
 @pytest.mark.usefixtures("idp")
@@ -980,7 +1006,7 @@ async def test_the_callback_clears_the_state_cookie_and_leaves_a_session(
     idp.nonce = nonce
     response = await client.get(f"{_PREFIX}/callback", params={"code": "c", "state": state})
 
-    assert response.status_code == 200, response.text
+    _assert_signed_in(response)
     cookies = response.headers.get_list("set-cookie")
     assert any(
         header.startswith("sso_state=") and "max-age=0" in header.lower() for header in cookies
@@ -1312,8 +1338,7 @@ async def test_a_token_endpoint_pointing_inward_is_refused(
     idp.nonce = nonce
     response = await client.get(f"{_PREFIX}/callback", params={"code": "c", "state": state})
 
-    assert response.status_code == 401
-    assert response.json()["error"]["message_key"] == "errors.sso_unsafe_url"
+    _assert_refused(response, "errors.sso_unsafe_url")
 
 
 async def test_a_plaintext_token_endpoint_is_refused(
@@ -1330,5 +1355,4 @@ async def test_a_plaintext_token_endpoint_is_refused(
     idp.nonce = nonce
     response = await client.get(f"{_PREFIX}/callback", params={"code": "c", "state": state})
 
-    assert response.status_code == 401
-    assert response.json()["error"]["message_key"] == "errors.sso_unsafe_url"
+    _assert_refused(response, "errors.sso_unsafe_url")

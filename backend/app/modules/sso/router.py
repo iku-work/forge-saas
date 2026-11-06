@@ -26,7 +26,7 @@ than discovered when a customer asks.
 
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Request, Response
+from fastapi import APIRouter, Depends, Request
 from fastapi.responses import RedirectResponse
 from redis.asyncio import Redis
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -37,9 +37,12 @@ from app.core.envelope import Envelope, Meta
 from app.core.exceptions import DomainError
 from app.middleware.rate_limit import api_limit, auth_limit, sensitive_limit
 from app.modules.auth.permissions import Permission
-from app.modules.auth.router import _client_ip, _request_id, _set_refresh_cookie
-from app.modules.auth.schemas import LoginResponse, TwoFactorRequiredResponse, UserPublic
-from app.modules.auth.service import TwoFactorChallenge
+from app.modules.auth.router import (
+    _client_ip,
+    _request_id,
+    browser_sign_in_failed,
+    browser_sign_in_redirect,
+)
 from app.modules.tenancy.models import Membership
 
 from .schemas import (
@@ -195,42 +198,49 @@ async def sso_start(
     return response
 
 
-@router.get("/callback")
-@auth_limit
-async def sso_callback(  # noqa: PLR0913 -- code/state/session/redis on top of request/response
-    request: Request,
-    response: Response,
-    code: str,
-    state: str,
-    session: Annotated[AsyncSession, Depends(get_session)],
-    redis: Annotated[Redis, Depends(get_redis)],
-) -> Envelope[LoginResponse | TwoFactorRequiredResponse]:
-    cookie_state = request.cookies.get(_STATE_COOKIE_NAME)
+def _verify_state(cookie_state: str | None, state: str) -> None:
     if cookie_state is None or cookie_state != state:
         # Login CSRF, not merely a signature check: without this an attacker
         # can complete *their* IdP login in a victim's browser and leave the
         # victim signed in as them.
         raise DomainError("errors.sso_state_mismatch", fallback="SSO state mismatch")
 
-    result = await SsoLoginService(session, redis).complete(
-        state=state,
-        code=code,
-        redirect_uri=str(request.url_for("sso_callback")),
-        ip=_client_ip(request),
-        user_agent=request.headers.get("user-agent", ""),
-    )
-    await session.commit()
-    response.delete_cookie(_STATE_COOKIE_NAME, path=_STATE_COOKIE_PATH)
 
-    if isinstance(result, TwoFactorChallenge):
-        return Envelope(
-            data=TwoFactorRequiredResponse(temp_token=result.temp_token),
-            meta=Meta(request_id=_request_id(request)),
+@router.get("/callback")
+@auth_limit
+async def sso_callback(  # noqa: PLR0913 -- code/state/error/session/redis on top of request
+    request: Request,
+    session: Annotated[AsyncSession, Depends(get_session)],
+    redis: Annotated[Redis, Depends(get_redis)],
+    code: str | None = None,
+    state: str | None = None,
+    error: str | None = None,
+) -> RedirectResponse:
+    """The page the browser lands on, so every outcome redirects into the app."""
+    if code is None or state is None:
+        # OIDC's `access_denied`: the person declined at their IdP.
+        reason = "cancelled" if error == "access_denied" else "failed"
+        redirect = browser_sign_in_failed(request, reason)
+        redirect.delete_cookie(_STATE_COOKIE_NAME, path=_STATE_COOKIE_PATH)
+        return redirect
+
+    try:
+        _verify_state(request.cookies.get(_STATE_COOKIE_NAME), state)
+
+        result = await SsoLoginService(session, redis).complete(
+            state=state,
+            code=code,
+            redirect_uri=str(request.url_for("sso_callback")),
+            ip=_client_ip(request),
+            user_agent=request.headers.get("user-agent", ""),
         )
+        await session.commit()
+    except DomainError as exc:
+        # Handled here, so get_session's rollback-on-exception never runs.
+        await session.rollback()
+        redirect = browser_sign_in_failed(request, exc.message_key)
+    else:
+        redirect = browser_sign_in_redirect(request, result)
 
-    access_token, refresh_plain, user = result
-    _set_refresh_cookie(response, refresh_plain)
-    return Envelope(
-        data=LoginResponse(access_token=access_token, user=UserPublic.model_validate(user)),
-        meta=Meta(request_id=_request_id(request)),
-    )
+    redirect.delete_cookie(_STATE_COOKIE_NAME, path=_STATE_COOKIE_PATH)
+    return redirect

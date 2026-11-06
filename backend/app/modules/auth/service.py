@@ -719,7 +719,13 @@ class AuthService:
         return await self._create_session(user, ip, user_agent, amr=[amr_methods.MAGIC_LINK])
 
     async def oauth_login(
-        self, provider: str, profile: OAuthProfile, ip: str, user_agent: str
+        self,
+        provider: str,
+        profile: OAuthProfile,
+        ip: str,
+        user_agent: str,
+        *,
+        signups_open: bool,
     ) -> tuple[str, str, User] | TwoFactorChallenge:
         oauth_account = await self._oauth_accounts.get_by_provider_account(
             provider, profile.provider_user_id
@@ -744,6 +750,11 @@ class AuthService:
             user = await self._users.get_by_email(profile.email)
             is_new_user = user is None
             if user is None:
+                if not signups_open:
+                    raise PermissionDeniedError(
+                        "errors.signup_disabled",
+                        fallback="New account registration is currently closed.",
+                    )
                 user = await self._users.create(
                     email=profile.email,
                     hashed_password=None,  # OAuth-only account -- §T-023

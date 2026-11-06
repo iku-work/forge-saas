@@ -10,11 +10,14 @@ finally -- it never commits, so the caller (here, the router) owns the
 transaction boundary.
 """
 
+import logging
 from datetime import timedelta
 from typing import Annotated
+from urllib.parse import quote
 from uuid import UUID, uuid4
 
 from fastapi import APIRouter, Depends, Request, Response
+from fastapi.responses import RedirectResponse
 from redis.asyncio import Redis
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -28,6 +31,8 @@ from app.core.dependencies import (
 )
 from app.core.envelope import Envelope, Meta
 from app.core.exceptions import AuthenticationError, NotFoundError
+from app.core.urls import frontend_url
+from app.middleware.locale import get_locale
 from app.middleware.rate_limit import api_limit, auth_limit, sensitive_limit
 from app.models._mixins import utcnow
 from app.modules.auth.models import User
@@ -54,6 +59,8 @@ from app.modules.auth.schemas import (
 )
 from app.modules.auth.service import AuthService, TwoFactorChallenge
 from app.modules.product_settings.dependencies import reject_if_signup_disabled
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -95,6 +102,40 @@ def _set_refresh_cookie(response: Response, token: str) -> None:
         samesite="strict",
         path=_REFRESH_COOKIE_PATH,
     )
+
+
+def browser_sign_in_redirect(
+    request: Request, result: tuple[str, str, User] | TwoFactorChallenge
+) -> RedirectResponse:
+    """Where a browser goes once an identity provider has vouched for it.
+
+    The callback is a top-level navigation, so whatever it returns is the page
+    the person sees. No access token goes along: the app restores the session
+    from the refresh cookie on load, the same way it does after a page refresh.
+    """
+    if isinstance(result, TwoFactorChallenge):
+        # A fragment, not a query string: browsers never send it to a server,
+        # so the token stays out of access logs and Referer headers. The login
+        # page removes it from the address bar as soon as it has read it.
+        path = f"/login#temp_token={quote(result.temp_token, safe='')}"
+        return RedirectResponse(frontend_url(path, get_locale(request)), status_code=302)
+
+    _access_token, refresh_plain, user = result
+    response = RedirectResponse(frontend_url("/", user.locale), status_code=302)
+    _set_refresh_cookie(response, refresh_plain)
+    return response
+
+
+def browser_sign_in_failed(request: Request, reason: str) -> RedirectResponse:
+    """Back to the login page, which turns `reason` into a message.
+
+    `reason` is `cancelled`, `failed` or a `DomainError.message_key`, never
+    text from the request. The page shows its own wording for the reasons it
+    knows and a general one for the rest.
+    """
+    logger.info("browser sign-in failed: %s", reason)
+    path = f"/login?sign_in_error={quote(reason, safe='')}"
+    return RedirectResponse(frontend_url(path, get_locale(request)), status_code=302)
 
 
 def _bearer_refresh_token(request: Request, body: RefreshRequest | None) -> str | None:
