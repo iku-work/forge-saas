@@ -3,9 +3,10 @@ import { QueryClientProvider, type QueryClient } from "@tanstack/react-query";
 import { RouterProvider } from "@tanstack/react-router";
 import { useTranslation } from "react-i18next";
 
-import { onSessionExpired } from "@forge/api-client";
+import { onSessionExpired, setReauthHandler } from "@forge/api-client";
 import { useAuth } from "@forge/hooks";
 
+import { requestReauth } from "./features/auth/reauthPrompt";
 import { detectPreferredLocale } from "./i18n";
 import { AppErrorBoundary } from "./layouts/AppErrorBoundary";
 import { ImpersonationBanner } from "./layouts/ImpersonationBanner";
@@ -18,7 +19,8 @@ import type { AppRouter } from "./router";
 
 // Lazy: the dialog brings the dialog, input and password components, which
 // would otherwise all land in the initial bundle (bundle-budget, 2026-11-06).
-// It registers its handler once loaded, moments after the app mounts.
+// The handler is the eager reauthPrompt, registered below, so a question
+// asked before the dialog has loaded waits for it rather than failing.
 const ReauthDialog = lazy(() =>
   import("./features/auth/ReauthDialog").then((module) => ({
     default: module.ReauthDialog,
@@ -94,6 +96,17 @@ export function AppRoot({ router, queryClient }: AppRootProps) {
   // a new device. It is a no-op when the two already agree, so the ordinary
   // case never repaints.
   useEffect(() => startThemeSync(), []);
+
+  // Only while signed in: that is when ReauthDialog is mounted to answer.
+  useEffect(() => {
+    if (!user) {
+      return;
+    }
+    setReauthHandler(requestReauth);
+    return () => {
+      setReauthHandler(null);
+    };
+  }, [user]);
   useServerThemeSync();
 
   return (

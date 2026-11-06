@@ -6,7 +6,6 @@ import {
   listOauthAccountsApiV1AuthOauthAccountsGet,
   reauthenticateApiV1AuthReauthPost,
   setAccessToken,
-  setReauthHandler,
 } from "@forge/api-client";
 import { useAuth } from "@forge/hooks";
 import {
@@ -26,6 +25,7 @@ import {
 import { localeOf, withLocale } from "../../lib/locale-url";
 import { getErrorMessage } from "./getErrorMessage";
 import { getOAuthStartUrl, OAUTH_PROVIDER_LABEL_KEYS } from "./oauth";
+import { onReauthRequest } from "./reauthPrompt";
 
 // Added by the backend when a re-auth through Google or GitHub failed (see
 // _reauth_redirect in app/modules/auth/oauth.py). Its value is a message key.
@@ -62,9 +62,10 @@ function removeReauthError(): void {
 /**
  * "Confirm it's you", for actions behind the backend's require_recent_auth.
  *
- * The api-client's interceptor calls the handler registered here when such an
- * action answers 403 step_up_auth_required, and replays the request with the
- * token this resolves to. So the person's click goes through once they have
+ * When such an action answers 403 step_up_auth_required, the api-client's
+ * interceptor asks reauthPrompt (registered in AppRoot), which hands the
+ * question to this dialog, and replays the request with the token it
+ * resolves to. So the person's click goes through once they have
  * confirmed, without signing out. They confirm the way their account can:
  * the password, a 2FA code, or the Google or GitHub account linked to it.
  * Signing out and in again is there for an account with none of those.
@@ -86,15 +87,10 @@ export function ReauthDialog() {
 
   useEffect(() => {
     removeReauthError();
-    setReauthHandler(
-      () =>
-        new Promise<string | null>((resolve) => {
-          setAnswer(() => resolve);
-        }),
-    );
-    return () => {
-      setReauthHandler(null);
-    };
+    // reauthPrompt holds a question asked before this lazy component loaded.
+    return onReauthRequest((resolve) => {
+      setAnswer(() => resolve);
+    });
   }, []);
 
   useEffect(() => {

@@ -1,9 +1,13 @@
 import { http, HttpResponse } from "msw";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it, vi } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
-import { authRetryInterceptor, getApiBaseUrl } from "@forge/api-client";
+import {
+  authRetryInterceptor,
+  getApiBaseUrl,
+  setReauthHandler,
+} from "@forge/api-client";
 import { t } from "@forge/i18n";
 
 import { envelope, errorEnvelope } from "../../test/appShellFixtures";
@@ -18,6 +22,7 @@ const hooks = vi.hoisted(() => ({
 vi.mock("@forge/hooks", () => hooks);
 
 const { ReauthDialog } = await import("./ReauthDialog");
+const { requestReauth } = await import("./reauthPrompt");
 
 const API = getApiBaseUrl();
 const PORTAL = `${API}/api/v1/billing/portal-session`;
@@ -41,6 +46,32 @@ function portalRequest(): Promise<Response> {
 }
 
 describe("ReauthDialog", () => {
+  // What AppRoot does while someone is signed in.
+  beforeAll(() => {
+    setReauthHandler(requestReauth);
+  });
+  afterAll(() => {
+    setReauthHandler(null);
+  });
+
+  it("answers a request made before it had loaded", async () => {
+    server.use(
+      http.get(`${API}/api/v1/auth/oauth/accounts`, () =>
+        HttpResponse.json(envelope([])),
+      ),
+    );
+
+    const result = portalRequest();
+    // Let the interceptor read the 403 and ask, with no dialog mounted yet.
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    render(<ReauthDialog />);
+    await userEvent.click(
+      await screen.findByRole("button", { name: t("auth.reauth.cancel") }),
+    );
+
+    expect((await result).status).toBe(403);
+  });
+
   it("asks for the password, then lets the blocked request through", async () => {
     let sentPassword: unknown = null;
     server.use(
