@@ -23,6 +23,7 @@ from typing import Any
 from uuid import UUID, uuid4
 
 import httpx
+import pyotp
 import pytest
 from sqlalchemy.ext.asyncio import (
     AsyncSession,
@@ -42,6 +43,7 @@ from app.modules.auth.repository import (
     SessionRepository,
     UserRepository,
 )
+from app.modules.auth.service import AuthService
 from app.modules.auth.utils import create_access_token, hash_password, hash_token
 
 _VALID_PASSWORD = "Correct-Horse9"
@@ -472,6 +474,33 @@ async def test_consume_magic_link_happy_path_sets_cookie(
     assert response.status_code == 200
     assert response.json()["data"]["access_token"]
     assert response.headers.get_list("set-cookie")
+
+
+async def test_consume_magic_link_with_a_second_factor_asks_for_it(
+    client: httpx.AsyncClient,
+    verified_user: User,
+    magic_link_repo: MagicLinkTokenRepository,
+    session: AsyncSession,
+) -> None:
+    """An inbox is one factor. With TOTP enrolled, the link ends at the same
+    2FA step as a password would, and sets no cookie yet."""
+    service = AuthService(session)
+    _, secret = await service.enable_2fa(verified_user)
+    await service.verify_2fa(verified_user, pyotp.TOTP(secret).now())
+    await magic_link_repo.create(
+        user_id=verified_user.id,
+        token_hash=hash_token("plain-magic-token-2fa"),
+        expires_at=datetime.now(UTC) + timedelta(minutes=15),
+    )
+    await session.commit()
+
+    response = await client.post(
+        "/api/v1/auth/magic-link/consume", json={"token": "plain-magic-token-2fa"}
+    )
+
+    assert response.status_code == 200
+    assert response.json()["data"]["temp_token"]
+    assert not response.headers.get_list("set-cookie")
 
 
 async def test_consume_magic_link_invalid_token_returns_401(client: httpx.AsyncClient) -> None:

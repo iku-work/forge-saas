@@ -1350,3 +1350,112 @@ async def test_dunning_survives_an_ordinary_status_change(
     sub = await subscriptions.get_by_stripe_subscription_id("sub_chased")
     assert sub is not None
     assert await dunning_campaigns.get_active_by_subscription_id(sub.id) is not None
+
+
+# --- older events arriving late, per stream ------------------------------------
+#
+# Stripe does not deliver in order. Each test applies a newer event, then an
+# older one of the same stream, and checks the older one changed nothing.
+
+
+async def _subscribed_at_later(service: BillingService, session: AsyncSession, sub_id: str) -> str:
+    """Creates `sub_id` (active) from an event stamped _LATER; returns its org id."""
+    price_id = f"price_{sub_id}"
+    org_id = str(uuid4())
+    await _make_plan(session, price_id=price_id)
+    await service.handle_event(
+        WebhookEvent(
+            id=f"evt_create_{sub_id}",
+            type="customer.subscription.created",
+            payload=_with_created(
+                _subscription_event(
+                    subscription_id=sub_id, status="active", org_id=org_id, price_id=price_id
+                ),
+                _LATER,
+            ),
+        )
+    )
+    return org_id
+
+
+async def _status(subscriptions: SubscriptionRepository, sub_id: str) -> str:
+    sub = await subscriptions.get_by_stripe_subscription_id(sub_id)
+    assert sub is not None
+    return sub.status
+
+
+async def test_an_older_subscription_update_does_not_undo_a_newer_one(
+    service: BillingService, session: AsyncSession, subscriptions: SubscriptionRepository
+) -> None:
+    org_id = await _subscribed_at_later(service, session, "sub_old_update")
+    older = _subscription_event(
+        subscription_id="sub_old_update",
+        status="past_due",
+        org_id=org_id,
+        price_id="price_sub_old_update",
+    )
+
+    await service.handle_event(
+        WebhookEvent(
+            id="evt_old_update",
+            type="customer.subscription.updated",
+            payload=_with_created(older, _EARLIER),
+        )
+    )
+
+    assert await _status(subscriptions, "sub_old_update") == "active"
+
+
+async def test_an_older_delete_does_not_cancel_a_newer_subscription(
+    service: BillingService, session: AsyncSession, subscriptions: SubscriptionRepository
+) -> None:
+    await _subscribed_at_later(service, session, "sub_old_delete")
+
+    await service.handle_event(
+        WebhookEvent(
+            id="evt_old_delete",
+            type="customer.subscription.deleted",
+            payload=_with_created({"data": {"object": {"id": "sub_old_delete"}}}, _EARLIER),
+        )
+    )
+
+    assert await _status(subscriptions, "sub_old_delete") == "active"
+
+
+async def test_an_older_payment_success_does_not_clear_a_newer_failure(
+    service: BillingService, session: AsyncSession, subscriptions: SubscriptionRepository
+) -> None:
+    await _subscribed_at_later(service, session, "sub_old_paid")
+    await service.handle_event(
+        WebhookEvent(
+            id="evt_new_failed",
+            type="invoice.payment_failed",
+            payload=_with_created(_invoice_event(subscription_id="sub_old_paid"), _LATER),
+        )
+    )
+
+    await service.handle_event(
+        WebhookEvent(
+            id="evt_old_paid",
+            type="invoice.payment_succeeded",
+            payload=_with_created(_invoice_event(subscription_id="sub_old_paid"), _EARLIER),
+        )
+    )
+
+    assert await _status(subscriptions, "sub_old_paid") == "past_due"
+
+
+async def test_an_invoice_with_its_subscription_expanded_is_applied(
+    service: BillingService, session: AsyncSession, subscriptions: SubscriptionRepository
+) -> None:
+    """Expanded, `subscription` is the object rather than its id."""
+    await _subscribed_at_later(service, session, "sub_expanded")
+    event = _invoice_event(subscription_id="sub_expanded")
+    details = event["data"]["object"]["parent"]["subscription_details"]
+    details["subscription"] = {"id": "sub_expanded", "object": "subscription"}
+
+    await service.handle_event(
+        WebhookEvent(id="evt_expanded", type="invoice.payment_failed", payload=event)
+    )
+
+    assert await _status(subscriptions, "sub_expanded") == "past_due"

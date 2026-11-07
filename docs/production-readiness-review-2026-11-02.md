@@ -25,6 +25,15 @@
 | Storage console | Found on the way: browsers opening the storage host's root were redirected to MinIO's console, which exposed an internal port number. The console is now off, and on 4 November that address answered 403 on forge-prod-2. |
 | M8 | Corrected: the 2026-12-01 dates would have stopped nothing, because `.trivyignore.rego` matches tar 6.2.1 by itself. The policy now carries the date, 2027-01-01, when the image-size entries expire too. Tested in CI: with a past date, `security` fails on tar. The Expo upgrade itself is still to do, and `first-product.md` lists it for any product shipping mobile. |
 | T-242 | Found on the way: the bundle size check was listed as built but only ever lived on a branch. Built in the bundle budgets PR. Initial JS is 164 KB gzipped against the plan's 150 KB aim, so the budget holds today's size rather than meeting that aim. |
+| Minor: coverage | Fixed in the Minor list PR: `auth/`, `billing/` and `tenancy/` reach 100%, and CI fails if any of the four modules drops below it. One line is excluded with a reason: a check that only narrows a type. |
+| Minor: JWTs | Fixed in the Minor list PR: tokens carry `iss` (`https://` + `DOMAIN`) and `aud` (`api`), and both are required. A token from another deployment is refused even with the same key. |
+| Minor: MinIO health | Fixed in the Minor list PR: the storage host answers 404 for everything under `/minio/`. Checked against `caddy:2-alpine`. |
+| Minor: `except Exception` | Fixed in the Minor list PR: AGENTS.md §0.5 now names the allowed boundaries. Ruff's `BLE001` was already on through `select = ["ALL"]`, so a new one cannot land without a re-raise, a `logger.exception` or a `noqa` with a reason. |
+| Minor: single person | Unchanged on purpose. `first-product.md` and `sdlc.md` say what to turn on when a second person joins. |
+| Minor: `forge` in `docker` | Open. Planned with the staging server: CI's key gets a forced command that runs only the deploy script. |
+| Minor: Dependabot | `glob` was dismissed on 5 November. `minimatch` is fixed in the Minor list PR: an override moves both affected copies to 11.0.3. They are build and lint tooling only, and lint, type-check, every build and every JS test pass on it. |
+| Minor: stale docs | Already fixed: V8.1.5 and V8.1.6 say `met`. |
+| Incident key | Replaced on 5 November. forge-prod-2 runs on a new JWT key and URL-token secret, with no overlap value, so the exposed key stopped working at once. |
 | Everything else | Open. |
 
 The race H1 mentions is closed by the binding: an attacker registering again cannot change what the owner's link does. One risk remains: the owner clicking a link from a signup they never made. The email's footer already tells people to ignore it in that case.
@@ -120,6 +129,8 @@ Secret scanning and push protection are both disabled. Gitleaks and trufflehog r
 ## An incident during this review
 
 While listing setting names on the box, one of my commands printed several lines from the middle of forge-prod's `JWT_PRIVATE_KEY`, because the value spans multiple lines. They are now in this session's transcript. It affects only this throwaway deployment, which has no real users. **Never reuse that key,** and rotate it if the box stays up longer than planned.
+
+**Replaced on 5 November 2026,** together with the URL-token secret, with no overlap value. The app now refuses to start with a private key that does not parse or does not pair with the public one.
 
 ## What held up
 

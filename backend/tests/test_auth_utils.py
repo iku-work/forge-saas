@@ -168,6 +168,57 @@ def test_access_token_with_wrong_algorithm_raises_authentication_error() -> None
         verify_access_token(forged_token)
 
 
+def _signed(claims: dict[str, object]) -> str:
+    key = RSAKey.import_key(get_settings().JWT_PRIVATE_KEY)
+    return jwt.encode({"alg": "RS256"}, claims, key)
+
+
+def _valid_claims() -> dict[str, object]:
+    now = datetime.now(UTC)
+    return {
+        "iss": f"https://{get_settings().DOMAIN}",
+        "aud": "api",
+        "sub": str(uuid4()),
+        "perms": [],
+        "iat": int(now.timestamp()),
+        "exp": int((now + timedelta(minutes=15)).timestamp()),
+        "jti": str(uuid4()),
+    }
+
+
+def test_access_token_names_its_issuer_and_audience() -> None:
+    token = create_access_token(uuid4(), None, [])
+
+    claims = jwt.decode(token, RSAKey.import_key(get_settings().JWT_PUBLIC_KEY)).claims
+
+    assert claims["iss"] == f"https://{get_settings().DOMAIN}"
+    assert claims["aud"] == "api"
+    verify_access_token(_signed(_valid_claims()))
+
+
+@pytest.mark.parametrize(
+    "change",
+    [
+        {"iss": "https://staging.example.com"},
+        {"aud": "someone-else"},
+        {"iss": None},
+        {"aud": None},
+    ],
+)
+def test_access_token_from_another_deployment_is_refused(change: dict[str, object]) -> None:
+    # Same signing key, different issuer or audience: what a key copied
+    # between staging and prod would produce.
+    claims = _valid_claims()
+    for name, value in change.items():
+        if value is None:
+            del claims[name]
+        else:
+            claims[name] = value
+
+    with pytest.raises(AuthenticationError):
+        verify_access_token(_signed(claims))
+
+
 def test_garbage_access_token_raises_authentication_error() -> None:
     with pytest.raises(AuthenticationError):
         verify_access_token("not.a.jwt")

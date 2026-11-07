@@ -41,7 +41,7 @@ from app.modules.auth.utils import (
     sign_url_token,
     verify_access_token,
 )
-from tests._auth import session_token
+from tests._auth import another_request_wins, session_token
 
 _VALID_PASSWORD = "Correct-Horse9"
 _IP = "127.0.0.1"
@@ -536,6 +536,26 @@ async def test_totp_replay_rejection_is_logged_and_notified(
     assert len(email_jobs) == 1
     assert email_jobs[0]["template"] == "security_notification"
     assert email_jobs[0]["context"]["event"] == "totp_replay_rejected"
+
+
+async def test_totp_code_submitted_twice_at_once_is_rejected_once(
+    service: AuthService,
+    verified_user: User,
+    enqueued_jobs: list[tuple[str, dict[str, Any]]],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Both requests read the old watermark and both find the code fresh;
+    the monotonic UPDATE lets only one of them have it."""
+    secret, _ = await _enable_and_verify(service, verified_user)
+    challenge = await _challenge_for(service, verified_user)
+    enqueued_jobs.clear()
+    another_request_wins(monkeypatch, service._totp_secrets, "mark_step_consumed")
+
+    with pytest.raises(AuthenticationError):
+        await service.confirm_login_2fa(challenge.temp_token, _next_code(secret), _IP, _USER_AGENT)
+
+    events = [k["context"]["event"] for n, k in enqueued_jobs if n == "send_email"]
+    assert events == ["totp_replay_rejected"]
 
 
 async def test_totp_replay_does_not_affect_a_different_users_secret(

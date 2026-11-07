@@ -20,17 +20,19 @@ from sqlalchemy.ext.asyncio import (
     async_sessionmaker,
 )
 
-from app.core.exceptions import NotFoundError
+from app.core.exceptions import InvalidCursorError, NotFoundError
 from app.modules.auth.models import (
     User,
 )
 from app.modules.auth.repository import (
+    EmailChangeTokenRepository,
     EmailVerificationTokenRepository,
     MagicLinkTokenRepository,
     PasswordResetTokenRepository,
     SessionRepository,
     TOTPSecretRepository,
     UserRepository,
+    WebAuthnCredentialRepository,
     _TokenRepository,
 )
 from app.modules.auth.session_rules import is_session_usable
@@ -833,3 +835,28 @@ async def test_a_backup_code_swap_from_a_stale_list_is_refused(
     assert not await repo.swap_backup_codes(
         existing_user.id, expected='["a", "b"]', replacement='["a"]'
     )
+
+
+# --- ids that point at nothing ---------------------------------------------------
+
+
+async def test_counting_a_failed_login_for_an_unknown_user_raises(
+    user_repo: UserRepository,
+) -> None:
+    with pytest.raises(NotFoundError):
+        await user_repo.increment_failed_login(uuid4())
+
+
+async def test_a_cursor_naming_no_user_is_refused(user_repo: UserRepository) -> None:
+    with pytest.raises(InvalidCursorError):
+        await user_repo.list_cursor(after=uuid4())
+
+
+async def test_updating_an_unknown_security_key_raises(session: AsyncSession) -> None:
+    with pytest.raises(NotFoundError):
+        await WebAuthnCredentialRepository(session).update_sign_count(uuid4(), 1)
+
+
+async def test_cancelling_an_unknown_email_change_raises(session: AsyncSession) -> None:
+    with pytest.raises(NotFoundError):
+        await EmailChangeTokenRepository(session).mark_cancelled(uuid4())

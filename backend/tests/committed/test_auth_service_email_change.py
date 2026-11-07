@@ -23,6 +23,7 @@ from app.modules.auth.models import User
 from app.modules.auth.repository import EmailChangeTokenRepository, UserRepository
 from app.modules.auth.service import AuthService
 from app.modules.auth.utils import hash_password
+from tests._auth import another_request_wins
 
 _VALID_PASSWORD = "Correct-Horse9"
 _IP = "127.0.0.1"
@@ -422,3 +423,43 @@ async def test_change_email_links_carry_the_recipients_locale(
     assert notification["context"]["settings_url"] == (
         f"{get_settings().FRONTEND_URL}/fr/settings/security"
     )
+
+
+# --- links that outlive their account, or arrive twice at once -------------------
+
+
+async def test_confirm_email_change_that_loses_the_race_raises(
+    service: AuthService,
+    verified_user: User,
+    redis_client: Redis,
+    enqueued_jobs: list[tuple[str, dict[str, Any]]],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    await _request(service, redis_client, verified_user, "new@example.com")
+    token = _confirm_url_token(enqueued_jobs)
+    another_request_wins(monkeypatch, service._email_change_tokens)
+
+    with pytest.raises(AuthenticationError):
+        await service.confirm_email_change(token)
+
+
+@pytest.mark.parametrize("link", ["confirm", "cancel"])
+async def test_email_change_link_for_soft_deleted_user_raises(  # noqa: PLR0913 -- the link under test on top of the usual set
+    link: str,
+    service: AuthService,
+    verified_user: User,
+    redis_client: Redis,
+    enqueued_jobs: list[tuple[str, dict[str, Any]]],
+    session: AsyncSession,
+) -> None:
+    await _request(service, redis_client, verified_user, "new@example.com")
+    use = (
+        service.confirm_email_change(_confirm_url_token(enqueued_jobs))
+        if link == "confirm"
+        else service.cancel_email_change(_cancel_url_token(enqueued_jobs))
+    )
+    verified_user.deleted_at = datetime.now(UTC)
+    await session.flush()
+
+    with pytest.raises(AuthenticationError):
+        await use

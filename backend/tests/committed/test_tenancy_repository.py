@@ -13,7 +13,7 @@ from sqlalchemy.ext.asyncio import (
     AsyncSession,
 )
 
-from app.core.exceptions import NotFoundError
+from app.core.exceptions import InvalidCursorError, NotFoundError
 from app.modules.auth.models import User
 from app.modules.auth.permissions import MemberRole
 from app.modules.tenancy.models import Membership, Organization
@@ -454,3 +454,18 @@ async def test_mark_accepted_is_false_for_missing(
     invitation_repo: InvitationRepository,
 ) -> None:
     assert await invitation_repo.mark_accepted(uuid4()) is False
+
+
+async def test_list_for_org_refuses_a_cursor_from_another_org(
+    membership_repo: MembershipRepository,
+    org_repo: OrganizationRepository,
+    user: User,
+    org: Organization,
+) -> None:
+    other_org = await org_repo.create(name="Other", slug=f"other-{uuid4().hex[:8]}")
+    elsewhere = await membership_repo.create(
+        user_id=user.id, org_id=other_org.id, role=MemberRole.OWNER
+    )
+
+    with pytest.raises(InvalidCursorError):
+        await membership_repo.list_for_org(org.id, after=elsewhere.id)

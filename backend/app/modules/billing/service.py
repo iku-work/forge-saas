@@ -653,7 +653,7 @@ class BillingService:
         if subscription is None:
             return []
         plan = await self._plans.get_by_id(subscription.plan_id)
-        if plan is None:
+        if plan is None:  # pragma: no cover -- plan_id is a foreign key; this narrows the type
             return []
 
         usage = UsageService(self._session, org_id)

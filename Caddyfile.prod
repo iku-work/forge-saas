@@ -176,7 +176,16 @@ http://{$DOMAIN} {
 # forgetting to set this should cost you a storage host nobody can reach rather
 # than an edge that refuses to start.
 {$STORAGE_DOMAIN:storage.localhost} {
-	reverse_proxy minio:9000
+	# MinIO's own endpoints (health, metrics, the admin API) all sit under
+	# /minio/. Uploads and downloads are bucket paths, so the public host has
+	# no reason to answer any of them; compose's health check calls MinIO
+	# directly, not through here.
+	handle /minio/* {
+		respond 404
+	}
+	handle {
+		reverse_proxy minio:9000
+	}
 
 	encode gzip zstd
 	header {

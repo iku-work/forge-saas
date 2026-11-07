@@ -22,6 +22,7 @@ from app.modules.auth.repository import EmailVerificationTokenRepository, UserRe
 from app.modules.auth.schemas import RegisterRequest
 from app.modules.auth.service import AuthService
 from app.modules.auth.utils import hash_token
+from tests._auth import another_request_wins
 
 _VALID_PASSWORD = "Correct-Horse9"
 
@@ -254,3 +255,42 @@ async def test_verify_email_for_soft_deleted_user_raises(
 
     with pytest.raises(AuthenticationError):
         await service.verify_email(plain)
+
+
+async def test_verify_email_that_loses_the_race_raises(
+    service: AuthService,
+    user_repo: UserRepository,
+    token_repo: EmailVerificationTokenRepository,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    user = await user_repo.create(email="ivan@example.com", hashed_password="hashed")
+    plain = await _issue_token(token_repo, user)
+    another_request_wins(monkeypatch, service._email_verification_tokens)
+
+    with pytest.raises(AuthenticationError):
+        await service.verify_email(plain)
+
+
+# --- sso_login's account link ------------------------------------------------
+
+
+async def test_sso_login_reuses_its_link_and_refuses_it_for_anyone_else(
+    service: AuthService, user_repo: UserRepository
+) -> None:
+    owner = await user_repo.create(
+        email="judy@example.com", hashed_password=None, email_verified_at=datetime.now(UTC)
+    )
+    other = await user_repo.create(
+        email="mallory@example.com", hashed_password=None, email_verified_at=datetime.now(UTC)
+    )
+    identity = {"provider": "sso:acme", "provider_user_id": "idp-sub-1", "mfa_asserted": True}
+
+    await service.sso_login(owner, "127.0.0.1", "pytest", **identity)
+    again = await service.sso_login(owner, "127.0.0.1", "pytest", **identity)
+    assert isinstance(again, tuple)
+    assert again[2].id == owner.id
+
+    # The IdP's subject belongs to one person; seen against another local
+    # account, it is refused rather than guessed at.
+    with pytest.raises(AuthenticationError):
+        await service.sso_login(other, "127.0.0.1", "pytest", **identity)

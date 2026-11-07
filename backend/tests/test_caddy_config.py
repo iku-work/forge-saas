@@ -202,6 +202,19 @@ def test_storage_host_is_declared_and_never_blank() -> None:
     assert not any("9001" in line for line in directives)
 
 
+def test_storage_host_hides_minio_own_endpoints() -> None:
+    """Health, metrics and the admin API live under /minio/; only bucket
+    paths are public. Handle blocks run in written order, so the 404 has to
+    come before the proxy. Measured against caddy:2-alpine on 2026-11-07:
+    /minio/health/live 404, a bucket path reaches MinIO."""
+    content = (REPO_ROOT / "Caddyfile.prod").read_text()
+    block = content[content.index("{$STORAGE_DOMAIN:storage.localhost} {") :]
+    block = block[: block.index("\n}\n")]
+
+    hidden = block.index("handle /minio/* {\n\t\trespond 404\n\t}")
+    assert hidden < block.index("reverse_proxy minio:9000")
+
+
 def test_prod_compose_keeps_minio_off_the_public_interface() -> None:
     """Caddy is the only way in. A stray `ports:` here would publish the
     object store, and its console, straight onto the internet."""
