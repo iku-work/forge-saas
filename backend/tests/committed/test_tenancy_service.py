@@ -27,6 +27,7 @@ from app.modules.audit.models import AuditEvent
 from app.modules.auth.models import User
 from app.modules.auth.permissions import MemberRole
 from app.modules.auth.utils import hash_token, sign_url_token
+from app.modules.tenancy import service as tenancy_service
 from app.modules.tenancy.models import Invitation, Membership, Organization
 from app.modules.tenancy.repository import (
     InvitationRepository,
@@ -34,6 +35,8 @@ from app.modules.tenancy.repository import (
     OrganizationRepository,
 )
 from app.modules.tenancy.service import _INVITATION_TTL_SECONDS, TenancyService, _slugify
+from app.modules.webhooks.events import EventType, MemberPayload
+from tests._auth import another_request_wins
 
 
 def _future(hours: int = 72) -> datetime:
@@ -690,3 +693,74 @@ async def test_preview_invitation_deleted_org_raises(
 
     with pytest.raises(AuthenticationError):
         await service.preview_invitation(token)
+
+
+# --- races and the optional webhook events -----------------------------------------
+
+
+async def test_accept_invitation_that_loses_the_race_raises(  # noqa: PLR0913 -- redis and monkeypatch on top of the usual set
+    service: TenancyService,
+    invitation_repo: InvitationRepository,
+    org: Organization,
+    user: User,
+    session: AsyncSession,
+    redis: Redis,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    token = await _issue_invitation(invitation_repo, org, user)
+    invitee = User(email="invitee@example.com")
+    session.add(invitee)
+    await session.flush()
+    another_request_wins(monkeypatch, service._invitations, "mark_accepted")
+
+    with pytest.raises(AuthenticationError):
+        await service.accept_invitation(token, invitee, redis)
+
+
+@pytest.fixture
+def emitted(monkeypatch: pytest.MonkeyPatch) -> list[tuple[EventType, MemberPayload]]:
+    """outbound_webhooks on, with emit recorded rather than queued."""
+    calls: list[tuple[EventType, MemberPayload]] = []
+
+    async def record(
+        _session: object, _org_id: object, event: EventType, payload: MemberPayload
+    ) -> None:
+        calls.append((event, payload))
+
+    monkeypatch.setattr(tenancy_service, "is_enabled", lambda _name: True)
+    monkeypatch.setattr(tenancy_service.webhooks, "emit", record)
+    return calls
+
+
+async def test_a_role_change_is_announced_with_the_members_email(
+    service: TenancyService,
+    membership_repo: MembershipRepository,
+    org: Organization,
+    user: User,
+    emitted: list[tuple[EventType, MemberPayload]],
+) -> None:
+    target = await membership_repo.create(user_id=user.id, org_id=org.id, role=MemberRole.MEMBER)
+    actor = Membership(user_id=uuid4(), org_id=org.id, role=MemberRole.OWNER)
+
+    await service.change_role(actor, target.id, MemberRole.ADMIN)
+
+    [(event, payload)] = emitted
+    assert event == EventType.MEMBER_ROLE_CHANGED
+    assert (payload.email, payload.role) == (user.email, MemberRole.ADMIN.value)
+
+
+async def test_a_removal_is_announced_before_the_row_goes(
+    service: TenancyService,
+    membership_repo: MembershipRepository,
+    org: Organization,
+    user: User,
+    emitted: list[tuple[EventType, MemberPayload]],
+) -> None:
+    target = await membership_repo.create(user_id=user.id, org_id=org.id, role=MemberRole.MEMBER)
+    actor = Membership(user_id=uuid4(), org_id=org.id, role=MemberRole.OWNER)
+
+    await service.remove_member(actor, target.id)
+
+    [(event, payload)] = emitted
+    assert event == EventType.MEMBER_REMOVED
+    assert (payload.membership_id, payload.email) == (target.id, user.email)

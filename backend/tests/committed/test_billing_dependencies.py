@@ -44,6 +44,7 @@ from app.models._mixins import utcnow
 from app.modules.auth.permissions import MemberRole
 from app.modules.billing.dependencies import (
     get_current_org_subscription,
+    get_optional_org_subscription,
     record_usage,
     require_feature,
 )
@@ -494,3 +495,13 @@ async def test_usage_service_dedups_on_an_idempotency_key(session: AsyncSession)
     assert second.id == first.id
     assert second.quantity == 1  # the retry did not double-count
     assert len(await _usage_rows(session, org.id)) == 1
+
+
+async def test_a_metering_route_gets_no_limits_when_billing_is_off(
+    monkeypatch: pytest.MonkeyPatch, session: AsyncSession, redis: Redis
+) -> None:
+    monkeypatch.setattr(product_config, "MODULES", _BILLING_OFF)
+    module_loader.get_modules.cache_clear()
+    org = _org()
+
+    assert await get_optional_org_subscription((org, _membership(org.id)), session, redis) is None

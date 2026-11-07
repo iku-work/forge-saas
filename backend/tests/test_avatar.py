@@ -328,3 +328,31 @@ async def test_a_fellow_members_clean_avatar_is_served(
 
     assert response.status_code == 200
     assert response.json()["data"]["url"] == f"https://fake.example/{stored.key}"
+
+
+# --- the owner's own avatar, end to end ------------------------------------
+
+
+async def test_choosing_an_uploaded_file_hands_back_its_key(
+    session: AsyncSession, owner: User, org: Organization
+) -> None:
+    stored = await _make_file(session, uploaded_by=owner.id, org_id=org.id)
+
+    assert await AuthService(session).resolve_avatar_change(owner.id, stored.id) == stored.key
+
+
+@pytest.mark.usefixtures("fake_avatar_backend")
+async def test_the_owner_gets_a_url_for_their_own_clean_avatar(
+    session: AsyncSession, client: httpx.AsyncClient, owner: User, org: Organization
+) -> None:
+    stored = await _make_file(session, uploaded_by=owner.id, org_id=org.id)
+    owner.avatar_object_key = stored.key
+    await session.flush()
+
+    response = await client.get(
+        "/api/v1/auth/me/avatar",
+        headers={"Authorization": f"Bearer {create_access_token(owner.id, None, ())}"},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["data"]["url"] == f"https://fake.example/{stored.key}"

@@ -461,6 +461,60 @@ async def test_complete_webauthn_login_tampered_signature_raises(
         await service.complete_webauthn_login(login_challenge_token, assertion, _IP, _USER_AGENT)
 
 
+async def _webauthn_login_challenge(
+    service: AuthService, user: User
+) -> tuple[dict[str, Any], str, str]:
+    """(options, challenge_token, the password step's temp_token)."""
+    challenge = await service.login(
+        LoginRequest(email=user.email, password=_VALID_PASSWORD), _IP, _USER_AGENT
+    )
+    assert isinstance(challenge, TwoFactorChallenge)
+    options, challenge_token = await service.begin_webauthn_login(challenge.temp_token)
+    return options, challenge_token, challenge.temp_token
+
+
+async def test_each_webauthn_login_step_refuses_the_other_steps_token(
+    service: AuthService, verified_user: User
+) -> None:
+    await _register(service, verified_user)
+    _, challenge_token, temp_token = await _webauthn_login_challenge(service, verified_user)
+
+    with pytest.raises(AuthenticationError):
+        await service.begin_webauthn_login(challenge_token)
+    with pytest.raises(AuthenticationError):
+        await service.complete_webauthn_login(temp_token, {}, _IP, _USER_AGENT)
+
+
+async def test_complete_webauthn_login_for_a_deleted_account_raises(
+    service: AuthService, verified_user: User, session: AsyncSession
+) -> None:
+    authenticator, _ = await _register(service, verified_user)
+    options, challenge_token, _ = await _webauthn_login_challenge(service, verified_user)
+    settings = get_settings()
+    assertion = authenticator.get(
+        rp_id=settings.DOMAIN, origin=settings.FRONTEND_URL, challenge=_challenge_from(options)
+    )
+    verified_user.deleted_at = datetime.now(UTC)
+    await session.flush()
+
+    with pytest.raises(AuthenticationError):
+        await service.complete_webauthn_login(challenge_token, assertion, _IP, _USER_AGENT)
+
+
+async def test_complete_webauthn_login_with_an_unregistered_key_raises(
+    service: AuthService, verified_user: User
+) -> None:
+    await _register(service, verified_user)
+    options, challenge_token, _ = await _webauthn_login_challenge(service, verified_user)
+    settings = get_settings()
+    stranger = SoftAuthenticator().get(
+        rp_id=settings.DOMAIN, origin=settings.FRONTEND_URL, challenge=_challenge_from(options)
+    )
+
+    with pytest.raises(AuthenticationError):
+        await service.complete_webauthn_login(challenge_token, stranger, _IP, _USER_AGENT)
+
+
 @pytest.mark.owasp("A07")
 async def test_complete_webauthn_login_sign_count_regression_revokes_all_sessions(
     service: AuthService,

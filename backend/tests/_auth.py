@@ -12,6 +12,7 @@ factor, and an access token bound to it.
 from collections.abc import Sequence
 from datetime import timedelta
 
+import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models._mixins import utcnow
@@ -42,3 +43,22 @@ async def session_token(
     )
     await session.commit()
     return create_access_token(user.id, None, (), sid=row.id)
+
+
+def another_request_wins(
+    monkeypatch: pytest.MonkeyPatch, repo: object, method: str = "consume"
+) -> None:
+    """Make `repo.<method>` lose the race the way it does in production.
+
+    A single-use token is read, checked, and only then consumed. Two requests
+    presenting it at once both pass the check; the database lets one of them
+    consume it. This runs the real statement twice: the first call is the
+    other request winning, the second is ours, and gets the real `False`.
+    """
+    real = getattr(repo, method)
+
+    async def lose(*args: object, **kwargs: object) -> object:
+        assert await real(*args, **kwargs)
+        return await real(*args, **kwargs)
+
+    monkeypatch.setattr(repo, method, lose)

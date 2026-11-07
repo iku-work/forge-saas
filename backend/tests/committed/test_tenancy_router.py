@@ -13,7 +13,7 @@ docstring for why TestClient is avoided.
 
 from datetime import UTC, datetime, timedelta
 from typing import Any
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import httpx
 import pytest
@@ -26,6 +26,7 @@ from app.modules.auth.models import User
 from app.modules.auth.permissions import MemberRole
 from app.modules.auth.utils import create_access_token
 from app.modules.tenancy.models import Invitation, Membership, Organization
+from app.modules.tenancy.service import TenancyService
 
 
 @pytest.fixture
@@ -168,6 +169,25 @@ async def test_get_org_unknown_org_returns_403(client: httpx.AsyncClient, user_a
     response = await client.get(f"/api/v1/orgs/{uuid4()}", headers=_auth_header(user_a))
 
     assert response.status_code == 403
+
+
+async def test_get_org_deleted_after_the_membership_check_returns_404(
+    client: httpx.AsyncClient,
+    user_a: User,
+    org_a: Organization,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The membership check passed, then the organization was soft-deleted
+    before the route read it: gone is a 404, not a 500."""
+
+    async def deleted_meanwhile(_self: TenancyService, _org_id: UUID) -> None:
+        return None
+
+    monkeypatch.setattr(TenancyService, "get_org", deleted_meanwhile)
+
+    response = await client.get(f"/api/v1/orgs/{org_a.id}", headers=_auth_header(user_a))
+
+    assert response.status_code == 404
 
 
 # --- PATCH /orgs/{org_id} ---------------------------------------------------------

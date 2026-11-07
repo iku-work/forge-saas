@@ -56,7 +56,7 @@ HTTP Request
 
 - Services raise **typed `DomainError` subclasses** (`NotFoundError`, `PermissionDeniedError`, `PlanLimitError`, etc.) — never `HTTPException`.
 - One global handler translates `DomainError` → HTTP envelope. Router owns translation, not service.
-- `except Exception` is forbidden except in the single top-level handler.
+- `except Exception` is forbidden except at a named boundary: the top-level handler, a job or sweep that must survive one bad item, an outbound call whose failure is recorded, or a best-effort side effect (audit, cache, rate-limit storage) that must not fail the request. Each one either re-raises, logs with `logger.exception`, or carries `# noqa: BLE001 -- <reason>`. Ruff's `BLE001` (on via `select = ["ALL"]`) enforces it.
 - Error messages are user-actionable. Internal detail never leaks to the response body.
 
 ### §0.6 Security — non-negotiable

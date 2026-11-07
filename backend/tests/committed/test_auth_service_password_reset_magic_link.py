@@ -32,6 +32,7 @@ from app.modules.auth.utils import (
     hash_token,
     verify_password,
 )
+from tests._auth import another_request_wins
 
 _VALID_PASSWORD = "Correct-Horse9"
 _NEW_PASSWORD = "Even-Better-Horse8"
@@ -473,3 +474,32 @@ async def test_no_session_exists_until_the_second_factor_is_cleared(
     await service.consume_magic_link(plain, _IP, _USER_AGENT)
 
     assert await session_repo.list_active_for_user(verified_user.id) == []
+
+
+# --- a second click on the same link, arriving together ------------------------
+
+
+async def test_confirm_password_reset_that_loses_the_race_raises(
+    service: AuthService,
+    verified_user: User,
+    password_reset_repo: PasswordResetTokenRepository,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    plain = await _issue_reset_token(password_reset_repo, verified_user)
+    another_request_wins(monkeypatch, service._password_reset_tokens)
+
+    with pytest.raises(AuthenticationError):
+        await service.confirm_password_reset(plain, _NEW_PASSWORD)
+
+
+async def test_consume_magic_link_that_loses_the_race_raises(
+    service: AuthService,
+    verified_user: User,
+    magic_link_repo: MagicLinkTokenRepository,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    plain = await _issue_magic_link_token(magic_link_repo, verified_user)
+    another_request_wins(monkeypatch, service._magic_link_tokens)
+
+    with pytest.raises(AuthenticationError):
+        await service.consume_magic_link(plain, _IP, _USER_AGENT)

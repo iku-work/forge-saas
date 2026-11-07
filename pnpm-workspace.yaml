@@ -101,6 +101,15 @@ overrides:
   # pull their own 5.x, which carries the same advisory and needed its own
   # floor. A scoped override fixes one line, not the package.
   "brace-expansion@5": ">=5.0.11 <6"
+  # GHSA-g3hv-75wg-m249 (moderate, globparts DoS): every minimatch from 7 up
+  # to 11.0.0, and the fix exists only on 11. The two copies here come from
+  # glob and eslint/typescript-eslint, all build tooling, so this crosses
+  # majors on purpose, checked by lint, type-check, tests and every build
+  # passing. minimatch@3 (eslint-plugin-react, Expo) is outside the advisory
+  # and keeps its own line. Exact, because 11.0.3 is the newest release past
+  # the one-week minimum age; Dependabot moves it on from there.
+  "minimatch@9": "11.0.3"
+  "minimatch@10": "11.0.3"
   # T-350: the rest of what trivy's HIGH set found once the job could finally
   # reach this step. All seven are transitive build tooling -- none is a
   # dependency of apps/web or any packages/* -- and every one is pinned to a

@@ -86,6 +86,9 @@ Follow `new-server.md`, including everything in its verification list.
   with `pnpm --filter web bundle:check --update` and review the diff (`bundle-budget.md`).
 - **Recovery keys:** keep a second copy of the backup private key and anything else
   only one person holds.
+- **A second person:** when one joins, require 1 approving review on `main` and add
+  them as a required reviewer on the `production` environment. Until then a merge is
+  a deploy (`docs/security/sdlc.md` §3).
 - **Mobile:** if you ship it, upgrade Expo first, with a Maestro run on a Mac. The app
   is on SDK 52, and `.trivyignore.rego` and `.trivyignore.yaml` list what that clears.
   `security` goes red from 2027-01-01 until that is done or the dates are moved, even

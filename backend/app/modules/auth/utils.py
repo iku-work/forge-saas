@@ -226,6 +226,8 @@ def create_access_token(  # noqa: PLR0913 -- T-218 adds auth_time on top of T-14
         expire_minutes if expire_minutes is not None else settings.ACCESS_TOKEN_EXPIRE_MINUTES
     )
     claims: dict[str, Any] = {
+        "iss": _jwt_issuer(settings),
+        "aud": _JWT_AUDIENCE,
         "sub": str(user_id),
         "org": str(org_id) if org_id is not None else None,
         "perms": list(permissions),
@@ -291,16 +293,27 @@ def _decode_with_rotation(token: str, settings: "Settings") -> dict[str, Any]:
 
 def _decode(token: str, public_key_pem: str) -> dict[str, Any]:
     decoded = jwt.decode(token, _rsa_key(public_key_pem), algorithms=[_JWT_ALGORITHM])
-    # joserfc verifies the signature only. Expiry is a separate, explicit
-    # step -- skip it and an expired token is accepted forever.
-    _ACCESS_TOKEN_CLAIMS.validate(decoded.claims)
+    # joserfc verifies the signature only. Expiry and the claims below are a
+    # separate, explicit step -- skip it and an expired token is accepted
+    # forever.
+    jwt.JWTClaimsRegistry(
+        sub={"essential": True},
+        jti={"essential": True},
+        exp={"essential": True},
+        # A deployment only accepts tokens it issued for its own API, so a
+        # key copied between staging and prod still cannot carry a session
+        # across.
+        iss={"essential": True, "value": _jwt_issuer(get_settings())},
+        aud={"essential": True, "value": _JWT_AUDIENCE},
+    ).validate(decoded.claims)
     return dict(decoded.claims)
 
 
-# Checked on every access token: present, and `exp` not yet passed.
-_ACCESS_TOKEN_CLAIMS = jwt.JWTClaimsRegistry(
-    sub={"essential": True}, jti={"essential": True}, exp={"essential": True}
-)
+_JWT_AUDIENCE = "api"
+
+
+def _jwt_issuer(settings: "Settings") -> str:
+    return f"https://{settings.DOMAIN}"
 
 
 @lru_cache(maxsize=8)

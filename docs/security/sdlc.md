@@ -75,6 +75,12 @@ matching control wasn't bypassed, not just that the diff "looks right":
 This is a checklist for the reviewer's attention, not a gate a bot
 enforces — the CI gates in the next section are what's actually blocking.
 
+**One person, for now.** Pull requests need no approval and the `production`
+environment has no required reviewers, so a merge is a deploy. With one
+maintainer, an approval rule would only add a click. When a second person joins,
+require 1 approval on `main` and make them a required reviewer on `production`
+(`first-product.md` step 6).
+
 ## 4. CI gates (automated, blocking)
 
 Every one of these runs on every push/PR via the `security` job in

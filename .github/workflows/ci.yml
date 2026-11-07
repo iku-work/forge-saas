@@ -246,6 +246,16 @@ jobs:
         working-directory: backend
         run: pytest --cov=app --cov-fail-under=85 tests/ -x
 
+      # AGENTS.md §0.8: 85% overall, but 100% on the four modules where an
+      # untested branch is a security or money bug. Read from the data file
+      # the step above wrote; a line that truly cannot run carries
+      # `# pragma: no cover -- <why>`.
+      - name: Coverage floor on auth, billing, tenancy and gdpr (100%)
+        working-directory: backend
+        run: >-
+          coverage report --fail-under=100 --show-missing --skip-covered
+          --include="app/modules/auth/*,app/modules/billing/*,app/modules/tenancy/*,app/modules/gdpr/*"
+
       # T-251: tests/test_new_module_script.py checks the generator against a
       # scratch tree; this checks the claim that actually matters -- that a
       # module generated into the *real* checkout is lint-, type- and
