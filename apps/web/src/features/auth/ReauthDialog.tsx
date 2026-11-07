@@ -1,10 +1,15 @@
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import i18next from "i18next";
+import { startAuthentication } from "@simplewebauthn/browser";
+import type { PublicKeyCredentialRequestOptionsJSON } from "@simplewebauthn/browser";
 
 import {
+  listCredentialsApiV1AuthWebauthnCredentialsGet,
   listOauthAccountsApiV1AuthOauthAccountsGet,
+  reauthApiV1AuthWebauthnReauthPost,
   reauthenticateApiV1AuthReauthPost,
+  reauthOptionsApiV1AuthWebauthnReauthOptionsPost,
   setAccessToken,
 } from "@forge/api-client";
 import { useAuth } from "@forge/hooks";
@@ -67,7 +72,8 @@ function removeReauthError(): void {
  * question to this dialog, and replays the request with the token it
  * resolves to. So the person's click goes through once they have
  * confirmed, without signing out. They confirm the way their account can:
- * the password, a 2FA code, or the Google or GitHub account linked to it.
+ * the password, a 2FA code, a passkey or security key, or the Google or
+ * GitHub account linked to it.
  * Signing out and in again is there for an account with none of those.
  */
 export function ReauthDialog() {
@@ -82,6 +88,7 @@ export function ReauthDialog() {
   const [value, setValue] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [providers, setProviders] = useState<string[]>([]);
+  const [hasSecurityKey, setHasSecurityKey] = useState(false);
 
   const open = answer !== null || error !== null;
 
@@ -103,6 +110,9 @@ export function ReauthDialog() {
           .map((account) => account.provider)
           .filter((provider) => provider in OAUTH_PROVIDER_LABEL_KEYS),
       );
+    });
+    void listCredentialsApiV1AuthWebauthnCredentialsGet().then(({ data }) => {
+      setHasSecurityKey((data?.data ?? []).length > 0);
     });
   }, [open]);
 
@@ -133,6 +143,49 @@ export function ReauthDialog() {
       close(token);
     } catch (err) {
       setError(getErrorMessage(err, "errors.reauth_failed"));
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const confirmWithSecurityKey = async (): Promise<void> => {
+    setError(null);
+    setSubmitting(true);
+    try {
+      const { data: optionsEnvelope } =
+        await reauthOptionsApiV1AuthWebauthnReauthOptionsPost({
+          throwOnError: true,
+        });
+      const ceremony = optionsEnvelope.data;
+      if (!ceremony) {
+        throw new Error("Re-auth options response was empty.");
+      }
+      let assertion: unknown;
+      try {
+        assertion = await startAuthentication({
+          optionsJSON:
+            ceremony.options as unknown as PublicKeyCredentialRequestOptionsJSON,
+        });
+      } catch {
+        // Cancelled, timed out, or no matching key: the browser's own
+        // wording is English and technical, so say it in ours.
+        setError(t("auth.reauth.error_security_key"));
+        return;
+      }
+      const { data } = await reauthApiV1AuthWebauthnReauthPost({
+        body: {
+          challenge_token: ceremony.challenge_token,
+          credential: assertion as Record<string, unknown>,
+        },
+        throwOnError: true,
+      });
+      const token = data.data?.access_token ?? null;
+      if (token) {
+        setAccessToken(token);
+      }
+      close(token);
+    } catch (err) {
+      setError(getErrorMessage(err, "auth.reauth.error_security_key"));
     } finally {
       setSubmitting(false);
     }
@@ -170,6 +223,18 @@ export function ReauthDialog() {
           <Alert variant="destructive">
             <AlertDescription>{error}</AlertDescription>
           </Alert>
+        ) : null}
+        {hasSecurityKey ? (
+          <Button
+            type="button"
+            className="w-full"
+            disabled={submitting}
+            onClick={() => {
+              void confirmWithSecurityKey();
+            }}
+          >
+            {t("auth.reauth.use_security_key")}
+          </Button>
         ) : null}
         {hasPassword || hasCode ? (
           <form
