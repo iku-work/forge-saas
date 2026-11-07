@@ -1,19 +1,21 @@
 # T-223: k6 load scripts (tests/load/) against a dedicated ephemeral compose
-# stack, nightly rather than per-PR -- see tests/load/README.md's "Why
+# stack, on a schedule rather than per-PR -- see tests/load/README.md's "Why
 # nightly, not per-PR" for the full reasoning (shared CI runners produce
 # noisy p95s that have nothing to do with the code in a given PR; per-PR
 # gates on that noise either flake constantly or get loosened until they
 # stop catching anything).
 name: Load Test
 
+# Weekly, Sunday night after the ZAP scan, while there is no product work;
+# nightly again once there is (agreed 2026-11-07).
 on:
   schedule:
-    - cron: "0 5 * * *"
+    - cron: "0 5 * * 0"
   workflow_dispatch:
 
 jobs:
   load-test:
-    # The nightly runs only once STAGING_URL is set, alongside zap-full.yml;
+    # The schedule runs only once STAGING_URL is set, alongside zap-full.yml;
     # until then it was ~9 billed minutes a night for nobody (2026-10-14).
     # "Run workflow" still runs it on demand.
     if: github.event_name == 'workflow_dispatch' || vars.STAGING_URL != ''

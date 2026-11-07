@@ -5,11 +5,15 @@
 # Run as root ON THE NEW SERVER, from a copy of this file:
 #
 #   scp scripts/bootstrap-hetzner-box.sh root@<ip>:
-#   ssh root@<ip> bash bootstrap-hetzner-box.sh git@github.com:<owner>/<repo>.git age1...
+#   ssh root@<ip> bash bootstrap-hetzner-box.sh git@github.com:<owner>/<repo>.git age1... [staging]
 #
 # The second argument is the public half of the backup key, made on your own
 # machine with `age-keygen` (docs/runbooks/new-server.md). It is required: a
 # box without backups is the default this script exists to rule out.
+#
+# `staging` as a third argument names the box's backup monitor in Sentry
+# forge-backup-staging rather than forge-backup, so the two boxes' check-ins
+# cannot stand in for each other, and keeps a week of local copies, not two.
 #
 # Safe to run again: every step checks first. The first run stops after
 # printing a read-only deploy key for the repository; add it on GitHub and run
@@ -27,9 +31,14 @@ set -euo pipefail
 # The single-quoted blocks are expanded by the deploy user's shell, on purpose.
 # shellcheck disable=SC2016
 
-USAGE="usage: bootstrap-hetzner-box.sh <git ssh url of the repository> <age public key>"
+USAGE="usage: bootstrap-hetzner-box.sh <git ssh url of the repository> <age public key> [staging]"
 REPO="${1:?$USAGE}"
 BACKUP_RECIPIENT="${2:?$USAGE}"
+case "${3:-}" in
+  "") BACKUP_MONITOR=forge-backup RETENTION_DAYS=14 ;;
+  staging) BACKUP_MONITOR=forge-backup-staging RETENTION_DAYS=7 ;;
+  *) echo "$USAGE" >&2; exit 1 ;;
+esac
 DEPLOY_USER=forge
 HOME_DIR=/home/$DEPLOY_USER
 APP_DIR=$HOME_DIR/forge
@@ -153,7 +162,8 @@ if [ ! -f "$HOME_DIR/forge-backup.env" ]; then
   cat > "$HOME_DIR/forge-backup.env" <<EOF
 BACKUP_AGE_RECIPIENT=$BACKUP_RECIPIENT
 BACKUP_DIR=/var/backups/forge
-BACKUP_RETENTION_DAYS=14
+BACKUP_RETENTION_DAYS=$RETENTION_DAYS
+BACKUP_SENTRY_MONITOR=$BACKUP_MONITOR
 # The compose set the backup needs to reach Postgres and MinIO: the deploy's,
 # minus the registry overlay (it requires the image refs), with DOMAIN and
 # friends interpolated from the env the deploy ships, as the deploy does.
@@ -219,5 +229,5 @@ echo "Done. Next, from docs/runbooks/new-server.md:"
   echo "  - copy $APP_DIR/bitwarden-values.txt into Bitwarden, then delete it"
 grep -q '^BACKUP_REMOTE=' "$HOME_DIR/forge-backup.env" ||
   echo "  - point backups off the box: ssh -t $DEPLOY_USER@<this box> bash forge/scripts/set-backup-remote.sh"
-echo "  - add the CI deploy key and the GitHub environment secrets, then deploy"
+echo "  - lock the CI deploy key (scripts/lock-deploy-key.sh), add the GitHub environment secrets, then deploy"
 echo "  - after the first deploy, run the restore drill (backup-restore.md)"

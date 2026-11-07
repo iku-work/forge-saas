@@ -53,6 +53,9 @@
 #   BACKUP_REMOTE          rclone target, e.g. "r2:forge-prod-backups"
 #                          (scripts/set-backup-remote.sh)
 #   BACKUP_SENTRY_DSN      default SENTRY_DSN from backend/.env
+#   BACKUP_SENTRY_MONITOR  the cron monitor's slug, default forge-backup. Each box
+#                          that shares a Sentry project needs its own, or one
+#                          box's check-ins hide the other's missed backups
 #   COMPOSE_FILE           docker compose's own variable: colon-separated,
 #                          e.g. "docker-compose.prod.yml:docker-compose.tls.yml"
 
@@ -80,8 +83,10 @@ die() {
 checkin_url=""
 if [ "$WHAT" = all ]; then
     dsn="${BACKUP_SENTRY_DSN:-$(sed -n 's/^SENTRY_DSN=//p' backend/.env 2>/dev/null | tr -d "\"'")}"
+    monitor="${BACKUP_SENTRY_MONITOR:-forge-backup}"
+    [[ "$monitor" =~ ^[a-z0-9_-]+$ ]] || die "BACKUP_SENTRY_MONITOR must be a slug: lowercase letters, digits, - and _"
     if [[ "$dsn" =~ ^https://([^@/]+)@([^/]+)/([0-9]+)$ ]]; then
-        checkin_url="https://${BASH_REMATCH[2]}/api/${BASH_REMATCH[3]}/cron/forge-backup/${BASH_REMATCH[1]}/"
+        checkin_url="https://${BASH_REMATCH[2]}/api/${BASH_REMATCH[3]}/cron/$monitor/${BASH_REMATCH[1]}/"
     else
         echo "backup: no SENTRY_DSN -- nobody is told if this stops working." >&2
     fi

@@ -1,7 +1,7 @@
 name: Deploy — Hetzner (docker compose over SSH)
 
-# A single VPS running docker-compose.prod.yml. The box pulls prebuilt images
-# and runs them; it builds nothing.
+# A single VPS per environment, running docker-compose.prod.yml. The box pulls
+# prebuilt images and runs them; it builds nothing.
 #
 # That last point is the whole design. When the box built its own images,
 # Docker build cache reached 30 GB of a 38 GB disk, Postgres began PANICking
@@ -11,44 +11,142 @@ name: Deploy — Hetzner (docker compose over SSH)
 # host, and the bundle lives inside the Caddy image, so a release is a
 # container rather than a directory edited underneath a running server.
 #
-# Secrets this needs, all in the `production` environment:
+# Every merge runs this twice, from ci.yml: on `staging`, then, only if staging
+# came up healthy, on `production` with the same backend image. The edge image
+# is built per environment, because its bundles carry the public URLs.
+#
+# On the box, CI's key runs scripts/deploy-box.sh and nothing else
+# (scripts/lock-deploy-key.sh). Each SSH call below is one of its subcommands.
+#
+# Secrets, in each GitHub environment (`staging`, `production`):
 #   BWS_ACCESS_TOKEN   Bitwarden Secrets Manager machine-account token. The
-#                      account reads the forge-prod project, and every secret
-#                      there becomes a line of backend/.env (see "Write
-#                      prod.env from Bitwarden" for the few that do not)
+#                      account reads that environment's project, and every
+#                      secret there becomes a line of backend/.env (see "Write
+#                      the env from Bitwarden" for the few that do not)
 #   SSH_HOST           box hostname or IP
-#   SSH_USER           the login (must be in the `docker` group)
-#   SSH_KEY            private key, PEM
+#   SSH_USER           the login, `forge`
+#   SSH_KEY            private key, PEM, locked on the box
 #   SSH_KNOWN_HOSTS    output of `ssh-keyscan <host>` -- pinned rather than
 #                      trusted on first use, or the deploy would accept a
 #                      man-in-the-middle on its first run
-#   PROD_DOMAIN        for the post-deploy smoke test
+# Variables, repository-wide or overridden per environment: PUBLIC_SITE_URL,
+# PUBLIC_APP_URL, PUBLIC_API_URL, VITE_SENTRY_DSN (the edge image's build).
 
 on:
   workflow_call:
     inputs:
       image-tag:
-        description: Tag of the already-built, already-scanned GHCR images.
+        description: Tag of the already-built, already-scanned backend image.
+        required: true
+        type: string
+      environment:
+        description: staging or production.
         required: true
         type: string
   workflow_dispatch:
     inputs:
       image-tag:
-        description: Commit SHA to deploy (must already be built and pushed).
+        description: Full commit SHA on main to deploy (its backend image must already be built).
         required: true
         type: string
-
-concurrency:
-  # One at a time: two overlapping deploys race on the same migration, and
-  # `up -d` on the same compose project would fight over containers.
-  group: deploy-hetzner
-  cancel-in-progress: false
+      environment:
+        description: Where to deploy it. Production this way skips staging, so keep it for rollbacks.
+        required: true
+        type: choice
+        options: [staging, production]
 
 jobs:
+  # The edge, with the SPA and marketing bundles inside it, built from the
+  # commit being deployed with this environment's URLs. Built here rather than
+  # in ci.yml's build job because those URLs are per environment.
+  #
+  # It compiles the frontend again rather than reusing CI's turbo build, so
+  # the image is reproducible from the Dockerfile alone. The GitHub Actions
+  # layer cache is what keeps that from costing a full rebuild each time.
+  edge:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: ${{ inputs.environment }}
+
+    permissions:
+      contents: read
+      packages: write
+
+    env:
+      TAG: ${{ inputs.image-tag }}
+      TARGET: ${{ inputs.environment }}
+      REPO: ghcr.io/${{ github.repository }}
+
+    steps:
+      - name: Name the edge image
+        id: ref
+        run: |
+          [[ "$TAG" =~ ^[0-9a-f]{40}$ ]] || { echo "image-tag must be a full commit SHA, got: $TAG" >&2; exit 1; }
+          case "$TARGET" in
+            production) suffix= ;;
+            staging) suffix=-staging ;;
+            *) echo "environment must be staging or production, got: $TARGET" >&2; exit 1 ;;
+          esac
+          image="${REPO,,}-caddy:$TAG$suffix"
+          echo "image=$image" >> "$GITHUB_OUTPUT"
+          echo "IMAGE=$image" >> "$GITHUB_ENV"
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.image-tag }}
+
+      - name: Log in to GHCR
+        uses: docker/login-action@81c6f93d4bc991e510b342a00b419b3bb4efc5c6 # v4.7.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # A tag is built once. A redeploy or a rollback to it gets the image that
+      # already ran, not a rebuild that might differ.
+      - name: Check whether it is already built
+        id: exists
+        run: |
+          if docker buildx imagetools inspect "$IMAGE" >/dev/null 2>&1; then
+            echo "$IMAGE is already built"
+            echo "built=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Set up Buildx
+        if: steps.exists.outputs.built != 'true'
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+
+      # Astro stops on an empty site URL ("Invalid URL"), so a missing variable
+      # fails here rather than shipping a broken bundle.
+      - name: Build and push the edge image
+        if: steps.exists.outputs.built != 'true'
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          file: Dockerfile.caddy
+          push: true
+          tags: ${{ steps.ref.outputs.image }}
+          build-args: |
+            PUBLIC_SITE_URL=${{ vars.PUBLIC_SITE_URL }}
+            PUBLIC_APP_URL=${{ vars.PUBLIC_APP_URL }}
+            PUBLIC_API_URL=${{ vars.PUBLIC_API_URL }}
+            VITE_API_URL=${{ vars.PUBLIC_API_URL }}
+            VITE_SENTRY_DSN=${{ vars.VITE_SENTRY_DSN }}
+          cache-from: type=gha,scope=edge-${{ inputs.environment }}
+          cache-to: type=gha,mode=max,scope=edge-${{ inputs.environment }}
+
   deploy:
+    needs: edge
     runs-on: ubuntu-latest
     timeout-minutes: 25
-    environment: production
+    environment: ${{ inputs.environment }}
+
+    # One at a time per box: two overlapping deploys race on the same migration,
+    # and `up -d` on the same compose project would fight over containers. On
+    # the job, because that is where a called workflow's concurrency applies.
+    concurrency:
+      group: deploy-hetzner-${{ inputs.environment }}
+      cancel-in-progress: false
 
     permissions:
       contents: read
@@ -57,37 +155,27 @@ jobs:
     # C4: every value reaches a script through `env:`, never through `${{ }}`
     # pasted into its source. Templating runs before bash parses anything, so
     # a `'` or `$(` in a secret -- or in the free-text `image-tag` input of a
-    # manual run -- became shell. Values that are interpolated into the
-    # remote script (the tag, the image refs, the actor) are validated first.
+    # manual run -- became shell. The box validates what it is sent again.
     env:
       TAG: ${{ inputs.image-tag }}
+      TARGET: ${{ inputs.environment }}
       BACKEND_IMAGE: ghcr.io/${{ github.repository }}:${{ inputs.image-tag }}
-      CADDY_IMAGE: ghcr.io/${{ github.repository }}-caddy:${{ inputs.image-tag }}
       ACTOR: ${{ github.actor }}
       SSH_USER: ${{ secrets.SSH_USER }}
       SSH_HOST: ${{ secrets.SSH_HOST }}
-      PROD_DOMAIN: ${{ secrets.PROD_DOMAIN }}
-      # --env-file: compose interpolates DOMAIN and the other Caddy hostnames
-      # from backend/.env, the file this deploy ships, rather than from a
-      # root .env that would only ever be edited by hand on the box.
-      COMPOSE: >-
-        --env-file backend/.env
-        -f docker-compose.prod.yml
-        -f docker-compose.tls.yml
-        -f docker-compose.registry.yml
 
     steps:
-      - name: Validate the values the remote script interpolates
+      - name: Validate the values the box is sent
         run: |
-          [[ "$TAG" =~ ^[0-9a-f]{7,40}$ ]] || { echo "image-tag must be a commit SHA, got: $TAG" >&2; exit 1; }
-          [[ "$BACKEND_IMAGE" =~ ^[a-z0-9./_:-]+$ ]] || { echo "unexpected image ref: $BACKEND_IMAGE" >&2; exit 1; }
+          if [ -z "$SSH_HOST" ]; then
+            echo "The $TARGET environment has no SSH_HOST. Set it up first (docs/runbooks/staging.md, docs/runbooks/new-server.md)." >&2
+            exit 1
+          fi
+          [[ "$TAG" =~ ^[0-9a-f]{40}$ ]] || { echo "image-tag must be a full commit SHA, got: $TAG" >&2; exit 1; }
           [[ "$ACTOR" =~ ^[A-Za-z0-9-]+(\[bot\])?$ ]] || { echo "unexpected actor: $ACTOR" >&2; exit 1; }
-          [[ "$PROD_DOMAIN" =~ ^[A-Za-z0-9.-]+$ ]] || { echo "PROD_DOMAIN must be a bare hostname" >&2; exit 1; }
 
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      # Pinned by version and checksum, like any binary that handles the
-      # production secrets.
       # Every product but the template itself, whose own deployment is the only
       # one allowed to look like the template.
       - name: Refuse the template's identity
@@ -96,6 +184,8 @@ jobs:
           PUBLIC_SITE_URL: ${{ vars.PUBLIC_SITE_URL }}
         run: bash scripts/check-product-identity.sh "$PUBLIC_SITE_URL"
 
+      # Pinned by version and checksum, like any binary that handles the
+      # production secrets.
       - name: Install the Bitwarden Secrets Manager CLI
         env:
           BWS_VERSION: "2.1.0"
@@ -113,7 +203,7 @@ jobs:
       # on the box, and the client builds (VITE_, EXPO_PUBLIC_). The backend
       # gets what it reads and nothing more. That rules out
       # MIGRATIONS_DATABASE_URL too, a superuser's password that a running app has
-      # no use for: the migrate step below builds it from the box's .env.postgres.
+      # no use for: the box builds it from its own .env.postgres to migrate.
       #
       # Values are cleaned of what pasting adds and the value never had: the
       # quotes it wore in a .env file, and the trailing newline -- which,
@@ -128,7 +218,7 @@ jobs:
       # unclosed quote or a PEM with no END line (compose then misreads every
       # line after it), and the backup identity, which opens every backup and
       # must never be readable by anything that deploys.
-      - name: Write prod.env from Bitwarden
+      - name: Write the env from Bitwarden
         env:
           BWS_ACCESS_TOKEN: ${{ secrets.BWS_ACCESS_TOKEN }}
           BWS_SERVER_URL: https://vault.bitwarden.eu
@@ -140,7 +230,7 @@ jobs:
                                  or (startswith($sq) and endswith($sq)))
               then .[1:-1] else . end)]')
           if [ "$(jq length <<<"$secrets")" -eq 0 ]; then
-            echo "The machine account can read no secrets. Give it Can read on forge-prod." >&2
+            echo "The machine account can read no secrets. Give it Can read on this environment's project." >&2
             exit 1
           fi
           dupes=$(jq -r '[.[].key] | group_by(.) | map(select(length > 1)[0]) | join(" ")' <<<"$secrets")
@@ -149,7 +239,7 @@ jobs:
             exit 1
           fi
           if jq -e 'any(.[]; .key == "BACKUP_AGE_IDENTITY")' <<<"$secrets" >/dev/null; then
-            echo "BACKUP_AGE_IDENTITY is readable by the deploy. Move it out of forge-prod." >&2
+            echo "BACKUP_AGE_IDENTITY is readable by the deploy. Move it out of this project." >&2
             exit 1
           fi
           broken=$(jq -r --arg sq "'" '[.[] | select((.value | startswith("\"") or startswith($sq))
@@ -164,9 +254,24 @@ jobs:
             | select(.key | test("^((BACKUP|GRAFANA|VITE|EXPO_PUBLIC)_|MIGRATIONS_DATABASE_URL$)") | not)
             | .key + "=" + (if .value | contains("\n") then "\"" + .value + "\"" else .value end)' <<<"$secrets" > prod.env
 
-      # Guards and the registry login -- nothing that touches production.
-      # Migrations run on the box below (C4): the production database is
-      # never reachable from GitHub's network.
+      # The app host comes from the env itself, so the smoke test checks the
+      # site this env configures. And the env must be this environment's:
+      # staging's settings on the production box would be a quiet outage.
+      - name: Check the env is this environment's
+        run: |
+          case "$TARGET" in production) want=prod ;; staging) want=staging ;; *) want= ;; esac
+          got=$(sed -n 's/^ENVIRONMENT=//p' prod.env | tail -n 1)
+          if [ -z "$want" ] || [ "$got" != "$want" ]; then
+            echo "The $TARGET deploy read ENVIRONMENT=$got from Bitwarden; it needs $want. Is BWS_ACCESS_TOKEN the right machine account?" >&2
+            exit 1
+          fi
+          domain=$(sed -n 's/^DOMAIN=//p' prod.env | tail -n 1)
+          [[ "$domain" =~ ^[A-Za-z0-9.-]+$ ]] || { echo "DOMAIN in Bitwarden must be a bare hostname" >&2; exit 1; }
+          echo "DOMAIN=$domain" >> "$GITHUB_ENV"
+
+      # Guards and the registry login -- nothing that touches the box.
+      # Migrations run on the box below (C4): its database is never reachable
+      # from GitHub's network.
       - name: Preflight — env and guards
         uses: ./.github/actions/deploy-preflight
         with:
@@ -184,24 +289,23 @@ jobs:
           chmod 600 ~/.ssh/id_deploy
           printf '%s\n' "$SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts
           chmod 644 ~/.ssh/known_hosts
+          printf 'Host box\n  HostName %s\n  User %s\n  IdentityFile ~/.ssh/id_deploy\n  IdentitiesOnly yes\n  BatchMode yes\n' \
+            "$SSH_HOST" "$SSH_USER" > ~/.ssh/config
+          chmod 600 ~/.ssh/config
 
       # The *tag*, not the full ref: backend and caddy live in two GHCR
       # repositories that share one tag, so a rollback needs the tag in order
-      # to rebuild both refs. And compose is asked which container is the
-      # backend rather than guessing `forge-backend-1`, which depends on
-      # whatever directory the project happens to sit in. The registry overlay
-      # refuses to parse without image refs, so placeholders stand in: `ps`
-      # finds the container by service, not by image.
+      # to rebuild both refs. Also the first call through the locked key, so a
+      # box whose key is not locked yet stops here, before anything changes.
       - name: Record the currently-deployed tag (rollback target)
         id: previous
         run: |
-          PREVIOUS=$(ssh -i ~/.ssh/id_deploy "$SSH_USER@$SSH_HOST" \
-            "cd ~/forge && docker inspect --format '{{.Config.Image}}' \
-               \"\$(BACKEND_IMAGE=unset CADDY_IMAGE=unset docker compose $COMPOSE ps -q backend)\" 2>/dev/null || true")
-          echo "full ref currently running: ${PREVIOUS:-<nothing>}"
-          PREVIOUS_TAG=${PREVIOUS##*:}
-          # Interpolated into the rollback script, so held to the same rule.
-          if [[ -n "$PREVIOUS_TAG" && ! "$PREVIOUS_TAG" =~ ^[0-9a-f]{7,40}$ ]]; then
+          if ! PREVIOUS_TAG=$(ssh box current); then
+            echo "The box did not run scripts/deploy-box.sh. Is CI's key locked (scripts/lock-deploy-key.sh)?" >&2
+            exit 1
+          fi
+          echo "currently running: ${PREVIOUS_TAG:-<nothing>}"
+          if [[ -n "$PREVIOUS_TAG" && ! "$PREVIOUS_TAG" =~ ^[0-9a-f]{40}$ ]]; then
             echo "running image has an unexpected tag ($PREVIOUS_TAG); no automatic rollback" >&2
             PREVIOUS_TAG=
           fi
@@ -209,123 +313,41 @@ jobs:
 
       # The env file goes over the wire rather than being edited in place.
       # Hand-editing it on the box is how CADDY_TRUSTED_PROXIES came to be
-      # missing for a week; the file is now derived from Bitwarden and
-      # nothing else.
-      - name: Ship the production env
-        run: |
-          scp -i ~/.ssh/id_deploy prod.env "$SSH_USER@$SSH_HOST:~/forge/backend/.env.next"
+      # missing for a week; the file is derived from Bitwarden and nothing else.
+      - name: Ship the env
+        run: ssh box env < prod.env
 
       # C4: on the box, from the image about to serve traffic, before anything
-      # user-facing changes. Running containers read their env when they
-      # start, so swapping the file here does not touch them; the previous
-      # file is kept as .env.prev for the rollback. Guarded on .env.next so a
-      # re-run never overwrites .env.prev with the new file.
+      # user-facing changes: check out the release, swap in the env (the old
+      # one is kept for the rollback), pull, bring the data services up to
+      # date, back up, migrate. Running containers read their env when they
+      # start, so none of this touches them.
       #
-      # The registry token goes over stdin, first line, ahead of nothing else:
-      # never in the script text and never in an argv the box's `ps` can see.
-      #
-      # `python -m app.core.migrations`, never `alembic upgrade head`: this
-      # schema has branched module heads and `head` (singular) cannot run.
+      # The registry token goes over stdin, never in an argv the box's `ps`
+      # can see. `python -m app.core.migrations` runs there, never alembic's
+      # own `upgrade head` (scripts/deploy-box.sh says why).
       - name: Migrate on the box
         id: migrate
         env:
           GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          printf '%s\n' "$GHCR_TOKEN" | ssh -i ~/.ssh/id_deploy "$SSH_USER@$SSH_HOST" \
-            "cd ~/forge && head -n1 | docker login ghcr.io -u $ACTOR --password-stdin"
-          ssh -i ~/.ssh/id_deploy "$SSH_USER@$SSH_HOST" bash -euo pipefail <<EOF
-            cd ~/forge
-            # --prune: a deleted branch "x" left behind blocks fetching a new "x/y".
-            git fetch --quiet --prune origin
-            git checkout --quiet $TAG
-            if [ -f backend/.env.next ]; then
-              # A first deploy has no env to keep.
-              if [ -f backend/.env ]; then cp backend/.env backend/.env.prev; fi
-              mv backend/.env.next backend/.env
-            fi
-
-            export BACKEND_IMAGE='$BACKEND_IMAGE'
-            export CADDY_IMAGE='$CADDY_IMAGE'
-            trap 'docker logout ghcr.io >/dev/null' EXIT
-            docker compose $COMPOSE pull --quiet backend worker scanner-worker caddy
-            docker logout ghcr.io >/dev/null
-            trap - EXIT
-
-            # The data services, to what this checkout says they are, before
-            # anything talks to them. Starts nothing that is already right, and
-            # the app's containers cannot reach them on a network they have left.
-            docker compose $COMPOSE up -d --wait --wait-timeout 300 --quiet-pull \\
-              postgres pgbouncer redis minio clamav postgres-exporter node-exporter </dev/null
-
-            # Backups leave the box before any data changes (ADR-0009): every
-            # product needs an off-host copy, and a high-sensitivity one needs a key
-            # that cannot list or delete it (scripts/check-backup-remote.sh).
-            if ! grep -qs '^BACKUP_REMOTE=' ~/forge-backup.env; then
-              echo "No off-box backup on this box (scripts/bootstrap-hetzner-box.sh, then scripts/set-backup-remote.sh). Refusing to migrate without one." >&2
-              exit 1
-            fi
-            if grep -qE '^DATA_SENSITIVITY=["]?high["]?\$' backend/.env; then
-              (set -a; . ~/forge-backup.env; set +a; bash scripts/check-backup-remote.sh </dev/null)
-            fi
-
-            # A restore point before the schema changes: the newest archive in
-            # /var/backups/forge is the state this migration started from
-            # (docs/runbooks/backup-restore.md). A first deploy has no schema
-            # yet, so nothing to keep. </dev/null on both: this script arrives
-            # on bash's stdin, and compose exec forwards stdin into the
-            # container, which would swallow the lines below -- the migration
-            # included -- and still exit 0.
-            schema=\$(docker compose $COMPOSE exec -T postgres \\
-              psql -U postgres -d forge -tAc "select to_regclass('public.alembic_version')" </dev/null)
-            if [ "\$schema" = alembic_version ]; then
-              (set -a; . ~/forge-backup.env; set +a; bash scripts/backup.sh db </dev/null)
-            fi
-
-            # -e with no value: from this shell's environment, so never in an argv.
-            pg_password=\$(sed -n 's/^POSTGRES_PASSWORD=//p' .env.postgres)
-            export MIGRATIONS_DATABASE_URL="postgresql+asyncpg://postgres:\$pg_password@postgres:5432/forge?sslmode=require"
-            docker compose $COMPOSE run --rm --no-deps -e MIGRATIONS_DATABASE_URL backend python -m app.core.migrations
-          EOF
+        run: printf '%s\n' "$GHCR_TOKEN" | ssh box migrate "$TAG" "$ACTOR"
 
       # Idempotent: the images are already pulled and the env is already in
-      # place, so this is one `up -d`, which converges however many times it
-      # runs -- including after a half-finished first attempt.
+      # place, so this is `up -d`, which converges however many times it runs.
       - name: Pull and switch
         id: switch
-        run: |
-          ssh -i ~/.ssh/id_deploy "$SSH_USER@$SSH_HOST" bash -euo pipefail <<EOF
-            cd ~/forge
-            export BACKEND_IMAGE='$BACKEND_IMAGE'
-            export CADDY_IMAGE='$CADDY_IMAGE'
-            # --no-deps, deliberately. Without it, compose stops caddy and
-            # then waits for its dependency chain -- and the backend refuses
-            # to start while caddy is down, because caddy carries the network
-            # alias for STORAGE_DOMAIN and the storage guard (correctly)
-            # refuses to reach object storage over the public internet. That
-            # deadlock took production down on 2026-09-14.
-            #
-            # And caddy in a call of its own, first. In one call, compose still
-            # orders caddy after the backend is healthy, which on a fresh box
-            # (no caddy running yet, so no alias) never happens: the first
-            # deploy to forge-prod-2 hung there (2026-10-26).
-            docker compose $COMPOSE up -d --no-deps caddy
-            docker compose $COMPOSE up -d --no-deps backend worker scanner-worker
-          EOF
+        run: ssh box switch "$TAG"
 
-      # A failure here rolls back like any other. scripts/wait-for-release.sh
-      # says what it checks, and why the smoke test below is not enough.
+      # A failure here rolls back like any other.
       - name: Verify every service runs the release and is healthy
         id: verify
-        run: |
-          ssh -i ~/.ssh/id_deploy "$SSH_USER@$SSH_HOST" \
-            "cd ~/forge && BACKEND_IMAGE='$BACKEND_IMAGE' CADDY_IMAGE='$CADDY_IMAGE' PROD_DOMAIN='$PROD_DOMAIN' COMPOSE='$COMPOSE' bash -s" \
-            < scripts/wait-for-release.sh
+        run: ssh box verify "$TAG"
 
       - name: Smoke test
         id: smoke_test
         run: |
           for _ in $(seq 1 30); do
-            if curl -sf "https://$PROD_DOMAIN/health/ready" >/dev/null; then
+            if curl -sf "https://$DOMAIN/health/ready" >/dev/null; then
               echo "healthy"
               exit 0
             fi
@@ -339,56 +361,20 @@ jobs:
       # (some containers on the new image, some not), or a failed smoke
       # test. The old `steps.switch.outcome == 'success'` missed the
       # half-finished switch, which is the case that most needs undoing. When
-      # nothing reached the containers, the `up -d` below converges to what
-      # is already running.
-      #
-      # Only the images, env and checkout move backwards. The database does
-      # not: a migration that has already applied stays applied, which is why
-      # they must be written to work against the previous release too.
+      # nothing reached the containers, the `up -d` there converges to what
+      # is already running. The box says whether the old release came back.
       - name: Roll back to the previous image
         if: failure() && steps.migrate.outcome != 'skipped' && steps.previous.outputs.tag != ''
         env:
           PREVIOUS_TAG: ${{ steps.previous.outputs.tag }}
-          REPO: ghcr.io/${{ github.repository }}
-        run: |
-          ssh -i ~/.ssh/id_deploy "$SSH_USER@$SSH_HOST" bash -euo pipefail <<EOF
-            cd ~/forge
-            if [ -f backend/.env.prev ]; then mv backend/.env.prev backend/.env; fi
-            rm -f backend/.env.next
-            git checkout --quiet $PREVIOUS_TAG
-            export BACKEND_IMAGE='$REPO:$PREVIOUS_TAG'
-            export CADDY_IMAGE='$REPO-caddy:$PREVIOUS_TAG'
-            # No --wait: getting the app back must not depend on these. The check
-            # below says whether it worked.
-            docker compose $COMPOSE up -d --quiet-pull \\
-              postgres pgbouncer redis minio clamav postgres-exporter node-exporter </dev/null
-            # Caddy first, for the reason given in "Pull and switch".
-            docker compose $COMPOSE up -d --no-deps caddy
-            docker compose $COMPOSE up -d --no-deps backend worker scanner-worker
-          EOF
-          # `up -d` returns before anything is healthy: the 2026-11-02 drill
-          # printed "rolled back" 12 s before the site came back. Say which it
-          # was, because a rollback that failed needs a person (runbook,
-          # Escalation).
-          if ssh -i ~/.ssh/id_deploy "$SSH_USER@$SSH_HOST" \
-            "cd ~/forge && BACKEND_IMAGE='$REPO:$PREVIOUS_TAG' CADDY_IMAGE='$REPO-caddy:$PREVIOUS_TAG' PROD_DOMAIN='$PROD_DOMAIN' COMPOSE='$COMPOSE' bash -s" \
-            < scripts/wait-for-release.sh; then
-            echo "rolled back to $PREVIOUS_TAG, healthy" >&2
-          else
-            echo "ROLLBACK FAILED: $PREVIOUS_TAG did not come back healthy. The site needs a person." >&2
-            exit 1
-          fi
+        run: ssh box rollback "$PREVIOUS_TAG"
 
-      # Nothing else removes old releases, and a full disk is what took
-      # production down on 2026-09-13. Safe for the rollback above: a deploy's
-      # rollback target is what is running when it starts, and images in use
-      # are never pruned. A week of others stays for rolling back by hand, and
-      # older tags can be pulled again from GHCR. Not worth failing a deploy
-      # that has already succeeded.
+      # Safe for the rollback above: a deploy's rollback target is what is
+      # running when it starts, and images in use are never pruned. Not worth
+      # failing a deploy that has already succeeded.
       - name: Prune old images
         continue-on-error: true
-        run: |
-          ssh -i ~/.ssh/id_deploy "$SSH_USER@$SSH_HOST" "docker image prune -af --filter until=168h | tail -n 1"
+        run: ssh box prune
 
       # Behind Cloudflare, 80 and 443 answer Cloudflare only, or anyone who finds
       # the IP skips its WAF and DDoS protection. This runner is outside
@@ -400,8 +386,8 @@ jobs:
       # address in SSH_HOST only, which is IPv4 on a runner without IPv6.
       - name: Check the origin refuses direct connections
         run: |
-          if ! curl -sI --max-time 10 "https://$PROD_DOMAIN/health/ready" | grep -i '^cf-ray:' >/dev/null; then
-            echo "$PROD_DOMAIN is not behind Cloudflare, nothing to check"
+          if ! curl -sI --max-time 10 "https://$DOMAIN/health/ready" | grep -i '^cf-ray:' >/dev/null; then
+            echo "$DOMAIN is not behind Cloudflare, nothing to check"
             exit 0
           fi
           open=0

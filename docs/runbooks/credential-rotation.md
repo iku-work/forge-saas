@@ -74,7 +74,7 @@ breaks if you skip the ordering.
 | `URL_TOKEN_SECRET` | overlap via `URL_TOKEN_SECRET_OLD`, see step 6b | every emailed and redirect-carried link |
 | `PASSWORD_PEPPER` | supported since 2026-09-14, see step 7 | every stored password |
 | `ENCRYPTION_KEY` | supported — `encryption-key-rotation.md` | encrypted columns |
-| `SSH_KEY` (deploy) | swap | the box's `authorized_keys` |
+| `SSH_KEY` (deploy) | swap | the box's `authorized_keys`, through `scripts/lock-deploy-key.sh` |
 
 ### 2. Rotate a straight-swap credential
 
@@ -249,10 +249,12 @@ but do not panic-force resets unless the hashes leaked too.
 ### 8. Rotate the deploy SSH key
 
 1. Generate a new keypair.
-2. Append the new public key to the box's `~/.ssh/authorized_keys` — append,
-   do not replace, or a failed deploy locks you out of the fix.
+2. Add it with `scripts/lock-deploy-key.sh`, as in `new-server.md` step 5. It
+   adds the new key locked and leaves the old one, so a failed deploy does not
+   lock you out of the fix.
 3. Update the `SSH_KEY` secret; redeploy.
-4. Only once a deploy has succeeded, remove the old public key.
+4. Only once a deploy has succeeded, remove the old public key's line from
+   `~forge/.ssh/authorized_keys`.
 
 ## Verification
 
