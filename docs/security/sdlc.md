@@ -105,7 +105,7 @@ it's pushed (`.github/workflows/ci.yml` `build` job).
 ## 5. Pre-release / staging
 
 - **ZAP full active scan** (`.github/workflows/zap-full.yml`) runs
-  nightly against staging — active attack payloads (SQLi, XSS, command
+  weekly against staging, Sunday night, and on demand — active attack payloads (SQLi, XSS, command
   injection) that are deliberately not run against every PR. See T-211's
   notes; this requires `STAGING_URL`/`ZAP_SCANNER_EMAIL`/
   `ZAP_SCANNER_PASSWORD` to be configured before it does anything.
@@ -119,6 +119,12 @@ it's pushed (`.github/workflows/ci.yml` `build` job).
 - The `build` job only runs after `test` and `security` both pass
   (`needs: [test, security]` in `.github/workflows/ci.yml`) — there is no
   path to a pushed image that skipped the security gates.
+- A merge deploys to staging first. Production gets the same backend image
+  only after staging runs it healthy and passes the smoke test
+  (`docs/runbooks/staging.md`).
+- CI's SSH key can run `scripts/deploy-box.sh` and nothing else on either
+  box, and that script deploys only commits on `main`
+  (`scripts/lock-deploy-key.sh`).
 - Deploys are documented in
   [`docs/runbooks/deploy-pipeline.md`](../runbooks/deploy-pipeline.md).
 

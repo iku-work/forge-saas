@@ -181,18 +181,35 @@ def _preflight_action() -> dict:
 
 # Parameterised over DEPLOY_TARGETS so that a fork adding a second platform gets
 # every one of these checks for it.
+def _deploy_callers(target: str) -> dict[str, dict]:
+    """ci.yml's jobs that deploy to `target`, by the environment they pass."""
+    jobs = _ci_workflow()["jobs"]
+    return {
+        job["with"]["environment"]: job
+        for name, job in jobs.items()
+        if name in (f"deploy-{target}", f"deploy-{target}-staging")
+    }
+
+
 @pytest.mark.parametrize("target", DEPLOY_TARGETS)
 def test_deploy_only_runs_on_main_and_needs_the_full_gate(target: str) -> None:
-    job = _ci_workflow()["jobs"][f"deploy-{target}"]
-    assert "refs/heads/main" in job["if"]
-    # The weekly scheduled run is on main too; only a push may deploy.
-    assert "github.event_name == 'push'" in job["if"]
-    # C2: the browser suite and the ZAP baseline gate the deploy as well as
-    # the image build (test and security arrive transitively through build).
-    assert set(job["needs"]) == {"build", "e2e-web", "zap-baseline"}
-    # Called as a reusable workflow, so the image it deploys is the one
-    # `build` scanned and pushed rather than one rebuilt here.
-    assert job["uses"] == f"./.github/workflows/deploy-{target}.yml"
+    callers = _deploy_callers(target)
+    assert set(callers) == {"staging", "production"}
+    gate = {"build", "e2e-web", "zap-baseline"}
+    for job in callers.values():
+        assert "refs/heads/main" in job["if"]
+        # The weekly scheduled run is on main too; only a push may deploy.
+        assert "github.event_name == 'push'" in job["if"]
+        # C2: the browser suite and the ZAP baseline gate the deploy as well as
+        # the image build (test and security arrive transitively through build).
+        assert gate <= set(job["needs"])
+        # Called as a reusable workflow, so the image it deploys is the one
+        # `build` scanned and pushed rather than one rebuilt here.
+        assert job["uses"] == f"./.github/workflows/deploy-{target}.yml"
+        assert job["with"]["image-tag"] == "${{ github.sha }}"
+    # Production gets the release only once staging has run it healthy.
+    assert set(callers["staging"]["needs"]) == gate
+    assert set(callers["production"]["needs"]) == {*gate, f"deploy-{target}-staging"}
 
 
 @pytest.mark.parametrize("target", DEPLOY_TARGETS)
@@ -200,10 +217,14 @@ def test_caller_grants_every_permission_the_deploy_job_asks_for(target: str) -> 
     # C3: a reusable workflow can only narrow its caller's grant. A permission
     # the called job declares but the caller does not grant is silently
     # absent.
-    caller = _ci_workflow()["jobs"][f"deploy-{target}"].get("permissions", {})
-    wanted = _deploy_workflow(target)["jobs"]["deploy"].get("permissions", {})
-    for scope, level in wanted.items():
-        assert caller.get(scope) == level, f"caller must grant {scope}: {level}"
+    rank = {"none": 0, "read": 1, "write": 2}
+    for caller in _deploy_callers(target).values():
+        granted = caller.get("permissions", {})
+        for job in _deploy_workflow(target)["jobs"].values():
+            for scope, level in job.get("permissions", {}).items():
+                assert rank[granted.get(scope, "none")] >= rank[level], (
+                    f"caller must grant {scope}: {level}"
+                )
 
 
 # T-225/ASVS V12.4.2: a deploy must refuse a production env file that would
@@ -224,16 +245,27 @@ def test_preflight_does_not_migrate() -> None:
         assert "migrat" not in step.get("name", "").lower(), step.get("name")
 
 
+DEPLOY_BOX = REPO_ROOT / "scripts" / "deploy-box.sh"
+
+
+def _box_function(name: str) -> str:
+    """One function's body from scripts/deploy-box.sh, which is everything a
+    deploy does on the box."""
+    script = DEPLOY_BOX.read_text(encoding="utf-8")
+    match = re.search(rf"^{name}\(\) \{{\n(.*?)^\}}$", script, re.MULTILINE | re.DOTALL)
+    assert match, f"no {name}() in deploy-box.sh"
+    return match.group(1)
+
+
+def _hetzner_step(name: str) -> dict:
+    steps = _deploy_workflow("hetzner")["jobs"]["deploy"]["steps"]
+    return next(s for s in steps if s.get("name") == name)
+
+
 # The step that migrates *on the target*, and the first step that changes
 # anything a user can reach, per platform.
 MIGRATE_STEP = {"hetzner": "Migrate on the box"}
 SWITCH_STEP = {"hetzner": "Pull and switch"}
-
-
-def _step_text(step: dict) -> str:
-    """A step's script plus its env."""
-    env = " ".join(str(v) for v in step.get("env", {}).values())
-    return f"{step.get('run', '')} {env}"
 
 
 @pytest.mark.parametrize("target", DEPLOY_TARGETS)
@@ -245,8 +277,8 @@ def test_every_deploy_migrates_on_the_target_before_it_switches(target: str) -> 
     switch = next(i for i, n in enumerate(names) if SWITCH_STEP[target] in n)
     assert migrate < switch, "a failed migration must abort before traffic moves"
 
-    text = _step_text(steps[migrate]) + " " + " ".join(str(v) for v in job["env"].values())
-    text = " ".join(text.split())
+    assert "ssh box migrate" in steps[migrate]["run"]
+    text = " ".join(_box_function("migrate").split())
     # `python -m app.core.migrations`, not `alembic upgrade head`: every
     # optional module keeps its migrations on its own branch (T-062), so this
     # tree always has several heads and a bare `head` is ambiguous -- alembic
@@ -328,7 +360,7 @@ def test_preflight_writes_a_hostile_env_file_verbatim(tmp_path: Path) -> None:
 def _write_env_from_bitwarden(
     tmp_path: Path, secrets: list[dict[str, str]]
 ) -> subprocess.CompletedProcess[str]:
-    """Run Hetzner's real "Write prod.env from Bitwarden" step with `bws`
+    """Run Hetzner's real "Write the env from Bitwarden" step with `bws`
     replaced by a script that prints `secrets`."""
     bash, jq = shutil.which("bash"), shutil.which("jq")
     if bash is None or jq is None:
@@ -342,7 +374,7 @@ def _write_env_from_bitwarden(
     )
     fake.chmod(0o755)
     steps = _deploy_workflow("hetzner")["jobs"]["deploy"]["steps"]
-    step = next(s for s in steps if s.get("name") == "Write prod.env from Bitwarden")
+    step = next(s for s in steps if s.get("name") == "Write the env from Bitwarden")
     # The flags GitHub runs a `run:` step with.
     return subprocess.run(  # noqa: S603 -- fixed argv: the step under test
         [bash, "--noprofile", "--norc", "-eo", "pipefail", "-c", step["run"]],
@@ -511,37 +543,39 @@ def test_every_backend_image_service_gets_the_internal_ca_under_tls() -> None:
 def test_a_deploy_needs_an_explicit_target(target: str) -> None:
     # Review 2026-10-01: unset used to mean render, so a repository with no
     # variables was one push away from a deploy nobody chose.
-    condition = _ci_workflow()["jobs"][f"deploy-{target}"]["if"]
-    assert f"vars.DEPLOY_TARGET == '{target}'" in condition
-    assert "== ''" not in condition
+    for job in _deploy_callers(target).values():
+        assert f"vars.DEPLOY_TARGET == '{target}'" in job["if"]
+        assert "== ''" not in job["if"]
 
 
 def test_hetzner_starts_caddy_on_its_own_before_the_backend() -> None:
     # Caddy carries the storage alias the backend's boot check needs. Started
     # in the same `up` as the backend, compose waits for a backend that cannot
     # become healthy without it: the first deploy to a fresh box (2026-10-26).
-    steps = _deploy_workflow("hetzner")["jobs"]["deploy"]["steps"]
-    for name in ("Pull and switch", "Roll back to the previous image"):
-        run = next(s["run"] for s in steps if s.get("name") == name)
-        ups = [line.strip() for line in run.splitlines() if " up -d --no-deps " in line]
-        assert ups == [
-            "docker compose $COMPOSE up -d --no-deps caddy",
-            "docker compose $COMPOSE up -d --no-deps backend worker scanner-worker",
-        ], name
+    ups = [
+        line.strip()
+        for line in _box_function("start_release").splitlines()
+        if " up -d --no-deps " in line
+    ]
+    assert ups == [
+        "docker compose $COMPOSE up -d --no-deps caddy </dev/null",
+        "docker compose $COMPOSE up -d --no-deps backend worker scanner-worker </dev/null",
+    ]
+    for name in ("switch", "rollback"):
+        assert "start_release" in _box_function(name), name
 
 
 def test_hetzner_brings_the_data_services_up_to_date_before_it_migrates() -> None:
     # A deploy that only recreated the app left a change to Postgres or Redis
     # waiting for someone to run `up -d` on the box, and the app on a network its
     # data services had not joined. A rollback puts them back with the checkout.
-    steps = _deploy_workflow("hetzner")["jobs"]["deploy"]["steps"]
-    migrate = next(s["run"] for s in steps if s.get("name") == "Migrate on the box")
     data_services = "postgres pgbouncer redis minio clamav postgres-exporter node-exporter"
-    assert data_services in migrate
-    assert migrate.index(data_services) < migrate.index("scripts/backup.sh db")
+    assert f'DATA_SERVICES="{data_services}"' in DEPLOY_BOX.read_text(encoding="utf-8")
+    migrate = _box_function("migrate")
+    assert migrate.index("$DATA_SERVICES") < migrate.index("scripts/backup.sh db")
     assert "--wait" in migrate
-    rollback = next(s["run"] for s in steps if s.get("name") == "Roll back to the previous image")
-    assert rollback.index(data_services) < rollback.index("up -d --no-deps caddy")
+    rollback = _box_function("rollback")
+    assert rollback.index("$DATA_SERVICES") < rollback.index("start_release")
     # Everything the bootstrap starts that holds state, or the two would drift.
     bootstrap = (REPO_ROOT / "scripts/bootstrap-hetzner-box.sh").read_text(encoding="utf-8")
     assert "pgbouncer redis minio minio-init clamav postgres-exporter node-exporter" in bootstrap
@@ -552,16 +586,15 @@ def test_hetzner_takes_a_backup_before_it_migrates() -> None:
     # restore point. The backup runs first, a box without backups refuses to
     # migrate, and every compose exec reads /dev/null: the remote script is
     # bash's stdin, and an exec that inherits it eats the migration line.
-    steps = _deploy_workflow("hetzner")["jobs"]["deploy"]["steps"]
-    run = next(s["run"] for s in steps if s.get("name") == "Migrate on the box")
+    run = _box_function("migrate")
     backup = run.index("scripts/backup.sh db")
     assert backup < run.index("python -m app.core.migrations")
     assert "Refusing to migrate" in run
-    execs = [m.start() for m in re.finditer(r"compose \$COMPOSE exec", run)]
-    assert execs, "the schema check moved; keep it off stdin"
+    execs = [m.start() for m in re.finditer(r"compose \$COMPOSE (?:exec|run|pull|up)", run)]
+    assert len(execs) >= 4, "the schema check moved; keep it off stdin"
     for start in [*execs, backup]:
         # To the end of the shell statement, following `\` continuations.
-        statement = re.match(r"(?:[^\n]*\\\\\n)*[^\n]*", run[start:])
+        statement = re.match(r"(?:[^\n]*\\\n)*[^\n]*", run[start:])
         assert statement
         assert "</dev/null" in statement.group(), run[start:]
 
@@ -569,8 +602,7 @@ def test_hetzner_takes_a_backup_before_it_migrates() -> None:
 def test_hetzner_requires_off_box_backups_and_checks_high_sensitivity_keys() -> None:
     # ADR-0009: every deploy needs an off-host copy before data changes, and
     # a high-sensitivity product's key must fail to list or delete it.
-    steps = _deploy_workflow("hetzner")["jobs"]["deploy"]["steps"]
-    run = next(s["run"] for s in steps if s.get("name") == "Migrate on the box")
+    run = _box_function("migrate")
     migrate = run.index("python -m app.core.migrations")
     assert run.index("^BACKUP_REMOTE=") < migrate
     assert "^DATA_SENSITIVITY=" in run
@@ -619,14 +651,17 @@ def test_hetzner_verifies_every_service_before_declaring_success() -> None:
     names = [s.get("name", "") for s in steps]
     verify = next(i for i, n in enumerate(names) if n.startswith("Verify every service"))
     assert names.index("Pull and switch") < verify < names.index("Smoke test")
-    assert "wait-for-release.sh" in steps[verify]["run"]
+    assert steps[verify]["run"] == 'ssh box verify "$TAG"'
+    assert "scripts/wait-for-release.sh" in _box_function("verify")
 
 
 def test_hetzner_checks_that_a_rollback_came_back() -> None:
     # The 2026-11-02 drill: "rolled back" printed before the site had returned.
-    steps = _deploy_workflow("hetzner")["jobs"]["deploy"]["steps"]
-    run = next(s["run"] for s in steps if s.get("name") == "Roll back to the previous image")
-    assert run.index("up -d --no-deps backend") < run.index("wait-for-release.sh")
+    assert _hetzner_step("Roll back to the previous image")["run"] == (
+        'ssh box rollback "$PREVIOUS_TAG"'
+    )
+    run = _box_function("rollback")
+    assert run.index("start_release") < run.index('verify "$1"')
     assert "ROLLBACK FAILED" in run
 
 
@@ -637,15 +672,17 @@ def test_hetzner_prunes_images_only_after_a_good_deploy_and_never_fails_it() -> 
     assert names.index("Prune old images") > names.index("Smoke test")
     assert "if" not in prune, "default if: success() is what keeps it off a failed deploy"
     assert prune["continue-on-error"] is True
-    assert "--filter until=" in prune["run"], "a bare prune -a removes every other release"
+    assert prune["run"] == "ssh box prune"
+    assert "--filter until=" in _box_function("prune"), (
+        "a bare prune -a removes every other release"
+    )
 
 
 def test_hetzner_keeps_the_superuser_password_out_of_the_running_app() -> None:
-    steps = _deploy_workflow("hetzner")["jobs"]["deploy"]["steps"]
-    run = next(s["run"] for s in steps if s.get("id") == "migrate")
+    run = _box_function("migrate")
     assert "-e MIGRATIONS_DATABASE_URL backend" in run
     assert "POSTGRES_PASSWORD" in run
-    writer = next(s["run"] for s in steps if s.get("name") == "Write prod.env from Bitwarden")
+    writer = _hetzner_step("Write the env from Bitwarden")["run"]
     assert "MIGRATIONS_DATABASE_URL" in writer
 
 
@@ -807,7 +844,7 @@ def test_the_edge_image_build_is_given_the_browser_sentry_dsn() -> None:
     dockerfile = (REPO_ROOT / "Dockerfile.caddy").read_text(encoding="utf-8")
     assert "ARG VITE_SENTRY_DSN" in dockerfile
     assert "VITE_SENTRY_DSN=$VITE_SENTRY_DSN" in dockerfile
-    steps = _ci_workflow()["jobs"]["build"]["steps"]
+    steps = _deploy_workflow("hetzner")["jobs"]["edge"]["steps"]
     edge = next(s for s in steps if s.get("name") == "Build and push the edge image")
     assert "VITE_SENTRY_DSN=${{ vars.VITE_SENTRY_DSN }}" in edge["with"]["build-args"]
 
@@ -956,7 +993,7 @@ def test_hetzner_origin_check(
         env={
             **os.environ,
             "PATH": f"{tmp_path}{os.pathsep}{os.environ['PATH']}",
-            "PROD_DOMAIN": "app.example.com",
+            "DOMAIN": "app.example.com",
             "SSH_HOST": "origin.invalid",
         },
         capture_output=True,

@@ -62,7 +62,8 @@ processors, then replace both files.
 | Google and GitHub sign-in | Those buttons | The OAuth client IDs and secrets, with `https://<your app host>/api/v1/auth/oauth/<google or github>/callback` as the redirect |
 | Sentry | Finding out about errors | One project for the backend and one for the browser |
 
-Use a separate staging environment to try these before live mode.
+Use the staging server (`staging.md`) to try these before live mode: its own Stripe
+sandbox, Google client and Resend key.
 
 **Expected:** you sign up on the real domain, get the email, and pay with a real
 card, then refund it.

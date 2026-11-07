@@ -156,7 +156,7 @@ bucket-scoped token cannot list buckets, hence `no_check_bucket`.
 ### Alerting: a Sentry cron monitor
 
 A full run of `backup.sh` checks in to a Sentry cron monitor named
-`forge-backup`, through the backend's own `SENTRY_DSN` (read from
+`forge-backup` (`BACKUP_SENTRY_MONITOR`; `forge-backup-staging` on staging), through the backend's own `SENTRY_DSN` (read from
 `backend/.env`; `BACKUP_SENTRY_DSN` overrides it). The first check-in creates
 the monitor with the timer's schedule (03:30 UTC, two hours' margin). A run
 that fails anywhere, a refusal included, reports an error; a run that never
