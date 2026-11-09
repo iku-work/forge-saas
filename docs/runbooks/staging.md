@@ -88,6 +88,8 @@ GitHub environment named **`staging`**, deployment branches limited to `main`:
 | variable | `PUBLIC_APP_URL`, `PUBLIC_API_URL` | `https://app-staging.<domain>` |
 
 The environment's variables override the repository's, which stay production's.
+Set them before `SSH_HOST`: the first deploy that finds `SSH_HOST` builds the
+commit's edge image, once, with whatever variables exist then.
 `VITE_SENTRY_DSN` can stay shared: Sentry separates the two by `ENVIRONMENT`.
 
 **Expected:** `gh secret list --env staging` lists the five secrets.
@@ -156,6 +158,9 @@ monitor, before the next 03:30 UTC (`backup.sh` re-creates a monitor at each che
 - **The scan reports what Cloudflare did, not the app.** It goes through
   Cloudflare's WAF and rate limits. To scan the app itself, run it against a local
   copy of the stack, as on 2026-11-03.
+- **Staging's pages point at production, or `robots.txt` allows crawling.** The
+  commit's edge image was built before the `staging` variables existed, and a tag
+  is built once. Deploy a newer commit.
 - **`The box did not run scripts/deploy-box.sh`.** The key is not locked, or the
   checkout predates the script. Run `lock-deploy-key.sh` again.
 - **A rollback refused with "older than scripts/deploy-box.sh".** Only the first

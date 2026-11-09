@@ -278,3 +278,38 @@ def test_a_deploy_refuses_another_environments_settings(
     assert (result.returncode == 0) is passes, result.stderr
     if passes:
         assert github_env.read_text(encoding="utf-8") == "DOMAIN=app.example.com\n"
+
+
+@pytest.mark.parametrize(("ssh_host", "passes"), [("", False), ("box.invalid", True)])
+def test_no_edge_image_is_built_for_an_environment_not_set_up(
+    tmp_path: Path, ssh_host: str, *, passes: bool
+) -> None:
+    # Its variables would be production's, and the tag is never built again.
+    bash = shutil.which("bash")
+    if bash is None:
+        pytest.skip("needs bash")
+    workflow = yaml.safe_load(
+        (REPO_ROOT / ".github" / "workflows" / "deploy-hetzner.yml").read_text(encoding="utf-8")
+    )
+    step = workflow["jobs"]["edge"]["steps"][0]
+    assert step["name"] == "Name the edge image"
+    assert workflow["jobs"]["edge"]["env"]["SSH_HOST"] == "${{ secrets.SSH_HOST }}"
+    output = tmp_path / "output"
+    result = subprocess.run(  # noqa: S603 -- fixed argv: the step under test
+        [bash, "--noprofile", "--norc", "-eo", "pipefail", "-c", step["run"]],
+        cwd=tmp_path,
+        env={
+            **os.environ,
+            "SSH_HOST": ssh_host,
+            "TAG": "a" * 40,
+            "TARGET": "staging",
+            "REPO": "ghcr.io/owner/repo",
+            "GITHUB_OUTPUT": str(output),
+            "GITHUB_ENV": str(tmp_path / "env"),
+        },
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert (result.returncode == 0) is passes, result.stderr
+    assert output.exists() is passes
