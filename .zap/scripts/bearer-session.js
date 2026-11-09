@@ -20,6 +20,12 @@
  */
 
 function extractWebSession(sessionWrapper) {
+    // A public staging keeps the 5/minute sign-in limit, so a re-login can be
+    // refused. A script error here fails the plan before it writes its reports.
+    if (sessionWrapper.getHttpMessage().getResponseHeader().getStatusCode() !== 200) {
+        print("bearer-session.js: login refused, no new token");
+        return;
+    }
     var json = JSON.parse(sessionWrapper.getHttpMessage().getResponseBody().toString());
     var token = json.data.access_token;
     sessionWrapper.getSession().setValue("token", token);
