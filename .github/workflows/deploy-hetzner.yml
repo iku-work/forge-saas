@@ -76,11 +76,20 @@ jobs:
       TAG: ${{ inputs.image-tag }}
       TARGET: ${{ inputs.environment }}
       REPO: ghcr.io/${{ github.repository }}
+      SSH_HOST: ${{ secrets.SSH_HOST }}
 
     steps:
+      # Before anything is built. An environment's variables fall back to the
+      # repository's, which are production's, and a tag is only built once: on
+      # 2026-11-09 a merge built staging's image before staging existed, and
+      # every later deploy reused bundles pointing at production.
       - name: Name the edge image
         id: ref
         run: |
+          if [ -z "$SSH_HOST" ]; then
+            echo "The $TARGET environment has no SSH_HOST. Set it up first (docs/runbooks/staging.md, docs/runbooks/new-server.md)." >&2
+            exit 1
+          fi
           [[ "$TAG" =~ ^[0-9a-f]{40}$ ]] || { echo "image-tag must be a full commit SHA, got: $TAG" >&2; exit 1; }
           case "$TARGET" in
             production) suffix= ;;
@@ -167,10 +176,6 @@ jobs:
     steps:
       - name: Validate the values the box is sent
         run: |
-          if [ -z "$SSH_HOST" ]; then
-            echo "The $TARGET environment has no SSH_HOST. Set it up first (docs/runbooks/staging.md, docs/runbooks/new-server.md)." >&2
-            exit 1
-          fi
           [[ "$TAG" =~ ^[0-9a-f]{40}$ ]] || { echo "image-tag must be a full commit SHA, got: $TAG" >&2; exit 1; }
           [[ "$ACTOR" =~ ^[A-Za-z0-9-]+(\[bot\])?$ ]] || { echo "unexpected actor: $ACTOR" >&2; exit 1; }
 

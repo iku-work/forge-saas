@@ -15,8 +15,8 @@ ENV_FILE="$HOME/forge-backup.env"
 [ -f "$ENV_FILE" ] || { echo "No $ENV_FILE: run scripts/bootstrap-hetzner-box.sh first." >&2; exit 1; }
 command -v rclone >/dev/null || { echo "rclone is not installed (apt-get install rclone, as root)." >&2; exit 1; }
 
-read -rp "Bucket name [forge-prod-backups]: " bucket
-bucket="${bucket:-forge-prod-backups}"
+# No default: Enter on a staging box must not point it at production's bucket.
+read -rp "Bucket name (forge-prod-backups, forge-staging-backups): " bucket
 read -rp "S3 endpoint (https://<account id>.eu.r2.cloudflarestorage.com): " endpoint
 read -rp "Access Key ID: " key_id
 read -rsp "Secret Access Key (not shown): " secret

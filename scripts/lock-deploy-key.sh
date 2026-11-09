@@ -3,7 +3,7 @@
 # Run as root ON THE BOX, from a copy of this file, with the key's public half:
 #
 #   scp scripts/lock-deploy-key.sh root@<ip>:
-#   ssh root@<ip> bash lock-deploy-key.sh "$(cat ~/.ssh/<product>_ci_deploy.pub)"
+#   ssh root@<ip> bash lock-deploy-key.sh "\"$(cat ~/.ssh/<product>_ci_deploy.pub)\""
 #
 # Any unrestricted line for the same key is replaced, so this also locks a key
 # that was added the old way. Other keys, your own included, are left alone.
