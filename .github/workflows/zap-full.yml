@@ -29,9 +29,11 @@
 # and dormant-until-configured behavior as the ZAP step.
 name: ZAP Full Scan
 
+# Weekly, Sunday night, while there is no product work to scan; nightly again
+# once there is (agreed 2026-11-07). "Run workflow" runs it any time.
 on:
   schedule:
-    - cron: "0 3 * * *"
+    - cron: "0 2 * * 0"
   workflow_dispatch:
 
 jobs:
@@ -146,7 +148,7 @@ jobs:
             fi
 
             body=$(printf '%s\n\n- **Risk**: %s\n- **Instances**: %s\n- **Run**: %s\n- **Report**: download the `zap-full-report` artifact from the run above for full request/response evidence.\n\nFingerprint: %s\n' \
-              "Nightly ZAP full active scan against staging found this alert." \
+              "The weekly ZAP full active scan against staging found this alert." \
               "$riskdesc" "$instance_count" "$RUN_URL" "$fingerprint")
 
             gh issue create \

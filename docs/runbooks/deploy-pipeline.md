@@ -1,7 +1,8 @@
 # Deploy pipeline runbook
 
-How a commit on `main` becomes a running deployment on a Hetzner server. Setting
-up the server the first time is `new-server.md`.
+How a commit on `main` becomes a running deployment on a Hetzner server: staging
+first, then production with the same backend image. Setting up a server the first
+time is `new-server.md`, and the staging server is `staging.md`.
 
 This is the only deploy path in the template. Render and AWS workflows existed
 until 2026-11-03 but had never run, so they were removed; git history has them.
@@ -25,20 +26,30 @@ Not this runbook: application faults after a successful deploy (that is
 - **Know which target is live.** `DEPLOY_TARGET` is a repository *variable*
   (Settings → Secrets and variables → Actions → Variables), not a secret.
   Unset deploys nothing; set `hetzner` to deploy from CI.
-- **The whole `backend/.env` comes from one place:** the Bitwarden Secrets
-  Manager project `forge-prod`, one secret per line, read with
-  `BWS_ACCESS_TOKEN`. `Settings()` validates every required field at import, so
-  a partial file fails the migration step rather than the app's first request.
+- **The whole `backend/.env` comes from one place:** that environment's
+  Bitwarden Secrets Manager project (`forge-prod`, `forge-staging`), one secret
+  per line, read with its `BWS_ACCESS_TOKEN`. `Settings()` validates every required
+  field at import, so a partial file fails the migration step rather than the
+  app's first request. The deploy also refuses an env whose `ENVIRONMENT` is not
+  this environment's (`prod`, `staging`), so one project's token pasted into the
+  other environment stops before the box.
 - **The runner never reaches the production database** (review C4,
   2026-09-29). The migration runs on the box; see step 3.
 - **Deploys wait for the whole gate**: `build` (and through it `test` and
   `security`), `e2e-web` and `zap-baseline`. A red browser suite blocks a
-  deploy (C2).
+  deploy (C2). Production also waits for staging: `deploy-hetzner` needs
+  `deploy-hetzner-staging`, so a staging that is down, or not set up, holds every
+  production deploy.
 - **Actions minutes.** Image builds are the most minute-hungry thing in this
   repo.
-- **Repository secrets:** `SSH_HOST`, `SSH_USER`, `SSH_KEY`, `SSH_KNOWN_HOSTS`
-  (from `ssh-keyscan <host>`, pinned rather than trusted on first use) and
-  `PROD_DOMAIN`.
+- **Secrets, in each GitHub environment** (`staging`, `production`):
+  `BWS_ACCESS_TOKEN`, `SSH_HOST`, `SSH_USER`, `SSH_KEY` and `SSH_KNOWN_HOSTS`
+  (from `ssh-keyscan <host>`, pinned rather than trusted on first use). The smoke
+  test's host is `DOMAIN` from the env itself; `PROD_DOMAIN` is no longer read.
+- **CI's key is locked on each box** (`scripts/lock-deploy-key.sh`): it runs
+  `scripts/deploy-box.sh` and nothing else, and that script deploys only commits
+  on `origin/main`. Every SSH call in the workflow is one of its subcommands. A
+  box whose key is not locked fails the first one, before anything changes.
 
 ## Steps
 
@@ -56,10 +67,14 @@ deploy job, visible as a skipped job in the run.
 Every push to `main` builds the backend image, scans it with Trivy (high+,
 fixable only), and pushes to `ghcr.io/<owner>/<repo>:<sha>` — **only if the
 scan passes**, so a vulnerable image never reaches the registry a deploy
-pulls from. On `main` it also builds `…-caddy:<sha>`, the edge image with the
-frontend baked in.
+pulls from.
 
-**Expected:** both tags visible under the repository's Packages.
+Each deploy's `edge` job then builds the edge image, with the frontend baked in,
+for its environment: `…-caddy:<sha>-staging` with staging's `PUBLIC_*` variables,
+then `…-caddy:<sha>` with production's. A tag that already exists is never
+rebuilt, so a redeploy gets the image that ran before.
+
+**Expected:** the tags visible under the repository's Packages.
 
 ### 3. Watch the preflight and the migration
 
@@ -74,8 +89,8 @@ before anything is touched:
 3. refuses to continue if it contains `VIRUS_SCANNER=noop`
 
 Then it **migrates on the box, from the image that is about to serve traffic**,
-before it switches: `docker compose run --rm --no-deps backend …` over SSH, step
-*Migrate on the box*. Its output is in the GitHub run.
+before it switches: `ssh box migrate <sha> …`, which runs `migrate` in
+`scripts/deploy-box.sh`, step *Migrate on the box*. Its output is in the GitHub run.
 
 **Expected:** the migration ends without error. This is the step to read
 first when a deploy fails — it tells you whether the schema moved.
@@ -94,7 +109,8 @@ succeeded against it.
 ### 4. Deploy, then verify from outside
 
 It then swaps traffic and finishes with
-`curl -sf https://$PROD_DOMAIN/health/ready`.
+`curl -sf https://$DOMAIN/health/ready`. On staging, a green run here is what
+lets production start.
 
 **Expected:** a green run. The swap is
 `docker compose up -d --no-deps backend worker scanner-worker caddy` — it is
@@ -112,15 +128,18 @@ Fix the firewall (`new-server.md`, step 1) and re-run the job.
 
 ### 5. Redeploy or roll forward by hand
 
-The deploy workflow also accepts `workflow_dispatch` with an image tag, so
-you can deploy any already-built SHA without pushing a commit:
+The deploy workflow also accepts `workflow_dispatch` with a full commit SHA on
+`main` and an environment, so you can deploy any already-built SHA without
+pushing a commit:
 
 ```bash
-gh workflow run deploy-hetzner.yml -f image-tag=<sha>
+gh workflow run deploy-hetzner.yml -f image-tag=<sha> -f environment=staging
 ```
 
 **Expected:** the run appears immediately and goes through the same preflight
-as an automatic deploy — including the migration.
+as an automatic deploy — including the migration. `environment=production` this
+way skips staging, so keep it for rollbacks. The box refuses a commit that is not
+on `main`, or that is older than `scripts/deploy-box.sh`.
 
 ## Verification
 
@@ -190,7 +209,7 @@ log says `ROLLBACK FAILED` means the site is down: see Escalation.
 **Manual**, for anything the smoke test did not catch:
 
 ```bash
-gh workflow run deploy-hetzner.yml -f image-tag=<previous sha>
+gh workflow run deploy-hetzner.yml -f image-tag=<previous sha> -f environment=production
 ```
 
 **The database does not roll back.** Only images move backwards; a migration that has applied stays applied. That is the point of
@@ -213,6 +232,10 @@ Stop and escalate when:
   must be up for the backend's storage guard to pass.
 - **A deploy ran that you did not expect.** Check the repository variable:
   only an explicit `DEPLOY_TARGET` deploys.
+- **Staging is red and production is waiting.** Production deploys nothing until
+  staging is green. Fix staging and re-run its job, which then runs production. To
+  ship to production without it, for an outage only, dispatch the workflow with
+  `environment=production`.
 
 ## Failure drill
 

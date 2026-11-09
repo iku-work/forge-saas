@@ -14,7 +14,7 @@ Written from the first deploy to a fresh box (forge-prod-2, 2026-10-26). Each
 Reach for this when:
 
 - **a new product** built from this template needs its production (or
-  staging) server;
+  staging, with `staging.md`) server;
 - **a server is replaced** (new region, new size, a rebuilt box). Run this on
   the new one, and restore the data (`backup-restore.md`) once it has deployed.
   DNS moves in step 2, so plan the switch: the old server stops serving then.
@@ -139,12 +139,18 @@ On your machine, make a key for CI and authorise it on the server:
 
 ```bash
 ssh-keygen -t ed25519 -N "" -C "github-actions deploy" -f ~/.ssh/<product>_ci_deploy
-ssh root@<ip> "cat >> /home/forge/.ssh/authorized_keys" < ~/.ssh/<product>_ci_deploy.pub
+scp scripts/lock-deploy-key.sh root@<ip>:
+ssh root@<ip> bash lock-deploy-key.sh "\"$(cat ~/.ssh/<product>_ci_deploy.pub)\""
 ssh-keyscan -t ed25519 <ip> > ~/.ssh/<product>_known_hosts
 ```
 
-GitHub → **Settings → Environments → New environment** `production`, with
-deployment branches limited to `main`. Add these environment secrets.
+The key can now run `scripts/deploy-box.sh` and nothing else: `forge` is in the
+`docker` group, which is root on the server, so an unrestricted key would be too.
+
+Why: before this, a leaked CI key opened a root shell (review 2026-11-02).
+
+GitHub → **Settings → Environments → New environment** `production` (or
+`staging`, `staging.md`), with deployment branches limited to `main`. Add these environment secrets.
 `gh secret set NAME --env production < file` keeps the values off the
 screen.
 
@@ -155,7 +161,6 @@ screen.
 | `SSH_KNOWN_HOSTS` | `~/.ssh/<product>_known_hosts` |
 | `SSH_HOST` | the server's IP |
 | `SSH_USER` | `forge` |
-| `PROD_DOMAIN` | the app host, used by the smoke test |
 
 Then add these repository variables: `PUBLIC_SITE_URL`, `PUBLIC_APP_URL`,
 `PUBLIC_API_URL` (the app host, https), `VITE_SENTRY_DSN` (the browser project's
@@ -164,22 +169,29 @@ last, `DEPLOY_TARGET=hetzner`.
 
 ### 6. First deploy
 
-Every push to `main` now deploys. For the first one, re-run the latest `main`
-CI run (`gh run rerun <id>`). That run also builds the edge image, which is
-only built once `DEPLOY_TARGET` is set.
+Every push to `main` now deploys, to staging first (`staging.md`). For the first
+one, re-run the latest `main` CI run (`gh run rerun <id>`), or deploy one commit:
+
+```bash
+gh workflow run deploy-hetzner.yml -f image-tag=<sha on main> -f environment=production
+```
+
+Each deploy builds its environment's edge image first, if that tag does not exist
+yet.
 
 ## Verification
 
 - The `deploy-hetzner / deploy` job is green. The workflow checks itself:
   - every service runs the release image and is healthy;
-  - the smoke test passes `https://<PROD_DOMAIN>/health/ready`.
+  - the smoke test passes `https://<DOMAIN>/health/ready`.
 - From outside: `curl -sI https://<app host>/` returns 200, and the marketing
   host serves its landing page.
 - On the server: `docker ps` shows backend, worker, scanner-worker and caddy
   next to the stateful services from step 3.
 - Backups restore: run the drill in `backup-restore.md` once, from the copy in
   R2. Until it has run, the backup is a belief.
-- Sentry shows the `forge-backup` cron monitor after the first nightly run,
+- Sentry shows the `forge-backup` cron monitor (`forge-backup-staging` on
+  staging) after the first nightly run,
   and its alert reaches you (backup-restore.md, "Alerting").
 - Security updates install by themselves. When one needs a reboot, the server
   reboots at 04:30 server time, with about two minutes of downtime. To change the

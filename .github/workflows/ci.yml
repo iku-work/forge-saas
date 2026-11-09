@@ -1402,37 +1402,6 @@ jobs:
       - name: Push image
         run: docker push "$IMAGE:$GITHUB_SHA"
 
-      # The edge, with the SPA and marketing bundles inside it. It is built on
-      # every main build so the tag always exists for a rollback to reach
-      # back to. Only when DEPLOY_TARGET is hetzner, though: its URLs come from
-      # repository variables set alongside that target, and without them
-      # Astro stops on an empty site URL ("Invalid URL").
-      #
-      # It compiles the frontend again rather than reusing the turbo build
-      # above, so the image is reproducible from the Dockerfile alone. The
-      # GitHub Actions layer cache is what keeps that from costing a full
-      # rebuild each time; only a lockfile or source change invalidates it.
-      - name: Set up Buildx for the edge image
-        if: github.ref == 'refs/heads/main' && vars.DEPLOY_TARGET == 'hetzner'
-        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
-
-      - name: Build and push the edge image
-        if: github.ref == 'refs/heads/main' && vars.DEPLOY_TARGET == 'hetzner'
-        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
-        with:
-          context: .
-          file: Dockerfile.caddy
-          push: true
-          tags: ${{ env.IMAGE }}-caddy:${{ github.sha }}
-          build-args: |
-            PUBLIC_SITE_URL=${{ vars.PUBLIC_SITE_URL }}
-            PUBLIC_APP_URL=${{ vars.PUBLIC_APP_URL }}
-            PUBLIC_API_URL=${{ vars.PUBLIC_API_URL }}
-            VITE_API_URL=${{ vars.PUBLIC_API_URL }}
-            VITE_SENTRY_DSN=${{ vars.VITE_SENTRY_DSN }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-
   # T-210: passive DAST pass against a real running instance of the app --
   # boots the same dev stack `make dev` does (minus the worker, which this
   # passive HTTP scan never exercises) and scans it through Caddy, not the
@@ -1755,17 +1724,35 @@ jobs:
   # set explicitly: unset deploys nothing (review 2026-10-01). It used to mean
   # render, so a repository with no variables at all was one push to main
   # away from a deploy nobody had chosen.
-  deploy-hetzner:
+  #
+  # Staging first, then production with the same backend image, and only if
+  # staging came up healthy and passed its smoke test. A staging that is not
+  # set up fails, and so production waits (docs/runbooks/staging.md).
+  deploy-hetzner-staging:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main' && vars.DEPLOY_TARGET == 'hetzner'
     # C2: E2E and the ZAP baseline gate the deploy, not only the image build
     # (test and security arrive through build). A red e2e-web blocks it.
     needs: [build, e2e-web, zap-baseline]
     # A called workflow can only narrow what its caller grants, so the
-    # grant lives here as well as inside the called job.
+    # grant lives here as well as inside the called jobs. packages: write is
+    # for the edge image, built per environment.
     permissions:
       contents: read
-      packages: read
+      packages: write
     uses: ./.github/workflows/deploy-hetzner.yml
     secrets: inherit
     with:
       image-tag: ${{ github.sha }}
+      environment: staging
+
+  deploy-hetzner:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && vars.DEPLOY_TARGET == 'hetzner'
+    needs: [build, e2e-web, zap-baseline, deploy-hetzner-staging]
+    permissions:
+      contents: read
+      packages: write
+    uses: ./.github/workflows/deploy-hetzner.yml
+    secrets: inherit
+    with:
+      image-tag: ${{ github.sha }}
+      environment: production

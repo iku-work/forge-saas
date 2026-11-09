@@ -30,7 +30,7 @@
 | Minor: MinIO health | Fixed in the Minor list PR: the storage host answers 404 for everything under `/minio/`. Checked against `caddy:2-alpine`. |
 | Minor: `except Exception` | Fixed in the Minor list PR: AGENTS.md §0.5 now names the allowed boundaries. Ruff's `BLE001` was already on through `select = ["ALL"]`, so a new one cannot land without a re-raise, a `logger.exception` or a `noqa` with a reason. |
 | Minor: single person | Unchanged on purpose. `first-product.md` and `sdlc.md` say what to turn on when a second person joins. |
-| Minor: `forge` in `docker` | Open. Planned with the staging server: CI's key gets a forced command that runs only the deploy script. |
+| Minor: `forge` in `docker` | Fixed in the staging PR: CI's key runs `scripts/deploy-box.sh` and nothing else (`scripts/lock-deploy-key.sh`), and that script deploys only commits on `main`. `forge` stays in `docker`; what the key can ask it to do is the fixed list. forge-prod-2 is locked when the lock script runs there. |
 | Minor: Dependabot | `glob` was dismissed on 5 November. `minimatch` is fixed in the Minor list PR: an override moves both affected copies to 11.0.3. They are build and lint tooling only, and lint, type-check, every build and every JS test pass on it. |
 | Minor: stale docs | Already fixed: V8.1.5 and V8.1.6 say `met`. |
 | Incident key | Replaced on 5 November. forge-prod-2 runs on a new JWT key and URL-token secret, with no overlap value, so the exposed key stopped working at once. |
