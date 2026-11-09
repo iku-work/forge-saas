@@ -42,6 +42,14 @@ env:
         - "${STAGING_URL}/api/v1/auth/sessions/.*"
         - "${STAGING_URL}/api/v1/auth/change-password"
         - "${STAGING_URL}/api/v1/auth/2fa/enable"
+        # Fuzzing it would spend the 5/minute sign-in budget the scanner's own
+        # re-logins need, and most of its answers would be the limiter's.
+        - "${STAGING_URL}/api/v1/auth/login$"
+        # These email whatever address the request names, and staging sends real
+        # mail: made-up addresses bounce against the domain production uses. For
+        # a local run, where mail goes to MailHog, delete these two lines.
+        - "${STAGING_URL}/api/v1/orgs/.*/invitations.*"
+        - "${STAGING_URL}/api/v1/auth/change-email.*"
       authentication:
         method: "json"
         parameters:

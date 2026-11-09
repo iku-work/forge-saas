@@ -115,6 +115,21 @@ def test_zap_full_plan_paths_exist_relative_to_the_plan() -> None:
     assert (plan_dir / openapi["parameters"]["apiFile"]).is_file()
 
 
+# Staging sends real mail, and each of these emails the address in the request.
+@pytest.mark.parametrize(
+    "path",
+    [
+        "/api/v1/orgs/04e90d83-8ab0-40c8-b3e8-cff6e0b414cf/invitations",
+        "/api/v1/orgs/04e90d83-8ab0-40c8-b3e8-cff6e0b414cf/invitations/x/resend",
+        "/api/v1/auth/change-email",
+    ],
+)
+def test_zap_full_scan_skips_routes_that_mail_a_chosen_address(path: str) -> None:
+    plan = yaml.safe_load((REPO_ROOT / ".zap" / "full-scan.yaml").read_text())
+    excluded = plan["env"]["contexts"][0]["excludePaths"]
+    assert any(re.fullmatch(p.replace("${STAGING_URL}", ""), path) for p in excluded)
+
+
 def test_zap_full_scan_ends_before_its_job_does() -> None:
     plan = yaml.safe_load((REPO_ROOT / ".zap" / "full-scan.yaml").read_text())
     active = next(j for j in plan["jobs"] if j["type"] == "activeScan")
