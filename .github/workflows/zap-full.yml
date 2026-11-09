@@ -13,8 +13,9 @@
 #   - ZAP_SCANNER_PASSWORD (secret)
 # The target also needs its rate limits raised for the run, with the values in
 # backend/.env.loadtest. At the default 100 requests a minute per user, the scan
-# would get little but 429s. Its email should be a sandbox, because the scan
-# calls the routes that send mail.
+# would get little but 429s. The plan skips the routes that email an address the
+# request names, because staging sends real mail. Sign-ups must be closed there
+# for the same reason.
 # Until STAGING_URL is set the job is skipped (grey, not red). It used to run
 # and fail every night, which taught everyone to ignore this workflow -- the
 # opposite of a signal (changed 2026-10-14).
