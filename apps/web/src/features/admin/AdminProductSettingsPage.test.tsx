@@ -144,6 +144,27 @@ describe("AdminProductSettingsPage", () => {
     expect(patches[0]?.maintenance_mode).toBeNull();
   });
 
+  it("shows each editor once after a save", async () => {
+    // A save changes the stored document, which remounts both editors. With
+    // one key shared between them, React rendered both a second time.
+    const { patches } = stubSettings();
+
+    renderApp({ initialPath: "/admin/settings", user: superadmin });
+    await userEvent.click(
+      await screen.findByLabelText("Close self-serve sign-up"),
+    );
+    await userEvent.click(screen.getByTestId("save-product-settings"));
+
+    await waitFor(() => {
+      expect(patches).toHaveLength(1);
+    });
+    await waitFor(() => {
+      expect(screen.getByLabelText("Close self-serve sign-up")).toBeChecked();
+    });
+    expect(screen.getAllByTestId("save-product-settings")).toHaveLength(1);
+    expect(screen.getAllByTestId("save-raw-product-settings")).toHaveLength(1);
+  });
+
   it("warns loudly while maintenance mode is on", async () => {
     stubSettings({ maintenance_mode: true });
 

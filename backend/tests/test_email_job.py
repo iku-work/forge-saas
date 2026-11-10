@@ -330,20 +330,25 @@ async def test_permanent_error_fails_fast_without_retrying(
     monkeypatch: pytest.MonkeyPatch,
     mock_render: AsyncMock,
     captured_sentry: Mock,
+    caplog: pytest.LogCaptureFixture,
 ) -> None:
     send = AsyncMock(side_effect=_validation_error())
     monkeypatch.setattr(email_job.resend.Emails, "send_async", send)
 
-    await email_job.send_email(
-        {},
-        to="erin@example.com",
-        template="invitation",
-        context={"org_name": "Acme", "accept_url": "https://x/a"},
-    )
+    with caplog.at_level(logging.ERROR, logger=email_job.__name__):
+        await email_job.send_email(
+            {},
+            to="erin@example.com",
+            template="invitation",
+            context={"org_name": "Acme", "accept_url": "https://x/a"},
+        )
 
     send.assert_awaited_once()
     mock_render.assert_awaited_once()
     captured_sentry.assert_called_once()
+    # Section 0.6: the give-up line names the template, never the recipient.
+    assert "template=invitation" in caplog.text
+    assert "erin@example.com" not in caplog.text
 
 
 async def test_breaker_open_requeues_the_job_instead_of_dropping_the_email(
