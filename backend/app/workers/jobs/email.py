@@ -201,7 +201,7 @@ async def send_email(  # noqa: PLR0913 -- ctx + the four wire params plus T-234'
         # dropping the email; see module docstring.
         raise Retry(defer=_RESEND_RETRY_DEFER_SECONDS) from None
     except ResendError as exc:
-        logger.exception("send_email: giving up (to=%s, template=%s)", to, template)
+        logger.exception("send_email: giving up (template=%s)", template)
         sentry_sdk.capture_exception(exc)
         return
     else:
