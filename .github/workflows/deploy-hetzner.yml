@@ -22,15 +22,17 @@ name: Deploy — Hetzner (docker compose over SSH)
 #   BWS_ACCESS_TOKEN   Bitwarden Secrets Manager machine-account token. The
 #                      account reads that environment's project, and every
 #                      secret there becomes a line of backend/.env (see "Write
-#                      the env from Bitwarden" for the few that do not)
+#                      the env from Bitwarden" for the few that do not). The
+#                      settings that are not secret are committed instead:
+#                      deploy/common.env and deploy/<environment>.env.
 #   SSH_HOST           box hostname or IP
 #   SSH_USER           the login, `forge`
 #   SSH_KEY            private key, PEM, locked on the box
 #   SSH_KNOWN_HOSTS    output of `ssh-keyscan <host>` -- pinned rather than
 #                      trusted on first use, or the deploy would accept a
 #                      man-in-the-middle on its first run
-# Variables, repository-wide or overridden per environment: PUBLIC_SITE_URL,
-# PUBLIC_APP_URL, PUBLIC_API_URL, VITE_SENTRY_DSN (the edge image's build).
+# Variable, repository-wide: VITE_SENTRY_DSN (the edge image's build). The
+# bundles' URLs come from DOMAIN and MARKETING_DOMAIN in the committed settings.
 
 on:
   workflow_call:
@@ -121,12 +123,16 @@ jobs:
             echo "built=true" >> "$GITHUB_OUTPUT"
           fi
 
+      # The bundles' URLs come from the domains this environment's backend is
+      # configured with, so the two cannot disagree.
+      - name: Read the committed settings
+        if: steps.exists.outputs.built != 'true'
+        run: bash scripts/read-deploy-settings.sh "$TARGET"
+
       - name: Set up Buildx
         if: steps.exists.outputs.built != 'true'
         uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
 
-      # Astro stops on an empty site URL ("Invalid URL"), so a missing variable
-      # fails here rather than shipping a broken bundle.
       - name: Build and push the edge image
         if: steps.exists.outputs.built != 'true'
         uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
@@ -136,10 +142,10 @@ jobs:
           push: true
           tags: ${{ steps.ref.outputs.image }}
           build-args: |
-            PUBLIC_SITE_URL=${{ vars.PUBLIC_SITE_URL }}
-            PUBLIC_APP_URL=${{ vars.PUBLIC_APP_URL }}
-            PUBLIC_API_URL=${{ vars.PUBLIC_API_URL }}
-            VITE_API_URL=${{ vars.PUBLIC_API_URL }}
+            PUBLIC_SITE_URL=https://${{ env.MARKETING_DOMAIN }}
+            PUBLIC_APP_URL=https://${{ env.DOMAIN }}
+            PUBLIC_API_URL=https://${{ env.DOMAIN }}
+            VITE_API_URL=https://${{ env.DOMAIN }}
             VITE_SENTRY_DSN=${{ vars.VITE_SENTRY_DSN }}
           cache-from: type=gha,scope=edge-${{ inputs.environment }}
           cache-to: type=gha,mode=max,scope=edge-${{ inputs.environment }}
@@ -181,13 +187,19 @@ jobs:
 
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
+      # The settings that are not secret are committed, and checked here before
+      # anything else: deploy/common.env and deploy/<environment>.env.
+      - name: Read the committed settings
+        run: bash scripts/read-deploy-settings.sh "$TARGET"
+
       # Every product but the template itself, whose own deployment is the only
-      # one allowed to look like the template.
+      # one allowed to look like the template. Against production's site even
+      # on staging: PRODUCTION_ORIGIN names production's, whichever deploys.
       - name: Refuse the template's identity
         if: github.repository != 'iku-work/forge-saas'
-        env:
-          PUBLIC_SITE_URL: ${{ vars.PUBLIC_SITE_URL }}
-        run: bash scripts/check-product-identity.sh "$PUBLIC_SITE_URL"
+        run: |
+          site=$(sed -n 's/^MARKETING_DOMAIN=//p' deploy/production.env)
+          bash scripts/check-product-identity.sh "${site:+https://$site}"
 
       # Pinned by version and checksum, like any binary that handles the
       # production secrets.
@@ -203,12 +215,17 @@ jobs:
           rm bws.zip
           echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
 
-      # One line of backend/.env per secret the machine account can read,
-      # except those meant for other consumers: backups and the Grafana agent
-      # on the box, and the client builds (VITE_, EXPO_PUBLIC_). The backend
-      # gets what it reads and nothing more. That rules out
+      # backend/.env is the committed settings, then one line per secret in this
+      # environment's Bitwarden project (BITWARDEN_PROJECT_ID, from the committed
+      # settings), except those meant for other consumers: backups and the
+      # Grafana agent on the box, and the client builds (VITE_, EXPO_PUBLIC_).
+      # The backend gets what it reads and nothing more. That rules out
       # MIGRATIONS_DATABASE_URL too, a superuser's password that a running app has
       # no use for: the box builds it from its own .env.postgres to migrate.
+      #
+      # Bitwarden holds secrets only, the names in deploy/secret-names. Anything
+      # else there fails the deploy: a setting kept in two places drifts, and
+      # the hand-typed copies were where the mistakes came from.
       #
       # Values are cleaned of what pasting adds and the value never had: the
       # quotes it wore in a .env file, and the trailing newline -- which,
@@ -229,11 +246,15 @@ jobs:
           BWS_SERVER_URL: https://vault.bitwarden.eu
         run: |
           # $sq: a single quote, which a single-quoted jq program cannot spell.
-          secrets=$(bws secret list --output json | jq --arg sq "'" '[.[] | .value |= (
+          if ! listed=$(bws secret list "$BITWARDEN_PROJECT_ID" --output json); then
+            echo "Could not read Bitwarden project $BITWARDEN_PROJECT_ID (deploy/$TARGET.env). Is BWS_ACCESS_TOKEN $TARGET's machine account, with Can read on it?" >&2
+            exit 1
+          fi
+          secrets=$(jq --arg sq "'" '[.[] | .value |= (
             sub("^\\s+"; "") | sub("\\s+$"; "")
             | if length > 1 and ((startswith("\"") and endswith("\""))
                                  or (startswith($sq) and endswith($sq)))
-              then .[1:-1] else . end)]')
+              then .[1:-1] else . end)]' <<<"$listed")
           if [ "$(jq length <<<"$secrets")" -eq 0 ]; then
             echo "The machine account can read no secrets. Give it Can read on this environment's project." >&2
             exit 1
@@ -254,25 +275,19 @@ jobs:
             echo "Malformed in Bitwarden (an unclosed quote, or a PEM with no END line): $broken" >&2
             exit 1
           fi
-          jq -r '.[].value | split("\n")[] | select(length >= 8) | "::add-mask::" + .' <<<"$secrets"
-          jq -r '.[]
-            | select(.key | test("^((BACKUP|GRAFANA|VITE|EXPO_PUBLIC)_|MIGRATIONS_DATABASE_URL$)") | not)
-            | .key + "=" + (if .value | contains("\n") then "\"" + .value + "\"" else .value end)' <<<"$secrets" > prod.env
-
-      # The app host comes from the env itself, so the smoke test checks the
-      # site this env configures. And the env must be this environment's:
-      # staging's settings on the production box would be a quiet outage.
-      - name: Check the env is this environment's
-        run: |
-          case "$TARGET" in production) want=prod ;; staging) want=staging ;; *) want= ;; esac
-          got=$(sed -n 's/^ENVIRONMENT=//p' prod.env | tail -n 1)
-          if [ -z "$want" ] || [ "$got" != "$want" ]; then
-            echo "The $TARGET deploy read ENVIRONMENT=$got from Bitwarden; it needs $want. Is BWS_ACCESS_TOKEN the right machine account?" >&2
+          not_secret=$(jq -r '.[].key | select(test("^(BACKUP|GRAFANA|VITE|EXPO_PUBLIC)_") | not)' <<<"$secrets" \
+            | grep -Fxv -f <(grep -vE '^[[:space:]]*(#|$)' deploy/secret-names) | xargs || true)
+          if [ -n "$not_secret" ]; then
+            echo "Not secrets, so not for Bitwarden: $not_secret. Commit them to deploy/common.env or deploy/$TARGET.env and delete them from Bitwarden." >&2
             exit 1
           fi
-          domain=$(sed -n 's/^DOMAIN=//p' prod.env | tail -n 1)
-          [[ "$domain" =~ ^[A-Za-z0-9.-]+$ ]] || { echo "DOMAIN in Bitwarden must be a bare hostname" >&2; exit 1; }
-          echo "DOMAIN=$domain" >> "$GITHUB_ENV"
+          jq -r '.[].value | split("\n")[] | select(length >= 8) | "::add-mask::" + .' <<<"$secrets"
+          {
+            cat settings.env
+            jq -r '.[]
+              | select(.key | test("^((BACKUP|GRAFANA|VITE|EXPO_PUBLIC)_|MIGRATIONS_DATABASE_URL$)") | not)
+              | .key + "=" + (if .value | contains("\n") then "\"" + .value + "\"" else .value end)' <<<"$secrets"
+          } > prod.env
 
       # Guards and the registry login -- nothing that touches the box.
       # Migrations run on the box below (C4): its database is never reachable

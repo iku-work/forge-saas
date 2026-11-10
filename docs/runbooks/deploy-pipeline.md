@@ -26,13 +26,16 @@ Not this runbook: application faults after a successful deploy (that is
 - **Know which target is live.** `DEPLOY_TARGET` is a repository *variable*
   (Settings → Secrets and variables → Actions → Variables), not a secret.
   Unset deploys nothing; set `hetzner` to deploy from CI.
-- **The whole `backend/.env` comes from one place:** that environment's
-  Bitwarden Secrets Manager project (`forge-prod`, `forge-staging`), one secret
-  per line, read with its `BWS_ACCESS_TOKEN`. `Settings()` validates every required
-  field at import, so a partial file fails the migration step rather than the
-  app's first request. The deploy also refuses an env whose `ENVIRONMENT` is not
-  this environment's (`prod`, `staging`), so one project's token pasted into the
-  other environment stops before the box.
+- **`backend/.env` comes from two places:** the committed settings
+  (`deploy/common.env`, `deploy/<environment>.env`), then the secrets in that
+  environment's Bitwarden Secrets Manager project, one per line, read with its
+  `BWS_ACCESS_TOKEN`. `deploy/secret-names` decides which is which: the deploy
+  refuses a secret in a committed file and anything else in Bitwarden.
+  `Settings()` validates every required field at import, so a partial file fails
+  the migration step rather than the app's first request. The deploy reads only
+  the project `BITWARDEN_PROJECT_ID` names, so one environment's token pasted
+  into the other stops before the box, and refuses a file whose `ENVIRONMENT` is
+  not this environment's (`prod`, `staging`).
 - **The runner never reaches the production database** (review C4,
   2026-09-29). The migration runs on the box; see step 3.
 - **Deploys wait for the whole gate**: `build` (and through it `test` and
@@ -82,7 +85,8 @@ rebuilt, so a redeploy gets the image that ran before.
 before anything is touched:
 
 1. logs in to GHCR
-2. checks `prod.env`, already written from Bitwarden, failing if it is empty.
+2. checks `prod.env`, already written from the committed settings and
+   Bitwarden, failing if it is empty.
    A secret reaches the script through `env:`, never `${{ }}` pasted into its
    source, so a `'` or `$(` in a password is data rather than shell (C4;
    `test_preflight_writes_a_hostile_env_file_verbatim` runs the real step)
@@ -379,15 +383,16 @@ silently rather than loudly:
   what the production site block's `X-Robots-Tag` rule is written against, so
   every *other* host — staging, a preview deploy — is told `noindex` without
   anybody having to remember.
-- **`PUBLIC_APP_URL` must be set to the app's public origin**, or every link
+- **`PUBLIC_APP_URL` must be the app's public origin** (the Hetzner deploy builds
+  it from `DOMAIN` in `deploy/<environment>.env`), or every link
   into the app falls back to `https://localhost` — the header's Sign in, the
   hero's Register and Log in, and the pricing CTA, i.e. every conversion path
   on the site. It shipped that way on this template's first production deploy
   and was found by a human clicking Sign in. `check-app-links.mjs` now fails
   any production build whose markup links to localhost, so this cannot recur
   silently.
-- The environment that builds the site must set `PUBLIC_SITE_URL` to exactly
-  that origin. Any other value, including leaving it unset, is treated as a
+- The environment that builds the site must set `PUBLIC_SITE_URL` (from
+  `MARKETING_DOMAIN`) to exactly that origin. Any other value, including leaving it unset, is treated as a
   staging build: `robots.txt` disallows every crawler and offers no sitemap.
   That is deliberate — a staging copy outranking production is expensive to
   undo — and every build prints which way it decided, so the build log is

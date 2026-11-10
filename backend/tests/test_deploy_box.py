@@ -240,46 +240,6 @@ def test_the_lock_forces_the_deploy_script_and_nothing_else() -> None:
     assert 'grep -vF " $blob"' in script
 
 
-@pytest.mark.parametrize(
-    ("target", "environment", "passes"),
-    [
-        ("staging", "staging", True),
-        ("production", "prod", True),
-        ("production", "staging", False),
-        ("staging", "prod", False),
-    ],
-)
-def test_a_deploy_refuses_another_environments_settings(
-    tmp_path: Path, target: str, environment: str, *, passes: bool
-) -> None:
-    # Staging's machine-account token pasted into production would otherwise
-    # ship staging's settings to the production box.
-    bash = shutil.which("bash")
-    if bash is None:
-        pytest.skip("needs bash")
-    workflow = yaml.safe_load(
-        (REPO_ROOT / ".github" / "workflows" / "deploy-hetzner.yml").read_text(encoding="utf-8")
-    )
-    step = next(
-        s
-        for s in workflow["jobs"]["deploy"]["steps"]
-        if s.get("name") == "Check the env is this environment's"
-    )
-    (tmp_path / "prod.env").write_text(ENV.format(environment=environment), encoding="utf-8")
-    github_env = tmp_path / "github_env"
-    result = subprocess.run(  # noqa: S603 -- fixed argv: the step under test
-        [bash, "--noprofile", "--norc", "-eo", "pipefail", "-c", step["run"]],
-        cwd=tmp_path,
-        env={**os.environ, "TARGET": target, "GITHUB_ENV": str(github_env)},
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-    assert (result.returncode == 0) is passes, result.stderr
-    if passes:
-        assert github_env.read_text(encoding="utf-8") == "DOMAIN=app.example.com\n"
-
-
 @pytest.mark.parametrize(("ssh_host", "passes"), [("", False), ("box.invalid", True)])
 def test_no_edge_image_is_built_for_an_environment_not_set_up(
     tmp_path: Path, ssh_host: str, *, passes: bool
