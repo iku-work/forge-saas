@@ -226,7 +226,8 @@ systemctl enable --now forge-box-health.timer >/dev/null
 echo
 echo "Done. Next, from docs/runbooks/new-server.md:"
 [ -f "$APP_DIR/bitwarden-values.txt" ] &&
-  echo "  - copy $APP_DIR/bitwarden-values.txt into Bitwarden, then delete it"
+  echo "  - store MINIO_KMS_SECRET_KEY from $APP_DIR/bitwarden-values.txt in the Password Manager," &&
+  echo "    then fill Bitwarden from your machine: bash scripts/fill-bitwarden.sh <environment> root@<this box>"
 grep -q '^BACKUP_REMOTE=' "$HOME_DIR/forge-backup.env" ||
   echo "  - point backups off the box: ssh -t $DEPLOY_USER@<this box> bash forge/scripts/set-backup-remote.sh"
 echo "  - lock the CI deploy key (scripts/lock-deploy-key.sh), add the GitHub environment secrets, then deploy"

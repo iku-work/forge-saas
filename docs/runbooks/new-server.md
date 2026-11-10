@@ -29,14 +29,19 @@ Reach for this when:
   PR. `DATA_SENSITIVITY` is there, `standard` or `high`: decide it now
   (`docs/security/data-classification.md`). Production refuses to start without
   it, and `high` needs an upload-only backup key, which rules out R2 in step 3.
-- **A Bitwarden project for this server**, holding the secrets and nothing
-  else: the names in `deploy/secret-names` this server uses, with your own
-  values. Never copy a value from a committed `.env.*` file. Production refuses
-  the keys that were once committed (`_PUBLISHED_KEY_FINGERPRINTS` in
-  `app/core/config.py`), and the others are dummies. Its ID goes in
-  `deploy/<environment>.env` as `BITWARDEN_PROJECT_ID`.
+- **A Bitwarden project for this server**, empty: step 4 fills it with the
+  names in `deploy/secret-names` this server uses. Its ID goes in
+  `deploy/<environment>.env` as `BITWARDEN_PROJECT_ID`. Never copy a value
+  from a committed `.env.*` file: production refuses the keys that were once
+  committed (`_PUBLISHED_KEY_FINGERPRINTS` in `app/core/config.py`), and the
+  others are dummies.
 - **A machine account** with **Can read** on that project, and an access token
   for it. The token is shown once; it goes straight into GitHub in step 5.
+- **The third-party secrets to hand:** the Stripe secret key and webhook
+  secret, the Resend API key, the Google OAuth client secret, the backend's
+  Sentry DSN. Step 4 asks for each.
+- **On your machine:** `bws`, the [Secrets Manager
+  CLI](https://bitwarden.com/help/secrets-manager-cli/), and `openssl`.
 
 ## Steps
 
@@ -119,25 +124,45 @@ expiry rules and a token (`backup-restore.md`, "Off-host copy"), and run
 `ssh -t forge@<ip> bash forge/scripts/set-backup-remote.sh`. Backups that
 live only on the server die with it.
 
-### 4. Move the generated values into Bitwarden
+### 4. Fill Bitwarden
 
-The script writes `~forge/forge/bitwarden-values.txt` (mode 600) on the
-server.
+In Secrets Manager, give a machine account **Can read, write** on the project
+and make an access token for it, for this step only. Then, from the repository
+on your machine, in Git Bash or any other bash:
 
-- Add each secret to the Bitwarden project, then delete the file. The settings
-  that go with them are already in `deploy/common.env`.
-- Store `MINIO_KMS_SECRET_KEY` somewhere off the server **instead**, in the
-  Password Manager and not in the deploy project. It decrypts every uploaded
-  file.
+```bash
+bash scripts/fill-bitwarden.sh production root@<ip>
+```
 
-Why: those values must match the passwords the services were just started
-with, and the deploy reads the app's secrets only from Bitwarden. It refuses
-any name there that is not in `deploy/secret-names`.
+It asks for the token, then:
 
-Pasting into Bitwarden: the value only, no surrounding quotes, and a PEM key
-from `-----BEGIN` to `-----END ...-----` inclusive. The deploy fails, naming
-the secret, on an unclosed quote or a PEM with no END line. It trims a trailing
-newline.
+- generates the keys the app signs and encrypts with (the JWT pair,
+  `ENCRYPTION_KEY`, `URL_TOKEN_SECRET`, `PASSWORD_PEPPER`, `METRICS_TOKEN`);
+- reads the passwords the bootstrap generated from the server's
+  `~forge/forge/bitwarden-values.txt`, and offers to delete that file;
+- asks for each third-party secret, hidden as you paste, and asks again if one
+  is in the wrong format. Enter skips one.
+
+Nothing is shown or written to a file. A name already in Bitwarden is never
+replaced, so running it again only fills what is missing, and it ends by
+listing that.
+
+Then:
+
+- **Revoke the write token.** The deploy's token only reads.
+- **Copy `ENCRYPTION_KEY`** from the project into the Password Manager. Without
+  it the encrypted columns cannot be read, by a restore or by anyone.
+- **Store `MINIO_KMS_SECRET_KEY`** from `bitwarden-values.txt` in the Password
+  Manager, before the file is deleted, and never in the deploy project. It
+  decrypts every uploaded file. The script skips it; the deploy refuses it.
+
+Why: the server's passwords must match the ones its services were just started
+with, and the deploy reads the app's secrets only from Bitwarden. It refuses any
+name there that is not in `deploy/secret-names`.
+
+A secret set by hand later: the value only, no surrounding quotes, and a PEM key
+from `-----BEGIN` to `-----END ...-----` inclusive. The deploy fails, naming the
+secret, on an unclosed quote or a PEM with no END line.
 
 ### 5. Connect GitHub
 
