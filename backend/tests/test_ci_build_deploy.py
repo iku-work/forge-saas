@@ -526,9 +526,33 @@ def test_every_deploy_setting_is_one_the_backend_reads() -> None:
     # a box that will not migrate.
     fields = set(Settings.model_fields)
     assert _secret_names() <= fields
+    # Caddy's, read by compose from the same file.
+    compose_only = {"CADDY_TRUSTED_PROXIES"}
     for path in (REPO_ROOT / "deploy").glob("*.env"):
         names = set(dotenv_values(path)) - {"BITWARDEN_PROJECT_ID"}
-        assert names <= fields - _secret_names(), path.name
+        assert names <= (fields | compose_only) - _secret_names(), path.name
+
+
+def test_every_compose_variable_is_committed_or_a_secret() -> None:
+    # The deploy refuses any non-secret in Bitwarden, so a variable compose
+    # reads from the env and neither place has falls back to its default
+    # silently. CADDY_TRUSTED_PROXIES did, on 2026-11-10: Caddy trusted only
+    # the private ranges, not Cloudflare's.
+    used: set[str] = set()
+    for name in ("docker-compose.prod.yml", "docker-compose.tls.yml"):
+        text = (REPO_ROOT / name).read_text(encoding="utf-8")
+        used |= set(re.findall(r"(?<!\$)\$\{([A-Z_][A-Z0-9_]*)", text))
+    supplied = set(dotenv_values(REPO_ROOT / "deploy" / "common.env")) | _secret_names()
+    for env in ("production.env", "staging.env"):
+        names = supplied | set(dotenv_values(REPO_ROOT / "deploy" / env))
+        # The images are set by scripts/deploy-box.sh, per release.
+        assert used - names <= {"BACKEND_IMAGE", "CADDY_IMAGE"}, env
+
+
+def test_caddy_trusts_the_proxies_the_backend_does() -> None:
+    settings = dotenv_values(REPO_ROOT / "deploy" / "common.env")
+    caddy = (settings["CADDY_TRUSTED_PROXIES"] or "").split()
+    assert caddy == (settings["TRUSTED_PROXY_IPS"] or "").split(",")
 
 
 _PROJECT = "BITWARDEN_PROJECT_ID=00000000-0000-0000-0000-000000000000\n"
