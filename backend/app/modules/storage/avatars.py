@@ -1,103 +1,130 @@
-"""Resolving a user's own avatar, which is the one file that is not org-scoped.
+"""A user's own avatar: not an organisation's file, and published where anyone
+can read it.
 
-Everything else in this module is scoped to an organisation:
-StoredFileRepository takes an org_id and every query filters on it, because a
-document belongs to the org that paid for the storage. An avatar does not. It
-belongs to the *person*, it follows them between organisations, and the
-profile page that shows it has no org in view at all.
+An avatar belongs to the person and follows them between organisations, so it
+is not a StoredFile: it uses no organisation's quota and needs no permission in
+one. Until 2026-11 it was an org file, and a member who could not upload files
+in their organisation could not change their own picture.
 
-So these two functions look a file up by `uploaded_by` instead of by `org_id`.
-That is the whole reason they exist rather than living on StorageService,
-which cannot be constructed without an org -- and it is why `uploaded_by` is
-checked on the way in rather than assumed: without it a user could point
-`avatar_object_key` at any file id in the system and have GET
-/auth/me/avatar presign it for them.
+The bytes go:
 
-The bucket stays private throughout. What reaches the browser is a
-short-lived presigned URL, never a public object.
+    POST /auth/me/avatar/upload-form   `presign_upload`: a form that can write
+                                       one object, incoming/avatars/<user>/<random>,
+                                       of up to 5 MB. The browser posts the file
+                                       straight to storage, like every upload.
+    POST /auth/me/avatar               names that key; `is_own_upload` checks it
+                                       is the caller's, and the job is queued
+    process_avatar         scanned, then `reencode`d -- only decoded pixels
+    (scanner worker)       survive, so EXIF, GPS and anything else riding in
+                           the file are gone -- and `publish`ed at
+                           public/avatars/<random>.webp, which needs no
+                           signature to read (scripts/minio-init.sh)
+
+Decoding happens in the scanner worker, never in the API process: a decoder
+bug or a decompression bomb costs that container, under its own memory limit.
+An upload nobody processes expires with the rest of incoming/ after a day.
 """
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, cast
+import io
+import re
+from typing import TYPE_CHECKING
+from uuid import uuid4
 
-from sqlalchemy import or_, select
+from PIL import Image, ImageOps
 
-from app.core.exceptions import NotFoundError
+from app.modules.auth.models import AVATAR_KEY_PREFIX
 from app.modules.storage.backend import get_storage_backend
-from app.modules.storage.models import StoredFile
-from app.modules.storage.scan_gate import CLEAN, require_clean_scan
+from app.modules.storage.keys import INCOMING_PREFIX
 
 if TYPE_CHECKING:
     from uuid import UUID
 
-    from sqlalchemy.ext.asyncio import AsyncSession
+    from app.modules.storage.backend import PresignedUpload
 
-AVATAR_BUCKET = "avatars"
+MAX_AVATAR_BYTES = 5_000_000
+AVATAR_SIZE = 512
+_INCOMING_AVATARS = f"{INCOMING_PREFIX}avatars/"
+# The largest image of each format, read from the header before a pixel is
+# decoded, and sized to the scanner worker's 384 MB (measured 2026-11-10 with
+# Pillow 13). A JPEG decodes at a reduced scale, so 50 MP costs ~20 MB; a PNG
+# or WebP decodes in full, and at 25 MP a WebP peaked at 380 MB. 12 MP is
+# about 180 MB, and a 12 MP phone photo is a JPEG anyway.
+_MAX_PIXELS = {"JPEG": 50_000_000, "PNG": 12_000_000, "WEBP": 12_000_000}
+# The key is new for every upload, so a cached copy is never stale.
+_CACHE_CONTROL = "public, max-age=31536000, immutable"
 
-# Shorter than the storage module's own download links. An avatar URL is
-# fetched when the page renders and used immediately; a long-lived signed URL
-# to a personal photo is a link worth not leaving lying around in a browser
-# history or a proxy log.
-AVATAR_URL_EXPIRES_IN_SECONDS = 300
+
+class InvalidAvatarError(Exception):
+    """Not an image this accepts. The message is for the log, not the user."""
 
 
-async def resolve_own_avatar_key(
-    session: AsyncSession, *, user_id: UUID, file_id: UUID
-) -> str | None:
-    """The object key of `file_id`, if it may become this user's avatar.
+async def presign_upload(user_id: UUID, content_type: str) -> PresignedUpload:
+    """A form for one new object under the user's own incoming prefix.
 
-    None -- never an exception -- when the file does not exist, was uploaded
-    by somebody else, is not in the avatars bucket, or has been judged and
-    failed (infected, or unscannable). The caller turns that into a 422;
-    there is nothing here worth distinguishing for the client, and saying
-    which one failed would confirm the existence of another user's file.
-
-    A file whose scan has **not finished yet** is accepted (plan D4, review
-    R7). Choosing it as your avatar is a statement of intent that is valid
-    before the verdict; *serving* it is not, and that gate lives in
-    `presign_own_avatar`, which every read goes through. Requiring the
-    verdict here meant the profile page -- which sets the avatar the moment
-    the upload is confirmed, before any scanner could have finished -- failed
-    nearly every first upload with a generic error.
+    The declared type is only what the form insists on; `reencode` decides
+    what the bytes are.
     """
-    model = cast("Any", StoredFile)
-    stmt = select(StoredFile).where(
-        model.id == file_id,
-        model.uploaded_by == user_id,
-        model.bucket == AVATAR_BUCKET,
-        model.status == "ready",
-        or_(model.virus_scan_result.is_(None), model.virus_scan_result == CLEAN),
-        model.deleted_at.is_(None),
-    )
-    stored_file = (await session.execute(stmt)).scalar_one_or_none()
-    return stored_file.key if stored_file is not None else None
+    key = f"{_INCOMING_AVATARS}{user_id}/{uuid4()}"
+    return await get_storage_backend().presign_upload(key, content_type, max_bytes=MAX_AVATAR_BYTES)
 
 
-async def presign_own_avatar(session: AsyncSession, key: str) -> str:
-    """A short-lived URL for the avatar stored at `key` -- once it is clean.
+async def is_own_upload(user_id: UUID, key: str) -> bool:
+    """Whether `key` is an upload this user's form made, and it arrived.
 
-    The scan gate for avatars, applied where the bytes are handed out rather
-    than where the choice is made (see `resolve_own_avatar_key`). An avatar
-    has no org, so it never passes through StorageService, and this is the
-    only thing between the stored object and a browser. 409 with the scan
-    gate's own message while the scan is pending or after it failed; 404 if
-    the file is gone.
+    The prefix is the proof: only a form from `presign_upload` for this user
+    can write under it.
     """
-    model = cast("Any", StoredFile)
-    stmt = select(StoredFile).where(model.key == key, model.deleted_at.is_(None))
-    stored_file = (await session.execute(stmt)).scalar_one_or_none()
-    if stored_file is None:
-        raise NotFoundError("errors.avatar_not_found", fallback="No uploaded avatar.")
-    require_clean_scan(stored_file)
-    return await presign_avatar(key)
+    pattern = rf"{re.escape(_INCOMING_AVATARS)}{user_id}/[0-9a-f-]{{36}}"
+    return re.fullmatch(pattern, key) is not None and await get_storage_backend().exists(key)
 
 
-async def presign_avatar(key: str) -> str:
-    """A short-lived URL the browser can put in an <img src>.
+def reencode(raw: bytes) -> bytes:
+    """A 512 px square WebP of the image's pixels, and nothing else from the file.
 
-    Presigned rather than public: the avatars bucket is private like every
-    other, so this is the only way the image reaches a page without opening
-    the bucket up.
+    Raises InvalidAvatarError for anything that is not a JPEG, PNG or WebP
+    Pillow can decode, or is too large to decode safely.
     """
-    return await get_storage_backend().presign_download(key, AVATAR_URL_EXPIRES_IN_SECONDS)
+    try:
+        with Image.open(io.BytesIO(raw)) as image:
+            limit = _MAX_PIXELS.get(image.format or "")
+            if limit is None:
+                raise InvalidAvatarError(f"format {image.format}")
+            if image.width * image.height > limit:
+                raise InvalidAvatarError(f"{image.format} of {image.width}x{image.height} pixels")
+            # Shrink before anything else copies it: transposing, converting
+            # and cropping each copy the image, and at full size four copies
+            # of a 25 MP PNG passed the scanner worker's 384 MB. `draft` makes
+            # a JPEG decode at a reduced scale to begin with.
+            image.draft("RGB", (AVATAR_SIZE * 2, AVATAR_SIZE * 2))
+            factor = min(image.size) // (AVATAR_SIZE * 2)
+            small = image.reduce(factor) if factor > 1 else image
+            upright = ImageOps.exif_transpose(small)
+            transparent = "A" in upright.getbands() or "transparency" in upright.info
+            square = ImageOps.fit(
+                upright.convert("RGBA" if transparent else "RGB"),
+                (AVATAR_SIZE, AVATAR_SIZE),
+                Image.Resampling.LANCZOS,
+            )
+    # A broken file is an UnidentifiedImageError (an OSError) or a ValueError.
+    except (OSError, ValueError, Image.DecompressionBombError) as exc:
+        raise InvalidAvatarError(str(exc)) from exc
+    out = io.BytesIO()
+    square.save(out, "WEBP", quality=85)
+    return out.getvalue()
+
+
+async def publish(webp: bytes) -> str:
+    key = f"{AVATAR_KEY_PREFIX}{uuid4()}.webp"
+    await get_storage_backend().put(key, webp, "image/webp", cache_control=_CACHE_CONTROL)
+    return key
+
+
+async def delete_avatar_objects(*keys: str | None) -> None:
+    """Delete published avatars and staged uploads. Any other key is left
+    alone: an avatar from before 2026-11 is an org's StoredFile."""
+    backend = get_storage_backend()
+    for key in keys:
+        if key and key.startswith((AVATAR_KEY_PREFIX, _INCOMING_AVATARS)):
+            await backend.delete(key)

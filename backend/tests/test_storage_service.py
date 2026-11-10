@@ -521,23 +521,6 @@ async def test_presign_upload_rejects_disallowed_content_type(
 
 
 @pytest.mark.usefixtures("fake_backend")
-async def test_presign_upload_avatars_bucket_has_stricter_allowlist(
-    session: AsyncSession, redis: Redis, org, user_id
-) -> None:
-    service = _service(session, redis, org)
-
-    with pytest.raises(UnprocessableEntityError):
-        await service.presign_upload(
-            user_id,
-            filename="doc.pdf",
-            content_type="application/pdf",
-            size_bytes=100,
-            bucket="avatars",
-            org_sub=None,
-        )
-
-
-@pytest.mark.usefixtures("fake_backend")
 async def test_presign_upload_allows_image_in_avatars_bucket(
     session: AsyncSession, redis: Redis, org, user_id
 ) -> None:

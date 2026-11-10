@@ -85,7 +85,9 @@ SCAN_QUEUE_NAME = "forge:queue:scan"
 # not at call sites, so no caller can forget it -- a job enqueued onto a
 # queue whose worker does not register it is accepted and never runs, which
 # tests/test_worker_registration.py checks per (queue, name) pair.
-JOB_QUEUES: dict[str, str] = {"virus_scan": SCAN_QUEUE_NAME}
+# process_avatar decodes an uploaded image, which belongs in the same
+# container as the scanner for the same reason.
+JOB_QUEUES: dict[str, str] = {"virus_scan": SCAN_QUEUE_NAME, "process_avatar": SCAN_QUEUE_NAME}
 
 
 def queue_for(function: str) -> str:

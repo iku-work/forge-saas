@@ -66,6 +66,7 @@ from app.modules.auth.schemas import UserPublic
 from app.modules.gdpr.models import ConsentRecord, DataExportJob
 from app.modules.gdpr.repository import DataExportJobRepository
 from app.modules.notifications.models import Notification, PushToken
+from app.modules.storage.avatars import delete_avatar_objects
 from app.modules.storage.backend import get_storage_backend
 from app.modules.storage.keys import delete_every_copy
 from app.modules.storage.models import StoredFile
@@ -153,6 +154,10 @@ async def purge_user_data(
         references = [r for r in USER_REFERENCES if r.model.__tablename__ in tables]
         if StoredFile.__tablename__ in tables:
             await _delete_stored_objects(session, user_id)
+        # Not StoredFile rows: the published avatar, which anyone with its
+        # URL can read, and any upload still being processed. Storage first,
+        # for the reason in _delete_stored_objects.
+        await delete_avatar_objects(user.avatar_object_key, user.avatar_pending_key)
         # Review OCT-03: export archives are not StoredFile rows. The whole
         # prefix, so failed and orphaned exports go too.
         await asyncio.to_thread(_delete_export_archives, user_id)

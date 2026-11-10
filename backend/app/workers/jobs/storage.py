@@ -64,8 +64,6 @@ from app.core.db import async_session_factory, dispose_engine
 from app.core.module_loader import is_enabled
 from app.core.tracing import trace_job
 from app.models._mixins import utcnow
-from app.modules.auth.models import User
-from app.modules.storage.avatars import AVATAR_BUCKET
 from app.modules.storage.backend import StorageBackend, get_storage_backend
 from app.modules.storage.keys import delete_every_copy
 from app.modules.storage.logos import LOGO_BUCKET
@@ -208,23 +206,23 @@ async def expire_abandoned_uploads(
 async def retire_unused_images(
     ctx: dict[str, Any],  # noqa: ARG001 -- scheduler calling convention
 ) -> None:
-    """Delete avatars and logos that no user or organization points at."""
+    """Delete logos no organization points at, and avatars uploaded as org files.
+
+    Avatars stopped being org files in 2026-11 (app.modules.storage.avatars).
+    The old ones are shown nowhere any more, whatever key a user row still
+    holds, so every file in that bucket is retired.
+    """
     if not is_enabled("file_storage"):
         return
     model = cast("Any", StoredFile)
-    user = cast("Any", User)
     org = cast("Any", Organization)
-    in_use = (
-        select(user.avatar_object_key)
-        .where(user.avatar_object_key.is_not(None))
-        .union(select(org.logo_object_key).where(org.logo_object_key.is_not(None)))
-    )
+    in_use = select(org.logo_object_key).where(org.logo_object_key.is_not(None))
 
     async with async_session_factory() as session:
         stmt = (
             select(StoredFile)
             .where(
-                model.bucket.in_((AVATAR_BUCKET, LOGO_BUCKET)),
+                model.bucket.in_(("avatars", LOGO_BUCKET)),
                 # Pending uploads are expire_abandoned_uploads' to retire.
                 model.status != "pending",
                 model.deleted_at.is_(None),

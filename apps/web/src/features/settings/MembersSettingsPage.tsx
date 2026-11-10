@@ -3,7 +3,6 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import {
   useInfiniteQuery,
   useMutation,
-  useQuery,
   useQueryClient,
 } from "@tanstack/react-query";
 import { Search, UserRound } from "lucide-react";
@@ -13,7 +12,6 @@ import { z } from "zod";
 
 import {
   createInvitationApiV1OrgsOrgIdInvitationsPost,
-  getMemberAvatarApiV1OrgsOrgIdMembersMembershipIdAvatarGet,
   listInvitationsApiV1OrgsOrgIdInvitationsGetInfiniteQueryKey,
   listMembersApiV1OrgsOrgIdMembersGet,
   listMembersApiV1OrgsOrgIdMembersGetInfiniteQueryKey,
@@ -80,8 +78,6 @@ import { PendingInvitationsCard } from "./PendingInvitationsCard";
 // what makes the container a scroll port at all -- without it the list
 // grows to its full height and there is nothing to virtualize against.
 const ESTIMATED_ROW_HEIGHT_PX = 72;
-// A presigned avatar URL lives five minutes; refetch a little before that.
-const AVATAR_URL_STALE_MS = 4 * 60 * 1000;
 const MAX_LIST_HEIGHT_PX = 420;
 
 const ROLE_OPTIONS: ApiMemberRole[] = [
@@ -122,37 +118,19 @@ const MEMBER_ROW =
   "h-16 py-0 grid-cols-[minmax(0,1fr)_6.5rem_2rem] @xl/list:grid-cols-[minmax(0,1fr)_6.5rem_6.5rem_7rem_2rem]";
 
 /**
- * A member's photo: your own from the user menu's query, an uploaded one
- * through the members avatar endpoint (a short-lived URL, fetched only for
- * members who have one), else an OAuth picture, else an initial.
+ * A member's photo: your own from the auth store (current the moment you
+ * change it), else theirs -- an uploaded avatar's public URL or an OAuth
+ * picture -- else an initial.
  */
 function MemberAvatar({
-  orgId,
   member,
   selfSrc,
 }: {
-  orgId: string;
   member: MembershipPublic;
   selfSrc: string | null;
 }) {
   const summary = member.user ?? null;
-  const uploaded = useQuery({
-    queryKey: ["members", orgId, member.id, "avatar"],
-    queryFn: async () => {
-      const { data } =
-        await getMemberAvatarApiV1OrgsOrgIdMembersMembershipIdAvatarGet({
-          path: { org_id: orgId, membership_id: member.id },
-          throwOnError: true,
-        });
-      return data.data?.url ?? null;
-    },
-    enabled: selfSrc === null && summary?.has_uploaded_avatar === true,
-    staleTime: AVATAR_URL_STALE_MS,
-    // 409 while a new photo's scan is pending: the initial is fine until the
-    // list is next opened.
-    retry: false,
-  });
-  const src = selfSrc ?? uploaded.data ?? summary?.avatar_url ?? null;
+  const src = selfSrc ?? summary?.avatar_url ?? null;
   const initial = (summary?.full_name ?? summary?.email ?? "")
     .trim()
     .charAt(0)
@@ -539,7 +517,6 @@ export function MembersSettingsPage({
                 <DataListRow className={MEMBER_ROW}>
                   <span className="flex min-w-0 items-center gap-3">
                     <MemberAvatar
-                      orgId={org.id}
                       member={member}
                       selfSrc={isSelf ? avatarSrc : null}
                     />

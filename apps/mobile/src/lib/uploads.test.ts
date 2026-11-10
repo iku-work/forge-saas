@@ -31,6 +31,8 @@ const mocks = vi.hoisted(() => ({
   presignUploadApiV1FilesPresignPost: vi.fn(),
   confirmUploadApiV1FilesFileIdConfirmPost: vi.fn(),
   deleteFileApiV1FilesFileIdDelete: vi.fn(),
+  getAvatarUploadFormApiV1AuthMeAvatarUploadFormPost: vi.fn(),
+  setMyAvatarApiV1AuthMeAvatarPost: vi.fn(),
 }));
 vi.mock("@forge/api-client", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@forge/api-client")>();
@@ -41,10 +43,14 @@ vi.mock("@forge/api-client", async (importOriginal) => {
     confirmUploadApiV1FilesFileIdConfirmPost:
       mocks.confirmUploadApiV1FilesFileIdConfirmPost,
     deleteFileApiV1FilesFileIdDelete: mocks.deleteFileApiV1FilesFileIdDelete,
+    getAvatarUploadFormApiV1AuthMeAvatarUploadFormPost:
+      mocks.getAvatarUploadFormApiV1AuthMeAvatarUploadFormPost,
+    setMyAvatarApiV1AuthMeAvatarPost: mocks.setMyAvatarApiV1AuthMeAvatarPost,
   };
 });
 
-const { pickAndUpload, UploadPermissionError } = await import("./uploads");
+const { pickAndUpload, pickAndUploadAvatar, UploadPermissionError } =
+  await import("./uploads");
 
 const GRANTED = {
   granted: true,
@@ -97,16 +103,14 @@ const CONFIRMED_FILE = {
 };
 
 function makeUploadTask(overrides: { uploadResult?: unknown } = {}) {
-  const uploadAsync = vi
-    .fn()
-    .mockResolvedValue(
-      overrides.uploadResult ?? {
-        status: 200,
-        headers: {},
-        mimeType: null,
-        body: "",
-      },
-    );
+  const uploadAsync = vi.fn().mockResolvedValue(
+    overrides.uploadResult ?? {
+      status: 200,
+      headers: {},
+      mimeType: null,
+      body: "",
+    },
+  );
   const cancelAsync = vi.fn().mockResolvedValue(undefined);
   return { uploadAsync, cancelAsync };
 }
@@ -355,5 +359,67 @@ describe("lib/uploads", () => {
     await handle.cancel();
 
     expect(mocks.deleteFileApiV1FilesFileIdDelete).not.toHaveBeenCalled();
+  });
+});
+
+describe("lib/uploads pickAndUploadAvatar", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    imagePicker.requestMediaLibraryPermissionsAsync.mockResolvedValue(GRANTED);
+    imagePicker.launchImageLibraryAsync.mockResolvedValue({
+      canceled: false,
+      assets: [
+        {
+          uri: "file://me.jpg",
+          fileName: "me.jpg",
+          fileSize: 512,
+          mimeType: "image/jpeg",
+        },
+      ],
+    });
+    fileSystem.createUploadTask.mockReturnValue(makeUploadTask());
+    mocks.getAvatarUploadFormApiV1AuthMeAvatarUploadFormPost.mockResolvedValue({
+      data: {
+        data: {
+          upload_url: "https://storage.example.com/forge",
+          fields: POLICY_FIELDS,
+          upload_key: "incoming/avatars/user-1/key-1",
+          expires_at: "2026-01-01T00:00:00Z",
+        },
+        error: null,
+      },
+    });
+    mocks.setMyAvatarApiV1AuthMeAvatarPost.mockResolvedValue({
+      data: { data: { id: "user-1", avatar_processing: true }, error: null },
+    });
+  });
+
+  it("uploads with the avatar form, not as an organization's file", async () => {
+    const user = await pickAndUploadAvatar();
+
+    expect(mocks.presignUploadApiV1FilesPresignPost).not.toHaveBeenCalled();
+    expect(fileSystem.createUploadTask).toHaveBeenCalledWith(
+      "https://storage.example.com/forge",
+      "file://me.jpg",
+      expect.objectContaining({ parameters: POLICY_FIELDS }),
+      expect.any(Function),
+    );
+    expect(mocks.setMyAvatarApiV1AuthMeAvatarPost).toHaveBeenCalledWith(
+      expect.objectContaining({
+        body: { upload_key: "incoming/avatars/user-1/key-1" },
+      }),
+    );
+    expect(user).toEqual({ id: "user-1", avatar_processing: true });
+  });
+
+  it("does not set the avatar when the upload fails", async () => {
+    fileSystem.createUploadTask.mockReturnValue(
+      makeUploadTask({
+        uploadResult: { status: 403, headers: {}, mimeType: null, body: "" },
+      }),
+    );
+
+    await expect(pickAndUploadAvatar()).rejects.toThrow("403");
+    expect(mocks.setMyAvatarApiV1AuthMeAvatarPost).not.toHaveBeenCalled();
   });
 });

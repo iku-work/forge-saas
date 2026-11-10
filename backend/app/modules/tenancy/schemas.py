@@ -43,10 +43,8 @@ class MemberUserSummary(AppBaseModel):
 
     Enough to draw a row (a name, a picture) and no more. `email` is set only
     for a caller who can manage members (an owner, an admin, or an API key with
-    `members:write`); everyone else gets null. Never the
-    uploaded avatar's object key: `has_uploaded_avatar` only says one exists
-    (the web app fetches a short-lived URL for it with a member's session).
-    `avatar_url` is an OAuth provider's picture, already an absolute URL.
+    `members:write`); everyone else gets null. `avatar_url` is the uploaded
+    avatar's public URL, else an OAuth provider's picture.
     """
 
     full_name: str | None

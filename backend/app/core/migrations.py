@@ -31,7 +31,7 @@ if TYPE_CHECKING:
 
 # Revision ID of the last always-on ("core") migration. Update this constant
 # whenever a new core-only migration is appended to alembic/versions/core/.
-CORE_HEAD_REVISION = "c4d8f2a6b1e3"
+CORE_HEAD_REVISION = "e5a9c3d7f1b2"
 
 # Module name -> the alembic branch label its first migration declares.
 # Only modules that currently ship a models.py (and therefore a migration)

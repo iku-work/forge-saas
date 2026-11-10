@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import ClassVar
+from typing import ClassVar, cast
 from uuid import UUID
 
 from sqlalchemy import Column, DateTime, UniqueConstraint, text
@@ -7,12 +7,18 @@ from sqlalchemy.dialects.postgresql import JSONB
 from sqlmodel import Field, SQLModel
 
 from app.core.encrypted_type import EncryptedString, RedactedReprMixin
+from app.core.urls import public_object_url
 from app.models._mixins import SoftDeleteMixin, TimestampMixin, UUIDPKMixin
 
 # Every datetime column declared directly in this file (i.e. not inherited
 # from TimestampMixin) must use the same tz-aware type as the mixin — see
 # app.models._mixins for why a naive TIMESTAMP column breaks asyncpg binds.
 _TZ_DATETIME = DateTime(timezone=True)
+
+
+# Where published avatars live. Readable without a signature: see
+# scripts/minio-init.sh, which grants anonymous GetObject on public/ only.
+AVATAR_KEY_PREFIX = "public/avatars/"
 
 
 class User(RedactedReprMixin, UUIDPKMixin, TimestampMixin, SoftDeleteMixin, SQLModel, table=True):
@@ -31,29 +37,32 @@ class User(RedactedReprMixin, UUIDPKMixin, TimestampMixin, SoftDeleteMixin, SQLM
     # Set by an OAuth provider (AuthService's oauth flow copies `picture`),
     # so it is an absolute URL on someone else's domain.
     avatar_url: str | None = Field(default=None)
-    # An avatar the user uploaded, as the private object key it lives at --
-    # the bucket is not public-read, so there is no URL to store. Resolved to
-    # a short-lived presigned URL by GET /auth/me/avatar, and preferred over
-    # avatar_url above: an upload is a deliberate choice, an OAuth picture is
-    # a default.
+    # An avatar the user uploaded: the key of its public copy, under
+    # AVATAR_KEY_PREFIX, which anyone can read without a signature. It is
+    # the re-encoded image the scanner worker published
+    # (app.modules.storage.avatars), never the uploaded file, and the key is
+    # random per upload, so an old avatar's URL stops working when it is
+    # replaced. Preferred over avatar_url above: an upload is a deliberate
+    # choice, an OAuth picture is a default.
     #
-    # Deliberately NOT a foreign key to stored_file.id. `file_storage` is an
-    # optional module with nothing depending on it, so that table does not
-    # exist in every configuration and a constraint would fail to create in
-    # the minimum-surface one. The cost is a key that can outlive its file,
-    # which shows up as an avatar that stops loading -- see
-    # AuthService.set_avatar for what is validated at write time instead.
+    # A key outside the prefix is an avatar from before 2026-11, when they
+    # were private org files; it is treated as no avatar.
     avatar_object_key: str | None = Field(default=None)
+    # The upload being processed into the avatar, under incoming/. Only the
+    # latest upload is published: the job drops one whose key is no longer
+    # this. Exposed only as UserPublic.avatar_processing.
+    avatar_pending_key: str | None = Field(default=None)
 
     @property
     def has_uploaded_avatar(self) -> bool:
-        """What UserPublic exposes instead of the key or a URL.
+        return (self.avatar_object_key or "").startswith(AVATAR_KEY_PREFIX)
 
-        A plain property rather than a column: it is derived, and the key
-        itself must not leave the server -- a client holding one could ask for
-        it to be presigned.
-        """
-        return self.avatar_object_key is not None
+    @property
+    def avatar_src(self) -> str | None:
+        """What to show: the uploaded avatar's public URL, else the OAuth picture."""
+        if self.has_uploaded_avatar:
+            return public_object_url(cast("str", self.avatar_object_key))
+        return self.avatar_url
 
     is_active: bool = Field(default=True)
     is_superadmin: bool = Field(default=False)

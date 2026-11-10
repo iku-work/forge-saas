@@ -135,6 +135,10 @@ migrate() {
   # talks to them. Starts nothing that is already right, and the app's
   # containers cannot reach them on a network they have left.
   docker compose $COMPOSE up -d --wait --wait-timeout 300 --quiet-pull $DATA_SERVICES </dev/null
+  # The bucket's policies and lifecycle rules, which change with the checkout.
+  # `run`, not `up`: compose does not start a one-shot container again once it
+  # has exited. scripts/minio-init.sh is safe to run every time.
+  docker compose $COMPOSE run --rm --no-deps minio-init </dev/null
 
   # Backups leave the box before any data changes (ADR-0009): every product
   # needs an off-host copy, and a high-sensitivity one needs a key that cannot
