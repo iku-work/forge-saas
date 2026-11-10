@@ -391,3 +391,56 @@ async def test_the_refusal_survives_stripe_being_unavailable(
     # is missing.
     assert excinfo.value.message_key == "errors.subscription_already_active"
     assert excinfo.value.details is None
+
+
+# --- the cancel flow ------------------------------------------------------------------
+
+
+async def test_cancel_flow_opens_on_the_subscription_and_returns_to_the_app(
+    service: BillingService,
+    session: AsyncSession,
+    org: Organization,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The plain portal's only way back after cancelling is a link people missed."""
+    org.stripe_customer_id = "cus_existing"
+    await _give_org_a_subscription(session, org, await _make_plan(session), "active")
+    subscription = await service.get_subscription(org.id)
+    assert subscription is not None
+    captured: dict[str, Any] = {}
+
+    async def _portal_create(**kwargs: object) -> _FakePortalSession:
+        captured.update(kwargs)
+        return _FakePortalSession(url="https://billing.stripe.com/portal/cancel")
+
+    monkeypatch.setattr(stripe.billing_portal.Session, "create_async", _portal_create)
+
+    await service.create_portal_session(org, cancel=True)
+
+    flow = captured["flow_data"]
+    assert isinstance(flow, dict)
+    assert flow["subscription_cancel"] == {"subscription": subscription.stripe_subscription_id}
+    assert flow["after_completion"] == {
+        "type": "redirect",
+        "redirect": {"return_url": captured["return_url"]},
+    }
+
+
+@pytest.mark.parametrize("status", [None, "canceled", "comp"])
+async def test_cancel_flow_refused_without_a_stripe_subscription(
+    service: BillingService,
+    session: AsyncSession,
+    org: Organization,
+    status: str | None,
+) -> None:
+    if status is not None:
+        await _give_org_a_subscription(
+            session, org, await _make_plan(session), "active" if status == "comp" else status
+        )
+        subscription = await service.get_subscription(org.id)
+        assert subscription is not None
+        subscription.free_override = status == "comp"
+        await session.flush()
+
+    with pytest.raises(ConflictError):
+        await service.create_portal_session(org, cancel=True)

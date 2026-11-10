@@ -133,5 +133,6 @@
   "file_scan_failed": "Diese Datei konnte nicht auf Schadsoftware geprüft werden und kann daher nicht heruntergeladen werden.",
   "file_infected": "In dieser Datei wurde Schadsoftware gefunden; sie ist nicht mehr verfügbar.",
   "reauth_failed": "Das Passwort oder der Code ist nicht korrekt.",
-  "reauth_wrong_account": "Dieses Konto ist nicht das, mit dem Sie angemeldet sind."
+  "reauth_wrong_account": "Dieses Konto ist nicht das, mit dem Sie angemeldet sind.",
+  "no_subscription_to_cancel": "Diese Organisation hat kein Abonnement, das gekündigt werden kann."
 }

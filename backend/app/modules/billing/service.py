@@ -175,11 +175,23 @@ async def _create_checkout_session_stripe(
 
 @resilient("stripe")
 async def _create_portal_session_stripe(
-    *, customer_id: str, return_to: str
+    *, customer_id: str, return_to: str, cancel_subscription: str | None = None
 ) -> stripe.billing_portal.Session:
+    if cancel_subscription is None:
+        return await stripe.billing_portal.Session.create_async(
+            customer=customer_id, return_url=return_to
+        )
+    # Straight into the cancel flow, and straight back afterwards. The plain
+    # portal's only way out after cancelling is a small link in its header,
+    # which people did not find.
     return await stripe.billing_portal.Session.create_async(
         customer=customer_id,
         return_url=return_to,
+        flow_data={
+            "type": "subscription_cancel",
+            "subscription_cancel": {"subscription": cancel_subscription},
+            "after_completion": {"type": "redirect", "redirect": {"return_url": return_to}},
+        },
     )
 
 
@@ -629,11 +641,29 @@ class BillingService:
             logger.warning("billing.portal_url_unavailable_for_conflict", exc_info=True)
             return None
 
-    async def create_portal_session(self, org: Organization, locale: str | None = None) -> str:
+    async def create_portal_session(
+        self, org: Organization, locale: str | None = None, *, cancel: bool = False
+    ) -> str:
+        cancel_subscription = None
+        if cancel:
+            subscription = await self._subscriptions.get_by_org_id(org.id)
+            # An admin's comp has a placeholder id Stripe has never heard of.
+            if (
+                subscription is None
+                or subscription.free_override
+                or subscription.status not in _LIVE_SUBSCRIPTION_STATUSES
+            ):
+                raise ConflictError(
+                    "errors.no_subscription_to_cancel",
+                    fallback="This organization has no subscription to cancel.",
+                )
+            cancel_subscription = subscription.stripe_subscription_id
         customer_id = await self.get_or_create_stripe_customer(org)
 
         portal_session = await _create_portal_session_stripe(
-            customer_id=customer_id, return_to=_billing_page_url(locale)
+            customer_id=customer_id,
+            return_to=_billing_page_url(locale),
+            cancel_subscription=cancel_subscription,
         )
         return portal_session.url
 
