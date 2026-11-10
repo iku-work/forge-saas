@@ -12,7 +12,7 @@
 # files only: a running service keeps what it started with until it is recreated.
 #
 # When it generates anything, it writes the application's new secrets to
-# bitwarden-values.txt. Copy that into Bitwarden and delete it. The settings
+# bitwarden-values.txt, for scripts/fill-bitwarden.sh to read. The settings
 # that go with them (PGBOUNCER_ENABLED, STORAGE_BACKEND, AWS_BUCKET_NAME as
 # .env.minio's MINIO_BUCKET, ...) are committed, in deploy/common.env.
 set -euo pipefail
@@ -74,4 +74,4 @@ AWS_SECRET_ACCESS_KEY=$(value MINIO_APP_SECRET_KEY .env.minio)
 # It decrypts every uploaded file, the way ENCRYPTION_KEY decrypts the columns.
 MINIO_KMS_SECRET_KEY=$(value MINIO_KMS_SECRET_KEY .env.minio)
 EOF
-echo "Wrote bitwarden-values.txt. Copy it into Bitwarden, then delete it."
+echo "Wrote bitwarden-values.txt. Fill Bitwarden from it with scripts/fill-bitwarden.sh."

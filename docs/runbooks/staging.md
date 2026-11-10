@@ -75,7 +75,8 @@ boxes cannot check in for each other, and keeps a week of local copies.
 
 **Expected:** the script ends with `Done.`, and `~forge/forge-backup.env` has
 `BACKUP_SENTRY_MONITOR=forge-backup-staging`. Point the backups at
-`forge-staging-backups` with `set-backup-remote.sh`.
+`forge-staging-backups` with `set-backup-remote.sh`. Step 4's script takes
+`staging` too: `bash scripts/fill-bitwarden.sh staging root@<ip>`.
 
 ### 3. Lock CI's key and connect GitHub
 
