@@ -10,6 +10,8 @@ import pytest
 import yaml
 from dotenv import dotenv_values
 
+from app.core.config import Settings
+
 REPO_ROOT = Path(__file__).parent.parent.parent
 
 
@@ -388,13 +390,25 @@ def _write_env_from_bitwarden(
         f"#!/bin/sh\ncat '{(tmp_path / 'secrets.json').as_posix()}'\n", encoding="utf-8"
     )
     fake.chmod(0o755)
+    # What "Read the committed settings" leaves behind for this step.
+    (tmp_path / "deploy").mkdir()
+    shutil.copy(REPO_ROOT / "deploy" / "secret-names", tmp_path / "deploy")
+    (tmp_path / "settings.env").write_text("ENVIRONMENT=staging\n", encoding="utf-8")
     steps = _deploy_workflow("hetzner")["jobs"]["deploy"]["steps"]
     step = next(s for s in steps if s.get("name") == "Write the env from Bitwarden")
+    # From a file, as GitHub runs it: Git Bash for Windows reads a `-c` script
+    # off the command line and drops one of each `\\` in it.
+    (tmp_path / "step.sh").write_text(step["run"], encoding="utf-8", newline="\n")
     # The flags GitHub runs a `run:` step with.
     return subprocess.run(  # noqa: S603 -- fixed argv: the step under test
-        [bash, "--noprofile", "--norc", "-eo", "pipefail", "-c", step["run"]],
+        [bash, "--noprofile", "--norc", "-eo", "pipefail", "step.sh"],
         cwd=tmp_path,
-        env={**os.environ, "PATH": f"{bin_dir}{os.pathsep}{os.environ['PATH']}"},
+        env={
+            **os.environ,
+            "PATH": f"{bin_dir}{os.pathsep}{os.environ['PATH']}",
+            "TARGET": "staging",
+            "BITWARDEN_PROJECT_ID": "00000000-0000-0000-0000-000000000000",
+        },
         capture_output=True,
         text=True,
         check=False,
@@ -420,6 +434,7 @@ def test_bitwarden_env_quotes_pems_and_leaves_out_other_consumers(tmp_path: Path
     )
     assert result.returncode == 0, result.stderr
     assert (tmp_path / "prod.env").read_text(encoding="utf-8") == (
+        "ENVIRONMENT=staging\n"
         f'JWT_PRIVATE_KEY="{pem}"\n'
         f'JWT_PUBLIC_KEY="{pem}"\n'
         "DATABASE_URL=postgresql+asyncpg://u:p$(id)@db/forge\n"
@@ -448,6 +463,11 @@ def test_bitwarden_env_quotes_pems_and_leaves_out_other_consumers(tmp_path: Path
             [{"key": "JWT_PUBLIC_KEY", "value": "-----BEGIN PUBLIC KEY-----\nabc"}],
             "JWT_PUBLIC_KEY",
         ),
+        # Bitwarden holds secrets only; settings are committed.
+        (
+            [{"key": "ENCRYPTION_KEY", "value": "a"}, {"key": "DOMAIN", "value": "b"}],
+            "Not secrets, so not for Bitwarden: DOMAIN.",
+        ),
     ],
 )
 def test_bitwarden_env_refuses_what_would_ship_broken(
@@ -457,6 +477,101 @@ def test_bitwarden_env_refuses_what_would_ship_broken(
     assert result.returncode != 0
     assert message in result.stderr
     assert not (tmp_path / "prod.env").exists()
+
+
+def _secret_names() -> set[str]:
+    lines = (REPO_ROOT / "deploy" / "secret-names").read_text(encoding="utf-8").splitlines()
+    return {line for line in lines if line and not line.startswith("#")}
+
+
+def _read_deploy_settings(
+    workspace: Path, target: str, files: dict[str, str] | None = None
+) -> subprocess.CompletedProcess[str]:
+    """Run scripts/read-deploy-settings.sh in a copy of the repository's
+    deploy/ directory, with `files` written over it."""
+    bash = shutil.which("bash")
+    if bash is None:
+        pytest.skip("needs bash")
+    shutil.copytree(REPO_ROOT / "deploy", workspace / "deploy")
+    for name, text in (files or {}).items():
+        (workspace / "deploy" / name).write_text(text, encoding="utf-8")
+    (workspace / "scripts").mkdir()
+    shutil.copy(REPO_ROOT / "scripts" / "read-deploy-settings.sh", workspace / "scripts")
+    return subprocess.run(  # noqa: S603 -- fixed argv: the script under test
+        [bash, str(workspace / "scripts" / "read-deploy-settings.sh"), target],
+        env={**os.environ, "GITHUB_ENV": str(workspace / "github_env")},
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+
+@pytest.mark.parametrize("target", ["production", "staging"])
+def test_each_environment_reads_its_committed_settings(tmp_path: Path, target: str) -> None:
+    result = _read_deploy_settings(tmp_path, target)
+
+    assert result.returncode == 0, result.stderr
+    settings = dotenv_values(tmp_path / "settings.env")
+    exported = dotenv_values(tmp_path / "github_env")
+    assert settings["ENVIRONMENT"] == {"production": "prod", "staging": "staging"}[target]
+    assert "BITWARDEN_PROJECT_ID" not in settings, "Settings() forbids a name it does not know"
+    assert exported["DOMAIN"] == settings["DOMAIN"]
+    assert exported["MARKETING_DOMAIN"] == settings["MARKETING_DOMAIN"]
+    assert settings["FRONTEND_URL"] == f"https://{settings['DOMAIN']}"
+    assert settings["ALLOWED_ORIGINS"] == f'["https://{settings["DOMAIN"]}"]'
+
+
+def test_every_deploy_setting_is_one_the_backend_reads() -> None:
+    # Settings() refuses a name it does not know, so a typo would only show as
+    # a box that will not migrate.
+    fields = set(Settings.model_fields)
+    assert _secret_names() <= fields
+    for path in (REPO_ROOT / "deploy").glob("*.env"):
+        names = set(dotenv_values(path)) - {"BITWARDEN_PROJECT_ID"}
+        assert names <= fields - _secret_names(), path.name
+
+
+_PROJECT = "BITWARDEN_PROJECT_ID=00000000-0000-0000-0000-000000000000\n"
+
+
+@pytest.mark.parametrize(
+    ("files", "message"),
+    [
+        (
+            {"staging.env": _PROJECT + "ENVIRONMENT=staging\nDOMAIN=a.b\nSTRIPE_SECRET_KEY=x\n"},
+            "Secrets committed to deploy/common.env deploy/staging.env: STRIPE_SECRET_KEY.",
+        ),
+        (
+            {"staging.env": _PROJECT + "ENVIRONMENT=staging\nDOMAIN=a.b\nLOG_LEVEL=DEBUG\n"},
+            "Set more than once in deploy/common.env deploy/staging.env: LOG_LEVEL",
+        ),
+        (
+            {"staging.env": _PROJECT + "ENVIRONMENT=prod\nDOMAIN=a.b\n"},
+            "deploy/staging.env must set ENVIRONMENT=staging",
+        ),
+        # Staging's settings on the production box would be a quiet outage.
+        (
+            {"production.env": _PROJECT + "ENVIRONMENT=staging\nDOMAIN=a.b\n"},
+            "deploy/production.env must set ENVIRONMENT=prod",
+        ),
+        (
+            {"staging.env": "ENVIRONMENT=staging\nDOMAIN=a.b\n"},
+            "deploy/staging.env needs BITWARDEN_PROJECT_ID",
+        ),
+        (
+            {"staging.env": _PROJECT + "ENVIRONMENT=staging\nDOMAIN=a.b\n export X=1\n"},
+            "Not NAME=value",
+        ),
+    ],
+)
+def test_committed_settings_refuse_what_would_ship_broken(
+    tmp_path: Path, files: dict[str, str], message: str
+) -> None:
+    target = "production" if "production.env" in files else "staging"
+    result = _read_deploy_settings(tmp_path, target, files)
+    assert result.returncode != 0
+    assert message in result.stderr
+    assert not (tmp_path / "settings.env").exists()
 
 
 # OWASP A06 (vulnerable components): T-212's mapping asserts the dependency
@@ -911,6 +1026,10 @@ def test_infra_secrets_give_every_account_its_own_password(tmp_path: Path) -> No
     assert f":{env['.env.redis']['REDIS_PASSWORD']}@redis" in (values["REDIS_URL"] or "")
     assert values["AWS_ACCESS_KEY_ID"] == "forge-app"
     assert "MIGRATIONS_DATABASE_URL" not in values
+    # Bitwarden takes secrets only; the deploy refuses anything else there.
+    assert set(values) - {"MINIO_KMS_SECRET_KEY"} <= _secret_names()
+    minio_bucket = env[".env.minio"]["MINIO_BUCKET"]
+    assert dotenv_values(REPO_ROOT / "deploy" / "common.env")["AWS_BUCKET_NAME"] == minio_bucket
 
 
 def test_infra_secrets_never_change_a_password_on_a_second_run(tmp_path: Path) -> None:

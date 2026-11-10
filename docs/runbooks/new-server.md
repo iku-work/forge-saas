@@ -23,14 +23,18 @@ Reach for this when:
 
 - **Accounts:** Hetzner, Cloudflare (the domain), Bitwarden Secrets Manager
   (EU), and GitHub admin on the product repo.
-- **A Bitwarden project for this server**, holding the app's settings: one
-  secret per `backend/.env.example` name, with your own values. Never copy a
-  value from a committed `.env.*` file. Production refuses the keys that were
-  once committed (`_PUBLISHED_KEY_FINGERPRINTS` in `app/core/config.py`), and
-  the others are dummies. It includes `DATA_SENSITIVITY`, `standard` or
-  `high`: decide it now (`docs/security/data-classification.md`). Production
-  refuses to start without it, and `high` needs an upload-only backup key,
-  which rules out R2 in step 3.
+- **The app's settings, committed:** `deploy/common.env` for what every
+  environment shares, `deploy/<environment>.env` for the rest (domains,
+  `ENVIRONMENT`, the Google client ID, `BITWARDEN_PROJECT_ID`). Edit them in a
+  PR. `DATA_SENSITIVITY` is there, `standard` or `high`: decide it now
+  (`docs/security/data-classification.md`). Production refuses to start without
+  it, and `high` needs an upload-only backup key, which rules out R2 in step 3.
+- **A Bitwarden project for this server**, holding the secrets and nothing
+  else: the names in `deploy/secret-names` this server uses, with your own
+  values. Never copy a value from a committed `.env.*` file. Production refuses
+  the keys that were once committed (`_PUBLISHED_KEY_FINGERPRINTS` in
+  `app/core/config.py`), and the others are dummies. Its ID goes in
+  `deploy/<environment>.env` as `BITWARDEN_PROJECT_ID`.
 - **A machine account** with **Can read** on that project, and an access token
   for it. The token is shown once; it goes straight into GitHub in step 5.
 
@@ -120,13 +124,15 @@ live only on the server die with it.
 The script writes `~forge/forge/bitwarden-values.txt` (mode 600) on the
 server.
 
-- Add each setting line to the Bitwarden project, then delete the file.
+- Add each secret to the Bitwarden project, then delete the file. The settings
+  that go with them are already in `deploy/common.env`.
 - Store `MINIO_KMS_SECRET_KEY` somewhere off the server **instead**, in the
   Password Manager and not in the deploy project. It decrypts every uploaded
   file.
 
 Why: those values must match the passwords the services were just started
-with, and the deploy reads the app's settings only from Bitwarden.
+with, and the deploy reads the app's secrets only from Bitwarden. It refuses
+any name there that is not in `deploy/secret-names`.
 
 Pasting into Bitwarden: the value only, no surrounding quotes, and a PEM key
 from `-----BEGIN` to `-----END ...-----` inclusive. The deploy fails, naming
@@ -162,10 +168,10 @@ screen.
 | `SSH_HOST` | the server's IP |
 | `SSH_USER` | `forge` |
 
-Then add these repository variables: `PUBLIC_SITE_URL`, `PUBLIC_APP_URL`,
-`PUBLIC_API_URL` (the app host, https), `VITE_SENTRY_DSN` (the browser project's
+Then add these repository variables: `VITE_SENTRY_DSN` (the browser project's
 DSN, which is public by design; leave it out and browser errors go nowhere), and
-last, `DEPLOY_TARGET=hetzner`.
+last, `DEPLOY_TARGET=hetzner`. The bundles' URLs come from `DOMAIN` and
+`MARKETING_DOMAIN` in `deploy/<environment>.env`.
 
 ### 6. First deploy
 

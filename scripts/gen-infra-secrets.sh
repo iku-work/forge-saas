@@ -11,8 +11,10 @@
 # again, since nothing is overwritten once it is the right shape. It changes
 # files only: a running service keeps what it started with until it is recreated.
 #
-# When it generates anything, it writes what the application needs to
-# bitwarden-values.txt. Copy that into Bitwarden and delete it.
+# When it generates anything, it writes the application's new secrets to
+# bitwarden-values.txt. Copy that into Bitwarden and delete it. The settings
+# that go with them (PGBOUNCER_ENABLED, STORAGE_BACKEND, AWS_BUCKET_NAME as
+# .env.minio's MINIO_BUCKET, ...) are committed, in deploy/common.env.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 umask 077
@@ -64,15 +66,9 @@ fi
 
 cat > bitwarden-values.txt <<EOF
 DATABASE_URL=postgresql+asyncpg://forge_app:$(value PGPASSWORD .env.pgbouncer)@pgbouncer:6432/forge?sslmode=require
-PGBOUNCER_ENABLED=true
 REDIS_URL=rediss://:$(value REDIS_PASSWORD .env.redis)@redis:6379/0?ssl_ca_certs=/certs/ca.crt
-STORAGE_BACKEND=minio
 AWS_ACCESS_KEY_ID=$(value MINIO_APP_ACCESS_KEY .env.minio)
 AWS_SECRET_ACCESS_KEY=$(value MINIO_APP_SECRET_KEY .env.minio)
-AWS_BUCKET_NAME=$(value MINIO_BUCKET .env.minio)
-VIRUS_SCANNER=clamav
-CLAMAV_HOST=clamav
-CLAMAV_PORT=3310
 
 # Not for the Bitwarden deploy project: back this up somewhere off the box.
 # It decrypts every uploaded file, the way ENCRYPTION_KEY decrypts the columns.
