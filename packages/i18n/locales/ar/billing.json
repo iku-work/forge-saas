@@ -5,7 +5,8 @@
     "status": "الحالة: {status}",
     "badge": "الخطة الحالية",
     "free_label": "مجانية",
-    "plan_label": "الخطة"
+    "plan_label": "الخطة",
+    "cancels_on": "يُلغى في {date}"
   },
   "available_plans": {
     "title": "الخطط المتاحة",
@@ -51,5 +52,6 @@
   "checkout": {
     "canceled": "تم إلغاء عملية الدفع. لم يتم خصم أي مبلغ منك."
   },
-  "description": "خطتك، وما استخدمته، وفواتيرك."
+  "description": "خطتك، وما استخدمته، وفواتيرك.",
+  "cancel_button": "إلغاء الاشتراك"
 }

@@ -136,5 +136,6 @@
   "file_scan_failed": "This file could not be scanned for malware, so it cannot be downloaded.",
   "file_infected": "This file was found to contain malware and is no longer available.",
   "reauth_failed": "That password or code is not right.",
-  "reauth_wrong_account": "That account is not the one you are signed in with."
+  "reauth_wrong_account": "That account is not the one you are signed in with.",
+  "no_subscription_to_cancel": "This organization has no subscription to cancel."
 }

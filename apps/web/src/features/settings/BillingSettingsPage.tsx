@@ -234,8 +234,9 @@ export function BillingSettingsPage({
   // confirmed, replays this request, so the mutation sees the portal URL.
   // Cancelling leaves the 403, shown through getErrorMessage.
   const portal = useMutation({
-    mutationFn: async () => {
+    mutationFn: async (flow: "cancel" | null) => {
       const { data } = await createPortalSessionApiV1BillingPortalSessionPost({
+        body: { flow },
         throwOnError: true,
       });
       return data;
@@ -293,10 +294,13 @@ export function BillingSettingsPage({
     }
   };
 
-  const handleManageBilling = async (): Promise<void> => {
+  // "cancel" opens Stripe's cancel flow, which comes back here when done.
+  const handleManageBilling = async (
+    flow: "cancel" | null = null,
+  ): Promise<void> => {
     setActionError(null);
     try {
-      const envelope = await portal.mutateAsync();
+      const envelope = await portal.mutateAsync(flow);
       const url = envelope.data?.url;
       if (url) {
         redirectTo(url);
@@ -373,9 +377,18 @@ export function BillingSettingsPage({
                   className="text-sm text-muted-foreground"
                   data-testid="billing-subscription-status"
                 >
-                  {t("billing.current_plan.status", {
-                    status: subscription.status,
-                  })}
+                  {/* Still active until the period ends, so the status alone
+                      read "active" after a cancellation. */}
+                  {activeSubscription?.cancel_at_period_end
+                    ? t("billing.current_plan.cancels_on", {
+                        date: formatDate(
+                          activeSubscription.current_period_end,
+                          i18n.language,
+                        ),
+                      })
+                    : t("billing.current_plan.status", {
+                        status: subscription.status,
+                      })}
                 </span>
               ) : null}
             </div>
@@ -390,6 +403,21 @@ export function BillingSettingsPage({
               disabled={portal.isPending}
             >
               {t("billing.manage_button")}
+            </Button>
+          ) : null}
+          {canManage &&
+          activeSubscription &&
+          !activeSubscription.cancel_at_period_end ? (
+            <Button
+              type="button"
+              variant="ghost"
+              data-testid="billing-cancel-subscription"
+              onClick={() => {
+                void handleManageBilling("cancel");
+              }}
+              disabled={portal.isPending}
+            >
+              {t("billing.cancel_button")}
             </Button>
           ) : null}
         </SettingsRow>

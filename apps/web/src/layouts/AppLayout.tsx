@@ -21,6 +21,7 @@ import {
   Avatar,
   AvatarFallback,
   AvatarImage,
+  Button,
   Dialog,
   DialogContent,
   DialogHeader,
@@ -479,7 +480,7 @@ function SidebarNav({
 
 export function AppLayout({ children }: { children: ReactNode }) {
   const { t } = useTranslation();
-  const { orgs, org, isLoading } = useOrg();
+  const { orgs, org, isLoading, loadFailed, refreshOrgs } = useOrg();
   const logoSrc = useOrgLogoSrc(org);
   const modules = useModules();
   const maintenance = useMaintenance();
@@ -546,6 +547,28 @@ export function AppLayout({ children }: { children: ReactNode }) {
         <span className="text-sm text-muted-foreground">
           {t("common.status.loading")}
         </span>
+      </div>
+    );
+  }
+
+  if (loadFailed) {
+    return (
+      <div
+        className="flex min-h-dvh flex-col items-center justify-center gap-4 p-4 text-center"
+        data-testid="org-load-failed"
+      >
+        <p className="text-sm text-muted-foreground">
+          {t("common.error.unexpected")}
+        </p>
+        <Button
+          type="button"
+          variant="outline"
+          onClick={() => {
+            void refreshOrgs();
+          }}
+        >
+          {t("common.error_boundary.reload")}
+        </Button>
       </div>
     );
   }

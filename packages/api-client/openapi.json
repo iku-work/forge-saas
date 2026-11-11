@@ -3469,6 +3469,24 @@
         "title": "PlanPublic",
         "type": "object"
       },
+      "PortalSessionRequest": {
+        "properties": {
+          "flow": {
+            "anyOf": [
+              {
+                "const": "cancel",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Flow"
+          }
+        },
+        "title": "PortalSessionRequest",
+        "type": "object"
+      },
       "PortalSessionResponse": {
         "properties": {
           "url": {
@@ -7768,6 +7786,23 @@
             }
           }
         ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/PortalSessionRequest"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Body"
+              }
+            }
+          }
+        },
         "responses": {
           "200": {
             "content": {

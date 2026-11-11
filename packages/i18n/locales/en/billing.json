@@ -5,7 +5,8 @@
     "status": "Status: {status}",
     "badge": "Current plan",
     "free_label": "Free",
-    "plan_label": "Plan"
+    "plan_label": "Plan",
+    "cancels_on": "Cancels on {date}"
   },
   "available_plans": {
     "title": "Available plans",
@@ -51,5 +52,6 @@
   "checkout": {
     "canceled": "Checkout was cancelled. You have not been charged."
   },
-  "description": "Your plan, what you have used, and your invoices."
+  "description": "Your plan, what you have used, and your invoices.",
+  "cancel_button": "Cancel subscription"
 }

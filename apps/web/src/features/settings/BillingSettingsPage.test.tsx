@@ -440,6 +440,95 @@ describe("BillingSettingsPage after a subscription is cancelled", () => {
     );
   });
 
+  it("says when a subscription set to cancel ends, and offers no second cancel", async () => {
+    // Still `active` until the period ends, so the status alone said nothing.
+    server.use(
+      http.get(`${API}/api/v1/billing/plans`, () =>
+        HttpResponse.json(envelope([freePlan, proPlan])),
+      ),
+      http.get(`${API}/api/v1/billing/subscription`, () =>
+        HttpResponse.json(
+          envelope({
+            id: "77777777-7777-7777-7777-777777777777",
+            plan_id: proPlan.id,
+            status: "active",
+            current_period_start: "2026-09-12T08:13:07Z",
+            current_period_end: "2026-10-12T08:13:07Z",
+            cancel_at_period_end: true,
+            trial_end: null,
+          } satisfies SubscriptionPublic),
+        ),
+      ),
+    );
+
+    renderPage();
+
+    expect(
+      await screen.findByTestId("billing-subscription-status"),
+    ).toHaveTextContent(/^Cancels on .*2026/);
+    expect(
+      screen.queryByTestId("billing-cancel-subscription"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("opens Stripe's cancel flow from the cancel button", async () => {
+    const assigned: string[] = [];
+    const bodies: unknown[] = [];
+    const location = window.location;
+    Object.defineProperty(window, "location", {
+      configurable: true,
+      value: {
+        assign: (url: string) => assigned.push(url),
+        replace: (url: string) => assigned.push(url),
+        set href(url: string) {
+          assigned.push(url);
+        },
+        get href() {
+          return "https://app.test/en/settings/billing";
+        },
+      },
+    });
+    server.use(
+      http.get(`${API}/api/v1/billing/plans`, () =>
+        HttpResponse.json(envelope([freePlan, proPlan])),
+      ),
+      http.get(`${API}/api/v1/billing/subscription`, () =>
+        HttpResponse.json(
+          envelope({
+            id: "77777777-7777-7777-7777-777777777777",
+            plan_id: proPlan.id,
+            status: "active",
+            current_period_start: "2026-09-12T08:13:07Z",
+            current_period_end: "2026-10-12T08:13:07Z",
+            cancel_at_period_end: false,
+            trial_end: null,
+          } satisfies SubscriptionPublic),
+        ),
+      ),
+      http.post(`${API}/api/v1/billing/portal-session`, async ({ request }) => {
+        bodies.push(await request.json());
+        return HttpResponse.json(
+          envelope({ url: "https://billing.stripe.test/cancel/abc" }),
+        );
+      }),
+    );
+
+    renderPage();
+    await userEvent.click(
+      await screen.findByTestId("billing-cancel-subscription"),
+    );
+
+    await waitFor(() => {
+      expect(assigned).toEqual(["https://billing.stripe.test/cancel/abc"]);
+    });
+    expect(bodies).toEqual([{ flow: "cancel" }]);
+
+    Object.defineProperty(window, "location", {
+      configurable: true,
+      value: location,
+    });
+  });
+
   it("still shows the plan while a payment is being chased", async () => {
     // past_due is live: the plan is still theirs during the grace period
     // (_is_entitled), so the page must not tell them they are on Free.
