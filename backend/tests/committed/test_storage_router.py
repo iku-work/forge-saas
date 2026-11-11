@@ -16,6 +16,7 @@ from uuid import UUID, uuid4
 
 import httpx
 import pytest
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import (
     AsyncSession,
 )
@@ -159,12 +160,20 @@ async def free_org(session: AsyncSession, owner: User) -> Organization:
 
 
 async def _add_member(
-    session: AsyncSession, org: Organization, *, role: MemberRole = MemberRole.MEMBER
+    session: AsyncSession,
+    org: Organization,
+    *,
+    role: MemberRole = MemberRole.MEMBER,
+    grants: list[str] | None = None,
 ) -> User:
+    """A member with the default grants (files:write), unless `grants` says otherwise."""
     user = User(email=f"member-{uuid4()}@example.com")
     session.add(user)
     await session.flush()
-    session.add(Membership(user_id=user.id, org_id=org.id, role=role))
+    membership = Membership(user_id=user.id, org_id=org.id, role=role)
+    if grants is not None:
+        membership.granted_permissions = grants
+    session.add(membership)
     await session.commit()
     return user
 
@@ -202,10 +211,22 @@ async def test_presign_requires_auth(client: httpx.AsyncClient, org: Organizatio
     assert response.status_code == 401
 
 
-async def test_presign_member_without_files_manage_returns_403(
+async def test_presign_member_can_upload_by_default(
     client: httpx.AsyncClient, session: AsyncSession, org: Organization
 ) -> None:
+    """files:write is every new membership's default grant."""
     member = await _add_member(session, org)
+
+    response = await _presign(client, member, org)
+
+    assert response.status_code == 200
+
+
+@pytest.mark.owasp("A01")
+async def test_presign_member_without_files_write_returns_403(
+    client: httpx.AsyncClient, session: AsyncSession, org: Organization
+) -> None:
+    member = await _add_member(session, org, grants=[])
 
     response = await _presign(client, member, org)
 
@@ -285,11 +306,16 @@ async def test_presign_happy_path_returns_upload_url_and_fields(
 # --- POST /files/{id}/confirm -----------------------------------------------------------
 
 
-async def test_confirm_requires_files_manage(
-    client: httpx.AsyncClient, session: AsyncSession, owner: User, org: Organization
+@pytest.mark.parametrize("grants", [None, []], ids=["can-write", "cannot-write"])
+async def test_confirm_is_only_for_the_uploader(
+    client: httpx.AsyncClient,
+    session: AsyncSession,
+    owner: User,
+    org: Organization,
+    grants: list[str] | None,
 ) -> None:
     presigned = (await _presign(client, owner, org)).json()["data"]
-    member = await _add_member(session, org)
+    member = await _add_member(session, org, grants=grants)
 
     response = await client.post(
         f"/api/v1/files/{presigned['file_id']}/confirm", headers=_headers(member, org)
@@ -561,11 +587,56 @@ async def test_download_is_refused_without_a_clean_verdict(  # noqa: PLR0913 -- 
 # --- DELETE /files/{id} ---------------------------------------------------------------------
 
 
-async def test_delete_requires_files_manage(
+@pytest.mark.owasp("A01")
+async def test_deleting_someone_elses_file_needs_files_manage(
     client: httpx.AsyncClient, session: AsyncSession, owner: User, org: Organization
 ) -> None:
     presigned = (await _presign(client, owner, org)).json()["data"]
     member = await _add_member(session, org)
+
+    response = await client.delete(
+        f"/api/v1/files/{presigned['file_id']}", headers=_headers(member, org)
+    )
+
+    assert response.status_code == 403
+
+
+async def test_a_member_granted_files_manage_can_delete_anyones(
+    client: httpx.AsyncClient, session: AsyncSession, owner: User, org: Organization
+) -> None:
+    presigned = (await _presign(client, owner, org)).json()["data"]
+    member = await _add_member(session, org, grants=["files:write", "files:manage"])
+
+    response = await client.delete(
+        f"/api/v1/files/{presigned['file_id']}", headers=_headers(member, org)
+    )
+
+    assert response.status_code == 200
+
+
+async def test_a_member_can_delete_their_own_upload(
+    client: httpx.AsyncClient, session: AsyncSession, org: Organization
+) -> None:
+    member = await _add_member(session, org)
+    presigned = (await _presign(client, member, org)).json()["data"]
+
+    response = await client.delete(
+        f"/api/v1/files/{presigned['file_id']}", headers=_headers(member, org)
+    )
+
+    assert response.status_code == 200
+
+
+async def test_a_member_whose_files_write_was_taken_away_cannot_delete_their_own(
+    client: httpx.AsyncClient, session: AsyncSession, org: Organization
+) -> None:
+    member = await _add_member(session, org)
+    presigned = (await _presign(client, member, org)).json()["data"]
+    membership = (
+        await session.execute(select(Membership).where(Membership.user_id == member.id))
+    ).scalar_one()
+    membership.granted_permissions = []
+    await session.commit()
 
     response = await client.delete(
         f"/api/v1/files/{presigned['file_id']}", headers=_headers(member, org)

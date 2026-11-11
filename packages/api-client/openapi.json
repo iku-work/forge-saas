@@ -3065,6 +3065,13 @@
             "title": "Created At",
             "type": "string"
           },
+          "granted_permissions": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Granted Permissions",
+            "type": "array"
+          },
           "id": {
             "format": "uuid",
             "title": "Id",
@@ -3086,6 +3093,15 @@
             "format": "uuid",
             "title": "Org Id",
             "type": "string"
+          },
+          "permissions": {
+            "description": "What this member can do: the role's permissions and the grants.\nThe web app gates its UI on this rather than re-deriving it.",
+            "items": {
+              "type": "string"
+            },
+            "readOnly": true,
+            "title": "Permissions",
+            "type": "array"
           },
           "role": {
             "$ref": "#/components/schemas/MemberRole"
@@ -3112,7 +3128,9 @@
           "org_id",
           "role",
           "invited_by",
-          "created_at"
+          "created_at",
+          "granted_permissions",
+          "permissions"
         ],
         "title": "MembershipPublic",
         "type": "object"
@@ -3421,6 +3439,21 @@
         ],
         "title": "PasswordResetRequest",
         "type": "object"
+      },
+      "Permission": {
+        "enum": [
+          "members:read",
+          "members:manage",
+          "billing:read",
+          "billing:manage",
+          "files:read",
+          "files:write",
+          "files:manage",
+          "audit:read",
+          "settings:manage"
+        ],
+        "title": "Permission",
+        "type": "string"
       },
       "PlanPublic": {
         "properties": {
@@ -4375,6 +4408,23 @@
           "count"
         ],
         "title": "UnreadCountResponse",
+        "type": "object"
+      },
+      "UpdateGrantsRequest": {
+        "properties": {
+          "granted_permissions": {
+            "items": {
+              "$ref": "#/components/schemas/Permission"
+            },
+            "maxItems": 9,
+            "title": "Granted Permissions",
+            "type": "array"
+          }
+        },
+        "required": [
+          "granted_permissions"
+        ],
+        "title": "UpdateGrantsRequest",
         "type": "object"
       },
       "UpdateMeRequest": {
@@ -9910,6 +9960,75 @@
           }
         ],
         "summary": "Update Member Role",
+        "tags": [
+          "tenancy"
+        ]
+      }
+    },
+    "/api/v1/orgs/{org_id}/members/{membership_id}/permissions": {
+      "put": {
+        "description": "Replace what one member has been granted on top of their role: any of files:write, files:manage, billing:read and audit:read, each of which the caller must hold.",
+        "operationId": "set_member_permissions_api_v1_orgs__org_id__members__membership_id__permissions_put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "membership_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Membership Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "org_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Org Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateGrantsRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_MembershipPublic_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_NoneType_"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Set Member Permissions",
         "tags": [
           "tenancy"
         ]

@@ -297,6 +297,92 @@ async def test_update_member_role_cross_tenant_target_returns_404(  # noqa: PLR0
     assert response.status_code == 404
 
 
+# --- PUT /orgs/{org_id}/members/{membership_id}/permissions ------------------------
+
+
+def _permissions_url(org: Organization, membership: Membership) -> str:
+    return f"/api/v1/orgs/{org.id}/members/{membership.id}/permissions"
+
+
+@pytest.mark.owasp("A01")
+async def test_set_member_permissions_member_cannot_manage(
+    client: httpx.AsyncClient, session: AsyncSession, org_a: Organization
+) -> None:
+    member, own = await _add_member(session, org_a)
+
+    response = await client.put(
+        _permissions_url(org_a, own),
+        json={"granted_permissions": ["files:manage"]},
+        headers=_auth_header(member),
+    )
+
+    assert response.status_code == 403
+
+
+async def test_a_granted_permission_opens_its_door(
+    client: httpx.AsyncClient, user_a: User, session: AsyncSession, org_a: Organization
+) -> None:
+    member, target = await _add_member(session, org_a)
+    billing = {**_auth_header(member), "X-Org-ID": str(org_a.id)}
+    assert (await client.get("/api/v1/billing/subscription", headers=billing)).status_code == 403
+
+    response = await client.put(
+        _permissions_url(org_a, target),
+        json={"granted_permissions": ["files:write", "billing:read"]},
+        headers=_auth_header(user_a),
+    )
+
+    assert response.status_code == 200
+    data = response.json()["data"]
+    assert data["granted_permissions"] == ["billing:read", "files:write"]
+    assert data["permissions"] == ["billing:read", "files:read", "files:write", "members:read"]
+    assert (await client.get("/api/v1/billing/subscription", headers=billing)).status_code == 200
+
+
+async def test_set_member_permissions_refuses_a_role_only_permission(
+    client: httpx.AsyncClient, user_a: User, session: AsyncSession, org_a: Organization
+) -> None:
+    _, target = await _add_member(session, org_a)
+
+    response = await client.put(
+        _permissions_url(org_a, target),
+        json={"granted_permissions": ["members:manage"]},
+        headers=_auth_header(user_a),
+    )
+
+    assert response.status_code == 403
+    assert response.json()["error"]["message_key"] == "errors.permission_not_grantable"
+
+
+async def test_set_member_permissions_refuses_an_unknown_permission(
+    client: httpx.AsyncClient, user_a: User, session: AsyncSession, org_a: Organization
+) -> None:
+    _, target = await _add_member(session, org_a)
+
+    response = await client.put(
+        _permissions_url(org_a, target),
+        json={"granted_permissions": ["files:everything"]},
+        headers=_auth_header(user_a),
+    )
+
+    assert response.status_code == 422
+
+
+async def test_the_member_list_reports_each_members_permissions(
+    client: httpx.AsyncClient, user_a: User, session: AsyncSession, org_a: Organization
+) -> None:
+    """The web app gates its UI on this, so a grant shows up without a role
+    change or a second request."""
+    member, _ = await _add_member(session, org_a)
+
+    response = await client.get(f"/api/v1/orgs/{org_a.id}/members", headers=_auth_header(user_a))
+
+    rows = {row["user_id"]: row for row in response.json()["data"]}
+    assert rows[str(member.id)]["granted_permissions"] == ["files:write"]
+    assert "files:write" in rows[str(member.id)]["permissions"]
+    assert "billing:manage" in rows[str(user_a.id)]["permissions"]
+
+
 # --- DELETE /orgs/{org_id}/members/{membership_id} ---------------------------------
 
 

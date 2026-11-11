@@ -55,7 +55,7 @@ from app.middleware.budgets import charge_org
 from app.modules.api_keys import rate_limit as api_key_rate_limit
 from app.modules.api_keys.scopes import SCOPE_PERMISSIONS, Scope
 from app.modules.api_keys.service import ApiKeyAuthenticator, looks_like_api_key
-from app.modules.auth.permissions import ROLE_PERMISSIONS
+from app.modules.auth.permissions import effective_permissions
 from app.modules.tenancy.repository import MembershipRepository
 
 _SCOPE_ATTR = "__public_api_scope__"
@@ -239,20 +239,17 @@ async def _principal_from_session(  # noqa: PLR0913 -- as above
     # app.middleware.budgets.)
     charge_org(request, org_id)
     permission = SCOPE_PERMISSIONS[scope]
-    if permission not in ROLE_PERMISSIONS[membership.role]:
+    held = effective_permissions(membership.role, membership.granted_permissions)
+    if permission not in held:
         raise PermissionDeniedError(
             "errors.missing_permission",
             fallback=f"Missing permission: {permission.value}",
             params={"permission": permission.value},
         )
-    # A session's scopes are what its role could exercise, not a stored list.
+    # A session's scopes are what its permissions could exercise, not a stored list.
     # Reported so a route can branch on capability without caring which kind
     # of principal it has.
-    granted = {
-        candidate.value
-        for candidate, needed in SCOPE_PERMISSIONS.items()
-        if needed in ROLE_PERMISSIONS[membership.role]
-    }
+    granted = {candidate.value for candidate, needed in SCOPE_PERMISSIONS.items() if needed in held}
     return CurrentPrincipal(
         actor_type="user",
         actor_id=user.id,

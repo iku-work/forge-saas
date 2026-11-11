@@ -46,7 +46,21 @@
     "change_role": "Cambiar rol",
     "joined_col": "Se unió",
     "status_active": "Activo",
-    "status_col": "Estado"
+    "status_col": "Estado",
+    "permissions": {
+      "action": "Permisos…",
+      "title": "Permisos de {name}",
+      "description": "Se suman al rol Miembro. Solo puedes dar o quitar un permiso que tú mismo tengas.",
+      "error": "No se pudieron actualizar los permisos de este miembro.",
+      "files_write": "Subir archivos",
+      "files_write_hint": "Subir archivos y eliminar los que haya subido.",
+      "files_manage": "Gestionar todos los archivos",
+      "files_manage_hint": "Eliminar cualquier archivo de la organización, lo haya subido quien lo haya subido.",
+      "billing_read": "Ver la facturación",
+      "billing_read_hint": "Ver el plan, las facturas y el estado de pago. Cambiar el plan sigue siendo cosa de los propietarios.",
+      "audit_read": "Ver el registro de auditoría",
+      "audit_read_hint": "Ver quién hizo qué en la organización."
+    }
   },
   "invitations": {
     "title": "Invitaciones pendientes",

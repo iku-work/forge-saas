@@ -46,7 +46,21 @@
     "change_role": "Rolle ändern",
     "joined_col": "Beigetreten",
     "status_active": "Aktiv",
-    "status_col": "Status"
+    "status_col": "Status",
+    "permissions": {
+      "action": "Berechtigungen…",
+      "title": "Berechtigungen für {name}",
+      "description": "Zusätzlich zur Rolle Mitglied. Sie können nur Berechtigungen geben oder entziehen, die Sie selbst haben.",
+      "error": "Die Berechtigungen dieses Mitglieds konnten nicht geändert werden.",
+      "files_write": "Dateien hochladen",
+      "files_write_hint": "Dateien hochladen und selbst hochgeladene löschen.",
+      "files_manage": "Alle Dateien verwalten",
+      "files_manage_hint": "Jede Datei der Organisation löschen, egal wer sie hochgeladen hat.",
+      "billing_read": "Abrechnung sehen",
+      "billing_read_hint": "Tarif, Rechnungen und Zahlungsstatus sehen. Den Tarif ändern weiterhin nur Inhaber.",
+      "audit_read": "Protokoll sehen",
+      "audit_read_hint": "Sehen, wer in der Organisation was getan hat."
+    }
   },
   "invitations": {
     "title": "Ausstehende Einladungen",

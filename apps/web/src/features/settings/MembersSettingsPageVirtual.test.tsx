@@ -51,6 +51,8 @@ function makeMembers(count: number, offset = 0): MembershipPublic[] {
       role: "member",
       invited_by: null,
       created_at: "2026-01-01T00:00:00Z",
+      granted_permissions: ["files:write"],
+      permissions: ["files:read", "files:write", "members:read"],
     };
   });
 }

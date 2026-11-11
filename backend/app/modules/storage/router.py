@@ -1,6 +1,8 @@
 """
 HTTP layer for the file storage module (T-112): presign/confirm/list/download/
-delete. Gated on the usual FILES_READ/FILES_MANAGE permission -- matches
+delete. Reading needs FILES_READ; uploading, and deleting your own upload,
+FILES_WRITE; deleting anyone's, FILES_MANAGE (2026-11: before FILES_WRITE
+existed, a member could not upload at all). Matches
 billing/router.py's own pattern of declaring get_current_org directly
 alongside require_permission when a route needs the resolved Organization/
 Membership themselves, not just a yes/no.
@@ -47,7 +49,7 @@ from app.core.dependencies import (
 from app.core.envelope import Envelope, Meta
 from app.middleware.rate_limit import api_limit
 from app.modules.auth.models import User
-from app.modules.auth.permissions import Permission
+from app.modules.auth.permissions import Permission, effective_permissions
 from app.modules.billing.dependencies import OrgSubscription, get_optional_org_subscription
 from app.modules.storage.models import StoredFile
 from app.modules.storage.schemas import (
@@ -73,8 +75,8 @@ async def presign_upload(  # noqa: PLR0913 — org_sub on top of the usual permi
     request: Request,
     body: PresignUploadRequest,
     org_and_membership: Annotated[tuple[Organization, Membership], Depends(get_current_org)],
-    membership: Annotated[  # noqa: ARG001 — required to gate on FILES_MANAGE
-        Membership, Depends(require_permission(Permission.FILES_MANAGE))
+    membership: Annotated[  # noqa: ARG001 — required to gate on FILES_WRITE
+        Membership, Depends(require_permission(Permission.FILES_WRITE))
     ],
     org_sub: Annotated[OrgSubscription | None, Depends(get_optional_org_subscription)],
     session: Annotated[AsyncSession, Depends(get_session)],
@@ -103,8 +105,8 @@ async def confirm_upload(  # noqa: PLR0913 — file_id on top of the usual permi
     request: Request,
     file_id: UUID,
     org_and_membership: Annotated[tuple[Organization, Membership], Depends(get_current_org)],
-    membership: Annotated[  # noqa: ARG001 — required to gate on FILES_MANAGE
-        Membership, Depends(require_permission(Permission.FILES_MANAGE))
+    membership: Annotated[  # noqa: ARG001 — required to gate on FILES_WRITE
+        Membership, Depends(require_permission(Permission.FILES_WRITE))
     ],
     session: Annotated[AsyncSession, Depends(get_session)],
     redis: Annotated[Redis, Depends(get_redis)],
@@ -195,13 +197,16 @@ async def delete_file(  # noqa: PLR0913 — file_id on top of the usual permissi
     request: Request,
     file_id: UUID,
     org_and_membership: Annotated[tuple[Organization, Membership], Depends(get_current_org)],
-    membership: Annotated[  # noqa: ARG001 — required to gate on FILES_MANAGE
-        Membership, Depends(require_permission(Permission.FILES_MANAGE))
+    membership: Annotated[  # noqa: ARG001 — required to gate on FILES_WRITE
+        Membership, Depends(require_permission(Permission.FILES_WRITE))
     ],
     session: Annotated[AsyncSession, Depends(get_session)],
     redis: Annotated[Redis, Depends(get_redis)],
 ) -> Envelope[None]:
     org, member = org_and_membership
-    await StorageService(session, org.id, redis).delete_file(member.user_id, file_id)
+    held = effective_permissions(member.role, member.granted_permissions)
+    await StorageService(session, org.id, redis).delete_file(
+        member.user_id, file_id, anyones=Permission.FILES_MANAGE in held
+    )
     await session.commit()
     return Envelope(data=None, meta=Meta(request_id=_request_id(request)))

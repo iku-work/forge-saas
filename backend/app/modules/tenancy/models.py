@@ -2,13 +2,13 @@ from datetime import datetime
 from typing import ClassVar
 from uuid import UUID
 
-from sqlalchemy import Column, DateTime, UniqueConstraint
+from sqlalchemy import Column, DateTime, UniqueConstraint, text
 from sqlalchemy import Enum as SAEnum
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlmodel import Field, SQLModel
 
 from app.models._mixins import SoftDeleteMixin, TimestampMixin, UUIDPKMixin
-from app.modules.auth.permissions import MemberRole
+from app.modules.auth.permissions import DEFAULT_GRANTS, MemberRole
 
 # Same convention as app.modules.auth.models: any datetime column declared
 # directly here (not inherited from TimestampMixin) must stay tz-aware so
@@ -70,6 +70,14 @@ class Membership(UUIDPKMixin, TimestampMixin, SQLModel, table=True):
     org_id: UUID = Field(foreign_key="organization.id", index=True)
     role: MemberRole = Field(sa_column=Column(member_role_column(), nullable=False))
     invited_by: UUID | None = Field(default=None, foreign_key="user.id")
+    # Permissions granted to this member on top of the role
+    # (app.modules.auth.permissions.effective_permissions). Every membership
+    # starts with DEFAULT_GRANTS; the server default gave rows that existed
+    # before the column the same, so nobody lost uploading when it arrived.
+    granted_permissions: list[str] = Field(
+        default_factory=lambda: [p.value for p in DEFAULT_GRANTS],
+        sa_column=Column(JSONB, nullable=False, server_default=text("'[\"files:write\"]'")),
+    )
 
 
 class Invitation(UUIDPKMixin, TimestampMixin, SQLModel, table=True):

@@ -40,7 +40,7 @@ from app.models._mixins import utcnow
 from app.modules.audit.service import AuditService
 from app.modules.auth.amr import has_second_factor
 from app.modules.auth.models import User
-from app.modules.auth.permissions import ROLE_PERMISSIONS, Permission
+from app.modules.auth.permissions import Permission, effective_permissions
 from app.modules.auth.repository import (
     SessionRepository,
     UserRepository,
@@ -318,7 +318,7 @@ def require_permission(permission: Permission) -> Callable[..., Awaitable[Member
         session: Annotated[AsyncSession, Depends(get_session)],
     ) -> Membership:
         org, membership = org_and_membership
-        if permission not in ROLE_PERMISSIONS[membership.role]:
+        if permission not in effective_permissions(membership.role, membership.granted_permissions):
             # Plain values, captured before persist_then_reject's rollback
             # expires the rows they came from.
             org_id, membership_id = org.id, membership.id

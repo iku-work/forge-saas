@@ -762,9 +762,13 @@ jobs:
 
       # test-storybook (T-150) drives Storybook through a real Chromium via
       # Playwright -- only chromium is installed since main.ts's a11y addon
-      # only exercises stories in that one browser.
+      # only exercises stories in that one browser. No --with-deps: that runs
+      # apt, and an Azure mirror DNS outage (2026-11-11) failed this job for
+      # hours. The ubuntu-latest image already ships Chrome and the libraries
+      # Chromium needs, and the a11y gate takes no screenshots, so the extra
+      # fonts apt would add don't matter.
       - name: Install Playwright chromium
-        run: pnpm --filter @forge/ui exec playwright install --with-deps chromium
+        run: pnpm --filter @forge/ui exec playwright install chromium
 
       # turbo's own pipeline (turbo.json) makes storybook:test depend on
       # storybook:build depend on ^build, so this one command builds both

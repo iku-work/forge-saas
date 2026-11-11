@@ -5,6 +5,7 @@ export enum Permission {
   BILLING_READ = "billing:read",
   BILLING_MANAGE = "billing:manage",
   FILES_READ = "files:read",
+  FILES_WRITE = "files:write",
   FILES_MANAGE = "files:manage",
   AUDIT_READ = "audit:read",
   SETTINGS_MANAGE = "settings:manage",
@@ -16,30 +17,14 @@ export enum MemberRole {
   MEMBER = "member",
 }
 
-// Mirrors ROLE_PERMISSIONS in backend/app/modules/auth/permissions.py. The
-// backend is authoritative -- this only drives client-side UI gating (e.g.
-// hiding a button a member has no permission to use); the API rejects the
-// request regardless of what the UI shows.
-//
-// Keyed by `${MemberRole}` (the union of the enum's string values) rather
-// than MemberRole itself: API responses (e.g. MembershipPublic.role in
-// @forge/api-client) come back typed as the plain string-literal union
-// generated from the OpenAPI schema, not this enum, and a string enum's
-// member type isn't assignable from -- so indexing this map with a
-// generated-type role wouldn't type-check without it.
-export const ROLE_PERMISSIONS: Readonly<Record<`${MemberRole}`, ReadonlySet<Permission>>> = {
-  [MemberRole.OWNER]: new Set(Object.values(Permission)),
-  [MemberRole.ADMIN]: new Set([
-    Permission.MEMBERS_READ,
-    Permission.MEMBERS_MANAGE,
-    Permission.BILLING_READ,
-    Permission.FILES_READ,
-    Permission.FILES_MANAGE,
-    Permission.AUDIT_READ,
-    Permission.SETTINGS_MANAGE,
-  ]),
-  [MemberRole.MEMBER]: new Set([Permission.MEMBERS_READ, Permission.FILES_READ]),
-};
+// Mirrors GRANTABLE_PERMISSIONS: what can be granted to one member on top of
+// their role, in the order the members page lists them.
+export const GRANTABLE_PERMISSIONS: readonly Permission[] = [
+  Permission.FILES_WRITE,
+  Permission.FILES_MANAGE,
+  Permission.BILLING_READ,
+  Permission.AUDIT_READ,
+];
 
 export type SubscriptionStatus =
   | "trialing"
