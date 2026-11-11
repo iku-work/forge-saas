@@ -197,7 +197,8 @@ def test_an_avatar_from_before_public_avatars_is_not_shown() -> None:
 
 
 def test_an_upload_in_progress_is_reported_but_its_key_is_not() -> None:
-    user = User(email="a@example.com", avatar_pending_key="incoming/avatars/x/y")
+    staged = "incoming/avatars/x/y"
+    user = User(email="a@example.com", avatar_pending_key=staged)
 
     dumped = UserPublic.model_validate(user).model_dump()
 

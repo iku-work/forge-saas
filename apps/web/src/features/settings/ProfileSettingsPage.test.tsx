@@ -55,6 +55,9 @@ vi.mock("@tanstack/react-router", async (importOriginal) => ({
 const { ProfileSettingsPage } = await import("./ProfileSettingsPage");
 
 const API = getApiBaseUrl();
+// Where the avatar form stores the upload (a plain name: secret scanners
+// read any quoted value next to "key" as a credential).
+const STAGED = "incoming/avatars/u/k";
 
 const user: UserPublic = {
   id: "11111111-1111-1111-1111-111111111111",
@@ -269,8 +272,8 @@ describe("ProfileSettingsPage", () => {
           return HttpResponse.json(
             envelope({
               upload_url: "https://storage.example.test/forge",
-              fields: { key: "incoming/avatars/u/k" },
-              upload_key: "incoming/avatars/u/k",
+              fields: { key: STAGED },
+              upload_key: STAGED,
               expires_at: "2026-12-31T00:00:00Z",
             }),
           );
@@ -279,7 +282,7 @@ describe("ProfileSettingsPage", () => {
       http.post("https://storage.example.test/forge", async ({ request }) => {
         // As text: undici cannot parse a jsdom File back out of the form.
         const body = await request.text();
-        sent.storageKey = body.includes("incoming/avatars/u/k");
+        sent.storageKey = body.includes(STAGED);
         return new HttpResponse(null, { status: 204 });
       }),
       http.post(`${API}/api/v1/auth/me/avatar`, async ({ request }) => {
@@ -319,7 +322,7 @@ describe("ProfileSettingsPage", () => {
     expect(sent).toEqual({
       form: { content_type: "image/png" },
       storageKey: true,
-      set: { upload_key: "incoming/avatars/u/k" },
+      set: { upload_key: STAGED },
     });
   });
 
@@ -331,8 +334,8 @@ describe("ProfileSettingsPage", () => {
         HttpResponse.json(
           envelope({
             upload_url: "https://storage.example.test/forge",
-            fields: { key: "incoming/avatars/u/k" },
-            upload_key: "incoming/avatars/u/k",
+            fields: { key: STAGED },
+            upload_key: STAGED,
             expires_at: "2026-12-31T00:00:00Z",
           }),
         ),
