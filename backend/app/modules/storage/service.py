@@ -84,7 +84,6 @@ _DEFAULT_ALLOWED_CONTENT_TYPES = frozenset(
 # Per-bucket overrides of the default allowlist above (T-112's Build section:
 # "configurable per bucket").
 _BUCKET_ALLOWED_CONTENT_TYPES: dict[str, frozenset[str]] = {
-    "avatars": frozenset({"image/jpeg", "image/png", "image/webp"}),
     # No SVG: it can carry script, and a logo is shown on every page.
     "logos": frozenset({"image/jpeg", "image/png", "image/webp"}),
 }

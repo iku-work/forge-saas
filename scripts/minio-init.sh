@@ -4,13 +4,22 @@
 # `user add` and `policy create` overwrite.
 set -eu
 
-mc alias set local http://minio:9000 "$MINIO_ROOT_USER" "$MINIO_ROOT_PASSWORD"
+mc alias set local "${MINIO_URL:-http://minio:9000}" "$MINIO_ROOT_USER" "$MINIO_ROOT_PASSWORD"
 mc mb --ignore-existing "local/$MINIO_BUCKET"
 
 # incoming/ objects expire after a day (review R1: see the same service in
 # docker-compose.yml for why, and why `ilm import`).
 echo '{"Rules":[{"ID":"expire-incoming","Status":"Enabled","Filter":{"Prefix":"incoming/"},"Expiration":{"Days":1}},{"ID":"expire-data-exports","Status":"Enabled","Filter":{"Prefix":"data-exports/"},"Expiration":{"Days":1}}]}' |
   mc ilm import "local/$MINIO_BUCKET"
+
+# Published avatars (app.modules.storage.avatars) are read without a
+# signature, so browsers can cache them. Anonymous GetObject under public/ and
+# nothing else: no listing, so a URL has to be known to be read, and every
+# other object still needs a presigned URL. `set-json` replaces the policy.
+echo "{\"Version\":\"2012-10-17\",\"Statement\":[
+  {\"Effect\":\"Allow\",\"Principal\":{\"AWS\":[\"*\"]},\"Action\":[\"s3:GetObject\"],\"Resource\":[\"arn:aws:s3:::$MINIO_BUCKET/public/*\"]}
+]}" > /tmp/forge-anonymous-policy.json
+mc anonymous set-json /tmp/forge-anonymous-policy.json "local/$MINIO_BUCKET"
 
 # The application's own user: this bucket's objects and nothing else. The root
 # user stays on the box for this script and for backups.

@@ -733,34 +733,6 @@ async def test_list_members_shows_emails_to_an_admin(
     }
 
 
-async def test_member_avatar_is_404_without_an_uploaded_one(
-    client: httpx.AsyncClient, session: AsyncSession, user_a: User, org_a: Organization
-) -> None:
-    _, membership = await _add_member(session, org_a)
-
-    response = await client.get(
-        f"/api/v1/orgs/{org_a.id}/members/{membership.id}/avatar", headers=_auth_header(user_a)
-    )
-
-    assert response.status_code == 404
-
-
-async def test_member_avatar_does_not_reach_another_orgs_membership(
-    client: httpx.AsyncClient,
-    session: AsyncSession,
-    user_a: User,
-    org_a: Organization,
-    org_b: Organization,
-) -> None:
-    _, other = await _add_member(session, org_b)
-
-    response = await client.get(
-        f"/api/v1/orgs/{org_a.id}/members/{other.id}/avatar", headers=_auth_header(user_a)
-    )
-
-    assert response.status_code == 404
-
-
 # --- resend / revoke an invitation (visual overhaul follow-up) -----------------
 
 

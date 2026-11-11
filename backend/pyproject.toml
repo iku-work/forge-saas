@@ -26,6 +26,10 @@ dependencies = [
     # python-jose (unmaintained, with an ecdsa advisory that had no fix).
     "joserfc>=1.0",
     "python-multipart>=0.0.12",
+    # Re-encodes uploaded avatars, which is what strips their EXIF and GPS
+    # metadata and anything else riding in the file: only decoded pixels
+    # survive (app.modules.storage.avatars).
+    "pillow>=12.0",
     "arq>=0.26",
     "apscheduler>=3.10",
     "redis>=5.0",

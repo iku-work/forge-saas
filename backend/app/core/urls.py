@@ -34,3 +34,16 @@ def frontend_url(path: str, locale: str | None = None) -> str:
     if not path.startswith("/"):
         raise ValueError(f"frontend_url() path must start with '/': {path!r}")
     return f"{get_settings().FRONTEND_URL}/{frontend_locale(locale)}{path}"
+
+
+def public_object_url(key: str) -> str:
+    """Where the browser fetches a public object, such as an avatar, without a
+    signature. PUBLIC_STORAGE_URL when set (a CDN, or an R2 bucket's public
+    domain); otherwise the storage endpoint, path-style, as MinIO serves it."""
+    settings = get_settings()
+    base = settings.PUBLIC_STORAGE_URL or (
+        f"{settings.AWS_ENDPOINT_URL}/{settings.AWS_BUCKET_NAME}"
+        if settings.AWS_ENDPOINT_URL
+        else f"https://{settings.AWS_BUCKET_NAME}.s3.{settings.AWS_REGION}.amazonaws.com"
+    )
+    return f"{base.rstrip('/')}/{key}"

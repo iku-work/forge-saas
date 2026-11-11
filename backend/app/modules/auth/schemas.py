@@ -5,7 +5,7 @@ accept or return a model directly (§0.4's mass-assignment rule).
 """
 
 from datetime import datetime
-from typing import Any, Self
+from typing import Any, Literal, Self
 from uuid import UUID
 
 from pydantic import AliasChoices, ConfigDict, EmailStr, Field, field_validator, model_validator
@@ -1064,14 +1064,15 @@ class UserPublic(AppBaseModel):
     id: UUID
     email: str
     full_name: str | None
-    # An OAuth provider's picture, if there is one -- an absolute URL on
-    # someone else's domain, safe to hand out.
-    avatar_url: str | None
-    # Whether the user has uploaded an avatar. Not the key and not a URL: the
-    # object is private, so what a client can actually render comes from GET
-    # /auth/me/avatar, and a presigned URL has no business being cached inside
-    # a user object that gets stored, logged and re-serialised.
+    # What to show: the uploaded avatar's public URL (User.avatar_src), else
+    # an OAuth provider's picture. Both are absolute URLs, safe to hand out.
+    avatar_url: str | None = Field(validation_alias=AliasChoices("avatar_src", "avatar_url"))
     has_uploaded_avatar: bool = False
+    # An upload is being scanned and re-encoded. Read from the pending key and
+    # turned into a bool before validation, like has_password.
+    avatar_processing: bool = Field(
+        default=False, validation_alias=AliasChoices("avatar_processing", "avatar_pending_key")
+    )
     locale: str
     # F-004. Sent on every session-bearing response so the web app can apply
     # the saved theme on the first render after login, rather than painting
@@ -1101,7 +1102,7 @@ class UserPublic(AppBaseModel):
     # The resolved matrix, not the stored one: see preferences.effective.
     _effective_preferences = field_validator("notification_preferences")(effective_preferences)
 
-    @field_validator("has_password", mode="before")
+    @field_validator("has_password", "avatar_processing", mode="before")
     @classmethod
     def _password_is_set(cls, value: object) -> bool:
         return bool(value)
@@ -1146,11 +1147,6 @@ class UpdateMeRequest(AppBaseModel):
     # admin directory. EncryptedString on the model side (see User.full_name)
     # so it is encrypted at rest and redacted from audit diffs.
     full_name: str | None = Field(default=None, max_length=_FULL_NAME_MAX_LENGTH)
-    # The id of a file the caller uploaded to the "avatars" bucket. Null
-    # clears the avatar. The server resolves this to a storage key itself and
-    # checks the file is the caller's -- a client-supplied key would be a way
-    # to have any object in the bucket presigned for you.
-    avatar_file_id: UUID | None = Field(default=None)
 
     @model_validator(mode="after")
     def _reject_an_explicitly_null_locale(self) -> Self:
@@ -1298,17 +1294,6 @@ class OAuthProfile(AppBaseModel):
     avatar_url: str | None = None
 
 
-class AvatarUrlResponse(AppBaseModel):
-    """A short-lived link to the caller's own uploaded avatar.
-
-    Separate from UserPublic because it expires: baking it into the user
-    object would put a decaying value into everything that caches one.
-    """
-
-    url: str
-    expires_at: datetime
-
-
 class Enable2FAResponse(AppBaseModel):
     provisioning_uri: str
     secret: str
@@ -1419,3 +1404,32 @@ class ConfirmEmailChangeRequest(AppBaseModel):
 
 class CancelEmailChangeRequest(AppBaseModel):
     token: str
+
+
+class AvatarUrlResponse(AppBaseModel):
+    """A short-lived link to a private image: today, an organization's logo.
+
+    Separate from the object it belongs to because it expires: baking it in
+    would put a decaying value into everything that caches that object.
+    """
+
+    url: str
+    expires_at: datetime
+
+
+class AvatarUploadFormRequest(AppBaseModel):
+    content_type: Literal["image/jpeg", "image/png", "image/webp"]
+
+
+class AvatarUploadForm(AppBaseModel):
+    """A presigned POST for one avatar upload, straight to storage. Post the
+    file with `fields`, then send `upload_key` to POST /auth/me/avatar."""
+
+    upload_url: str
+    fields: dict[str, str]
+    upload_key: str
+    expires_at: datetime
+
+
+class SetAvatarRequest(AppBaseModel):
+    upload_key: str = Field(max_length=200)

@@ -100,7 +100,7 @@ longest:
 
 | Link | Constant | Lifetime |
 | --- | --- | --- |
-| Avatar | `AVATAR_URL_EXPIRES_IN_SECONDS` | 5 minutes |
+| Logo | `LOGO_URL_EXPIRES_IN_SECONDS` | 5 minutes |
 | Upload (POST policy) | `presign_upload`'s `expires_in` default | 10 minutes |
 | File download | `_DOWNLOAD_EXPIRES_IN_SECONDS` | **1 hour** |
 
@@ -271,7 +271,7 @@ Then, per credential:
 
 - **Stripe:** trigger a test webhook from the dashboard and confirm a new
   `webhook_event` row with `processed_at` set and no `error`.
-- **Object storage:** upload a file through the app and load its avatar or
+- **Object storage:** upload a file through the app and load its
   download link — a presigned URL signed with the new key.
 - **Database / Redis:** restart one process and watch it come back healthy.
   Pooled connections hide a wrong password until something reconnects, which

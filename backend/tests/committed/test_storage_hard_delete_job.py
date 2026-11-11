@@ -580,11 +580,13 @@ async def test_a_replaced_avatar_and_logo_are_retired(
             assert ("hard_delete_stored_file", {"file_id": stored.id}) in enqueued_jobs
 
 
-async def test_an_avatar_or_logo_in_use_is_kept(
+async def test_a_logo_in_use_is_kept_and_an_old_style_avatar_is_not(
     session: AsyncSession,
     session_factory: async_sessionmaker[AsyncSession],
     ctx: dict[str, Any],
 ) -> None:
+    """Avatars stopped being org files in 2026-11. One a user row still names
+    is shown nowhere, so it goes, and stops counting towards the org's quota."""
     avatar = await _make_image(session, bucket="avatars")
     logo = await _make_image(session, bucket="logos")
     owner = await session.get(User, avatar.uploaded_by)
@@ -598,10 +600,12 @@ async def test_an_avatar_or_logo_in_use_is_kept(
     await retire_unused_images(ctx)
 
     async with session_factory() as verify:
-        for stored in (avatar, logo):
-            refreshed = await verify.get(StoredFile, stored.id)
-            assert refreshed is not None
-            assert refreshed.deleted_at is None
+        kept = await verify.get(StoredFile, logo.id)
+        retired = await verify.get(StoredFile, avatar.id)
+        assert kept is not None
+        assert kept.deleted_at is None
+        assert retired is not None
+        assert retired.deleted_at is not None
 
 
 async def test_a_fresh_upload_and_an_ordinary_file_are_left_alone(

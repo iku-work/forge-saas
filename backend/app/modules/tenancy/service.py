@@ -457,23 +457,6 @@ class TenancyService:
             {membership.user_id for membership in memberships}
         )
 
-    async def member_avatar_key(self, org_id: UUID, membership_id: UUID) -> str:
-        """The object key of a fellow member's uploaded avatar.
-
-        404 for a membership outside `org_id` (the same answer as one that
-        does not exist, so another org's ids reveal nothing), for a deleted
-        user, and for a member with no uploaded avatar.
-        """
-        membership = await self._memberships.get_by_id(membership_id)
-        if membership is None or membership.org_id != org_id:
-            raise NotFoundError("errors.membership_not_found", fallback="Membership not found")
-        user = (await AuthService(self._session).users_by_ids({membership.user_id})).get(
-            membership.user_id
-        )
-        if user is None or user.avatar_object_key is None:
-            raise NotFoundError("errors.avatar_not_found", fallback="No uploaded avatar.")
-        return user.avatar_object_key
-
     async def list_pending_invitations(
         self, org_id: UUID, after: UUID | None, limit: int
     ) -> tuple[list[Invitation], UUID | None]:

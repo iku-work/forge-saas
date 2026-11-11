@@ -36,6 +36,7 @@ from app.core.modules import ModuleConfig
 from app.modules.api_keys.models import ApiKey
 from app.modules.audit.models import AuditEvent
 from app.modules.auth.models import (
+    AVATAR_KEY_PREFIX,
     EmailChangeToken,
     EmailVerificationToken,
     MagicLinkToken,
@@ -475,3 +476,26 @@ async def test_purge_user_data_keeps_stripe_customer_when_org_still_has_members(
         assert refetched_org is not None
         assert refetched_org.stripe_customer_id == "cus_busy"
         assert await verify_session.get(User, staying.id) is not None
+
+
+async def test_purge_deletes_the_published_avatar(
+    session: AsyncSession, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Anyone with its URL can read a published avatar, so it goes with the
+    account, and so does an upload still being processed."""
+    published = f"{AVATAR_KEY_PREFIX}{uuid4()}.webp"
+    pending = f"incoming/avatars/{uuid4()}/{uuid4()}"
+    user = await _make_user(session, "had-an-avatar@example.com")
+    user.avatar_object_key = published
+    user.avatar_pending_key = pending
+    await session.commit()
+    deleted: list[str | None] = []
+
+    async def _delete_avatar_objects(*keys: str | None) -> None:
+        deleted.extend(keys)
+
+    monkeypatch.setattr(gdpr_job_module, "delete_avatar_objects", _delete_avatar_objects)
+
+    await purge_user_data({}, user_id=user.id)
+
+    assert deleted == [published, pending]
