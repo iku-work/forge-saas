@@ -225,6 +225,12 @@ class MembershipRepository:
         await self.session.flush()
         return membership
 
+    async def set_grants(self, membership_id: UUID, grants: list[str]) -> Membership:
+        membership = await self._get_or_raise(membership_id)
+        membership.granted_permissions = grants
+        await self.session.flush()
+        return membership
+
     async def remove(self, membership_id: UUID) -> None:
         # Membership has no SoftDeleteMixin (T-025) -- removing a member is a
         # hard delete, not a tombstone.

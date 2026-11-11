@@ -19,6 +19,7 @@
   "org_header_required": "X-Org-ID header is required.",
   "not_org_member": "Not a member of this organization.",
   "missing_permission": "Missing permission: {permission}.",
+  "permission_not_grantable": "{permission} can't be given to one member. Change their role instead.",
   "oauth_exchange_failed": "{provider} OAuth exchange failed.",
   "oauth_no_email": "GitHub account has no email.",
   "oauth_unknown_provider": "Unknown OAuth provider: {provider}.",

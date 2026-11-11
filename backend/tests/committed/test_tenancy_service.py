@@ -24,8 +24,9 @@ from app.core.exceptions import (
     PermissionDeniedError,
 )
 from app.modules.audit.models import AuditEvent
+from app.modules.auth import permissions as permissions_module
 from app.modules.auth.models import User
-from app.modules.auth.permissions import MemberRole
+from app.modules.auth.permissions import GRANTABLE_PERMISSIONS, MemberRole, Permission
 from app.modules.auth.utils import hash_token, sign_url_token
 from app.modules.tenancy import service as tenancy_service
 from app.modules.tenancy.models import Invitation, Membership, Organization
@@ -481,6 +482,148 @@ async def test_change_role_target_in_different_org_raises_not_found(
 
     with pytest.raises(NotFoundError):
         await service.change_role(actor, target.id, MemberRole.ADMIN)
+
+
+# --- set_grants ----------------------------------------------------------------
+
+
+async def test_a_new_membership_starts_with_files_write(
+    membership_repo: MembershipRepository, org: Organization, user: User
+) -> None:
+    created = await membership_repo.create(user_id=user.id, org_id=org.id, role=MemberRole.MEMBER)
+
+    assert created.granted_permissions == ["files:write"]
+
+
+async def test_set_grants_replaces_them_and_audits_the_difference(
+    service: TenancyService,
+    membership_repo: MembershipRepository,
+    org: Organization,
+    user: User,
+    session: AsyncSession,
+) -> None:
+    target = await membership_repo.create(user_id=user.id, org_id=org.id, role=MemberRole.MEMBER)
+    actor = Membership(user_id=uuid4(), org_id=org.id, role=MemberRole.ADMIN)
+
+    updated = await service.set_grants(
+        actor, target.id, [Permission.BILLING_READ, Permission.AUDIT_READ, Permission.AUDIT_READ]
+    )
+
+    assert updated.granted_permissions == ["audit:read", "billing:read"]
+    event = (
+        await session.execute(
+            select(AuditEvent).where(AuditEvent.action == "membership.permissions_changed")
+        )
+    ).scalar_one()
+    assert (event.org_id, event.actor_id, event.resource_id) == (
+        org.id,
+        actor.user_id,
+        str(target.id),
+    )
+    assert event.diff == {"added": ["audit:read", "billing:read"], "removed": ["files:write"]}
+
+
+async def test_set_grants_with_nothing_changed_writes_no_audit_event(
+    service: TenancyService,
+    membership_repo: MembershipRepository,
+    org: Organization,
+    user: User,
+    session: AsyncSession,
+) -> None:
+    target = await membership_repo.create(user_id=user.id, org_id=org.id, role=MemberRole.MEMBER)
+    actor = Membership(user_id=uuid4(), org_id=org.id, role=MemberRole.OWNER)
+
+    await service.set_grants(actor, target.id, [Permission.FILES_WRITE])
+
+    events = await session.execute(
+        select(AuditEvent).where(AuditEvent.action == "membership.permissions_changed")
+    )
+    assert events.first() is None
+
+
+async def test_set_grants_denies_actor_without_members_manage(
+    service: TenancyService, membership_repo: MembershipRepository, org: Organization, user: User
+) -> None:
+    target = await membership_repo.create(user_id=user.id, org_id=org.id, role=MemberRole.MEMBER)
+    # Grants never include members:manage, so a member stays out even with all of them.
+    actor = Membership(
+        user_id=uuid4(),
+        org_id=org.id,
+        role=MemberRole.MEMBER,
+        granted_permissions=[p.value for p in GRANTABLE_PERMISSIONS],
+    )
+
+    with pytest.raises(PermissionDeniedError):
+        await service.set_grants(actor, target.id, [])
+
+
+@pytest.mark.parametrize(
+    "permission",
+    [Permission.MEMBERS_MANAGE, Permission.BILLING_MANAGE, Permission.SETTINGS_MANAGE],
+)
+async def test_set_grants_refuses_what_only_a_role_gives(
+    service: TenancyService,
+    membership_repo: MembershipRepository,
+    org: Organization,
+    user: User,
+    permission: Permission,
+) -> None:
+    target = await membership_repo.create(user_id=user.id, org_id=org.id, role=MemberRole.MEMBER)
+    actor = Membership(user_id=uuid4(), org_id=org.id, role=MemberRole.OWNER)
+
+    with pytest.raises(PermissionDeniedError) as exc:
+        await service.set_grants(actor, target.id, [permission])
+
+    assert exc.value.message_key == "errors.permission_not_grantable"
+
+
+@pytest.mark.parametrize("change", ["add", "remove"])
+async def test_set_grants_refuses_a_change_the_actor_could_not_make_themselves(  # noqa: PLR0913 -- the parametrized change on top of the usual fixtures
+    service: TenancyService,
+    membership_repo: MembershipRepository,
+    org: Organization,
+    user: User,
+    monkeypatch: pytest.MonkeyPatch,
+    change: str,
+) -> None:
+    """No role today has members:manage without every grantable permission,
+    so the rule is pinned against a hypothetical one: a role that may manage
+    members but not read billing can neither give billing:read nor take it."""
+    monkeypatch.setitem(
+        permissions_module.ROLE_PERMISSIONS,
+        MemberRole.ADMIN,
+        frozenset({Permission.MEMBERS_READ, Permission.MEMBERS_MANAGE}),
+    )
+    target = await membership_repo.create(user_id=user.id, org_id=org.id, role=MemberRole.MEMBER)
+    if change == "remove":
+        await membership_repo.set_grants(target.id, ["billing:read"])
+    actor = Membership(
+        user_id=uuid4(), org_id=org.id, role=MemberRole.ADMIN, granted_permissions=[]
+    )
+
+    with pytest.raises(PermissionDeniedError) as exc:
+        await service.set_grants(
+            actor, target.id, [] if change == "remove" else [Permission.BILLING_READ]
+        )
+
+    assert exc.value.params == {"permission": "billing:read"}
+
+
+async def test_set_grants_target_in_different_org_raises_not_found(
+    service: TenancyService,
+    membership_repo: MembershipRepository,
+    org_repo: OrganizationRepository,
+    org: Organization,
+    user: User,
+) -> None:
+    other_org = await org_repo.create(name="Other", slug=f"other-{uuid4().hex[:8]}")
+    target = await membership_repo.create(
+        user_id=user.id, org_id=other_org.id, role=MemberRole.MEMBER
+    )
+    actor = Membership(user_id=uuid4(), org_id=org.id, role=MemberRole.OWNER)
+
+    with pytest.raises(NotFoundError):
+        await service.set_grants(actor, target.id, [])
 
 
 # --- remove_member -------------------------------------------------------------

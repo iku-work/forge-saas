@@ -11,6 +11,7 @@ import {
   envelope,
   errorEnvelope,
   fixtureOrg,
+  fixtureUser,
   makeStoredFile,
 } from "../../test/appShellFixtures";
 import { server } from "../../test/server";
@@ -19,9 +20,11 @@ const hooks = vi.hoisted(() => ({
   // The row menu's dropdown reads the text direction to place itself.
   useDirection: vi.fn(() => "ltr"),
   useOrg: vi.fn(),
+  // The uploader of every makeStoredFile() unless a test says otherwise.
+  useAuth: vi.fn(() => ({ user: fixtureUser })),
   // Defaults to "yes" so every pre-existing test here keeps exercising the
   // owner's view of the page; the read-only cases below set it to false.
-  usePermission: vi.fn(() => true),
+  usePermission: vi.fn<(permission: string) => boolean>(() => true),
   useModules: vi.fn(() => ({
     fileStorage: true,
     billing: false,
@@ -269,6 +272,31 @@ describe("FilesPage", () => {
     expect(screen.queryByText("Drop files here")).not.toBeInTheDocument();
     // Read access is real access: download stays.
     expect(screen.getByRole("button", { name: "Download" })).toBeEnabled();
+  });
+
+  it("lets someone who can upload delete only their own files", async () => {
+    // files:write without files:manage: a member with the default grant.
+    hooks.usePermission.mockImplementation(
+      (permission: string) => permission === "files:write",
+    );
+    const own = makeStoredFile(1);
+    const theirs = makeStoredFile(2, { uploaded_by: "someone-else" });
+    server.use(
+      http.get(`${API}/api/v1/files`, () =>
+        HttpResponse.json(envelope([own, theirs])),
+      ),
+    );
+
+    renderPage();
+
+    expect(await screen.findByText(theirs.filename)).toBeInTheDocument();
+    expect(screen.getByText("Drop files here")).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: `Actions for ${own.filename}` }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: `Actions for ${theirs.filename}` }),
+    ).not.toBeInTheDocument();
   });
 
   it("points a read-only member somewhere useful when there is nothing here", async () => {

@@ -19,6 +19,7 @@
   "org_header_required": "رأس X-Org-ID مطلوب.",
   "not_org_member": "لست عضوًا في هذه المؤسسة.",
   "missing_permission": "الإذن مفقود: {permission}.",
+  "permission_not_grantable": "لا يمكن منح {permission} لعضو واحد. غيّر دوره بدلاً من ذلك.",
   "oauth_exchange_failed": "فشل تبادل OAuth مع {provider}.",
   "oauth_no_email": "حساب GitHub لا يحتوي على بريد إلكتروني.",
   "oauth_unknown_provider": "مزوّد OAuth غير معروف: {provider}.",

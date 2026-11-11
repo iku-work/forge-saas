@@ -27,7 +27,12 @@ from app.core.urls import frontend_url
 from app.models._mixins import utcnow
 from app.modules.audit.service import AuditService
 from app.modules.auth.models import User
-from app.modules.auth.permissions import ROLE_PERMISSIONS, MemberRole, Permission
+from app.modules.auth.permissions import (
+    GRANTABLE_PERMISSIONS,
+    MemberRole,
+    Permission,
+    effective_permissions,
+)
 from app.modules.auth.repository import UserRepository
 from app.modules.auth.service import AuthService
 from app.modules.auth.utils import hash_token, sign_url_token, verify_url_token
@@ -256,7 +261,9 @@ class TenancyService:
     async def change_role(
         self, actor_membership: Membership, target_membership_id: UUID, new_role: MemberRole
     ) -> Membership:
-        if Permission.MEMBERS_MANAGE not in ROLE_PERMISSIONS[actor_membership.role]:
+        if Permission.MEMBERS_MANAGE not in effective_permissions(
+            actor_membership.role, actor_membership.granted_permissions
+        ):
             raise PermissionDeniedError(
                 "errors.missing_permission",
                 fallback="Missing permission: members:manage",
@@ -310,8 +317,66 @@ class TenancyService:
             )
         return updated
 
+    async def set_grants(
+        self,
+        actor_membership: Membership,
+        target_membership_id: UUID,
+        grants: list[Permission],
+    ) -> Membership:
+        """Replace what a member has been granted on top of their role.
+
+        Only GRANTABLE_PERMISSIONS can be granted, and only by someone who
+        holds each permission being added or taken away: nobody hands out,
+        or withdraws, more than they have themselves.
+        """
+        held = effective_permissions(actor_membership.role, actor_membership.granted_permissions)
+        if Permission.MEMBERS_MANAGE not in held:
+            raise PermissionDeniedError(
+                "errors.missing_permission",
+                fallback="Missing permission: members:manage",
+                params={"permission": "members:manage"},
+            )
+        for permission in grants:
+            if permission not in GRANTABLE_PERMISSIONS:
+                raise PermissionDeniedError(
+                    "errors.permission_not_grantable",
+                    fallback=f"{permission.value} cannot be granted to one member",
+                    params={"permission": permission.value},
+                )
+
+        target = await self._memberships.get_by_id(target_membership_id)
+        if target is None or target.org_id != actor_membership.org_id:  # see change_role
+            raise NotFoundError("errors.membership_not_found", fallback="Membership not found")
+
+        new = sorted({p.value for p in grants})
+        old = sorted(set(target.granted_permissions))
+        added = [p for p in new if p not in old]
+        removed = [p for p in old if p not in new]
+        for value in added + removed:
+            if value not in held:
+                raise PermissionDeniedError(
+                    "errors.missing_permission",
+                    fallback=f"Missing permission: {value}",
+                    params={"permission": value},
+                )
+        if not added and not removed:
+            return target
+
+        updated = await self._memberships.set_grants(target.id, new)
+        await self._audit.log(
+            action="membership.permissions_changed",
+            resource_type="membership",
+            resource_id=str(target.id),
+            org_id=actor_membership.org_id,
+            actor_id=actor_membership.user_id,
+            diff={"added": added, "removed": removed},
+        )
+        return updated
+
     async def remove_member(self, actor_membership: Membership, target_membership_id: UUID) -> UUID:
-        if Permission.MEMBERS_MANAGE not in ROLE_PERMISSIONS[actor_membership.role]:
+        if Permission.MEMBERS_MANAGE not in effective_permissions(
+            actor_membership.role, actor_membership.granted_permissions
+        ):
             raise PermissionDeniedError(
                 "errors.missing_permission",
                 fallback="Missing permission: members:manage",

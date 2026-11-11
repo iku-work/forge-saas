@@ -19,6 +19,7 @@
   "org_header_required": "Der Header X-Org-ID ist erforderlich.",
   "not_org_member": "Kein Mitglied dieser Organisation.",
   "missing_permission": "Fehlende Berechtigung: {permission}.",
+  "permission_not_grantable": "{permission} kann nicht einzelnen Mitgliedern gegeben werden. Ändern Sie stattdessen die Rolle.",
   "oauth_exchange_failed": "Der OAuth-Austausch mit {provider} ist fehlgeschlagen.",
   "oauth_no_email": "Das GitHub-Konto hat keine E-Mail-Adresse.",
   "oauth_unknown_provider": "Unbekannter OAuth-Anbieter: {provider}.",

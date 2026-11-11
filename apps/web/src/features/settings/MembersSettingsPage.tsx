@@ -70,6 +70,7 @@ import { MEMBERS_LIST_SCROLL_ID } from "../../lib/scrollRestorationIds";
 import { useAvatarSrc } from "../../lib/useAvatarSrc";
 import { useDebouncedValue } from "../../lib/useDebouncedValue";
 import { getErrorMessage } from "../auth/getErrorMessage";
+import { MemberPermissionsDialog } from "./MemberPermissionsDialog";
 import { PendingInvitationsCard } from "./PendingInvitationsCard";
 
 // The member row is fixed-height (`h-16`: two lines of text beside a
@@ -277,6 +278,9 @@ export function MembersSettingsPage({
   // F-009: removing someone takes their access away at once, so it is
   // confirmed first, naming them.
   const [pendingRemoval, setPendingRemoval] = useState<MembershipPublic | null>(
+    null,
+  );
+  const [editingGrants, setEditingGrants] = useState<MembershipPublic | null>(
     null,
   );
   // Searching is by email, and emails are only sent to those who manage
@@ -584,6 +588,18 @@ export function MembersSettingsPage({
                               </DropdownMenuRadioGroup>
                             </DropdownMenuSubContent>
                           </DropdownMenuSub>
+                          {/* Owners and admins already hold everything that
+                              can be granted. */}
+                          {member.role === "member" ? (
+                            <DropdownMenuItem
+                              data-testid="member-permissions"
+                              onSelect={() => {
+                                setEditingGrants(member);
+                              }}
+                            >
+                              {t("tenancy.members.permissions.action")}
+                            </DropdownMenuItem>
+                          ) : null}
                           <DropdownMenuSeparator />
                           <DropdownMenuItem
                             className="text-destructive focus:text-destructive"
@@ -651,6 +667,19 @@ export function MembersSettingsPage({
           void handleRemove(member.id);
         }}
       />
+
+      {editingGrants ? (
+        <MemberPermissionsDialog
+          key={editingGrants.id}
+          orgId={org.id}
+          member={editingGrants}
+          name={memberName(editingGrants, t("tenancy.members.unnamed"))}
+          onClose={() => {
+            setEditingGrants(null);
+          }}
+          onSaved={invalidateMembers}
+        />
+      ) : null}
 
       {canManage ? (
         <PendingInvitationsCard

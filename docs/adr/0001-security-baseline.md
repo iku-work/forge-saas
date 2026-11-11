@@ -67,8 +67,8 @@ questionnaire) — evidence links point at real files, not at task IDs.
 | ID | Requirement | Status | Evidence |
 |---|---|---|---|
 | V1.4.1 | Enforcement only on a trusted server layer, never the client | met | `backend/app/core/dependencies.py` `require_permission`/`get_current_org` — server-side FastAPI dependencies, no client-side gating. |
-| V1.4.4 | Single, well-vetted access-control mechanism for all requests | met | `backend/app/modules/auth/permissions.py` docstring: "`require_permission` is the only place that should consult `ROLE_PERMISSIONS`." |
-| V1.4.5 | Attribute/feature-based checks, not role alone | met | Org-scoping is the attribute check: `backend/app/modules/tenancy/service.py` explicitly re-checks `target.org_id != actor_membership.org_id` before every mutation, on top of role-based `ROLE_PERMISSIONS`. |
+| V1.4.4 | Single, well-vetted access-control mechanism for all requests | met | `backend/app/modules/auth/permissions.py`: every gate asks `effective_permissions` (the role's permissions plus a member's grants, which are limited to `GRANTABLE_PERMISSIONS`). |
+| V1.4.5 | Attribute/feature-based checks, not role alone | met | Org-scoping is the attribute check: `backend/app/modules/tenancy/service.py` explicitly re-checks `target.org_id != actor_membership.org_id` before every mutation, on top of `effective_permissions`. |
 
 #### V1.5 Input and Output Architecture
 
@@ -301,7 +301,7 @@ questionnaire) — evidence links point at real files, not at task IDs.
 |---|---|---|---|
 | V4.1.1 | Access control enforced on a trusted server layer | met | `backend/app/core/dependencies.py`. |
 | V4.1.2 | Access-control attributes/policy data can't be client-manipulated | met | Role comes from the DB-controlled `Membership.role`; the `X-Org-ID` header alone grants nothing without a matching `Membership` row (`backend/app/core/dependencies.py:126-140`). |
-| V4.1.3 | Principle of least privilege | met | `ROLE_PERMISSIONS` scoping (`backend/app/modules/auth/permissions.py`) + the cross-tenant sweep in `backend/tests/security/test_tenant_isolation.py`. |
+| V4.1.3 | Principle of least privilege | met | `ROLE_PERMISSIONS` scoping, with members granted single permissions (`files:write` by default) rather than a wider role (`backend/app/modules/auth/permissions.py`) + the cross-tenant sweep in `backend/tests/security/test_tenant_isolation.py`. |
 | V4.1.5 | Access controls fail securely, including on exception | met | `require_permission`/`get_current_org` raise `PermissionDeniedError` (403) rather than defaulting open. |
 
 #### V4.2 Operation Level Access Control

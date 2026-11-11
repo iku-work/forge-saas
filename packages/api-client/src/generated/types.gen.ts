@@ -1311,6 +1311,10 @@ export type MembershipPublic = {
      */
     created_at: string;
     /**
+     * Granted Permissions
+     */
+    granted_permissions: Array<string>;
+    /**
      * Id
      */
     id: string;
@@ -1322,6 +1326,13 @@ export type MembershipPublic = {
      * Org Id
      */
     org_id: string;
+    /**
+     * Permissions
+     *
+     * What this member can do: the role's permissions and the grants.
+     * The web app gates its UI on this rather than re-deriving it.
+     */
+    readonly permissions: Array<string>;
     role: MemberRole;
     user?: MemberUserSummary | null;
     /**
@@ -1533,6 +1544,11 @@ export type PasswordResetRequest = {
      */
     email: string;
 };
+
+/**
+ * Permission
+ */
+export type Permission = 'members:read' | 'members:manage' | 'billing:read' | 'billing:manage' | 'files:read' | 'files:write' | 'files:manage' | 'audit:read' | 'settings:manage';
 
 /**
  * PlanPublic
@@ -2144,6 +2160,16 @@ export type UnreadCountResponse = {
 };
 
 /**
+ * UpdateGrantsRequest
+ */
+export type UpdateGrantsRequest = {
+    /**
+     * Granted Permissions
+     */
+    granted_permissions: Array<Permission>;
+};
+
+/**
  * UpdateMeRequest
  *
  * A partial update: every field is optional and only what was *sent* is
@@ -2656,6 +2682,59 @@ export type WebhookSecretRotated = {
      * Secret
      */
     secret: string;
+};
+
+/**
+ * Envelope[MembershipPublic]
+ */
+export type EnvelopeMembershipPublicWritable = {
+    data?: MembershipPublicWritable | null;
+    error?: ErrorBody | null;
+    meta: Meta;
+};
+
+/**
+ * Envelope[list[MembershipPublic]]
+ */
+export type EnvelopeListMembershipPublicWritable = {
+    /**
+     * Data
+     */
+    data?: Array<MembershipPublicWritable> | null;
+    error?: ErrorBody | null;
+    meta: Meta;
+};
+
+/**
+ * MembershipPublic
+ */
+export type MembershipPublicWritable = {
+    /**
+     * Created At
+     */
+    created_at: string;
+    /**
+     * Granted Permissions
+     */
+    granted_permissions: Array<string>;
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * Invited By
+     */
+    invited_by: string | null;
+    /**
+     * Org Id
+     */
+    org_id: string;
+    role: MemberRole;
+    user?: MemberUserSummary | null;
+    /**
+     * User Id
+     */
+    user_id: string;
 };
 
 export type ListApiKeysApiV1ApiKeysGetData = {
@@ -5258,6 +5337,40 @@ export type UpdateMemberRoleApiV1OrgsOrgIdMembersMembershipIdPatchResponses = {
 };
 
 export type UpdateMemberRoleApiV1OrgsOrgIdMembersMembershipIdPatchResponse = UpdateMemberRoleApiV1OrgsOrgIdMembersMembershipIdPatchResponses[keyof UpdateMemberRoleApiV1OrgsOrgIdMembersMembershipIdPatchResponses];
+
+export type SetMemberPermissionsApiV1OrgsOrgIdMembersMembershipIdPermissionsPutData = {
+    body: UpdateGrantsRequest;
+    path: {
+        /**
+         * Membership Id
+         */
+        membership_id: string;
+        /**
+         * Org Id
+         */
+        org_id: string;
+    };
+    query?: never;
+    url: '/api/v1/orgs/{org_id}/members/{membership_id}/permissions';
+};
+
+export type SetMemberPermissionsApiV1OrgsOrgIdMembersMembershipIdPermissionsPutErrors = {
+    /**
+     * Validation Error
+     */
+    422: EnvelopeNoneType;
+};
+
+export type SetMemberPermissionsApiV1OrgsOrgIdMembersMembershipIdPermissionsPutError = SetMemberPermissionsApiV1OrgsOrgIdMembersMembershipIdPermissionsPutErrors[keyof SetMemberPermissionsApiV1OrgsOrgIdMembersMembershipIdPermissionsPutErrors];
+
+export type SetMemberPermissionsApiV1OrgsOrgIdMembersMembershipIdPermissionsPutResponses = {
+    /**
+     * Successful Response
+     */
+    200: EnvelopeMembershipPublic;
+};
+
+export type SetMemberPermissionsApiV1OrgsOrgIdMembersMembershipIdPermissionsPutResponse = SetMemberPermissionsApiV1OrgsOrgIdMembersMembershipIdPermissionsPutResponses[keyof SetMemberPermissionsApiV1OrgsOrgIdMembersMembershipIdPermissionsPutResponses];
 
 export type GetDeliveryApiV1WebhooksDeliveriesDeliveryIdGetData = {
     body?: never;

@@ -896,7 +896,7 @@ async def test_delete_file_soft_deletes_and_enqueues_deferred_hard_delete(  # no
     fake_backend.uploaded[presigned["key"]] = {"ContentLength": 1024, "ETag": '"abc"'}
     await service.confirm_upload(user_id, presigned["file_id"])
 
-    await service.delete_file(user_id, presigned["file_id"])
+    await service.delete_file(user_id, presigned["file_id"], anyones=False)
 
     repo = StoredFileRepository(session, org.id)
     with pytest.raises(NotFoundError):
@@ -920,7 +920,7 @@ async def test_delete_file_releases_the_bytes_it_was_holding(
     repo = StoredFileRepository(session, org.id)
     assert await repo.total_bytes_for_org() == 1024
 
-    await service.delete_file(user_id, presigned["file_id"])
+    await service.delete_file(user_id, presigned["file_id"], anyones=False)
 
     assert await repo.total_bytes_for_org() == 0
 

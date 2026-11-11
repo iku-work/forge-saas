@@ -17,7 +17,7 @@ import {
 
 import { useFeatureFlags, useModules, useOrg } from "@forge/hooks";
 import type { ActiveModules } from "@forge/hooks";
-import { Permission, ROLE_PERMISSIONS } from "@forge/types";
+import { Permission } from "@forge/types";
 
 // T-233: every in-app destination is locale-prefixed. `to` is the router's
 // path (with the `$locale` param it needs); `path` is the same destination
@@ -200,12 +200,12 @@ export interface VisibleNav {
  * list's length between renders. Consulting the three underlying sources
  * directly has no such constraint, and is the same comparison.
  *
- * Deny-by-default throughout, matching useFeatureFlag and useModules: no role
- * yet, no flags yet, or a failed fetch all read as "hide it".
+ * Deny-by-default throughout, matching useFeatureFlag and useModules: no
+ * permissions yet, no flags yet, or a failed fetch all read as "hide it".
  */
 export function useVisibleNavItems(): VisibleNav {
   const modules = useModules();
-  const { role } = useOrg();
+  const { permissions } = useOrg();
   const { data: flagData } = useFeatureFlags();
   const flags = flagData?.data?.flags;
 
@@ -213,10 +213,8 @@ export function useVisibleNavItems(): VisibleNav {
     if (item.module && !modules[item.module]) {
       return false;
     }
-    if (item.permission) {
-      if (!role || !ROLE_PERMISSIONS[role].has(item.permission)) {
-        return false;
-      }
+    if (item.permission && !permissions.has(item.permission)) {
+      return false;
     }
     if (item.flag && !flags?.[item.flag]) {
       return false;
