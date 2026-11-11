@@ -71,7 +71,7 @@ describe("AppLayout (owner, one org)", () => {
     ).toBeInTheDocument();
     expect(screen.getByTestId("sidebar-settings-nav")).toBeInTheDocument();
     expect(screen.queryByTestId("sidebar-primary-nav")).not.toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Profile" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Members" })).toBeInTheDocument();
   });
 
   it("offers a way back to the app from settings", async () => {
@@ -84,11 +84,14 @@ describe("AppLayout (owner, one org)", () => {
     expect(back).toHaveAttribute("href", "/en");
   });
 
-  it("groups settings into the account and the organization", async () => {
+  it("shows only the account's pages in account settings", async () => {
+    // The two areas used to share one sidebar, and with several
+    // organizations it was easy to change the wrong one.
     renderApp({ initialPath: "/settings/profile", user });
 
-    const account = await screen.findByRole("group", { name: "Your account" });
-    const organization = screen.getByRole("group", { name: "Acme Inc" });
+    const account = await screen.findByRole("group", {
+      name: "Account settings",
+    });
 
     expect(
       within(account).getByRole("link", { name: "Profile" }),
@@ -97,22 +100,63 @@ describe("AppLayout (owner, one org)", () => {
       within(account).getByRole("link", { name: "Security" }),
     ).toBeInTheDocument();
     expect(
+      screen.queryByRole("link", { name: "Members" }),
+    ).not.toBeInTheDocument();
+    expect(screen.getByTestId("settings-area-header")).toHaveTextContent(
+      "Account settings",
+    );
+  });
+
+  it("shows only the organization's pages, under its name, in organization settings", async () => {
+    renderApp({ initialPath: "/settings/billing", user });
+
+    const organization = await screen.findByRole("group", {
+      name: "Acme Inc settings",
+    });
+
+    expect(
       within(organization).getByRole("link", { name: "Members" }),
     ).toBeInTheDocument();
     expect(
       within(organization).getByRole("link", { name: "Billing" }),
     ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("link", { name: "Profile" }),
+    ).not.toBeInTheDocument();
+    expect(screen.getByTestId("settings-area-header")).toHaveTextContent(
+      "Acme IncOrganization settings",
+    );
   });
 
-  it("offers Dashboard and Settings from the user menu", async () => {
-    // With the settings pages out of the sidebar, this menu is the only
-    // pointer route into them -- and the only way back out of settings.
+  it("offers Dashboard and account settings from the user menu", async () => {
+    // With the settings pages out of the sidebar, this menu is the pointer
+    // route into the account's -- and a way back out of settings.
     renderApp({ initialPath: "/", user });
 
     await userEvent.click(await screen.findByTestId("user-menu-trigger"));
 
-    expect(await screen.findByTestId("user-menu-settings")).toBeInTheDocument();
+    expect(await screen.findByTestId("user-menu-settings")).toHaveTextContent(
+      "Account settings",
+    );
     expect(screen.getByTestId("user-menu-dashboard")).toBeInTheDocument();
+    // The switcher is there (multi-org is on), so the org's settings are not.
+    expect(
+      screen.queryByTestId("user-menu-org-settings"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("opens the organization's settings from the org switcher", async () => {
+    renderApp({ initialPath: "/", user });
+
+    await userEvent.click(await screen.findByTestId("org-switcher-trigger"));
+    await userEvent.click(await screen.findByTestId("org-switcher-settings"));
+
+    expect(
+      await screen.findByRole("group", { name: "Acme Inc settings" }),
+    ).toBeInTheDocument();
+    expect(
+      await screen.findByRole("heading", { name: "Organization" }),
+    ).toBeInTheDocument();
   });
 
   it("renders settings pages nested under the guarded layout", async () => {

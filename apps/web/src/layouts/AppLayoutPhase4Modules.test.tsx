@@ -54,12 +54,12 @@ describe("AppLayout (public_api and outbound_webhooks enabled)", () => {
   });
 
   it("shows the API keys and Webhooks nav links to an owner", async () => {
-    // From a settings route: both are settings pages, and the sidebar only
-    // renders that group while you are inside it.
-    renderApp({ initialPath: "/settings/profile", user });
+    // From an organization settings route: both are organization pages, and
+    // the sidebar only renders that area while you are inside it.
+    renderApp({ initialPath: "/settings/members", user });
 
     expect(
-      await screen.findByRole("heading", { name: "Profile" }),
+      await screen.findByRole("heading", { name: "Members" }),
     ).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "API keys" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Webhooks" })).toBeInTheDocument();

@@ -160,6 +160,28 @@ export const SETTINGS_NAV: NavItem[] = [
   },
 ];
 
+export type SettingsArea = NonNullable<NavItem["group"]>;
+
+/**
+ * Which settings area a path is in, or null outside settings.
+ *
+ * Account and organization settings are separate areas, each with its own
+ * sidebar, so a page about you never sits in one list with a page about the
+ * organization. Matched against the ungated list: whether a page is visible
+ * to this user does not change which area it belongs to. A settings path no
+ * item claims is treated as the account's.
+ */
+export function settingsAreaFor(path: string): SettingsArea | null {
+  if (!path.startsWith("/settings")) {
+    return null;
+  }
+  const item = SETTINGS_NAV.find(
+    (candidate) =>
+      path === candidate.path || path.startsWith(`${candidate.path}/`),
+  );
+  return item?.group ?? "account";
+}
+
 export interface VisibleNav {
   primary: NavItem[];
   settings: NavItem[];

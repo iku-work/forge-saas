@@ -41,7 +41,10 @@
     "back_to_app": "Volver a la aplicación",
     "collapse_sidebar": "Contraer barra lateral",
     "expand_sidebar": "Expandir barra lateral",
-    "group_account": "Tu cuenta"
+    "group_account": "Tu cuenta",
+    "account_settings": "Configuración de la cuenta",
+    "org_settings": "Configuración de la organización",
+    "org_settings_named": "Configuración de {org}"
   },
   "support": {
     "contact": "Contactar con soporte",
