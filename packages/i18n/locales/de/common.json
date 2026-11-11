@@ -41,7 +41,10 @@
     "back_to_app": "Zurück zur App",
     "collapse_sidebar": "Seitenleiste einklappen",
     "expand_sidebar": "Seitenleiste ausklappen",
-    "group_account": "Ihr Konto"
+    "group_account": "Ihr Konto",
+    "account_settings": "Kontoeinstellungen",
+    "org_settings": "Organisationseinstellungen",
+    "org_settings_named": "Einstellungen von {org}"
   },
   "support": {
     "contact": "Support kontaktieren",

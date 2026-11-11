@@ -40,6 +40,9 @@
     "skip_to_content": "Skip to content",
     "back_to_app": "Back to app",
     "group_account": "Your account",
+    "account_settings": "Account settings",
+    "org_settings": "Organization settings",
+    "org_settings_named": "{org} settings",
     "collapse_sidebar": "Collapse sidebar",
     "expand_sidebar": "Expand sidebar"
   },
