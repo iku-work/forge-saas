@@ -20,6 +20,7 @@ from app.core.logging import configure_logging
 from app.core.metrics import start_worker_metrics_server
 from app.core.sentry import init_sentry
 from app.core.storage_endpoint import enforce_storage_endpoint_is_reachable_internally
+from app.workers.jobs.avatars import process_avatar
 from app.workers.jobs.billing import send_dunning_email
 from app.workers.jobs.email import send_email
 from app.workers.jobs.encryption import rotate_encryption_keys_job
@@ -133,7 +134,7 @@ class ScanWorkerSettings:
     with its own memory limit.
     """
 
-    functions: ClassVar[list[WorkerCoroutine]] = [virus_scan]
+    functions: ClassVar[list[WorkerCoroutine]] = [virus_scan, process_avatar]
     queue_name = SCAN_QUEUE_NAME
     redis_settings = build_redis_settings()
     max_jobs = get_settings().SCAN_MAX_CONCURRENCY

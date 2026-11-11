@@ -11,7 +11,6 @@ transaction boundary.
 """
 
 import logging
-from datetime import timedelta
 from typing import Annotated
 from urllib.parse import quote
 from uuid import UUID, uuid4
@@ -21,6 +20,7 @@ from fastapi.responses import RedirectResponse
 from redis.asyncio import Redis
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core import jobs
 from app.core.db import get_session
 from app.core.dependencies import (
     get_current_user,
@@ -30,14 +30,14 @@ from app.core.dependencies import (
     require_recent_auth,
 )
 from app.core.envelope import Envelope, Meta
-from app.core.exceptions import AuthenticationError, NotFoundError
+from app.core.exceptions import AuthenticationError
 from app.core.urls import frontend_url
 from app.middleware.locale import get_locale
 from app.middleware.rate_limit import api_limit, auth_limit, sensitive_limit
-from app.models._mixins import utcnow
 from app.modules.auth.models import User
 from app.modules.auth.schemas import (
-    AvatarUrlResponse,
+    AvatarUploadForm,
+    AvatarUploadFormRequest,
     CancelEmailChangeRequest,
     ChangePasswordRequest,
     ConfirmEmailChangeRequest,
@@ -54,6 +54,7 @@ from app.modules.auth.schemas import (
     RegisterRequest,
     RequestEmailChangeRequest,
     SessionPublic,
+    SetAvatarRequest,
     TwoFactorRequiredResponse,
     UpdateMeRequest,
     UserPublic,
@@ -377,16 +378,6 @@ async def update_me(
     # key and an explicit null mean different things -- leave it alone versus
     # clear it. Only what the client actually sent is written.
     changes = body.model_dump(exclude_unset=True)
-    if "avatar_file_id" in changes:
-        # The client names a file it uploaded; the column stores the object
-        # key. Resolving here rather than trusting a key from the client is
-        # what stops an arbitrary object being presigned later -- see
-        # AuthService.resolve_avatar_change.
-        service = AuthService(session)
-        changes["avatar_object_key"] = await service.resolve_avatar_change(
-            user.id, changes.pop("avatar_file_id")
-        )
-
     if not changes:
         return Envelope(
             data=UserPublic.model_validate(user), meta=Meta(request_id=_request_id(request))
@@ -400,43 +391,72 @@ async def update_me(
     )
 
 
-@router.get("/me/avatar")
+@router.post(
+    "/me/avatar/upload-form",
+    dependencies=[Depends(reject_during_impersonation("data_mutation"))],
+)
+@auth_limit
+async def get_avatar_upload_form(
+    request: Request,
+    body: AvatarUploadFormRequest,
+    user: Annotated[User, Depends(get_current_user)],
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> Envelope[AvatarUploadForm]:
+    """A presigned form for a new avatar of up to 5 MB, posted straight to
+    storage like every upload. Then POST /auth/me/avatar with its key."""
+    form = await AuthService(session).avatar_upload_form(user.id, body.content_type)
+    return Envelope(
+        data=AvatarUploadForm(
+            upload_url=form.url, fields=form.fields, upload_key=form.key, expires_at=form.expires_at
+        ),
+        meta=Meta(request_id=_request_id(request)),
+    )
+
+
+@router.post(
+    "/me/avatar",
+    status_code=202,
+    dependencies=[Depends(reject_during_impersonation("data_mutation"))],
+)
+# Each one is scanned and decoded, so far fewer than the general budget.
+@auth_limit
+async def set_my_avatar(
+    request: Request,
+    body: SetAvatarRequest,
+    user: Annotated[User, Depends(get_current_user)],
+    session: Annotated[AsyncSession, Depends(get_session)],
+    redis: Annotated[Redis, Depends(get_redis)],
+) -> Envelope[UserPublic]:
+    """Make an uploaded image the avatar.
+
+    202: it is scanned and re-encoded in the background, then published.
+    `avatar_processing` is true until then; afterwards `avatar_url` is the new
+    image, or unchanged if the file could not be used.
+    """
+    updated = await AuthService(session).stage_avatar(user.id, body.upload_key)
+    await session.commit()
+    await invalidate_user_cache(redis, user.id)
+    await jobs.enqueue_job("process_avatar", user_id=updated.id, upload_key=body.upload_key)
+    return Envelope(
+        data=UserPublic.model_validate(updated), meta=Meta(request_id=_request_id(request))
+    )
+
+
+@router.delete("/me/avatar", dependencies=[Depends(reject_during_impersonation("data_mutation"))])
 @api_limit
-async def get_my_avatar(
+async def delete_my_avatar(
     request: Request,
     user: Annotated[User, Depends(get_current_user)],
     session: Annotated[AsyncSession, Depends(get_session)],
-) -> Envelope[AvatarUrlResponse]:
-    """A short-lived presigned URL for the caller's own uploaded avatar.
-
-    The avatars bucket is private like every other, so there is no public URL
-    to put in a UserPublic -- and a presigned one does not belong there
-    either, because it expires and that object is cached and re-serialised
-    everywhere. Hence a separate endpoint the page calls when it renders.
-
-    404 when the user has no uploaded avatar: an OAuth `picture` is already on
-    UserPublic.avatar_url and needs nothing from here. 409 while the avatar's
-    malware scan has not come back clean.
-    """
-    if user.avatar_object_key is None:
-        raise NotFoundError("errors.avatar_not_found", fallback="No uploaded avatar.")
-
-    # Lazy for the same reason as AuthService.resolve_avatar_change: this
-    # module has to import with file_storage off.
-    from app.modules.storage.avatars import (  # noqa: PLC0415
-        AVATAR_URL_EXPIRES_IN_SECONDS,
-        presign_own_avatar,
-    )
-
-    # 409 until the avatar's scan comes back clean (review R7): it can be
-    # *chosen* before then, but not served.
-    url = await presign_own_avatar(session, user.avatar_object_key)
+    redis: Annotated[Redis, Depends(get_redis)],
+) -> Envelope[UserPublic]:
+    service = AuthService(session)
+    updated, keys = await service.remove_avatar(user.id)
+    await session.commit()
+    await invalidate_user_cache(redis, user.id)
+    await service.delete_avatar_objects(keys)
     return Envelope(
-        data=AvatarUrlResponse(
-            url=url,
-            expires_at=utcnow() + timedelta(seconds=AVATAR_URL_EXPIRES_IN_SECONDS),
-        ),
-        meta=Meta(request_id=_request_id(request)),
+        data=UserPublic.model_validate(updated), meta=Meta(request_id=_request_id(request))
     )
 
 

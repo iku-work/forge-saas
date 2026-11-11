@@ -288,48 +288,10 @@ def _membership_public(
         public.user = MemberUserSummary(
             full_name=user.full_name,
             email=user.email if show_email else None,
-            avatar_url=user.avatar_url,
+            avatar_url=user.avatar_src,
             has_uploaded_avatar=user.has_uploaded_avatar,
         )
     return public
-
-
-@router.get(
-    "/orgs/{org_id}/members/{membership_id}/avatar",
-    description=(
-        "A short-lived URL for a fellow member's uploaded avatar. 404 when they "
-        "have none (an OAuth picture is already `user.avatar_url` on the member), "
-        "409 while its malware scan is pending."
-    ),
-)
-@api_limit
-async def get_member_avatar(
-    request: Request,
-    org_id: UUID,
-    membership_id: UUID,
-    # A member's session, not an API-key scope: a photo URL serves the web
-    # UI, and the public API contract (test_public_openapi) is deliberate.
-    viewer: Annotated[  # noqa: ARG001 -- gates the route and proves org membership; org comes from path
-        Membership, Depends(require_org_permission(Permission.MEMBERS_READ))
-    ],
-    session: Annotated[AsyncSession, Depends(get_session)],
-) -> Envelope[AvatarUrlResponse]:
-    key = await TenancyService(session).member_avatar_key(org_id, membership_id)
-    # Lazy: storage is an optional module, and this one must import without
-    # it. With file_storage off nobody has an uploaded avatar, so the 404
-    # above is raised before this line is reached.
-    from app.modules.storage.avatars import (  # noqa: PLC0415
-        AVATAR_URL_EXPIRES_IN_SECONDS,
-        presign_own_avatar,
-    )
-
-    url = await presign_own_avatar(session, key)
-    return Envelope(
-        data=AvatarUrlResponse(
-            url=url, expires_at=utcnow() + timedelta(seconds=AVATAR_URL_EXPIRES_IN_SECONDS)
-        ),
-        meta=Meta(request_id=_request_id(request)),
-    )
 
 
 @router.patch(

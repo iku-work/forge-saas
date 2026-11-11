@@ -190,8 +190,59 @@
         "title": "ApiKeyUpdateRequest",
         "type": "object"
       },
+      "AvatarUploadForm": {
+        "description": "A presigned POST for one avatar upload, straight to storage. Post the\nfile with `fields`, then send `upload_key` to POST /auth/me/avatar.",
+        "properties": {
+          "expires_at": {
+            "format": "date-time",
+            "title": "Expires At",
+            "type": "string"
+          },
+          "fields": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "title": "Fields",
+            "type": "object"
+          },
+          "upload_key": {
+            "title": "Upload Key",
+            "type": "string"
+          },
+          "upload_url": {
+            "title": "Upload Url",
+            "type": "string"
+          }
+        },
+        "required": [
+          "upload_url",
+          "fields",
+          "upload_key",
+          "expires_at"
+        ],
+        "title": "AvatarUploadForm",
+        "type": "object"
+      },
+      "AvatarUploadFormRequest": {
+        "properties": {
+          "content_type": {
+            "enum": [
+              "image/jpeg",
+              "image/png",
+              "image/webp"
+            ],
+            "title": "Content Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "content_type"
+        ],
+        "title": "AvatarUploadFormRequest",
+        "type": "object"
+      },
       "AvatarUrlResponse": {
-        "description": "A short-lived link to the caller's own uploaded avatar.\n\nSeparate from UserPublic because it expires: baking it into the user\nobject would put a decaying value into everything that caches one.",
+        "description": "A short-lived link to a private image: today, an organization's logo.\n\nSeparate from the object it belongs to because it expires: baking it in\nwould put a decaying value into everything that caches that object.",
         "properties": {
           "expires_at": {
             "format": "date-time",
@@ -622,6 +673,38 @@
           "meta"
         ],
         "title": "Envelope[ApiKeyPublic]",
+        "type": "object"
+      },
+      "Envelope_AvatarUploadForm_": {
+        "properties": {
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AvatarUploadForm"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "error": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ErrorBody"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "meta": {
+            "$ref": "#/components/schemas/Meta"
+          }
+        },
+        "required": [
+          "meta"
+        ],
+        "title": "Envelope[AvatarUploadForm]",
         "type": "object"
       },
       "Envelope_AvatarUrlResponse_": {
@@ -2927,7 +3010,7 @@
         "type": "string"
       },
       "MemberUserSummary": {
-        "description": "Who a membership belongs to, as fellow members see them.\n\nEnough to draw a row (a name, a picture) and no more. `email` is set only\nfor a caller who can manage members (an owner, an admin, or an API key with\n`members:write`); everyone else gets null. Never the\nuploaded avatar's object key: `has_uploaded_avatar` only says one exists\n(the web app fetches a short-lived URL for it with a member's session).\n`avatar_url` is an OAuth provider's picture, already an absolute URL.",
+        "description": "Who a membership belongs to, as fellow members see them.\n\nEnough to draw a row (a name, a picture) and no more. `email` is set only\nfor a caller who can manage members (an owner, an admin, or an API key with\n`members:write`); everyone else gets null. `avatar_url` is the uploaded\navatar's public URL, else an OAuth provider's picture.",
         "properties": {
           "avatar_url": {
             "anyOf": [
@@ -3766,6 +3849,20 @@
         "title": "SessionPublic",
         "type": "object"
       },
+      "SetAvatarRequest": {
+        "properties": {
+          "upload_key": {
+            "maxLength": 200,
+            "title": "Upload Key",
+            "type": "string"
+          }
+        },
+        "required": [
+          "upload_key"
+        ],
+        "title": "SetAvatarRequest",
+        "type": "object"
+      },
       "SsoConnectionPublic": {
         "properties": {
           "client_id": {
@@ -4283,18 +4380,6 @@
       "UpdateMeRequest": {
         "description": "A partial update: every field is optional and only what was *sent* is\nwritten.\n\nBoth fields are nullable, so \"leave it alone\" and \"clear it\" have to be\ntold apart by something other than the value -- the router reads\n`model_fields_set` (via model_dump(exclude_unset=True)) rather than\ntreating None as absent. Sending `{\"full_name\": null}` removes the name;\nomitting the key entirely leaves it.\n\n`locale` was the only field here until 2026-09-12, which is why the\nprofile page had nothing to submit: there was no field for the name it\ndisplayed.",
         "properties": {
-          "avatar_file_id": {
-            "anyOf": [
-              {
-                "format": "uuid",
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Avatar File Id"
-          },
           "full_name": {
             "anyOf": [
               {
@@ -4431,6 +4516,11 @@
       },
       "UserPublic": {
         "properties": {
+          "avatar_processing": {
+            "default": false,
+            "title": "Avatar Processing",
+            "type": "boolean"
+          },
           "avatar_url": {
             "anyOf": [
               {
@@ -6240,15 +6330,14 @@
       }
     },
     "/api/v1/auth/me/avatar": {
-      "get": {
-        "description": "A short-lived presigned URL for the caller's own uploaded avatar.\n\nThe avatars bucket is private like every other, so there is no public URL\nto put in a UserPublic -- and a presigned one does not belong there\neither, because it expires and that object is cached and re-serialised\neverywhere. Hence a separate endpoint the page calls when it renders.\n\n404 when the user has no uploaded avatar: an OAuth `picture` is already on\nUserPublic.avatar_url and needs nothing from here. 409 while the avatar's\nmalware scan has not come back clean.",
-        "operationId": "get_my_avatar_api_v1_auth_me_avatar_get",
+      "delete": {
+        "operationId": "delete_my_avatar_api_v1_auth_me_avatar_delete",
         "responses": {
           "200": {
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Envelope_AvatarUrlResponse_"
+                  "$ref": "#/components/schemas/Envelope_UserPublic_"
                 }
               }
             },
@@ -6260,7 +6349,99 @@
             "OAuth2PasswordBearer": []
           }
         ],
-        "summary": "Get My Avatar",
+        "summary": "Delete My Avatar",
+        "tags": [
+          "auth"
+        ]
+      },
+      "post": {
+        "description": "Make an uploaded image the avatar.\n\n202: it is scanned and re-encoded in the background, then published.\n`avatar_processing` is true until then; afterwards `avatar_url` is the new\nimage, or unchanged if the file could not be used.",
+        "operationId": "set_my_avatar_api_v1_auth_me_avatar_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetAvatarRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_UserPublic_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_NoneType_"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Set My Avatar",
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/api/v1/auth/me/avatar/upload-form": {
+      "post": {
+        "description": "A presigned form for a new avatar of up to 5 MB, posted straight to\nstorage like every upload. Then POST /auth/me/avatar with its key.",
+        "operationId": "get_avatar_upload_form_api_v1_auth_me_avatar_upload_form_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AvatarUploadFormRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_AvatarUploadForm_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_NoneType_"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Get Avatar Upload Form",
         "tags": [
           "auth"
         ]
@@ -9729,65 +9910,6 @@
           }
         ],
         "summary": "Update Member Role",
-        "tags": [
-          "tenancy"
-        ]
-      }
-    },
-    "/api/v1/orgs/{org_id}/members/{membership_id}/avatar": {
-      "get": {
-        "description": "A short-lived URL for a fellow member's uploaded avatar. 404 when they have none (an OAuth picture is already `user.avatar_url` on the member), 409 while its malware scan is pending.",
-        "operationId": "get_member_avatar_api_v1_orgs__org_id__members__membership_id__avatar_get",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "org_id",
-            "required": true,
-            "schema": {
-              "format": "uuid",
-              "title": "Org Id",
-              "type": "string"
-            }
-          },
-          {
-            "in": "path",
-            "name": "membership_id",
-            "required": true,
-            "schema": {
-              "format": "uuid",
-              "title": "Membership Id",
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Envelope_AvatarUrlResponse_"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Envelope_NoneType_"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "security": [
-          {
-            "OAuth2PasswordBearer": []
-          }
-        ],
-        "summary": "Get Member Avatar",
         "tags": [
           "tenancy"
         ]

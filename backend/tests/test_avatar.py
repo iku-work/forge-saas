@@ -1,358 +1,358 @@
-"""Setting and reading a user's own avatar, out of a private bucket.
+"""A user's own avatar: uploaded through the API, published at a public URL.
 
-The uploader on the profile page stored a file and then did nothing with it:
-`onUploaded` showed a toast, no column recorded which file it was, and
-`avatar_url` (set only by OAuth) was rendered nowhere. So an avatar could be
-uploaded, and never seen.
+Until 2026-11 an avatar was a file in the user's organization, so a member
+who could not upload files there could not change their own picture. It is
+now the person's: staged by POST /auth/me/avatar, then scanned, re-encoded
+and published by the scanner worker (tests/committed/test_avatar_job.py).
 
-The bucket stays private, which is what shapes the design. There is no URL to
-put on a user object, so the id of an uploaded file is exchanged for a
-short-lived presigned URL by GET /auth/me/avatar, and the *server* resolves
-the id to a storage key -- a client-supplied key would be a request to
-presign any object in the bucket.
-
-The check worth reading first is
-`test_cannot_claim_a_file_uploaded_by_someone_else`.
+The check worth reading first is `test_reencoding_keeps_only_the_pixels`.
 """
 
-from uuid import UUID, uuid4
+import io
+from datetime import UTC, datetime, timedelta
+from typing import Any
+from uuid import uuid4
 
 import httpx
 import pytest
+from PIL import Image
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.exceptions import ConflictError, NotFoundError, UnprocessableEntityError
-from app.modules.auth.models import User
-from app.modules.auth.permissions import MemberRole
+from app.core.config import get_settings
+from app.core.exceptions import UnprocessableEntityError
+from app.core.urls import public_object_url
+from app.modules.auth.models import AVATAR_KEY_PREFIX, User
+from app.modules.auth.schemas import UserPublic
 from app.modules.auth.service import AuthService
 from app.modules.auth.utils import create_access_token
 from app.modules.storage import avatars as avatars_module
 from app.modules.storage.avatars import (
-    AVATAR_BUCKET,
-    presign_own_avatar,
-    resolve_own_avatar_key,
+    AVATAR_SIZE,
+    MAX_AVATAR_BYTES,
+    InvalidAvatarError,
+    reencode,
 )
-from app.modules.storage.models import StoredFile
-from app.modules.tenancy.models import Membership, Organization
+from app.modules.storage.backend import PresignedUpload
 
-pytestmark = pytest.mark.module_dependent  # stored_file
+_GPS_IFD = 0x8825
+_GPS_LATITUDE = 2
+
+
+def _jpeg_with_location() -> bytes:
+    exif = Image.Exif()
+    exif[0x010F] = "Phone maker"  # Make
+    exif.get_ifd(_GPS_IFD)[_GPS_LATITUDE] = (60.0, 10.0, 30.0)
+    out = io.BytesIO()
+    Image.new("RGB", (1200, 900), "teal").save(out, "JPEG", exif=exif)
+    return out.getvalue()
+
+
+def _png(size: tuple[int, int], mode: str = "RGB") -> bytes:
+    out = io.BytesIO()
+    Image.new(mode, size).save(out, "PNG")
+    return out.getvalue()
+
+
+class _FakeBackend:
+    def __init__(self) -> None:
+        self.objects: dict[str, bytes] = {}
+        self.presigned: list[tuple[str, str, int]] = []
+
+    async def put(
+        self,
+        key: str,
+        body: bytes,
+        content_type: str,  # noqa: ARG002 -- StorageBackend's signature
+        *,
+        cache_control: str | None = None,  # noqa: ARG002 -- as above
+    ) -> None:
+        self.objects[key] = body
+
+    async def delete(self, key: str) -> None:
+        self.objects.pop(key, None)
+
+    async def exists(self, key: str) -> bool:
+        return key in self.objects
+
+    async def presign_upload(
+        self, key: str, content_type: str, max_bytes: int, expires_in: int = 600
+    ) -> PresignedUpload:
+        self.presigned.append((key, content_type, max_bytes))
+        return PresignedUpload(
+            url="https://storage.example/forge",
+            fields={"key": key},
+            key=key,
+            expires_at=datetime.now(UTC) + timedelta(seconds=expires_in),
+        )
 
 
 @pytest.fixture
-async def org(session: AsyncSession) -> Organization:
-    """stored_file.org_id is a real foreign key, so a bare uuid4() will not
-    do -- even though nothing under test reads the org."""
-    organization = Organization(name="Acme", slug=f"acme-{uuid4().hex[:8]}")
-    session.add(organization)
-    await session.flush()
-    return organization
+def fake_backend(monkeypatch: pytest.MonkeyPatch) -> _FakeBackend:
+    backend = _FakeBackend()
+    monkeypatch.setattr(avatars_module, "get_storage_backend", lambda: backend)
+    return backend
 
 
 @pytest.fixture
 async def owner(session: AsyncSession) -> User:
-    """A plain persisted user. `verified_user` lives in test_auth_router.py
-    rather than conftest, and nothing here needs a verified one."""
     user = User(email=f"avatar-{uuid4().hex[:8]}@example.com", hashed_password="x")
     session.add(user)
     await session.flush()
     return user
 
 
-async def _make_file(  # noqa: PLR0913 -- a row factory; every field is a test knob
-    session: AsyncSession,
-    *,
-    uploaded_by: UUID,
-    org_id: UUID,
-    bucket: str = AVATAR_BUCKET,
-    status: str = "ready",
-    # An avatar is an attacker-supplied file handed to a browser with an
-    # image content type, so it passes the same scan gate as every other
-    # download. The default here is the post-scan state; the tests at the
-    # bottom of this file cover what happens before one.
-    virus_scan_result: str | None = "clean",
-) -> StoredFile:
-    stored = StoredFile(
-        org_id=org_id,
-        uploaded_by=uploaded_by,
-        key=f"{org_id}/{bucket}/{uuid4()}/photo.jpg",
-        filename="photo.jpg",
-        content_type="image/jpeg",
-        size_bytes=1024,
-        bucket=bucket,
-        status=status,
-        virus_scan_result=virus_scan_result,
+def _bearer(user: User) -> dict[str, str]:
+    return {"Authorization": f"Bearer {create_access_token(user.id, None, ())}"}
+
+
+# --- re-encoding -----------------------------------------------------------
+
+
+def test_reencoding_keeps_only_the_pixels() -> None:
+    """A phone photo carries where it was taken. The published avatar must
+    not: it is readable by anyone who has the URL."""
+    raw = _jpeg_with_location()
+    assert Image.open(io.BytesIO(raw)).getexif().get_ifd(_GPS_IFD)  # the fixture has it
+
+    with Image.open(io.BytesIO(reencode(raw))) as published:
+        assert published.format == "WEBP"
+        assert published.size == (AVATAR_SIZE, AVATAR_SIZE)
+        assert not published.getexif()
+        assert "xmp" not in published.info
+        assert "icc_profile" not in published.info
+
+
+def test_a_phone_photo_is_turned_the_right_way_up() -> None:
+    """Phones store the pixels sideways and an EXIF tag saying so. Dropping
+    the tag without applying it would publish the avatar on its side."""
+    image = Image.new("RGB", (2000, 1000), "red")
+    image.paste((0, 0, 255), (1000, 0, 2000, 1000))
+    exif = Image.Exif()
+    exif[0x0112] = 6  # display rotated 90 degrees clockwise
+    raw = io.BytesIO()
+    image.save(raw, "JPEG", exif=exif)
+
+    with Image.open(io.BytesIO(reencode(raw.getvalue()))) as published:
+        upright = published.convert("RGB")
+        pixel = upright.getpixel((AVATAR_SIZE // 2, 10))
+        assert isinstance(pixel, tuple)
+        red, _, blue = pixel
+        assert red > 200 > blue  # the left half is now on top
+
+
+def test_transparency_survives() -> None:
+    with Image.open(io.BytesIO(reencode(_png((300, 300), "RGBA")))) as published:
+        assert published.mode == "RGBA"
+
+
+@pytest.mark.parametrize(
+    "raw",
+    [
+        pytest.param(b"not an image at all", id="garbage"),
+        pytest.param(_png((10, 10))[:40], id="truncated"),
+        pytest.param(_png((6000, 5000), "1"), id="too-many-pixels"),
+    ],
+)
+def test_refuses_what_it_cannot_safely_decode(raw: bytes) -> None:
+    with pytest.raises(InvalidAvatarError):
+        reencode(raw)
+
+
+def test_refuses_a_gif() -> None:
+    out = io.BytesIO()
+    Image.new("P", (10, 10)).save(out, "GIF")
+
+    with pytest.raises(InvalidAvatarError):
+        reencode(out.getvalue())
+
+
+# --- what clients see ------------------------------------------------------
+
+
+def test_a_published_avatar_is_a_public_url_and_wins_over_the_oauth_picture() -> None:
+    key = f"{AVATAR_KEY_PREFIX}{uuid4()}.webp"
+    user = User(
+        email="a@example.com", avatar_url="https://oauth.example/p.png", avatar_object_key=key
     )
-    session.add(stored)
-    await session.flush()
-    return stored
+
+    public = UserPublic.model_validate(user)
+
+    assert public.avatar_url == public_object_url(key)
+    assert public.has_uploaded_avatar
+    assert not public.avatar_processing
 
 
-async def test_resolves_the_key_of_the_users_own_ready_avatar(
-    session: AsyncSession, owner: User, org: Organization
+def test_an_avatar_from_before_public_avatars_is_not_shown() -> None:
+    """Those keys name private org files, which no longer have a URL."""
+    user = User(
+        email="a@example.com",
+        avatar_url="https://oauth.example/p.png",
+        avatar_object_key=f"{uuid4()}/avatars/{uuid4()}/me.png",
+    )
+
+    public = UserPublic.model_validate(user)
+
+    assert public.avatar_url == "https://oauth.example/p.png"
+    assert not public.has_uploaded_avatar
+
+
+def test_an_upload_in_progress_is_reported_but_its_key_is_not() -> None:
+    staged = "incoming/avatars/x/y"
+    user = User(email="a@example.com", avatar_pending_key=staged)
+
+    dumped = UserPublic.model_validate(user).model_dump()
+
+    assert dumped["avatar_processing"] is True
+    assert "incoming/" not in str(dumped)
+
+
+def test_public_urls(monkeypatch: pytest.MonkeyPatch) -> None:
+    settings = get_settings()
+    monkeypatch.setattr(settings, "AWS_ENDPOINT_URL", "https://storage.example.com")
+    monkeypatch.setattr(settings, "AWS_BUCKET_NAME", "forge")
+    monkeypatch.setattr(settings, "PUBLIC_STORAGE_URL", "")
+    assert public_object_url("public/a.webp") == "https://storage.example.com/forge/public/a.webp"
+
+    monkeypatch.setattr(settings, "PUBLIC_STORAGE_URL", "https://cdn.example.com/")
+    assert public_object_url("public/a.webp") == "https://cdn.example.com/public/a.webp"
+
+
+# --- uploading -------------------------------------------------------------
+
+
+async def test_uploads_are_refused_when_file_storage_is_off(
+    session: AsyncSession, owner: User, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    stored = await _make_file(session, uploaded_by=owner.id, org_id=org.id)
-
-    key = await resolve_own_avatar_key(session, user_id=owner.id, file_id=stored.id)
-
-    assert key == stored.key
-
-
-async def test_cannot_claim_a_file_uploaded_by_someone_else(
-    session: AsyncSession, owner: User, org: Organization
-) -> None:
-    """The check the whole design rests on.
-
-    Without it, setting `avatar_file_id` to any id in the system would have
-    GET /auth/me/avatar presign that object -- and the bucket is private
-    precisely so that cannot happen. It is also why the caller gets one
-    undifferentiated failure: saying "not yours" rather than "not found"
-    would confirm the file exists.
-    """
-    other = User(email=f"other-{uuid4().hex[:8]}@example.com", hashed_password="x")
-    session.add(other)
-    await session.flush()
-    # uploaded_by is a real foreign key, so the other user has to exist --
-    # which is the realistic case anyway: a file somebody actually uploaded.
-    stored = await _make_file(session, uploaded_by=other.id, org_id=org.id)
-
-    key = await resolve_own_avatar_key(session, user_id=owner.id, file_id=stored.id)
-
-    assert key is None
-
-
-async def test_ignores_a_file_outside_the_avatars_bucket(
-    session: AsyncSession, owner: User, org: Organization
-) -> None:
-    """A document is not an avatar. Same private bucket family, different
-    content-type allowlist, and no reason for the profile page to reach it."""
-    stored = await _make_file(session, uploaded_by=owner.id, org_id=org.id, bucket="default")
-
-    key = await resolve_own_avatar_key(session, user_id=owner.id, file_id=stored.id)
-
-    assert key is None
-
-
-async def test_ignores_a_file_that_never_finished_uploading(
-    session: AsyncSession, owner: User, org: Organization
-) -> None:
-    """`pending` means presign was issued and confirm never succeeded, so
-    there may be no object behind the key at all."""
-    stored = await _make_file(session, uploaded_by=owner.id, org_id=org.id, status="pending")
-
-    key = await resolve_own_avatar_key(session, user_id=owner.id, file_id=stored.id)
-
-    assert key is None
-
-
-async def test_ignores_a_file_that_does_not_exist(session: AsyncSession, owner: User) -> None:
-    key = await resolve_own_avatar_key(session, user_id=owner.id, file_id=uuid4())
-
-    assert key is None
-
-
-async def test_finds_the_avatar_regardless_of_which_org_it_was_uploaded_in(
-    session: AsyncSession, owner: User, org: Organization
-) -> None:
-    """The reason this lives outside StorageService.
-
-    Every other query in the storage module filters on org_id, because a
-    document belongs to the org. An avatar belongs to the person and follows
-    them between orgs -- and the profile page showing it has no org in view
-    at all. Scoping this by org would make an avatar vanish on switching.
-    """
-    stored = await _make_file(session, uploaded_by=owner.id, org_id=org.id)
-
-    # Looked up with no org in hand whatsoever.
-    key = await resolve_own_avatar_key(session, user_id=owner.id, file_id=stored.id)
-
-    assert key == stored.key
-
-
-async def test_setting_an_avatar_is_refused_when_file_storage_is_off(
-    session: AsyncSession, owner: User, org: Organization, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    """`file_storage` is optional and nothing requires it, so `stored_file`
-    is absent in the minimum-surface configuration. Querying it there is a
-    500; refusing is the honest answer, and there is nothing the client could
-    legitimately be pointing at anyway."""
-    stored = await _make_file(session, uploaded_by=owner.id, org_id=org.id)
     monkeypatch.setattr(
         "app.modules.auth.service.is_enabled", lambda name: name != "file_storage", raising=True
     )
 
     with pytest.raises(UnprocessableEntityError):
-        await AuthService(session).resolve_avatar_change(owner.id, stored.id)
+        await AuthService(session).avatar_upload_form(owner.id, "image/png")
 
 
-async def test_clearing_an_avatar_needs_no_storage_module(
-    session: AsyncSession, owner: User, monkeypatch: pytest.MonkeyPatch
+async def test_the_form_can_only_write_under_the_users_own_prefix(
+    client: httpx.AsyncClient, owner: User, fake_backend: _FakeBackend
 ) -> None:
-    """Removing an avatar is a write to `user`, nothing more -- it must not
-    depend on a module that may be switched off."""
-    monkeypatch.setattr(
-        "app.modules.auth.service.is_enabled", lambda name: name != "file_storage", raising=True
-    )
-
-    assert await AuthService(session).resolve_avatar_change(owner.id, None) is None
-
-
-async def test_an_avatar_still_being_scanned_can_be_chosen(
-    session: AsyncSession, owner: User, org: Organization
-) -> None:
-    """Review R7 / plan D4: choosing is allowed before the verdict, serving is not.
-
-    The profile page sets the avatar the moment the upload is confirmed, and
-    no scanner finishes that fast -- requiring a verdict here failed nearly
-    every first avatar upload. The scan gate moved to `presign_own_avatar`,
-    which every read goes through (tests below).
-    """
-    stored = await _make_file(session, uploaded_by=owner.id, org_id=org.id, virus_scan_result=None)
-
-    assert await resolve_own_avatar_key(session, user_id=owner.id, file_id=stored.id) == stored.key
-
-
-async def test_an_avatar_that_could_not_be_scanned_cannot_be_chosen(
-    session: AsyncSession, owner: User, org: Organization
-) -> None:
-    stored = await _make_file(session, uploaded_by=owner.id, org_id=org.id, status="failed")
-
-    assert await resolve_own_avatar_key(session, user_id=owner.id, file_id=stored.id) is None
-
-
-async def test_an_infected_avatar_does_not_resolve(
-    session: AsyncSession, owner: User, org: Organization
-) -> None:
-    stored = await _make_file(
-        session,
-        uploaded_by=owner.id,
-        org_id=org.id,
-        status="infected",
-        virus_scan_result="Eicar-Test-Signature",
-    )
-
-    assert await resolve_own_avatar_key(session, user_id=owner.id, file_id=stored.id) is None
-
-
-# --- serving: the scan gate for avatars (review R7) ------------------------
-
-
-class _FakeAvatarBackend:
-    async def presign_download(
-        self,
-        key: str,
-        expires_in: int = 3600,  # noqa: ARG002 -- StorageBackend's signature
-        *,
-        filename: str | None = None,  # noqa: ARG002 -- as above
-    ) -> str:
-        return f"https://fake.example/{key}"
-
-
-@pytest.fixture
-def fake_avatar_backend(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(avatars_module, "get_storage_backend", _FakeAvatarBackend)
-
-
-@pytest.mark.usefixtures("fake_avatar_backend")
-async def test_a_clean_avatar_is_served(
-    session: AsyncSession, owner: User, org: Organization
-) -> None:
-    stored = await _make_file(session, uploaded_by=owner.id, org_id=org.id)
-
-    assert await presign_own_avatar(session, stored.key) == f"https://fake.example/{stored.key}"
-
-
-@pytest.mark.usefixtures("fake_avatar_backend")
-async def test_an_avatar_is_not_served_until_its_scan_is_clean(
-    session: AsyncSession, owner: User, org: Organization
-) -> None:
-    """Chosen before the verdict, served only after it -- a 409 the page
-    treats as "show initials for now", not as a missing avatar."""
-    stored = await _make_file(session, uploaded_by=owner.id, org_id=org.id, virus_scan_result=None)
-
-    with pytest.raises(ConflictError) as caught:
-        await presign_own_avatar(session, stored.key)
-
-    assert caught.value.message_key == "errors.file_scan_pending"
-
-
-@pytest.mark.usefixtures("fake_avatar_backend")
-async def test_an_avatar_found_infected_after_it_was_chosen_is_not_served(
-    session: AsyncSession, owner: User, org: Organization
-) -> None:
-    stored = await _make_file(
-        session,
-        uploaded_by=owner.id,
-        org_id=org.id,
-        status="infected",
-        virus_scan_result="Eicar-Test-Signature",
-    )
-
-    with pytest.raises(ConflictError) as caught:
-        await presign_own_avatar(session, stored.key)
-
-    assert caught.value.message_key == "errors.file_infected"
-
-
-@pytest.mark.usefixtures("fake_avatar_backend")
-async def test_a_deleted_avatar_is_not_found(session: AsyncSession) -> None:
-    with pytest.raises(NotFoundError):
-        await presign_own_avatar(session, "org/avatars/gone/me.png")
-
-
-# --- a fellow member's avatar (visual overhaul follow-up) --------------------
-
-
-@pytest.mark.usefixtures("fake_avatar_backend")
-async def test_a_fellow_members_clean_avatar_is_served(
-    session: AsyncSession, client: httpx.AsyncClient, owner: User, org: Organization
-) -> None:
-    """The members list shows photos, so a member can ask for another
-    member's -- through the same scan gate as their own, and only inside an
-    organization they share."""
-    stored = await _make_file(session, uploaded_by=owner.id, org_id=org.id)
-    owner.avatar_object_key = stored.key
-    viewer = User(email=f"viewer-{uuid4().hex[:8]}@example.com", hashed_password="x")
-    session.add(viewer)
-    await session.flush()
-    owner_membership = Membership(user_id=owner.id, org_id=org.id, role=MemberRole.OWNER)
-    session.add_all(
-        [owner_membership, Membership(user_id=viewer.id, org_id=org.id, role=MemberRole.MEMBER)]
-    )
-    await session.flush()
-    token = create_access_token(viewer.id, None, ())
-
-    response = await client.get(
-        f"/api/v1/orgs/{org.id}/members/{owner_membership.id}/avatar",
-        headers={"Authorization": f"Bearer {token}"},
+    response = await client.post(
+        "/api/v1/auth/me/avatar/upload-form",
+        headers=_bearer(owner),
+        json={"content_type": "image/png"},
     )
 
     assert response.status_code == 200
-    assert response.json()["data"]["url"] == f"https://fake.example/{stored.key}"
+    form = response.json()["data"]
+    assert form["upload_key"].startswith(f"incoming/avatars/{owner.id}/")
+    assert fake_backend.presigned == [(form["upload_key"], "image/png", MAX_AVATAR_BYTES)]
 
 
-# --- the owner's own avatar, end to end ------------------------------------
-
-
-async def test_choosing_an_uploaded_file_hands_back_its_key(
-    session: AsyncSession, owner: User, org: Organization
-) -> None:
-    stored = await _make_file(session, uploaded_by=owner.id, org_id=org.id)
-
-    assert await AuthService(session).resolve_avatar_change(owner.id, stored.id) == stored.key
-
-
-@pytest.mark.usefixtures("fake_avatar_backend")
-async def test_the_owner_gets_a_url_for_their_own_clean_avatar(
-    session: AsyncSession, client: httpx.AsyncClient, owner: User, org: Organization
-) -> None:
-    stored = await _make_file(session, uploaded_by=owner.id, org_id=org.id)
-    owner.avatar_object_key = stored.key
-    await session.flush()
-
-    response = await client.get(
-        "/api/v1/auth/me/avatar",
-        headers={"Authorization": f"Bearer {create_access_token(owner.id, None, ())}"},
+async def test_a_gif_gets_no_form(client: httpx.AsyncClient, owner: User) -> None:
+    response = await client.post(
+        "/api/v1/auth/me/avatar/upload-form",
+        headers=_bearer(owner),
+        json={"content_type": "image/gif"},
     )
 
+    assert response.status_code == 422
+
+
+async def test_setting_the_upload_queues_it_for_the_scanner(
+    client: httpx.AsyncClient,
+    owner: User,
+    fake_backend: _FakeBackend,
+    enqueued_jobs: list[tuple[str, dict[str, Any]]],
+) -> None:
+    key = f"incoming/avatars/{owner.id}/{uuid4()}"
+    fake_backend.objects[key] = _png((64, 64))
+
+    response = await client.post(
+        "/api/v1/auth/me/avatar", headers=_bearer(owner), json={"upload_key": key}
+    )
+
+    assert response.status_code == 202
+    assert response.json()["data"]["avatar_processing"] is True
+    assert owner.avatar_pending_key == key
+    assert enqueued_jobs == [("process_avatar", {"user_id": owner.id, "upload_key": key})]
+
+
+@pytest.mark.parametrize("whose", ["someone-else", "not-uploaded", "published", "traversal"])
+async def test_only_the_users_own_arrived_upload_can_be_set(
+    client: httpx.AsyncClient,
+    owner: User,
+    fake_backend: _FakeBackend,
+    enqueued_jobs: list[tuple[str, dict[str, Any]]],
+    whose: str,
+) -> None:
+    """Otherwise one user could publish another's upload as their own avatar."""
+    key = {
+        "someone-else": f"incoming/avatars/{uuid4()}/{uuid4()}",
+        "not-uploaded": f"incoming/avatars/{owner.id}/{uuid4()}",
+        "published": f"{AVATAR_KEY_PREFIX}{uuid4()}.webp",
+        "traversal": f"incoming/avatars/{owner.id}/../{uuid4()}",
+    }[whose]
+    if whose != "not-uploaded":
+        fake_backend.objects[key] = _png((64, 64))
+
+    response = await client.post(
+        "/api/v1/auth/me/avatar", headers=_bearer(owner), json={"upload_key": key}
+    )
+
+    assert response.status_code == 422
+    assert owner.avatar_pending_key is None
+    assert enqueued_jobs == []
+
+
+async def test_removing_the_avatar_deletes_it(
+    client: httpx.AsyncClient, session: AsyncSession, owner: User, fake_backend: _FakeBackend
+) -> None:
+    published = f"{AVATAR_KEY_PREFIX}{uuid4()}.webp"
+    fake_backend.objects[published] = b"webp"
+    owner.avatar_object_key = published
+    await session.flush()
+
+    response = await client.delete("/api/v1/auth/me/avatar", headers=_bearer(owner))
+
     assert response.status_code == 200
-    assert response.json()["data"]["url"] == f"https://fake.example/{stored.key}"
+    assert response.json()["data"]["has_uploaded_avatar"] is False
+    assert owner.avatar_object_key is None
+    assert fake_backend.objects == {}
+
+
+async def test_removing_when_there_is_no_avatar_touches_no_storage(
+    client: httpx.AsyncClient, owner: User, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Removal is a write to the user row; with nothing to delete it must not
+    need the object store, which a product may not have."""
+
+    def _no_storage() -> None:
+        raise AssertionError("storage was reached")
+
+    monkeypatch.setattr(avatars_module, "get_storage_backend", _no_storage)
+
+    response = await client.delete("/api/v1/auth/me/avatar", headers=_bearer(owner))
+
+    assert response.status_code == 200
+
+
+async def test_a_storage_failure_does_not_undo_the_removal(
+    client: httpx.AsyncClient,
+    session: AsyncSession,
+    owner: User,
+    fake_backend: _FakeBackend,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The row no longer points at the image, which is what the user asked
+    for. The object stays behind, unlisted and unreferenced, and the failure
+    is logged rather than shown to them."""
+    owner.avatar_object_key = f"{AVATAR_KEY_PREFIX}{uuid4()}.webp"
+    await session.flush()
+
+    async def _broken(key: str) -> None:
+        raise RuntimeError(key)
+
+    monkeypatch.setattr(fake_backend, "delete", _broken)
+
+    response = await client.delete("/api/v1/auth/me/avatar", headers=_bearer(owner))
+
+    assert response.status_code == 200
+    assert owner.avatar_object_key is None

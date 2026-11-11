@@ -15,7 +15,7 @@ import secrets
 from collections.abc import Collection, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import timedelta
-from typing import Any
+from typing import TYPE_CHECKING, Any
 from uuid import UUID, uuid4
 
 import pyotp
@@ -83,6 +83,9 @@ from app.modules.auth.utils import (
 )
 from app.modules.notifications.preferences import normalize
 from app.modules.sso import enforcement as sso_enforcement
+
+if TYPE_CHECKING:
+    from app.modules.storage.backend import PresignedUpload
 
 logger = logging.getLogger(__name__)
 
@@ -181,6 +184,14 @@ def _session_invalid() -> AuthenticationError:
         "errors.session_invalid",
         fallback="Your session is no longer valid. Please log in again.",
     )
+
+
+def _require_file_storage() -> None:
+    # Uploads need the object store, which the optional module brings.
+    if not is_enabled("file_storage"):
+        raise UnprocessableEntityError(
+            "errors.avatar_file_invalid", fallback="That file cannot be used as an avatar."
+        )
 
 
 class AuthService:
@@ -1118,45 +1129,47 @@ class AuthService:
     async def list_sessions(self, user_id: UUID) -> list[SessionModel]:
         return await self._sessions.list_active_for_user(user_id)
 
-    async def resolve_avatar_change(self, user_id: UUID, file_id: UUID | None) -> str | None:
-        """Translate a client-supplied file id into the key to store.
+    async def avatar_upload_form(self, user_id: UUID, content_type: str) -> "PresignedUpload":
+        """A presigned form for a new avatar, straight to storage."""
+        _require_file_storage()
+        # Lazy: file_storage is optional, and auth must import without it.
+        from app.modules.storage.avatars import presign_upload  # noqa: PLC0415
 
-        None means "clear the avatar" and needs no lookup. Anything else is
-        checked against the caller: the file has to exist, be ready, live in
-        the avatars bucket, and have been uploaded by *them*. Skipping that
-        would let anyone set their avatar to any file id in the system and
-        then have GET /auth/me/avatar presign it -- the bucket is private, so
-        this endpoint is the only thing standing in front of it.
+        return await presign_upload(user_id, content_type)
 
-        Raises UnprocessableEntityError rather than saying which check failed:
-        the distinctions would confirm the existence of other people's files.
+    async def stage_avatar(self, user_id: UUID, upload_key: str) -> User:
+        """Mark `upload_key` as the avatar being processed.
+
+        The caller commits, then enqueues `process_avatar`. 422 unless the key
+        is an upload this user's own form made: a client-chosen key would
+        otherwise let one user publish another's upload as their avatar.
         """
-        if file_id is None:
-            return None
+        _require_file_storage()
+        from app.modules.storage.avatars import is_own_upload  # noqa: PLC0415
 
-        # file_storage is optional and nothing requires it, so `stored_file`
-        # does not exist in every configuration -- querying it there would be
-        # a 500 rather than a refusal. There is also no way to have uploaded
-        # anything, so any id the client offers is invalid by definition.
-        if not is_enabled("file_storage"):
+        if not await is_own_upload(user_id, upload_key):
             raise UnprocessableEntityError(
-                "errors.avatar_file_invalid",
-                fallback="That file cannot be used as an avatar.",
+                "errors.avatar_file_invalid", fallback="That file cannot be used as an avatar."
             )
+        return await self._users.update(user_id, avatar_pending_key=upload_key)
 
-        # Lazy, like app.core.resilience's import of the scanner: file_storage
-        # is optional, and auth must still import when it is off.
-        from app.modules.storage.avatars import (  # noqa: PLC0415
-            resolve_own_avatar_key,
-        )
+    async def remove_avatar(self, user_id: UUID) -> tuple[User, list[str | None]]:
+        """Clear the avatar and any upload in progress. Returns the user and
+        the keys to delete once the caller has committed."""
+        user = await self._users.get_by_id(user_id)
+        keys = [user.avatar_object_key, user.avatar_pending_key] if user else []
+        updated = await self._users.update(user_id, avatar_object_key=None, avatar_pending_key=None)
+        return updated, keys
 
-        key = await resolve_own_avatar_key(self._db, user_id=user_id, file_id=file_id)
-        if key is None:
-            raise UnprocessableEntityError(
-                "errors.avatar_file_invalid",
-                fallback="That file cannot be used as an avatar.",
-            )
-        return key
+    async def delete_avatar_objects(self, keys: list[str | None]) -> None:
+        if not any(keys):
+            return
+        from app.modules.storage.avatars import delete_avatar_objects  # noqa: PLC0415
+
+        try:
+            await delete_avatar_objects(*keys)
+        except Exception:  # noqa: BLE001 -- best effort: the row no longer points at it
+            logger.warning("auth.avatar_delete_failed", exc_info=True)
 
     async def update_profile(self, user_id: UUID, changes: Mapping[str, Any]) -> User:
         """Apply exactly the fields PATCH /me was sent, and no others.

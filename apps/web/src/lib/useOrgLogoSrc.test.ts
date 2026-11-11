@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { avatarRetry, avatarRetryDelay, isScanPending } from "./useAvatarSrc";
+import { isScanPending, scanRetry, scanRetryDelay } from "./useOrgLogoSrc";
 
 const pending = {
   data: null,
@@ -11,7 +11,7 @@ const infected = {
   error: { code: "conflict", message_key: "errors.file_infected" },
 };
 
-describe("avatar retry policy (review R7)", () => {
+describe("logo retry policy (review R7)", () => {
   it("recognises only the scan-pending conflict", () => {
     expect(isScanPending(pending)).toBe(true);
     expect(isScanPending(infected)).toBe(false);
@@ -19,14 +19,14 @@ describe("avatar retry policy (review R7)", () => {
   });
 
   it("keeps asking for a couple of minutes while the scan is pending", () => {
-    expect(avatarRetry(1, pending)).toBe(true);
-    expect(avatarRetry(23, pending)).toBe(true);
-    expect(avatarRetry(24, pending)).toBe(false);
-    expect(avatarRetryDelay(1, pending)).toBe(5_000);
+    expect(scanRetry(1, pending)).toBe(true);
+    expect(scanRetry(23, pending)).toBe(true);
+    expect(scanRetry(24, pending)).toBe(false);
+    expect(scanRetryDelay(1, pending)).toBe(5_000);
   });
 
-  it("gives up quickly on anything else, an infected avatar included", () => {
-    expect(avatarRetry(2, infected)).toBe(true);
-    expect(avatarRetry(3, infected)).toBe(false);
+  it("gives up quickly on anything else, an infected logo included", () => {
+    expect(scanRetry(2, infected)).toBe(true);
+    expect(scanRetry(3, infected)).toBe(false);
   });
 });
