@@ -24,6 +24,11 @@ class CheckoutSessionResponse(AppBaseModel):
     url: str
 
 
+class PortalSessionRequest(AppBaseModel):
+    # "cancel" opens Stripe's cancel flow, which returns to the app when done.
+    flow: Literal["cancel"] | None = None
+
+
 class PortalSessionResponse(AppBaseModel):
     url: str
 

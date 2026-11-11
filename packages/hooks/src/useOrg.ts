@@ -8,6 +8,7 @@ import {
 import type { MemberRole, OrganizationPublic } from "@forge/api-client";
 
 import { useAuth } from "./useAuth";
+import { refreshConfig } from "./useModules";
 
 // Persists the user's org switcher choice across reloads -- without this,
 // every page load would fall back to "first org in the list", which is
@@ -38,9 +39,18 @@ interface OrgState {
   currentOrgId: string | null;
   role: MemberRole | null;
   isLoading: boolean;
+  // The org list could not be loaded. Not the same as having no orgs: read as
+  // that, a maintenance window's 503 offered to create a first organization.
+  loadFailed: boolean;
 }
 
-let state: OrgState = { orgs: [], currentOrgId: null, role: null, isLoading: true };
+let state: OrgState = {
+  orgs: [],
+  currentOrgId: null,
+  role: null,
+  isLoading: true,
+  loadFailed: false,
+};
 const listeners = new Set<() => void>();
 
 function setState(next: Partial<OrgState>): void {
@@ -67,7 +77,10 @@ function getSnapshot(): OrgState {
 // their own role is always present on the first page (capped at the API's
 // max page size), so this needs no pagination beyond that for a phase-1
 // template's org sizes.
-async function loadRole(userId: string, orgId: string): Promise<MemberRole | null> {
+async function loadRole(
+  userId: string,
+  orgId: string,
+): Promise<MemberRole | null> {
   try {
     const { data } = await listMembersApiV1OrgsOrgIdMembersGet({
       path: { org_id: orgId },
@@ -129,13 +142,22 @@ async function bootstrap(userId: string): Promise<void> {
     if (generation !== loadGeneration) {
       return;
     }
-    setState({ orgs, currentOrgId, role, isLoading: false });
+    setState({ orgs, currentOrgId, role, isLoading: false, loadFailed: false });
   } catch {
     if (generation !== loadGeneration) {
       return;
     }
     setCurrentOrgId(null);
-    setState({ orgs: [], currentOrgId: null, role: null, isLoading: false });
+    setState({
+      orgs: [],
+      currentOrgId: null,
+      role: null,
+      isLoading: false,
+      loadFailed: true,
+    });
+    // A maintenance window answers 503 before the config poll has noticed it;
+    // this shows its screen now rather than at the next poll.
+    void refreshConfig();
   }
 }
 
@@ -144,6 +166,7 @@ export interface UseOrgResult {
   org: OrganizationPublic | null;
   role: MemberRole | null;
   isLoading: boolean;
+  loadFailed: boolean;
   switchOrg: (orgId: string) => void;
   refreshOrgs: () => Promise<void>;
 }
@@ -160,7 +183,13 @@ export function useOrg(): UseOrgResult {
         // repopulates the store microseconds after logout cleared it.
         loadGeneration += 1;
         setCurrentOrgId(null);
-        setState({ orgs: [], currentOrgId: null, role: null, isLoading: false });
+        setState({
+          orgs: [],
+          currentOrgId: null,
+          role: null,
+          isLoading: false,
+          loadFailed: false,
+        });
       }
       return;
     }
@@ -199,13 +228,16 @@ export function useOrg(): UseOrgResult {
     }
   }, [user]);
 
-  const org = snapshot.orgs.find((candidate) => candidate.id === snapshot.currentOrgId) ?? null;
+  const org =
+    snapshot.orgs.find((candidate) => candidate.id === snapshot.currentOrgId) ??
+    null;
 
   return {
     orgs: snapshot.orgs,
     org,
     role: snapshot.role,
     isLoading: snapshot.isLoading,
+    loadFailed: snapshot.loadFailed,
     switchOrg,
     refreshOrgs,
   };

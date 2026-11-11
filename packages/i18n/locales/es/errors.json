@@ -133,5 +133,6 @@
   "file_scan_failed": "No se ha podido analizar este archivo en busca de malware, así que no se puede descargar.",
   "file_infected": "Se ha detectado malware en este archivo y ya no está disponible.",
   "reauth_failed": "La contraseña o el código no son correctos.",
-  "reauth_wrong_account": "Esa cuenta no es con la que has iniciado sesión."
+  "reauth_wrong_account": "Esa cuenta no es con la que has iniciado sesión.",
+  "no_subscription_to_cancel": "Esta organización no tiene ninguna suscripción que cancelar."
 }

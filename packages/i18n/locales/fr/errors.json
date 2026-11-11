@@ -133,5 +133,6 @@
   "file_scan_failed": "Ce fichier n'a pas pu être analysé pour détecter des logiciels malveillants, il ne peut donc pas être téléchargé.",
   "file_infected": "Ce fichier contient un logiciel malveillant et n'est plus disponible.",
   "reauth_failed": "Le mot de passe ou le code est incorrect.",
-  "reauth_wrong_account": "Ce compte n'est pas celui avec lequel vous êtes connecté."
+  "reauth_wrong_account": "Ce compte n'est pas celui avec lequel vous êtes connecté.",
+  "no_subscription_to_cancel": "Cette organisation n’a aucun abonnement à résilier."
 }

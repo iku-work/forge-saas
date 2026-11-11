@@ -442,3 +442,16 @@ async def test_list_plans_is_public(client: httpx.AsyncClient, session: AsyncSes
     slugs = {p["slug"] for p in response.json()["data"]}
     assert active.slug in slugs
     assert inactive.slug not in slugs
+
+
+async def test_portal_session_cancel_flow_is_refused_without_a_subscription(
+    client: httpx.AsyncClient, owner: User, org: Organization
+) -> None:
+    response = await client.post(
+        "/api/v1/billing/portal-session",
+        headers=_headers(owner, org),
+        json={"flow": "cancel"},
+    )
+
+    assert response.status_code == 409
+    assert response.json()["error"]["message_key"] == "errors.no_subscription_to_cancel"

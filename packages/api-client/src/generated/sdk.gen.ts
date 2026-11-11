@@ -587,7 +587,11 @@ export const listPlansApiV1BillingPlansGet = <ThrowOnError extends boolean = fal
 export const createPortalSessionApiV1BillingPortalSessionPost = <ThrowOnError extends boolean = false>(options?: Options<CreatePortalSessionApiV1BillingPortalSessionPostData, ThrowOnError>): RequestResult<CreatePortalSessionApiV1BillingPortalSessionPostResponses, CreatePortalSessionApiV1BillingPortalSessionPostErrors, ThrowOnError> => (options?.client ?? client).post<CreatePortalSessionApiV1BillingPortalSessionPostResponses, CreatePortalSessionApiV1BillingPortalSessionPostErrors, ThrowOnError>({
     security: [{ scheme: 'bearer', type: 'http' }],
     url: '/api/v1/billing/portal-session',
-    ...options
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options?.headers
+    }
 });
 
 /**

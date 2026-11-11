@@ -5,7 +5,8 @@
     "status": "Status: {status}",
     "badge": "Aktueller Tarif",
     "free_label": "Kostenlos",
-    "plan_label": "Tarif"
+    "plan_label": "Tarif",
+    "cancels_on": "Endet am {date}"
   },
   "available_plans": {
     "title": "Verfügbare Tarife",
@@ -51,5 +52,6 @@
   "checkout": {
     "canceled": "Der Bezahlvorgang wurde abgebrochen. Es wurde nichts berechnet."
   },
-  "description": "Ihr Tarif, Ihre Nutzung und Ihre Rechnungen."
+  "description": "Ihr Tarif, Ihre Nutzung und Ihre Rechnungen.",
+  "cancel_button": "Abonnement kündigen"
 }

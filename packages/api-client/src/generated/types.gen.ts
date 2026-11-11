@@ -1527,6 +1527,16 @@ export type PlanPublic = {
 };
 
 /**
+ * PortalSessionRequest
+ */
+export type PortalSessionRequest = {
+    /**
+     * Flow
+     */
+    flow?: 'cancel' | null;
+};
+
+/**
  * PortalSessionResponse
  */
 export type PortalSessionResponse = {
@@ -3951,7 +3961,10 @@ export type ListPlansApiV1BillingPlansGetResponses = {
 export type ListPlansApiV1BillingPlansGetResponse = ListPlansApiV1BillingPlansGetResponses[keyof ListPlansApiV1BillingPlansGetResponses];
 
 export type CreatePortalSessionApiV1BillingPortalSessionPostData = {
-    body?: never;
+    /**
+     * Body
+     */
+    body?: PortalSessionRequest | null;
     headers?: {
         /**
          * X-Org-Id
