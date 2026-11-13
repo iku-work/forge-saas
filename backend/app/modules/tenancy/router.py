@@ -100,8 +100,9 @@ async def create_org(
     body: CreateOrgRequest,
     user: Annotated[User, Depends(get_current_user)],
     session: Annotated[AsyncSession, Depends(get_session)],
+    redis: Annotated[Redis, Depends(get_redis)],
 ) -> Envelope[OrganizationPublic]:
-    org = await TenancyService(session).create_org(user, body.name)
+    org = await TenancyService(session).create_org_for_user(user, body.name, redis)
     await session.commit()
     return Envelope(
         data=OrganizationPublic.model_validate(org), meta=Meta(request_id=_request_id(request))

@@ -83,6 +83,23 @@ class OrganizationRepository:
         result = await self.session.execute(stmt)
         return list(result.scalars().all())
 
+    async def list_owned_by(self, user_id: UUID) -> list[Organization]:
+        """The orgs this user is an owner of. Unbounded for the same reason
+        as list_for_user."""
+        m = cast("Any", Organization)
+        mem = cast("Any", Membership)
+        stmt = (
+            select(Organization)
+            .join(Membership, mem.org_id == m.id)
+            .where(
+                mem.user_id == user_id,
+                mem.role == MemberRole.OWNER,
+                m.deleted_at.is_(None),
+            )
+        )
+        result = await self.session.execute(stmt)
+        return list(result.scalars().all())
+
     async def list_with_stripe_customer(
         self, *, limit: int, after_id: UUID | None
     ) -> list[Organization]:

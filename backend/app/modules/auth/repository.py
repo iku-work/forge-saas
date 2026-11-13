@@ -44,6 +44,17 @@ class UserRepository:
         result = await self.session.execute(stmt)
         return result.scalar_one_or_none()
 
+    async def lock(self, user_id: UUID) -> None:
+        """Hold this user's row until the transaction ends.
+
+        FOR NO KEY UPDATE, like OrganizationRepository.lock: rows that only
+        reference the user (a new membership) take KEY SHARE and don't wait.
+        """
+        m = cast("Any", User)
+        await self.session.execute(
+            select(m.id).where(m.id == user_id).with_for_update(key_share=True)
+        )
+
     async def list_by_ids(self, user_ids: Collection[UUID]) -> list[User]:
         # T-243: batch counterpart to get_by_id, for a caller holding a page
         # of rows that each name an actor (the admin audit feed). AuditEvent

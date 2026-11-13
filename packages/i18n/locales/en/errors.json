@@ -69,6 +69,7 @@
   "file_count_quota_exceeded": "This would exceed the {max_files}-file limit on your plan.",
   "seat_limit_reached": "Your plan's member limit has been reached, and pending invitations count toward it. Upgrade, or remove a member or an invitation, to invite someone else.",
   "seat_limit_reached_to_join": "This organization has reached its plan's member limit. Ask one of its admins to upgrade or remove a member.",
+  "free_org_limit_reached": "You already own {limit} organizations on the free plan. Upgrade one of them to create another.",
   "file_not_uploaded": "No upload found at the presigned location.",
   "file_size_mismatch": "Uploaded file size does not match the claimed size.",
   "upload_changed": "The upload changed while it was being confirmed. Confirm it again.",
