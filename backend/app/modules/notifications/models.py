@@ -4,6 +4,12 @@ Notification deliberately skips SoftDeleteMixin (unlike most user-data
 tables, see §0.3) -- notifications are pruned by a hard-delete retention job,
 never soft-deleted, so there's no value in a deleted_at column every read
 query would otherwise have to filter on.
+
+A notification belongs to its recipient, not to an org (§0.2's user-scoped
+list). `org_id` says which org an event happened in, and is empty for one
+about the person themselves (an invitation to an org they are not in yet).
+The inbox shows a user every notification of theirs, except those from an
+org they are no longer a member of: see NotificationRepository._visible.
 """
 
 from datetime import datetime
@@ -14,7 +20,7 @@ from sqlalchemy import Column, DateTime, Index
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlmodel import Field, SQLModel
 
-from app.models._mixins import OrgScopedMixin, SoftDeleteMixin, TimestampMixin, UUIDPKMixin
+from app.models._mixins import SoftDeleteMixin, TimestampMixin, UUIDPKMixin
 
 # Same convention as the other modules' models.py: any datetime column
 # declared directly here (not inherited from a mixin) must stay tz-aware so
@@ -22,7 +28,7 @@ from app.models._mixins import OrgScopedMixin, SoftDeleteMixin, TimestampMixin, 
 _TZ_DATETIME = DateTime(timezone=True)
 
 
-class Notification(UUIDPKMixin, TimestampMixin, OrgScopedMixin, SQLModel, table=True):
+class Notification(UUIDPKMixin, TimestampMixin, SQLModel, table=True):
     __tablename__ = "notification"
     __table_args__: ClassVar[tuple[Index, ...]] = (
         # Hot path (T-102): unread-count lookup for a single user.
@@ -31,23 +37,16 @@ class Notification(UUIDPKMixin, TimestampMixin, OrgScopedMixin, SQLModel, table=
         # ORDER BY created_at DESC, id DESC -- an ascending btree index serves
         # a descending scan equally well via Postgres' backward index scan, so
         # there's no need for a DESC-specific index definition here.
-        Index(
-            "ix_notification_org_id_user_id_created_at_id",
-            "org_id",
-            "user_id",
-            "created_at",
-            "id",
-        ),
+        Index("ix_notification_user_id_created_at_id", "user_id", "created_at", "id"),
         # T-102: NotificationService.send()'s idempotency check --
-        # "same org+user+key within the last 24h" -- filters on all three.
-        Index(
-            "ix_notification_org_id_user_id_idempotency_key",
-            "org_id",
-            "user_id",
-            "idempotency_key",
-        ),
+        # "same user+key within the last 24h" (and the same org, filtered on
+        # the few rows that leaves).
+        Index("ix_notification_user_id_idempotency_key", "user_id", "idempotency_key"),
     )
 
+    # Nullable: see the module docstring. Indexed for the membership check
+    # every inbox read makes.
+    org_id: UUID | None = Field(default=None, foreign_key="organization.id", index=True)
     user_id: UUID = Field(foreign_key="user.id", index=True)
     type: str = Field(index=True)  # "member_invited" | "payment_failed" | "weekly_summary" | ...
     # T-234: title/body are the *send-time* rendering of this type's catalog

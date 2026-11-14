@@ -531,7 +531,7 @@ async def test_org_row_is_served_from_cache_on_the_second_request(world: World) 
     # The org row is only cached by get_current_org (X-Org-ID), which the
     # path-keyed /orgs/{id} route does not use -- warm it through a route
     # that does.
-    warmed = await world.client.get("/api/v1/notifications/unread-count")
+    warmed = await world.client.get("/api/v1/me/support-context")
     assert warmed.status_code == 200
     assert await cache.read_json(world.redis, key) is not None
 

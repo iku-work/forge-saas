@@ -454,9 +454,9 @@ async def test_checkout_session_during_impersonation_is_blocked(
 async def test_marking_a_notification_read_during_impersonation_leaves_it_unread(
     world: ImpersonatedWorld, redis: Redis
 ) -> None:
-    repo = NotificationRepository(world.session, world.org.id, redis)
+    repo = NotificationRepository(world.session, world.user.id, redis)
     notification = await repo.create(
-        user_id=world.user.id,
+        org_id=world.org.id,
         type="weekly_summary",
         title="Your week",
         body="Here is your week.",
@@ -484,9 +484,9 @@ async def test_marking_a_notification_read_during_impersonation_leaves_it_unread
 async def test_the_same_user_can_mark_it_read_themselves(
     world: ImpersonatedWorld, redis: Redis
 ) -> None:
-    repo = NotificationRepository(world.session, world.org.id, redis)
+    repo = NotificationRepository(world.session, world.user.id, redis)
     notification = await repo.create(
-        user_id=world.user.id,
+        org_id=world.org.id,
         type="weekly_summary",
         title="Your week",
         body="Here is your week.",

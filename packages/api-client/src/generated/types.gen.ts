@@ -1464,6 +1464,10 @@ export type NotificationPublic = {
      */
     id: string;
     /**
+     * Org Id
+     */
+    org_id: string | null;
+    /**
      * Read At
      */
     read_at: string | null;
@@ -4682,12 +4686,6 @@ export type GetSupportContextApiV1MeSupportContextGetResponse = GetSupportContex
 
 export type ListNotificationsApiV1NotificationsGetData = {
     body?: never;
-    headers?: {
-        /**
-         * X-Org-Id
-         */
-        'X-Org-ID'?: string | null;
-    };
     path?: never;
     query?: {
         /**
@@ -4751,25 +4749,10 @@ export type RegisterPushTokenApiV1NotificationsPushTokensPostResponse = Register
 
 export type MarkAllNotificationsReadApiV1NotificationsReadAllPostData = {
     body?: never;
-    headers?: {
-        /**
-         * X-Org-Id
-         */
-        'X-Org-ID'?: string | null;
-    };
     path?: never;
     query?: never;
     url: '/api/v1/notifications/read-all';
 };
-
-export type MarkAllNotificationsReadApiV1NotificationsReadAllPostErrors = {
-    /**
-     * Validation Error
-     */
-    422: EnvelopeNoneType;
-};
-
-export type MarkAllNotificationsReadApiV1NotificationsReadAllPostError = MarkAllNotificationsReadApiV1NotificationsReadAllPostErrors[keyof MarkAllNotificationsReadApiV1NotificationsReadAllPostErrors];
 
 export type MarkAllNotificationsReadApiV1NotificationsReadAllPostResponses = {
     /**
@@ -4796,25 +4779,10 @@ export type StreamNotificationsApiV1NotificationsStreamGetResponses = {
 
 export type GetUnreadCountApiV1NotificationsUnreadCountGetData = {
     body?: never;
-    headers?: {
-        /**
-         * X-Org-Id
-         */
-        'X-Org-ID'?: string | null;
-    };
     path?: never;
     query?: never;
     url: '/api/v1/notifications/unread-count';
 };
-
-export type GetUnreadCountApiV1NotificationsUnreadCountGetErrors = {
-    /**
-     * Validation Error
-     */
-    422: EnvelopeNoneType;
-};
-
-export type GetUnreadCountApiV1NotificationsUnreadCountGetError = GetUnreadCountApiV1NotificationsUnreadCountGetErrors[keyof GetUnreadCountApiV1NotificationsUnreadCountGetErrors];
 
 export type GetUnreadCountApiV1NotificationsUnreadCountGetResponses = {
     /**
@@ -4827,12 +4795,6 @@ export type GetUnreadCountApiV1NotificationsUnreadCountGetResponse = GetUnreadCo
 
 export type MarkNotificationReadApiV1NotificationsNotificationIdReadPatchData = {
     body?: never;
-    headers?: {
-        /**
-         * X-Org-Id
-         */
-        'X-Org-ID'?: string | null;
-    };
     path: {
         /**
          * Notification Id
@@ -4863,12 +4825,6 @@ export type MarkNotificationReadApiV1NotificationsNotificationIdReadPatchRespons
 
 export type MarkNotificationUnreadApiV1NotificationsNotificationIdUnreadPatchData = {
     body?: never;
-    headers?: {
-        /**
-         * X-Org-Id
-         */
-        'X-Org-ID'?: string | null;
-    };
     path: {
         /**
          * Notification Id

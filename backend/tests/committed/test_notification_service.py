@@ -67,6 +67,34 @@ async def test_send_persists_notification_with_default_channels(
     assert set(notification.channels) == {"email", "in_app"}  # member_invited default, push=False
 
 
+async def test_send_without_an_org_is_a_personal_notification(
+    service: NotificationService, user: User, session: AsyncSession
+) -> None:
+    """Something about the person themselves, such as an invitation to an org
+    they are not in yet: no org, and the dedup key still holds."""
+    first = await service.send(
+        user_id=user.id,
+        org_id=None,
+        type="member_invited",
+        params={"email": "new@example.com", "org_name": "Acme"},
+        idempotency_key="personal-1",
+    )
+    again = await service.send(
+        user_id=user.id,
+        org_id=None,
+        type="member_invited",
+        params={"email": "new@example.com", "org_name": "Acme"},
+        idempotency_key="personal-1",
+    )
+
+    assert first.org_id is None
+    assert again.id == first.id
+    audit = (
+        await session.execute(select(AuditEvent).where(AuditEvent.resource_id == str(first.id)))
+    ).scalar_one()
+    assert audit.org_id is None
+
+
 async def test_send_email_only_type_enqueues_only_email_job(
     service: NotificationService,
     user: User,

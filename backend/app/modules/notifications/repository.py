@@ -1,5 +1,5 @@
 """
-DB access for the notifications module (T-102): org+user-scoped Notification
+DB access for the notifications module (T-102): user-scoped Notification
 reads/writes (plus the unread-count Redis cache), and user-scoped PushToken
 device management.
 
@@ -7,8 +7,8 @@ Deliberately not a BaseRepository subclass, same reasoning as
 app.modules.billing.repository: Notification has no `deleted_at` (T-101's
 model docstring -- notifications are hard-deleted by a retention job, never
 soft-deleted), so it doesn't satisfy BaseRepository's `_OrgScopedRecord`
-shape. PushToken is looked up by its own unique token / by user_id, never by
-org_id, like the auth module's SessionRepository.
+shape. Both are looked up by user_id, never by org_id, like the auth module's
+SessionRepository.
 """
 
 from datetime import datetime, timedelta
@@ -16,7 +16,17 @@ from typing import Any, cast
 from uuid import UUID
 
 from redis.asyncio import Redis
-from sqlalchemy import CursorResult, delete, func, select, tuple_, update
+from sqlalchemy import (
+    ColumnElement,
+    CursorResult,
+    and_,
+    delete,
+    func,
+    or_,
+    select,
+    tuple_,
+    update,
+)
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core import cache_keys
@@ -24,6 +34,7 @@ from app.core.exceptions import InvalidCursorError, NotFoundError
 from app.core.repository import DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE
 from app.models._mixins import utcnow
 from app.modules.notifications.models import Notification, PushToken
+from app.modules.tenancy.models import Membership, Organization
 
 _UNREAD_COUNT_CACHE_TTL_SECONDS = 30
 _IDEMPOTENCY_WINDOW = timedelta(hours=24)
@@ -38,14 +49,40 @@ def _unread_count_cache_key(user_id: UUID) -> str:
 
 
 class NotificationRepository:
-    def __init__(self, session: AsyncSession, org_id: UUID, redis: Redis) -> None:
+    """One recipient's notifications. §0.2's user-scoped shape: `user_id` is
+    required and every query filters on it, the way BaseRepository filters
+    on org_id.
+
+    Reads go through _visible(): a notification from an org the user has left
+    (or that was deleted) disappears with their access to it.
+    """
+
+    def __init__(self, session: AsyncSession, user_id: UUID, redis: Redis) -> None:
         self.session = session
-        self.org_id = org_id
+        self.user_id = user_id
         self._redis = redis
 
-    async def get_or_raise(self, notification_id: UUID) -> Notification:
+    def _visible(self) -> ColumnElement[bool]:
         m = cast("Any", Notification)
-        stmt = select(Notification).where(m.id == notification_id, m.org_id == self.org_id)
+        mem = cast("Any", Membership)
+        org = cast("Any", Organization)
+        still_a_member = (
+            select(mem.id)
+            .join(Organization, org.id == mem.org_id)
+            .where(
+                mem.user_id == self.user_id,
+                mem.org_id == m.org_id,
+                org.deleted_at.is_(None),
+            )
+            .exists()
+        )
+        return and_(m.user_id == self.user_id, or_(m.org_id.is_(None), still_a_member))
+
+    async def get_or_raise(self, notification_id: UUID) -> Notification:
+        # Another user's notification, or one from an org this user has left,
+        # is indistinguishable from a missing one.
+        m = cast("Any", Notification)
+        stmt = select(Notification).where(m.id == notification_id, self._visible())
         result = await self.session.execute(stmt)
         notification = result.scalar_one_or_none()
         if notification is None:
@@ -53,33 +90,32 @@ class NotificationRepository:
         return notification
 
     async def create(self, **kwargs: Any) -> Notification:  # noqa: ANN401 -- see core.repository.BaseRepository.create
-        org_override = kwargs.get("org_id")
-        if org_override is not None and org_override != self.org_id:
-            raise ValueError("create() cannot set org_id to a different organization")
-        kwargs["org_id"] = self.org_id
+        user_override = kwargs.get("user_id")
+        if user_override is not None and user_override != self.user_id:
+            raise ValueError("create() cannot set user_id to a different user")
+        kwargs["user_id"] = self.user_id
         notification = Notification(**kwargs)
         self.session.add(notification)
         await self.session.flush()
-        await self._invalidate_unread_count(notification.user_id)
+        await self._invalidate_unread_count()
         return notification
 
     async def find_recent_by_idempotency_key(
-        self, user_id: UUID, idempotency_key: str
+        self, org_id: UUID | None, idempotency_key: str
     ) -> Notification | None:
         m = cast("Any", Notification)
         cutoff = utcnow() - _IDEMPOTENCY_WINDOW
         stmt = select(Notification).where(
-            m.org_id == self.org_id,
-            m.user_id == user_id,
+            m.user_id == self.user_id,
             m.idempotency_key == idempotency_key,
+            m.org_id.is_not_distinct_from(org_id),
             m.created_at >= cutoff,
         )
         result = await self.session.execute(stmt)
-        return result.scalar_one_or_none()
+        return result.scalars().first()
 
-    async def list_for_user(
+    async def list_page(
         self,
-        user_id: UUID,
         after: UUID | None = None,
         limit: int = DEFAULT_PAGE_SIZE,
         *,
@@ -87,19 +123,16 @@ class NotificationRepository:
     ) -> tuple[list[Notification], UUID | None]:
         capped_limit = min(limit, MAX_PAGE_SIZE)
         m = cast("Any", Notification)
-        stmt = select(Notification).where(m.org_id == self.org_id, m.user_id == user_id)
+        stmt = select(Notification).where(self._visible())
         if unread_only:
             stmt = stmt.where(m.read_at.is_(None))
         stmt = stmt.order_by(m.created_at.desc(), m.id.desc()).limit(capped_limit + 1)
         if after is not None:
-            # Scoped to org_id + user_id, not get_or_raise(): an anchor
-            # belonging to another org, or to another user in this org, must
-            # not leak its position. It is refused rather than ignored --
+            # Through _visible(), not a bare id lookup: another user's anchor
+            # must not leak its position. It is refused rather than ignored --
             # ignoring it returned page one, which the notification feed
             # appends as duplicates.
-            anchor_stmt = select(Notification).where(
-                m.id == after, m.org_id == self.org_id, m.user_id == user_id
-            )
+            anchor_stmt = select(Notification).where(m.id == after, self._visible())
             anchor = (await self.session.execute(anchor_stmt)).scalar_one_or_none()
             if anchor is None:
                 raise InvalidCursorError(
@@ -117,72 +150,68 @@ class NotificationRepository:
         next_cursor = page[-1].id if page and len(items) > capped_limit else None
         return page, next_cursor
 
-    async def mark_read(self, notification_id: UUID, user_id: UUID) -> Notification:
+    async def mark_read(self, notification_id: UUID) -> Notification:
         notification = await self.get_or_raise(notification_id)
-        if notification.user_id != user_id:
-            # Same-org, different-user notification -- indistinguishable from
-            # a missing one to the caller, same as tenancy's cross-org checks
-            # (app.modules.tenancy.service.change_role).
-            raise NotFoundError("errors.notification_not_found", fallback="Notification not found")
         notification.read_at = utcnow()
         await self.session.flush()
-        await self._invalidate_unread_count(user_id)
+        await self._invalidate_unread_count()
         return notification
 
-    async def mark_unread(self, notification_id: UUID, user_id: UUID) -> Notification:
+    async def mark_unread(self, notification_id: UUID) -> Notification:
         """The inverse of mark_read, so the web app's "Undo" can restore the
         state rather than only the appearance (F-009).
 
-        Same ownership check and same not-found shape as mark_read -- an undo
+        Same visibility rule and same not-found shape as mark_read -- an undo
         is an ordinary write by the same caller a moment later, and gets no
         special authority for being one.
         """
         notification = await self.get_or_raise(notification_id)
-        if notification.user_id != user_id:
-            raise NotFoundError("errors.notification_not_found", fallback="Notification not found")
         notification.read_at = None
         await self.session.flush()
-        await self._invalidate_unread_count(user_id)
+        await self._invalidate_unread_count()
         return notification
 
-    async def mark_all_read(self, user_id: UUID) -> int:
+    async def mark_all_read(self) -> int:
         m = cast("Any", Notification)
         stmt = (
             update(Notification)
-            .where(m.org_id == self.org_id, m.user_id == user_id, m.read_at.is_(None))
+            .where(self._visible(), m.read_at.is_(None))
             .values(read_at=utcnow())
         )
         result = await self.session.execute(stmt)
-        await self._invalidate_unread_count(user_id)
+        await self._invalidate_unread_count()
         return cast("CursorResult[Any]", result).rowcount
 
-    async def unread_count(self, user_id: UUID) -> int:
-        cached = await self._redis.get(_unread_count_cache_key(user_id))
+    async def unread_count(self) -> int:
+        # ponytail: leaving an org doesn't clear this cache, so for up to its
+        # 30 s TTL the badge can still count that org's unread items. Clear it
+        # from tenancy's membership paths if that ever matters.
+        cached = await self._redis.get(_unread_count_cache_key(self.user_id))
         if cached is not None:
             return int(cached)
         m = cast("Any", Notification)
         stmt = (
             select(func.count())
             .select_from(Notification)
-            .where(m.org_id == self.org_id, m.user_id == user_id, m.read_at.is_(None))
+            .where(self._visible(), m.read_at.is_(None))
         )
         count = (await self.session.execute(stmt)).scalar_one()
         await self._redis.set(
-            _unread_count_cache_key(user_id), count, ex=_UNREAD_COUNT_CACHE_TTL_SECONDS
+            _unread_count_cache_key(self.user_id), count, ex=_UNREAD_COUNT_CACHE_TTL_SECONDS
         )
         return count
 
-    async def _invalidate_unread_count(self, user_id: UUID) -> None:
-        await self._redis.delete(_unread_count_cache_key(user_id))
+    async def _invalidate_unread_count(self) -> None:
+        await self._redis.delete(_unread_count_cache_key(self.user_id))
 
     @staticmethod
     async def prune_older_than(session: AsyncSession, cutoff: datetime) -> int:
         """T-219: the hard-delete retention job this class's own docstring
         (and T-101's model docstring) promised -- called by
         app.workers.scheduler.prune_old_notifications. A `@staticmethod`,
-        not an instance method, because it purges across every org in one
+        not an instance method, because it purges across every user in one
         sweep; every other method here is deliberately scoped to a single
-        org_id via __init__, which doesn't fit a global retention pass.
+        user_id via __init__, which doesn't fit a global retention pass.
         """
         m = cast("Any", Notification)
         stmt = delete(Notification).where(m.created_at < cutoff)

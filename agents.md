@@ -34,6 +34,7 @@ HTTP Request
 - `BaseRepository.__init__(session, org_id)` — `org_id` is required, has no default.
 - Every query in every repository includes `WHERE org_id = self.org_id`. This makes cross-tenant data access structurally impossible.
 - Only `User`, `Session`, `OAuthAccount`, `TOTPSecret`, `ConsentRecord` are scoped by `user_id` instead (they belong to the user, not the org).
+- `Notification` is scoped by `user_id` too: one inbox per person. Its `org_id` is optional and says which org an event happened in. Every read shows only rows with no org, or from an org the user is still a member of, so leaving an org takes its notifications with it (`NotificationRepository._visible`).
 
 ### §0.3 Data integrity
 

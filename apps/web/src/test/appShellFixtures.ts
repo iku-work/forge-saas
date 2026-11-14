@@ -110,6 +110,7 @@ export function makeNotification(
 ): NotificationPublic {
   return {
     id: `66666666-6666-6666-6666-${String(suffix).padStart(12, "0")}`,
+    org_id: null,
     type: "member_invited",
     title: "Someone joined your organization",
     body: "Jane Doe accepted your invitation.",

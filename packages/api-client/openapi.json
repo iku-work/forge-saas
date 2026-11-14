@@ -3306,6 +3306,18 @@
             "title": "Id",
             "type": "string"
           },
+          "org_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Org Id"
+          },
           "read_at": {
             "anyOf": [
               {
@@ -3329,6 +3341,7 @@
         },
         "required": [
           "id",
+          "org_id",
           "type",
           "title",
           "body",
@@ -8812,23 +8825,6 @@
               "title": "Unread Only",
               "type": "boolean"
             }
-          },
-          {
-            "in": "header",
-            "name": "X-Org-ID",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "format": "uuid",
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "X-Org-Id"
-            }
           }
         ],
         "responses": {
@@ -8913,25 +8909,6 @@
     "/api/v1/notifications/read-all": {
       "post": {
         "operationId": "mark_all_notifications_read_api_v1_notifications_read_all_post",
-        "parameters": [
-          {
-            "in": "header",
-            "name": "X-Org-ID",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "format": "uuid",
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "X-Org-Id"
-            }
-          }
-        ],
         "responses": {
           "200": {
             "content": {
@@ -8942,16 +8919,6 @@
               }
             },
             "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Envelope_NoneType_"
-                }
-              }
-            },
-            "description": "Validation Error"
           }
         },
         "security": [
@@ -8992,25 +8959,6 @@
     "/api/v1/notifications/unread-count": {
       "get": {
         "operationId": "get_unread_count_api_v1_notifications_unread_count_get",
-        "parameters": [
-          {
-            "in": "header",
-            "name": "X-Org-ID",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "format": "uuid",
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "X-Org-Id"
-            }
-          }
-        ],
         "responses": {
           "200": {
             "content": {
@@ -9021,16 +8969,6 @@
               }
             },
             "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Envelope_NoneType_"
-                }
-              }
-            },
-            "description": "Validation Error"
           }
         },
         "security": [
@@ -9056,23 +8994,6 @@
               "format": "uuid",
               "title": "Notification Id",
               "type": "string"
-            }
-          },
-          {
-            "in": "header",
-            "name": "X-Org-ID",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "format": "uuid",
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "X-Org-Id"
             }
           }
         ],
@@ -9122,23 +9043,6 @@
               "format": "uuid",
               "title": "Notification Id",
               "type": "string"
-            }
-          },
-          {
-            "in": "header",
-            "name": "X-Org-ID",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "format": "uuid",
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "X-Org-Id"
             }
           }
         ],

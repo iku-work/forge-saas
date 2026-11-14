@@ -55,16 +55,18 @@ class NotificationService:
         self,
         *,
         user_id: UUID,
-        org_id: UUID,
+        org_id: UUID | None,
         type: str,  # noqa: A002 -- matches the T-102 spec's `type` param name
         params: dict[str, Any] | None = None,
         action_url: str | None = None,
         idempotency_key: str | None = None,
     ) -> Notification:
-        repo = NotificationRepository(self._session, org_id, self._redis)
+        """`org_id` is the org the event happened in, or None for one about
+        the person themselves (see app.modules.notifications.models)."""
+        repo = NotificationRepository(self._session, user_id, self._redis)
 
         if idempotency_key is not None:
-            existing = await repo.find_recent_by_idempotency_key(user_id, idempotency_key)
+            existing = await repo.find_recent_by_idempotency_key(org_id, idempotency_key)
             if existing is not None:
                 return existing
 
@@ -81,7 +83,7 @@ class NotificationService:
 
         channels = channels_for(user.notification_preferences, type)
         notification = await repo.create(
-            user_id=user_id,
+            org_id=org_id,
             type=type,
             title=title,
             body=body,
@@ -128,7 +130,7 @@ class NotificationService:
         self,
         *,
         user_ids: Sequence[UUID],
-        org_id: UUID,
+        org_id: UUID | None,
         type: str,  # noqa: A002 -- see send()
         params: dict[str, Any] | None = None,
         action_url: str | None = None,
@@ -141,7 +143,7 @@ class NotificationService:
         precisely the T-234 bug this method exists to make unwriteable -- the
         first recipient's language would reach everyone. `idempotency_key` is
         safe to share across recipients; the repository scopes its dedup
-        lookup to (org_id, user_id, key).
+        lookup to (user_id, org_id, key).
         """
         return [
             await self.send(

@@ -40,6 +40,10 @@ class NotificationPublic(AppBaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: UUID
+    # The org the event happened in, or null for one about the person. The
+    # inbox spans every org the reader belongs to, so a client labels or
+    # switches by this.
+    org_id: UUID | None
     type: str
     title: str
     body: str

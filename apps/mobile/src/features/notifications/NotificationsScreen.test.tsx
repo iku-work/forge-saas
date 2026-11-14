@@ -39,6 +39,7 @@ const ORG = { id: "org-1", name: "Acme", slug: "acme" };
 
 const UNREAD_NOTIFICATION = {
   id: "n1",
+  org_id: null,
   type: "member_invited",
   title: "Jane joined",
   body: "Jane joined your org",
@@ -50,6 +51,7 @@ const UNREAD_NOTIFICATION = {
 
 const READ_NOTIFICATION = {
   id: "n2",
+  org_id: "org-1",
   type: "payment_failed",
   title: "Payment failed",
   body: "Update your card",
