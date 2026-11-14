@@ -67,6 +67,13 @@ SUPPORT_TOOL: SupportTool = "none"
 # an https://, http:// or mailto: URL.
 SUPPORT_URL: str | None = None
 
+# ── Organizations ───────────────────────────────────────────────────────────
+# How many free-plan organizations one user may own. Every org gets its own
+# free quota (seats, storage), so without a cap one person could stack them.
+# Orgs on a paid plan don't count. Creating one more is refused with a
+# message telling the user to upgrade one of theirs. None means no limit.
+MAX_FREE_ORGS_PER_USER: int | None = 3
+
 # ── Internationalisation ────────────────────────────────────────────────────
 # Each locale toggle mirrors MODULES above -- enabled=False excludes it from
 # get_supported_locales() (and therefore the /config endpoint and web/mobile

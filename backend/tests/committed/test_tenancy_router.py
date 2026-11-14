@@ -323,13 +323,18 @@ async def test_a_granted_permission_opens_its_door(
     client: httpx.AsyncClient, user_a: User, session: AsyncSession, org_a: Organization
 ) -> None:
     member, target = await _add_member(session, org_a)
+    # Built before the first request: a refused request can roll the shared
+    # session back, which expires these objects, and reading an expired
+    # attribute outside the session's greenlet raises MissingGreenlet.
     billing = {**_auth_header(member), "X-Org-ID": str(org_a.id)}
+    url = _permissions_url(org_a, target)
+    owner = _auth_header(user_a)
     assert (await client.get("/api/v1/billing/subscription", headers=billing)).status_code == 403
 
     response = await client.put(
-        _permissions_url(org_a, target),
+        url,
         json={"granted_permissions": ["files:write", "billing:read"]},
-        headers=_auth_header(user_a),
+        headers=owner,
     )
 
     assert response.status_code == 200

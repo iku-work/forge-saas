@@ -79,6 +79,29 @@ def get_branding() -> Branding:
     )
 
 
+# Used when a product config predates MAX_FREE_ORGS_PER_USER.
+DEFAULT_FREE_ORG_CAP = 3
+
+
+@lru_cache(maxsize=1)
+def get_free_org_cap() -> int | None:
+    """How many free-plan orgs one user may own, or None for no limit.
+
+    Read with a default rather than imported by name: the product owns
+    config.py, and one written before the setting existed must keep working.
+    """
+    import product.config as product_config  # noqa: PLC0415 -- see get_branding()
+
+    cap: object = getattr(product_config, "MAX_FREE_ORGS_PER_USER", DEFAULT_FREE_ORG_CAP)
+    if cap is None or (isinstance(cap, int) and not isinstance(cap, bool) and cap >= 1):
+        return cap
+    msg = (
+        f"MAX_FREE_ORGS_PER_USER must be a positive integer or None, got {cap!r}. "
+        "Fix it in backend/product/config.py"
+    )
+    raise RuntimeError(msg)
+
+
 @lru_cache(maxsize=1)
 def get_support_config() -> SupportConfig:
     """T-262: which support tool the product wired up, plus the URL every

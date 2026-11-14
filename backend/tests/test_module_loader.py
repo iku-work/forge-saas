@@ -159,3 +159,40 @@ def test_get_branding_reflects_product_config_override(monkeypatch: pytest.Monke
 
     assert branding.app_name == "Acme"
     assert branding.support_email == "help@acme.test"
+
+
+@pytest.fixture
+def _clear_cap_cache() -> Generator[None]:
+    module_loader.get_free_org_cap.cache_clear()
+    yield
+    module_loader.get_free_org_cap.cache_clear()
+
+
+@pytest.mark.usefixtures("_clear_cap_cache")
+@pytest.mark.parametrize("cap", [1, 3, None])
+def test_free_org_cap_reads_the_product_config(
+    monkeypatch: pytest.MonkeyPatch, cap: int | None
+) -> None:
+    monkeypatch.setattr(product_config, "MAX_FREE_ORGS_PER_USER", cap)
+
+    assert module_loader.get_free_org_cap() == cap
+
+
+@pytest.mark.usefixtures("_clear_cap_cache")
+def test_free_org_cap_defaults_when_the_config_predates_it(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delattr(product_config, "MAX_FREE_ORGS_PER_USER")
+
+    assert module_loader.get_free_org_cap() == module_loader.DEFAULT_FREE_ORG_CAP
+
+
+@pytest.mark.usefixtures("_clear_cap_cache")
+@pytest.mark.parametrize("cap", [0, -1, True, "3", 2.5])
+def test_free_org_cap_rejects_anything_but_a_positive_int(
+    monkeypatch: pytest.MonkeyPatch, cap: object
+) -> None:
+    monkeypatch.setattr(product_config, "MAX_FREE_ORGS_PER_USER", cap)
+
+    with pytest.raises(RuntimeError, match="MAX_FREE_ORGS_PER_USER"):
+        module_loader.get_free_org_cap()

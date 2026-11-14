@@ -111,6 +111,16 @@ class FeatureFlagService:
         plan_features = await self.plan_features(org)
         return bool(plan_features.get(flag))
 
+    async def on_paid_plan(self, org: Organization) -> bool:
+        """Whether the org is entitled to a plan other than free. Always
+        False with billing off: there is nothing to pay for."""
+        if not is_module_enabled("billing"):
+            return False
+        from app.modules.billing.dependencies import resolve_org_subscription  # noqa: PLC0415
+
+        org_sub = await resolve_org_subscription(org, self._session, self._redis)
+        return org_sub.plan.slug != "free"
+
     async def plan_features(self, org: Organization) -> dict[str, int]:
         if not is_module_enabled("billing"):
             return {}

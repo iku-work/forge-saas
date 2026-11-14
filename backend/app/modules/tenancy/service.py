@@ -22,7 +22,7 @@ from app.core.exceptions import (
     PlanLimitError,
     UnprocessableEntityError,
 )
-from app.core.module_loader import is_enabled
+from app.core.module_loader import get_free_org_cap, is_enabled
 from app.core.urls import frontend_url
 from app.models._mixins import utcnow
 from app.modules.audit.service import AuditService
@@ -77,6 +77,27 @@ class TenancyService:
         org = await self._orgs.create(name=name, slug=slug)
         await self._memberships.create(user_id=user.id, org_id=org.id, role=MemberRole.OWNER)
         return org
+
+    async def create_org_for_user(self, user: User, name: str, redis: Redis) -> Organization:
+        """Org creation from the app, where the free-org cap applies.
+
+        Seeds call create_org directly. The user's row stays locked until the
+        transaction ends, so two requests at once can't both take the last
+        free slot.
+        """
+        cap = get_free_org_cap()
+        if cap is not None:
+            await UserRepository(self._session).lock(user.id)
+            flags = FeatureFlagService(self._session, redis)
+            owned = await self._orgs.list_owned_by(user.id)
+            free = [org for org in owned if not await flags.on_paid_plan(org)]
+            if len(free) >= cap:
+                raise PlanLimitError(
+                    "errors.free_org_limit_reached",
+                    fallback=f"You already own {cap} organizations on the free plan.",
+                    params={"limit": cap},
+                )
+        return await self.create_org(user, name)
 
     async def _unique_slug(self, name: str) -> str:
         base = _slugify(name)
