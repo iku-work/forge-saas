@@ -168,8 +168,10 @@ export function AdminProductSettingsPage() {
             </Alert>
           ) : null}
 
+          {/* Siblings need distinct keys: with one shared key, React
+              rendered both editors twice after a save. */}
           <TypedSettingsForm
-            key={documentKey}
+            key={`typed:${documentKey}`}
             data={settings}
             onApply={(changes) => {
               applyChanges.mutate(changes);
@@ -178,7 +180,7 @@ export function AdminProductSettingsPage() {
           />
 
           <RawJsonEditor
-            key={documentKey}
+            key={`raw:${documentKey}`}
             settings={stored}
             onSaved={async (data) => {
               queryClient.setQueryData(["admin", "product-settings"], data);

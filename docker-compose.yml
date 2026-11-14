@@ -108,6 +108,9 @@ services:
         mc mb --ignore-existing local/forge-test &&
         for bucket in forge-local forge-test; do
           echo '{"Rules":[{"ID":"expire-incoming","Status":"Enabled","Filter":{"Prefix":"incoming/"},"Expiration":{"Days":1}},{"ID":"expire-data-exports","Status":"Enabled","Filter":{"Prefix":"data-exports/"},"Expiration":{"Days":1}}]}' | mc ilm import "local/$$bucket" || exit 1
+          # Avatars under public/ are read without a signature (scripts/minio-init.sh).
+          echo "{\"Version\":\"2012-10-17\",\"Statement\":[{\"Effect\":\"Allow\",\"Principal\":{\"AWS\":[\"*\"]},\"Action\":[\"s3:GetObject\"],\"Resource\":[\"arn:aws:s3:::$$bucket/public/*\"]}]}" > /tmp/anonymous.json &&
+          mc anonymous set-json /tmp/anonymous.json "local/$$bucket" || exit 1
         done
     depends_on:
       minio:

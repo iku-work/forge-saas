@@ -3,6 +3,7 @@ import { Link, useLocation, useNavigate } from "@tanstack/react-router";
 import {
   ArrowLeft,
   Bell,
+  Building2,
   Check,
   ChevronsUpDown,
   LayoutDashboard,
@@ -21,6 +22,7 @@ import {
   Avatar,
   AvatarFallback,
   AvatarImage,
+  Button,
   Dialog,
   DialogContent,
   DialogHeader,
@@ -58,7 +60,12 @@ import { CreateOrgForm } from "../features/settings/CreateOrgForm";
 import { NotificationBell } from "../features/notifications/NotificationBell";
 import { SupportLink } from "../features/support/SupportLink";
 import { stripLocale } from "../lib/locale-url";
-import { useVisibleNavItems, type NavItem } from "../lib/navigation";
+import {
+  settingsAreaFor,
+  useVisibleNavItems,
+  type NavItem,
+  type SettingsArea,
+} from "../lib/navigation";
 import { RailTooltip } from "../components/RailTooltip";
 import { SidebarToggle } from "../components/SidebarToggle";
 import { useAvatarSrc } from "../lib/useAvatarSrc";
@@ -134,6 +141,7 @@ function Monogram({
 
 function OrgSwitcher() {
   const { t } = useTranslation();
+  const locale = useRouteLocale();
   const { orgs, org, isLoading, switchOrg } = useOrg();
   const logoSrc = useOrgLogoSrc(org);
   const [createOpen, setCreateOpen] = useState(false);
@@ -178,6 +186,22 @@ function OrgSwitcher() {
             </DropdownMenuItem>
           ))}
           <DropdownMenuSeparator />
+          {/* Organization settings open from the organization they belong
+              to; the user menu opens the account's. */}
+          {org ? (
+            <DropdownMenuItem asChild>
+              <Link
+                to="/$locale/settings/org"
+                params={{ locale }}
+                data-testid="org-switcher-settings"
+              >
+                <Settings className="size-4" aria-hidden="true" />
+                <span className="flex-1 truncate">
+                  {t("common.nav.org_settings_named", { org: org.name })}
+                </span>
+              </Link>
+            </DropdownMenuItem>
+          ) : null}
           <DropdownMenuItem
             data-testid="org-switcher-create"
             onSelect={() => {
@@ -209,6 +233,7 @@ function OrgSwitcher() {
 function UserMenu() {
   const { t } = useTranslation();
   const { user, logout } = useAuth();
+  const modules = useModules();
   const navigate = useNavigate();
   const locale = useRouteLocale();
   // Above the early return, not beside the <Avatar> -- `if (!user) return`
@@ -255,10 +280,11 @@ function UserMenu() {
       <DropdownMenuContent side="top" align="start" className="w-56">
         <DropdownMenuLabel className="truncate">{user.email}</DropdownMenuLabel>
         <DropdownMenuSeparator />
-        {/* The settings pages left the sidebar, so this menu is now the only
-            way to reach them by pointer -- and Dashboard is here as its
+        {/* The settings pages left the sidebar, so this menu is the pointer
+            route into the account's -- and Dashboard is here as its
             counterpart, because the sidebar no longer shows the primary nav
-            while you are inside settings. */}
+            while you are inside settings. The organization's open from the
+            org switcher. */}
         <DropdownMenuItem asChild>
           <Link
             to="/$locale"
@@ -276,9 +302,23 @@ function UserMenu() {
             data-testid="user-menu-settings"
           >
             <Settings className="size-4" aria-hidden="true" />
-            {t("common.nav.settings")}
+            {t("common.nav.account_settings")}
           </Link>
         </DropdownMenuItem>
+        {/* Without multi-org there is no switcher, so the one organization's
+            settings open from here instead. */}
+        {modules.multiOrg ? null : (
+          <DropdownMenuItem asChild>
+            <Link
+              to="/$locale/settings/org"
+              params={{ locale }}
+              data-testid="user-menu-org-settings"
+            >
+              <Building2 className="size-4" aria-hidden="true" />
+              {t("common.nav.org_settings")}
+            </Link>
+          </DropdownMenuItem>
+        )}
         {user.is_superadmin ? (
           <DropdownMenuItem asChild>
             <Link to="/$locale/admin" params={{ locale }}>
@@ -316,6 +356,47 @@ function CreateFirstOrgPrompt() {
 }
 
 /**
+ * Whose settings these are, at the top of a settings area: the organization's
+ * logo and name, or the person's avatar and name. With several organizations
+ * the two lists used to sit in one sidebar, told apart by a small heading,
+ * and it was easy to change the wrong one.
+ */
+function SettingsAreaHeader({ area }: { area: SettingsArea }) {
+  const { t } = useTranslation();
+  const { org } = useOrg();
+  const { user } = useAuth();
+  const logoSrc = useOrgLogoSrc(org);
+  const avatarSrc = useAvatarSrc();
+  const isOrg = area === "organization";
+
+  return (
+    <div
+      data-testid="settings-area-header"
+      className="flex items-center gap-2.5 px-2.5 pb-2 pt-3 group-data-[collapsed]/shell:justify-center group-data-[collapsed]/shell:px-0"
+    >
+      {isOrg ? (
+        <Monogram name={org?.name} src={logoSrc} />
+      ) : (
+        <Avatar className="size-[1.375rem]">
+          {avatarSrc ? <AvatarImage src={avatarSrc} alt="" /> : null}
+          <AvatarFallback className="text-[0.625rem]">
+            {user ? initialsFor(user.email) : null}
+          </AvatarFallback>
+        </Avatar>
+      )}
+      <span className="min-w-0 flex-1 leading-tight group-data-[collapsed]/shell:sr-only">
+        <span className="block truncate text-sm font-semibold text-foreground">
+          {isOrg ? org?.name : (user?.full_name ?? user?.email)}
+        </span>
+        <span className="block truncate text-xs text-muted-foreground">
+          {t(isOrg ? "common.nav.org_settings" : "common.nav.account_settings")}
+        </span>
+      </span>
+    </div>
+  );
+}
+
+/**
  * The sidebar shows one group at a time, chosen by where you are.
  *
  * Settings used to sit under the primary nav as a second, permanently
@@ -327,7 +408,11 @@ function CreateFirstOrgPrompt() {
  *
  * Getting back out is the cost, so there are several ways: "Back to app" at
  * the top of the settings sidebar, Dashboard in the user menu, and ⌘K,
- * which reaches every page from either mode.
+ * which reaches every page from any mode.
+ *
+ * Settings are two areas, not one: the account's (from the user menu) and
+ * the organization's (from the org switcher). Each shows only its own pages
+ * under a header saying whose they are.
  *
  * This renders the whole sidebar -- header, navigation and footer -- so the
  * desktop column and the phone drawer are the same component and cannot
@@ -335,14 +420,14 @@ function CreateFirstOrgPrompt() {
  */
 function SidebarNav({
   modules,
-  inSettings,
+  settingsArea,
   onNavigate,
   onOpenPalette,
   collapsed = false,
   toggle,
 }: {
   modules: ActiveModules;
-  inSettings: boolean;
+  settingsArea: SettingsArea | null;
   onNavigate?: () => void;
   onOpenPalette: () => void;
   /** Rail mode: tooltips on. The drawer copy never passes it. */
@@ -417,17 +502,6 @@ function SidebarNav({
     </>
   );
 
-  const settingsGroups = (["account", "organization"] as const).map(
-    (group) => ({
-      group,
-      label:
-        group === "account"
-          ? t("common.nav.group_account")
-          : (org?.name ?? t("common.nav.organization")),
-      items: nav.settings.filter((item) => item.group === group),
-    }),
-  );
-
   return (
     <ShellSidebar header={header} footer={footer}>
       {/* onClick rather than a route subscription: tapping a link in the
@@ -437,10 +511,10 @@ function SidebarNav({
         className="flex flex-col gap-0.5"
         onClick={onNavigate}
         data-testid={
-          inSettings ? "sidebar-settings-nav" : "sidebar-primary-nav"
+          settingsArea ? "sidebar-settings-nav" : "sidebar-primary-nav"
         }
       >
-        {inSettings ? (
+        {settingsArea ? (
           <>
             <RailTooltip
               label={t("common.nav.back_to_app")}
@@ -457,15 +531,22 @@ function SidebarNav({
                 </Link>
               </ShellNavItem>
             </RailTooltip>
-            {settingsGroups.map(({ group, label, items }) =>
-              items.length > 0 ? (
-                <ShellNavGroup key={group} label={label}>
-                  {items.map((item) => (
-                    <NavLink key={item.to} item={item} collapsed={collapsed} />
-                  ))}
-                </ShellNavGroup>
-              ) : null,
-            )}
+            <SettingsAreaHeader area={settingsArea} />
+            <ShellNavGroup
+              role="group"
+              aria-label={
+                settingsArea === "organization"
+                  ? t("common.nav.org_settings_named", { org: org?.name })
+                  : t("common.nav.account_settings")
+              }
+              data-testid={`settings-area-${settingsArea}`}
+            >
+              {nav.settings
+                .filter((item) => item.group === settingsArea)
+                .map((item) => (
+                  <NavLink key={item.to} item={item} collapsed={collapsed} />
+                ))}
+            </ShellNavGroup>
           </>
         ) : (
           nav.primary.map((item) => (
@@ -479,7 +560,7 @@ function SidebarNav({
 
 export function AppLayout({ children }: { children: ReactNode }) {
   const { t } = useTranslation();
-  const { orgs, org, isLoading } = useOrg();
+  const { orgs, org, isLoading, loadFailed, refreshOrgs } = useOrg();
   const logoSrc = useOrgLogoSrc(org);
   const modules = useModules();
   const maintenance = useMaintenance();
@@ -494,10 +575,8 @@ export function AppLayout({ children }: { children: ReactNode }) {
   const navigate = useNavigate();
   const locale = useRouteLocale();
   const activePath = stripLocale(location.pathname);
-  // Which group the sidebar shows. Prefix match rather than an exact list, so
-  // a settings page added later is in the right mode without being registered
-  // anywhere a second time.
-  const inSettings = activePath.startsWith("/settings");
+  // Which group the sidebar shows: the primary nav, or one settings area.
+  const settingsArea = settingsAreaFor(activePath);
 
   // F-005. Recorded from the shell rather than from each page: this is the
   // one place that sees every in-app navigation, and a page-level call would
@@ -550,6 +629,28 @@ export function AppLayout({ children }: { children: ReactNode }) {
     );
   }
 
+  if (loadFailed) {
+    return (
+      <div
+        className="flex min-h-dvh flex-col items-center justify-center gap-4 p-4 text-center"
+        data-testid="org-load-failed"
+      >
+        <p className="text-sm text-muted-foreground">
+          {t("common.error.unexpected")}
+        </p>
+        <Button
+          type="button"
+          variant="outline"
+          onClick={() => {
+            void refreshOrgs();
+          }}
+        >
+          {t("common.error_boundary.reload")}
+        </Button>
+      </div>
+    );
+  }
+
   if (orgs.length === 0) {
     return <CreateFirstOrgPrompt />;
   }
@@ -581,7 +682,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
           sidebar={
             <SidebarNav
               modules={modules}
-              inSettings={inSettings}
+              settingsArea={settingsArea}
               onOpenPalette={openPalette}
               collapsed={sidebar.collapsed}
               toggle={
@@ -618,7 +719,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
                     </SheetTitle>
                     <SidebarNav
                       modules={modules}
-                      inSettings={inSettings}
+                      settingsArea={settingsArea}
                       onOpenPalette={openPalette}
                       onNavigate={() => {
                         setNavOpen(false);

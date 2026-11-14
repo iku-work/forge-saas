@@ -33,6 +33,7 @@ from app.core.db import persist_then_reject
 from app.core.exceptions import (
     ConflictError,
     NotFoundError,
+    PermissionDeniedError,
     PlanLimitError,
     UnprocessableEntityError,
 )
@@ -84,7 +85,6 @@ _DEFAULT_ALLOWED_CONTENT_TYPES = frozenset(
 # Per-bucket overrides of the default allowlist above (T-112's Build section:
 # "configurable per bucket").
 _BUCKET_ALLOWED_CONTENT_TYPES: dict[str, frozenset[str]] = {
-    "avatars": frozenset({"image/jpeg", "image/png", "image/webp"}),
     # No SVG: it can carry script, and a logo is shown on every page.
     "logos": frozenset({"image/jpeg", "image/png", "image/webp"}),
 }
@@ -213,6 +213,14 @@ class StorageService:
                 "errors.resource_not_found",
                 fallback="StoredFile not found",
                 params={"resource": "StoredFile"},
+            )
+        if stored_file.uploaded_by != user_id:
+            # Anyone with FILES_WRITE passes the route's gate since 2026-11,
+            # so the upload has to be the caller's own.
+            raise PermissionDeniedError(
+                "errors.missing_permission",
+                fallback="Only the uploader can confirm an upload",
+                params={"permission": "files:write"},
             )
         if stored_file.status != "pending":
             # Idempotent: re-confirming an already-ready file is a no-op
@@ -399,8 +407,16 @@ class StorageService:
             actor_id=None,
         )
 
-    async def delete_file(self, user_id: UUID, file_id: UUID) -> None:
+    async def delete_file(self, user_id: UUID, file_id: UUID, *, anyones: bool) -> None:
+        """Soft-delete a file. Without `anyones` (FILES_MANAGE), only one the
+        caller uploaded."""
         stored_file = await self._repo.get_or_raise(file_id)
+        if not anyones and stored_file.uploaded_by != user_id:
+            raise PermissionDeniedError(
+                "errors.missing_permission",
+                fallback="Missing permission: files:manage",
+                params={"permission": "files:manage"},
+            )
         await self._repo.soft_delete(file_id)
 
         await jobs.enqueue_job(

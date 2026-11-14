@@ -40,7 +40,7 @@ from app.middleware.rate_limit import api_limit
 from app.models._mixins import utcnow
 from app.modules.api_keys.scopes import Scope
 from app.modules.auth.models import User
-from app.modules.auth.permissions import ROLE_PERMISSIONS, Permission
+from app.modules.auth.permissions import Permission, effective_permissions
 from app.modules.auth.schemas import AvatarUrlResponse
 from app.modules.tenancy.models import Invitation, Membership, Organization
 from app.modules.tenancy.schemas import (
@@ -51,6 +51,7 @@ from app.modules.tenancy.schemas import (
     MembershipPublic,
     MemberUserSummary,
     OrganizationPublic,
+    UpdateGrantsRequest,
     UpdateMembershipRequest,
     UpdateOrgRequest,
 )
@@ -81,7 +82,7 @@ def require_org_permission(permission: Permission) -> Callable[..., Awaitable[Me
         org_and_membership: Annotated[tuple[Organization, Membership], Depends(get_org_membership)],
     ) -> Membership:
         _, membership = org_and_membership
-        if permission not in ROLE_PERMISSIONS[membership.role]:
+        if permission not in effective_permissions(membership.role, membership.granted_permissions):
             raise PermissionDeniedError(
                 "errors.missing_permission",
                 fallback=f"Missing permission: {permission.value}",
@@ -99,8 +100,9 @@ async def create_org(
     body: CreateOrgRequest,
     user: Annotated[User, Depends(get_current_user)],
     session: Annotated[AsyncSession, Depends(get_session)],
+    redis: Annotated[Redis, Depends(get_redis)],
 ) -> Envelope[OrganizationPublic]:
-    org = await TenancyService(session).create_org(user, body.name)
+    org = await TenancyService(session).create_org_for_user(user, body.name, redis)
     await session.commit()
     return Envelope(
         data=OrganizationPublic.model_validate(org), meta=Meta(request_id=_request_id(request))
@@ -288,48 +290,10 @@ def _membership_public(
         public.user = MemberUserSummary(
             full_name=user.full_name,
             email=user.email if show_email else None,
-            avatar_url=user.avatar_url,
+            avatar_url=user.avatar_src,
             has_uploaded_avatar=user.has_uploaded_avatar,
         )
     return public
-
-
-@router.get(
-    "/orgs/{org_id}/members/{membership_id}/avatar",
-    description=(
-        "A short-lived URL for a fellow member's uploaded avatar. 404 when they "
-        "have none (an OAuth picture is already `user.avatar_url` on the member), "
-        "409 while its malware scan is pending."
-    ),
-)
-@api_limit
-async def get_member_avatar(
-    request: Request,
-    org_id: UUID,
-    membership_id: UUID,
-    # A member's session, not an API-key scope: a photo URL serves the web
-    # UI, and the public API contract (test_public_openapi) is deliberate.
-    viewer: Annotated[  # noqa: ARG001 -- gates the route and proves org membership; org comes from path
-        Membership, Depends(require_org_permission(Permission.MEMBERS_READ))
-    ],
-    session: Annotated[AsyncSession, Depends(get_session)],
-) -> Envelope[AvatarUrlResponse]:
-    key = await TenancyService(session).member_avatar_key(org_id, membership_id)
-    # Lazy: storage is an optional module, and this one must import without
-    # it. With file_storage off nobody has an uploaded avatar, so the 404
-    # above is raised before this line is reached.
-    from app.modules.storage.avatars import (  # noqa: PLC0415
-        AVATAR_URL_EXPIRES_IN_SECONDS,
-        presign_own_avatar,
-    )
-
-    url = await presign_own_avatar(session, key)
-    return Envelope(
-        data=AvatarUrlResponse(
-            url=url, expires_at=utcnow() + timedelta(seconds=AVATAR_URL_EXPIRES_IN_SECONDS)
-        ),
-        meta=Meta(request_id=_request_id(request)),
-    )
 
 
 @router.patch(
@@ -354,6 +318,34 @@ async def update_member_role(  # noqa: PLR0913 — redis (cache invalidation, T-
     # change. It is wired anyway because the day anything permission-derived
     # is added to that payload, the invalidation has to already be here.
     await invalidate_user_cache(redis, updated.user_id)
+    return Envelope(
+        data=MembershipPublic.model_validate(updated), meta=Meta(request_id=_request_id(request))
+    )
+
+
+@router.put(
+    "/orgs/{org_id}/members/{membership_id}/permissions",
+    dependencies=[Depends(reject_during_impersonation("data_mutation"))],
+    description=(
+        "Replace what one member has been granted on top of their role: any of "
+        "files:write, files:manage, billing:read and audit:read, each of which the "
+        "caller must hold."
+    ),
+)
+@api_limit
+async def set_member_permissions(  # noqa: PLR0913 — as update_member_role
+    request: Request,
+    membership_id: UUID,
+    body: UpdateGrantsRequest,
+    actor: Annotated[Membership, Depends(require_org_permission(Permission.MEMBERS_MANAGE))],
+    session: Annotated[AsyncSession, Depends(get_session)],
+    redis: Annotated[Redis, Depends(get_redis)],
+) -> Envelope[MembershipPublic]:
+    updated = await TenancyService(session).set_grants(
+        actor, membership_id, body.granted_permissions
+    )
+    await session.commit()
+    await invalidate_user_cache(redis, updated.user_id)  # see update_member_role
     return Envelope(
         data=MembershipPublic.model_validate(updated), meta=Meta(request_id=_request_id(request))
     )

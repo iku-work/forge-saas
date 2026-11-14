@@ -41,7 +41,10 @@
     "back_to_app": "العودة إلى التطبيق",
     "collapse_sidebar": "طي الشريط الجانبي",
     "expand_sidebar": "توسيع الشريط الجانبي",
-    "group_account": "حسابك"
+    "group_account": "حسابك",
+    "account_settings": "إعدادات الحساب",
+    "org_settings": "إعدادات المؤسسة",
+    "org_settings_named": "إعدادات {org}"
   },
   "support": {
     "contact": "الاتصال بالدعم",

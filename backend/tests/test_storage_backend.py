@@ -14,6 +14,7 @@ import secrets
 from collections.abc import Generator
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
 from uuid import uuid4
 
 import httpx
@@ -28,7 +29,6 @@ from app.core.config import get_settings
 from app.core.exceptions import ExternalServiceUnavailableError
 from app.core.resilience import BREAKERS, resilient
 from app.modules.auth.repository import UserRepository
-from app.modules.storage import avatars as avatars_module
 from app.modules.storage import service as storage_service_module
 from app.modules.storage.backend import ObjectChangedError, PresignedUpload, get_storage_backend
 from app.modules.storage.backends.minio import MinioBackend
@@ -429,7 +429,6 @@ async def test_reusing_an_upload_form_after_confirm_cannot_change_what_is_served
     """
     backend = MinioBackend(bucket=_BUCKET, region="us-east-1", options=_options(minio_container))
     monkeypatch.setattr(storage_service_module, "get_storage_backend", lambda: backend)
-    monkeypatch.setattr(avatars_module, "get_storage_backend", lambda: backend)
     user = await UserRepository(session).create(email=f"uploader-{uuid4()}@example.com")
     org = await OrganizationRepository(session).create(name="Acme", slug=f"acme-{uuid4().hex[:8]}")
     service = StorageService(session, org.id, redis)
@@ -458,7 +457,6 @@ async def test_reusing_an_upload_form_after_confirm_cannot_change_what_is_served
 
     served = await backend.presign_download(stored.key)
     assert _get(served).content == original
-    assert _get(await avatars_module.presign_avatar(stored.key)).content == original
 
 
 async def test_a_form_cannot_write_the_served_key_directly(backend: S3Backend) -> None:
@@ -470,3 +468,45 @@ async def test_a_form_cannot_write_the_served_key_directly(backend: S3Backend) -
 
     assert response.status_code == 403
     assert await backend.head(key) is None
+
+
+_INIT_SCRIPT = Path(__file__).resolve().parents[2] / "scripts" / "minio-init.sh"
+
+
+async def test_minio_init_makes_public_readable_and_nothing_else(
+    minio_container: MinioContainer,
+) -> None:
+    """scripts/minio-init.sh, run for real, against the image production uses.
+
+    Avatars under public/ are fetched without a signature. Anything else, and
+    a listing of public/ itself, still needs one: a listing would hand out
+    every avatar's URL.
+    """
+    bucket = "policy-tests"
+    config = minio_container.get_config()
+    result = minio_container.get_wrapped_container().exec_run(
+        ["sh", "-c", _INIT_SCRIPT.read_text(encoding="utf-8")],
+        environment={
+            "MINIO_URL": "http://localhost:9000",
+            "MINIO_ROOT_USER": config["access_key"],
+            "MINIO_ROOT_PASSWORD": config["secret_key"],
+            "MINIO_BUCKET": bucket,
+            "MINIO_APP_ACCESS_KEY": "forge-app-test",
+            "MINIO_APP_SECRET_KEY": secrets.token_hex(16),
+        },
+    )
+    assert result.exit_code == 0, result.output.decode()
+
+    backend = MinioBackend(bucket=bucket, region="us-east-1", options=_options(minio_container))
+    await backend.put("public/avatars/a.webp", b"RIFFpicture", "image/webp")
+    await backend.put("org/default/report.pdf", b"%PDF-1.4", "application/pdf")
+    base = f"http://{config['endpoint']}/{bucket}"
+
+    async with httpx.AsyncClient() as anonymous:
+        public = await anonymous.get(f"{base}/public/avatars/a.webp")
+        assert public.status_code == 200
+        assert public.content == b"RIFFpicture"
+        assert (await anonymous.get(f"{base}/org/default/report.pdf")).status_code == 403
+        assert (await anonymous.get(f"{base}?list-type=2&prefix=public/")).status_code == 403
+        put = await anonymous.put(f"{base}/public/avatars/b.webp", content=b"x")
+        assert put.status_code == 403

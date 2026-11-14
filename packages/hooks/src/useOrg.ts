@@ -6,8 +6,10 @@ import {
   setCurrentOrgId,
 } from "@forge/api-client";
 import type { MemberRole, OrganizationPublic } from "@forge/api-client";
+import type { Permission } from "@forge/types";
 
 import { useAuth } from "./useAuth";
+import { refreshConfig } from "./useModules";
 
 // Persists the user's org switcher choice across reloads -- without this,
 // every page load would fall back to "first org in the list", which is
@@ -37,10 +39,23 @@ interface OrgState {
   orgs: OrganizationPublic[];
   currentOrgId: string | null;
   role: MemberRole | null;
+  // What the caller can do in the current org: the role's permissions plus
+  // what they have been granted, as the API computed them.
+  permissions: ReadonlySet<Permission>;
   isLoading: boolean;
+  // The org list could not be loaded. Not the same as having no orgs: read as
+  // that, a maintenance window's 503 offered to create a first organization.
+  loadFailed: boolean;
 }
 
-let state: OrgState = { orgs: [], currentOrgId: null, role: null, isLoading: true };
+let state: OrgState = {
+  orgs: [],
+  currentOrgId: null,
+  role: null,
+  permissions: new Set(),
+  isLoading: true,
+  loadFailed: false,
+};
 const listeners = new Set<() => void>();
 
 function setState(next: Partial<OrgState>): void {
@@ -61,23 +76,36 @@ function getSnapshot(): OrgState {
   return state;
 }
 
-// Resolves the caller's own role in `orgId` by reading it off the member
-// list rather than a dedicated endpoint -- GET /orgs/{id}/members is granted
+// Resolves the caller's own role and permissions in `orgId` by reading them
+// off the member list rather than a dedicated endpoint -- GET /orgs/{id}/members is granted
 // to MEMBERS_READ, which every role has, and the member who's asking for
 // their own role is always present on the first page (capped at the API's
 // max page size), so this needs no pagination beyond that for a phase-1
 // template's org sizes.
-async function loadRole(userId: string, orgId: string): Promise<MemberRole | null> {
+interface Standing {
+  role: MemberRole | null;
+  permissions: ReadonlySet<Permission>;
+}
+
+const NO_STANDING: Standing = { role: null, permissions: new Set() };
+
+async function loadStanding(userId: string, orgId: string): Promise<Standing> {
   try {
     const { data } = await listMembersApiV1OrgsOrgIdMembersGet({
       path: { org_id: orgId },
       query: { limit: 100 },
       throwOnError: true,
     });
-    const members = data.data ?? [];
-    return members.find((member) => member.user_id === userId)?.role ?? null;
+    const own = (data.data ?? []).find((member) => member.user_id === userId);
+    if (!own) {
+      return NO_STANDING;
+    }
+    return {
+      role: own.role,
+      permissions: new Set(own.permissions as Permission[]),
+    };
   } catch {
-    return null;
+    return NO_STANDING;
   }
 }
 
@@ -125,17 +153,34 @@ async function bootstrap(userId: string): Promise<void> {
     const orgs = data.data ?? [];
     const currentOrgId = pickOrgId(orgs);
     setCurrentOrgId(currentOrgId);
-    const role = currentOrgId ? await loadRole(userId, currentOrgId) : null;
+    const standing = currentOrgId
+      ? await loadStanding(userId, currentOrgId)
+      : NO_STANDING;
     if (generation !== loadGeneration) {
       return;
     }
-    setState({ orgs, currentOrgId, role, isLoading: false });
+    setState({
+      orgs,
+      currentOrgId,
+      ...standing,
+      isLoading: false,
+      loadFailed: false,
+    });
   } catch {
     if (generation !== loadGeneration) {
       return;
     }
     setCurrentOrgId(null);
-    setState({ orgs: [], currentOrgId: null, role: null, isLoading: false });
+    setState({
+      orgs: [],
+      currentOrgId: null,
+      ...NO_STANDING,
+      isLoading: false,
+      loadFailed: true,
+    });
+    // A maintenance window answers 503 before the config poll has noticed it;
+    // this shows its screen now rather than at the next poll.
+    void refreshConfig();
   }
 }
 
@@ -143,7 +188,9 @@ export interface UseOrgResult {
   orgs: OrganizationPublic[];
   org: OrganizationPublic | null;
   role: MemberRole | null;
+  permissions: ReadonlySet<Permission>;
   isLoading: boolean;
+  loadFailed: boolean;
   switchOrg: (orgId: string) => void;
   refreshOrgs: () => Promise<void>;
 }
@@ -160,7 +207,13 @@ export function useOrg(): UseOrgResult {
         // repopulates the store microseconds after logout cleared it.
         loadGeneration += 1;
         setCurrentOrgId(null);
-        setState({ orgs: [], currentOrgId: null, role: null, isLoading: false });
+        setState({
+          orgs: [],
+          currentOrgId: null,
+          ...NO_STANDING,
+          isLoading: false,
+          loadFailed: false,
+        });
       }
       return;
     }
@@ -173,20 +226,20 @@ export function useOrg(): UseOrgResult {
     (orgId: string): void => {
       writeStoredOrgId(orgId);
       setCurrentOrgId(orgId);
-      setState({ currentOrgId: orgId, role: null });
+      setState({ currentOrgId: orgId, ...NO_STANDING });
       const userId = user?.id;
       if (userId) {
-        void loadRole(userId, orgId).then((role) => {
+        void loadStanding(userId, orgId).then((standing) => {
           // Same staleness rule as bootstrap's: switching A -> B faster than
           // A's member list comes back would otherwise leave B selected while
-          // showing the caller's role in A. `role` drives client-side
-          // permission gating (ROLE_PERMISSIONS), so the wrong one renders
+          // showing the caller's role in A. `permissions` drives client-side
+          // gating, so the wrong one renders
           // controls for an org the user may only be a member of -- the API
           // still refuses them, but the UI should not offer them.
           if (state.currentOrgId !== orgId) {
             return;
           }
-          setState({ role });
+          setState(standing);
         });
       }
     },
@@ -199,13 +252,17 @@ export function useOrg(): UseOrgResult {
     }
   }, [user]);
 
-  const org = snapshot.orgs.find((candidate) => candidate.id === snapshot.currentOrgId) ?? null;
+  const org =
+    snapshot.orgs.find((candidate) => candidate.id === snapshot.currentOrgId) ??
+    null;
 
   return {
     orgs: snapshot.orgs,
     org,
     role: snapshot.role,
+    permissions: snapshot.permissions,
     isLoading: snapshot.isLoading,
+    loadFailed: snapshot.loadFailed,
     switchOrg,
     refreshOrgs,
   };

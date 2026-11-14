@@ -108,12 +108,49 @@ export type ApiKeyUpdateRequest = {
 };
 
 /**
+ * AvatarUploadForm
+ *
+ * A presigned POST for one avatar upload, straight to storage. Post the
+ * file with `fields`, then send `upload_key` to POST /auth/me/avatar.
+ */
+export type AvatarUploadForm = {
+    /**
+     * Expires At
+     */
+    expires_at: string;
+    /**
+     * Fields
+     */
+    fields: {
+        [key: string]: string;
+    };
+    /**
+     * Upload Key
+     */
+    upload_key: string;
+    /**
+     * Upload Url
+     */
+    upload_url: string;
+};
+
+/**
+ * AvatarUploadFormRequest
+ */
+export type AvatarUploadFormRequest = {
+    /**
+     * Content Type
+     */
+    content_type: 'image/jpeg' | 'image/png' | 'image/webp';
+};
+
+/**
  * AvatarUrlResponse
  *
- * A short-lived link to the caller's own uploaded avatar.
+ * A short-lived link to a private image: today, an organization's logo.
  *
- * Separate from UserPublic because it expires: baking it into the user
- * object would put a decaying value into everything that caches one.
+ * Separate from the object it belongs to because it expires: baking it in
+ * would put a decaying value into everything that caches that object.
  */
 export type AvatarUrlResponse = {
     /**
@@ -365,6 +402,15 @@ export type EnvelopeApiKeyCreated = {
  */
 export type EnvelopeApiKeyPublic = {
     data?: ApiKeyPublic | null;
+    error?: ErrorBody | null;
+    meta: Meta;
+};
+
+/**
+ * Envelope[AvatarUploadForm]
+ */
+export type EnvelopeAvatarUploadForm = {
+    data?: AvatarUploadForm | null;
     error?: ErrorBody | null;
     meta: Meta;
 };
@@ -1234,10 +1280,8 @@ export type MemberRole = 'owner' | 'admin' | 'member';
  *
  * Enough to draw a row (a name, a picture) and no more. `email` is set only
  * for a caller who can manage members (an owner, an admin, or an API key with
- * `members:write`); everyone else gets null. Never the
- * uploaded avatar's object key: `has_uploaded_avatar` only says one exists
- * (the web app fetches a short-lived URL for it with a member's session).
- * `avatar_url` is an OAuth provider's picture, already an absolute URL.
+ * `members:write`); everyone else gets null. `avatar_url` is the uploaded
+ * avatar's public URL, else an OAuth provider's picture.
  */
 export type MemberUserSummary = {
     /**
@@ -1267,6 +1311,10 @@ export type MembershipPublic = {
      */
     created_at: string;
     /**
+     * Granted Permissions
+     */
+    granted_permissions: Array<string>;
+    /**
      * Id
      */
     id: string;
@@ -1278,6 +1326,13 @@ export type MembershipPublic = {
      * Org Id
      */
     org_id: string;
+    /**
+     * Permissions
+     *
+     * What this member can do: the role's permissions and the grants.
+     * The web app gates its UI on this rather than re-deriving it.
+     */
+    readonly permissions: Array<string>;
     role: MemberRole;
     user?: MemberUserSummary | null;
     /**
@@ -1491,6 +1546,11 @@ export type PasswordResetRequest = {
 };
 
 /**
+ * Permission
+ */
+export type Permission = 'members:read' | 'members:manage' | 'billing:read' | 'billing:manage' | 'files:read' | 'files:write' | 'files:manage' | 'audit:read' | 'settings:manage';
+
+/**
  * PlanPublic
  */
 export type PlanPublic = {
@@ -1524,6 +1584,16 @@ export type PlanPublic = {
      * Slug
      */
     slug: string;
+};
+
+/**
+ * PortalSessionRequest
+ */
+export type PortalSessionRequest = {
+    /**
+     * Flow
+     */
+    flow?: 'cancel' | null;
 };
 
 /**
@@ -1751,6 +1821,16 @@ export type SessionPublic = {
      * User Agent
      */
     user_agent: string;
+};
+
+/**
+ * SetAvatarRequest
+ */
+export type SetAvatarRequest = {
+    /**
+     * Upload Key
+     */
+    upload_key: string;
 };
 
 /**
@@ -2080,6 +2160,16 @@ export type UnreadCountResponse = {
 };
 
 /**
+ * UpdateGrantsRequest
+ */
+export type UpdateGrantsRequest = {
+    /**
+     * Granted Permissions
+     */
+    granted_permissions: Array<Permission>;
+};
+
+/**
  * UpdateMeRequest
  *
  * A partial update: every field is optional and only what was *sent* is
@@ -2096,10 +2186,6 @@ export type UnreadCountResponse = {
  * displayed.
  */
 export type UpdateMeRequest = {
-    /**
-     * Avatar File Id
-     */
-    avatar_file_id?: string | null;
     /**
      * Full Name
      */
@@ -2165,6 +2251,10 @@ export type UsageSummary = {
  * UserPublic
  */
 export type UserPublic = {
+    /**
+     * Avatar Processing
+     */
+    avatar_processing?: boolean;
     /**
      * Avatar Url
      */
@@ -2592,6 +2682,59 @@ export type WebhookSecretRotated = {
      * Secret
      */
     secret: string;
+};
+
+/**
+ * Envelope[MembershipPublic]
+ */
+export type EnvelopeMembershipPublicWritable = {
+    data?: MembershipPublicWritable | null;
+    error?: ErrorBody | null;
+    meta: Meta;
+};
+
+/**
+ * Envelope[list[MembershipPublic]]
+ */
+export type EnvelopeListMembershipPublicWritable = {
+    /**
+     * Data
+     */
+    data?: Array<MembershipPublicWritable> | null;
+    error?: ErrorBody | null;
+    meta: Meta;
+};
+
+/**
+ * MembershipPublic
+ */
+export type MembershipPublicWritable = {
+    /**
+     * Created At
+     */
+    created_at: string;
+    /**
+     * Granted Permissions
+     */
+    granted_permissions: Array<string>;
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * Invited By
+     */
+    invited_by: string | null;
+    /**
+     * Org Id
+     */
+    org_id: string;
+    role: MemberRole;
+    user?: MemberUserSummary | null;
+    /**
+     * User Id
+     */
+    user_id: string;
 };
 
 export type ListApiKeysApiV1ApiKeysGetData = {
@@ -3189,21 +3332,71 @@ export type UpdateMeApiV1AuthMePatchResponses = {
 
 export type UpdateMeApiV1AuthMePatchResponse = UpdateMeApiV1AuthMePatchResponses[keyof UpdateMeApiV1AuthMePatchResponses];
 
-export type GetMyAvatarApiV1AuthMeAvatarGetData = {
+export type DeleteMyAvatarApiV1AuthMeAvatarDeleteData = {
     body?: never;
     path?: never;
     query?: never;
     url: '/api/v1/auth/me/avatar';
 };
 
-export type GetMyAvatarApiV1AuthMeAvatarGetResponses = {
+export type DeleteMyAvatarApiV1AuthMeAvatarDeleteResponses = {
     /**
      * Successful Response
      */
-    200: EnvelopeAvatarUrlResponse;
+    200: EnvelopeUserPublic;
 };
 
-export type GetMyAvatarApiV1AuthMeAvatarGetResponse = GetMyAvatarApiV1AuthMeAvatarGetResponses[keyof GetMyAvatarApiV1AuthMeAvatarGetResponses];
+export type DeleteMyAvatarApiV1AuthMeAvatarDeleteResponse = DeleteMyAvatarApiV1AuthMeAvatarDeleteResponses[keyof DeleteMyAvatarApiV1AuthMeAvatarDeleteResponses];
+
+export type SetMyAvatarApiV1AuthMeAvatarPostData = {
+    body: SetAvatarRequest;
+    path?: never;
+    query?: never;
+    url: '/api/v1/auth/me/avatar';
+};
+
+export type SetMyAvatarApiV1AuthMeAvatarPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: EnvelopeNoneType;
+};
+
+export type SetMyAvatarApiV1AuthMeAvatarPostError = SetMyAvatarApiV1AuthMeAvatarPostErrors[keyof SetMyAvatarApiV1AuthMeAvatarPostErrors];
+
+export type SetMyAvatarApiV1AuthMeAvatarPostResponses = {
+    /**
+     * Successful Response
+     */
+    202: EnvelopeUserPublic;
+};
+
+export type SetMyAvatarApiV1AuthMeAvatarPostResponse = SetMyAvatarApiV1AuthMeAvatarPostResponses[keyof SetMyAvatarApiV1AuthMeAvatarPostResponses];
+
+export type GetAvatarUploadFormApiV1AuthMeAvatarUploadFormPostData = {
+    body: AvatarUploadFormRequest;
+    path?: never;
+    query?: never;
+    url: '/api/v1/auth/me/avatar/upload-form';
+};
+
+export type GetAvatarUploadFormApiV1AuthMeAvatarUploadFormPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: EnvelopeNoneType;
+};
+
+export type GetAvatarUploadFormApiV1AuthMeAvatarUploadFormPostError = GetAvatarUploadFormApiV1AuthMeAvatarUploadFormPostErrors[keyof GetAvatarUploadFormApiV1AuthMeAvatarUploadFormPostErrors];
+
+export type GetAvatarUploadFormApiV1AuthMeAvatarUploadFormPostResponses = {
+    /**
+     * Successful Response
+     */
+    200: EnvelopeAvatarUploadForm;
+};
+
+export type GetAvatarUploadFormApiV1AuthMeAvatarUploadFormPostResponse = GetAvatarUploadFormApiV1AuthMeAvatarUploadFormPostResponses[keyof GetAvatarUploadFormApiV1AuthMeAvatarUploadFormPostResponses];
 
 export type ListOauthAccountsApiV1AuthOauthAccountsGetData = {
     body?: never;
@@ -3951,7 +4144,10 @@ export type ListPlansApiV1BillingPlansGetResponses = {
 export type ListPlansApiV1BillingPlansGetResponse = ListPlansApiV1BillingPlansGetResponses[keyof ListPlansApiV1BillingPlansGetResponses];
 
 export type CreatePortalSessionApiV1BillingPortalSessionPostData = {
-    body?: never;
+    /**
+     * Body
+     */
+    body?: PortalSessionRequest | null;
     headers?: {
         /**
          * X-Org-Id
@@ -5142,39 +5338,39 @@ export type UpdateMemberRoleApiV1OrgsOrgIdMembersMembershipIdPatchResponses = {
 
 export type UpdateMemberRoleApiV1OrgsOrgIdMembersMembershipIdPatchResponse = UpdateMemberRoleApiV1OrgsOrgIdMembersMembershipIdPatchResponses[keyof UpdateMemberRoleApiV1OrgsOrgIdMembersMembershipIdPatchResponses];
 
-export type GetMemberAvatarApiV1OrgsOrgIdMembersMembershipIdAvatarGetData = {
-    body?: never;
+export type SetMemberPermissionsApiV1OrgsOrgIdMembersMembershipIdPermissionsPutData = {
+    body: UpdateGrantsRequest;
     path: {
-        /**
-         * Org Id
-         */
-        org_id: string;
         /**
          * Membership Id
          */
         membership_id: string;
+        /**
+         * Org Id
+         */
+        org_id: string;
     };
     query?: never;
-    url: '/api/v1/orgs/{org_id}/members/{membership_id}/avatar';
+    url: '/api/v1/orgs/{org_id}/members/{membership_id}/permissions';
 };
 
-export type GetMemberAvatarApiV1OrgsOrgIdMembersMembershipIdAvatarGetErrors = {
+export type SetMemberPermissionsApiV1OrgsOrgIdMembersMembershipIdPermissionsPutErrors = {
     /**
      * Validation Error
      */
     422: EnvelopeNoneType;
 };
 
-export type GetMemberAvatarApiV1OrgsOrgIdMembersMembershipIdAvatarGetError = GetMemberAvatarApiV1OrgsOrgIdMembersMembershipIdAvatarGetErrors[keyof GetMemberAvatarApiV1OrgsOrgIdMembersMembershipIdAvatarGetErrors];
+export type SetMemberPermissionsApiV1OrgsOrgIdMembersMembershipIdPermissionsPutError = SetMemberPermissionsApiV1OrgsOrgIdMembersMembershipIdPermissionsPutErrors[keyof SetMemberPermissionsApiV1OrgsOrgIdMembersMembershipIdPermissionsPutErrors];
 
-export type GetMemberAvatarApiV1OrgsOrgIdMembersMembershipIdAvatarGetResponses = {
+export type SetMemberPermissionsApiV1OrgsOrgIdMembersMembershipIdPermissionsPutResponses = {
     /**
      * Successful Response
      */
-    200: EnvelopeAvatarUrlResponse;
+    200: EnvelopeMembershipPublic;
 };
 
-export type GetMemberAvatarApiV1OrgsOrgIdMembersMembershipIdAvatarGetResponse = GetMemberAvatarApiV1OrgsOrgIdMembersMembershipIdAvatarGetResponses[keyof GetMemberAvatarApiV1OrgsOrgIdMembersMembershipIdAvatarGetResponses];
+export type SetMemberPermissionsApiV1OrgsOrgIdMembersMembershipIdPermissionsPutResponse = SetMemberPermissionsApiV1OrgsOrgIdMembersMembershipIdPermissionsPutResponses[keyof SetMemberPermissionsApiV1OrgsOrgIdMembersMembershipIdPermissionsPutResponses];
 
 export type GetDeliveryApiV1WebhooksDeliveriesDeliveryIdGetData = {
     body?: never;

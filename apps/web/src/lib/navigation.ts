@@ -17,7 +17,7 @@ import {
 
 import { useFeatureFlags, useModules, useOrg } from "@forge/hooks";
 import type { ActiveModules } from "@forge/hooks";
-import { Permission, ROLE_PERMISSIONS } from "@forge/types";
+import { Permission } from "@forge/types";
 
 // T-233: every in-app destination is locale-prefixed. `to` is the router's
 // path (with the `$locale` param it needs); `path` is the same destination
@@ -160,6 +160,28 @@ export const SETTINGS_NAV: NavItem[] = [
   },
 ];
 
+export type SettingsArea = NonNullable<NavItem["group"]>;
+
+/**
+ * Which settings area a path is in, or null outside settings.
+ *
+ * Account and organization settings are separate areas, each with its own
+ * sidebar, so a page about you never sits in one list with a page about the
+ * organization. Matched against the ungated list: whether a page is visible
+ * to this user does not change which area it belongs to. A settings path no
+ * item claims is treated as the account's.
+ */
+export function settingsAreaFor(path: string): SettingsArea | null {
+  if (!path.startsWith("/settings")) {
+    return null;
+  }
+  const item = SETTINGS_NAV.find(
+    (candidate) =>
+      path === candidate.path || path.startsWith(`${candidate.path}/`),
+  );
+  return item?.group ?? "account";
+}
+
 export interface VisibleNav {
   primary: NavItem[];
   settings: NavItem[];
@@ -178,12 +200,12 @@ export interface VisibleNav {
  * list's length between renders. Consulting the three underlying sources
  * directly has no such constraint, and is the same comparison.
  *
- * Deny-by-default throughout, matching useFeatureFlag and useModules: no role
- * yet, no flags yet, or a failed fetch all read as "hide it".
+ * Deny-by-default throughout, matching useFeatureFlag and useModules: no
+ * permissions yet, no flags yet, or a failed fetch all read as "hide it".
  */
 export function useVisibleNavItems(): VisibleNav {
   const modules = useModules();
-  const { role } = useOrg();
+  const { permissions } = useOrg();
   const { data: flagData } = useFeatureFlags();
   const flags = flagData?.data?.flags;
 
@@ -191,10 +213,8 @@ export function useVisibleNavItems(): VisibleNav {
     if (item.module && !modules[item.module]) {
       return false;
     }
-    if (item.permission) {
-      if (!role || !ROLE_PERMISSIONS[role].has(item.permission)) {
-        return false;
-      }
+    if (item.permission && !permissions.has(item.permission)) {
+      return false;
     }
     if (item.flag && !flags?.[item.flag]) {
       return false;

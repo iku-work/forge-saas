@@ -186,6 +186,21 @@ class S3Backend:
         await asyncio.to_thread(_copy)
 
     @resilient("s3")
+    async def put(
+        self, key: str, body: bytes, content_type: str, *, cache_control: str | None = None
+    ) -> None:
+        extra = {"CacheControl": cache_control} if cache_control else {}
+        await asyncio.to_thread(
+            self._client.put_object,
+            Bucket=self._bucket,
+            Key=key,
+            Body=body,
+            ContentType=content_type,
+            ServerSideEncryption=_SSE_ALGORITHM,
+            **extra,
+        )
+
+    @resilient("s3")
     async def delete(self, key: str) -> None:
         await asyncio.to_thread(self._client.delete_object, Bucket=self._bucket, Key=key)
 

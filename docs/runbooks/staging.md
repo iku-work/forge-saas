@@ -39,7 +39,7 @@ Make each of these with a fresh value. None is a copy of production's.
 |---|---|---|
 | Hetzner | server `forge-staging` | as `new-server.md` step 1, with the same firewall |
 | Cloudflare | `staging.`, `app-staging.`, `storage-staging.` A records | Proxied, to the new server |
-| Bitwarden Secrets Manager | project `forge-staging` | every name `forge-prod` has, with staging values |
+| Bitwarden Secrets Manager | project `forge-staging` | every secret `forge-prod` has, with staging values; its ID in `deploy/staging.env` |
 | Bitwarden Secrets Manager | machine account `forge-staging-deploy` | **Can read** on `forge-staging` only |
 | Stripe | a sandbox, `forge-staging` | its own test keys, the same plans (`sync_plans`), a webhook to `app-staging.` |
 | Google Cloud | OAuth client `forge-staging` | redirect `https://app-staging.<domain>/api/v1/auth/oauth/google/callback` |
@@ -47,17 +47,19 @@ Make each of these with a fresh value. None is a copy of production's.
 | Cloudflare R2 | bucket `forge-staging-backups` | lock and expiry as `backup-restore.md`, a week of each is enough |
 | age | `forge-staging-backup-key.txt` | made on your machine, stored in the Password Manager |
 
-In `forge-staging`, these differ from production by more than their value:
+Staging's settings are committed, in `deploy/staging.env`; `deploy/common.env` has
+what it shares with production. What differs:
 
-- `ENVIRONMENT=staging`. The deploy refuses an env whose `ENVIRONMENT` is not the
+- `ENVIRONMENT=staging`. The deploy refuses a file whose `ENVIRONMENT` is not the
   environment it deploys to.
 - `DOMAIN=app-staging.<domain>`, `MARKETING_DOMAIN=staging.<domain>`,
-  `STORAGE_DOMAIN=storage-staging.<domain>`, and every URL built from them.
+  `STORAGE_DOMAIN=storage-staging.<domain>`, and every URL built from them. The
+  edge image's bundles take their URLs from these two domains.
 - `API_RATE_LIMIT` and `ORG_RATE_LIMIT` as in `backend/.env.loadtest`, so the weekly
   scan is not answered with 429s. `AUTH_RATE_LIMIT` stays at the default: the box is
   public, and its sign-in routes are as reachable as production's.
 
-**Expected:** each row exists, and the Bitwarden project holds only staging values.
+**Expected:** each row exists, and the Bitwarden project holds only staging secrets.
 
 ### 2. Bootstrap the box
 
@@ -73,7 +75,8 @@ boxes cannot check in for each other, and keeps a week of local copies.
 
 **Expected:** the script ends with `Done.`, and `~forge/forge-backup.env` has
 `BACKUP_SENTRY_MONITOR=forge-backup-staging`. Point the backups at
-`forge-staging-backups` with `set-backup-remote.sh`.
+`forge-staging-backups` with `set-backup-remote.sh`. Step 4's script takes
+`staging` too: `bash scripts/fill-bitwarden.sh staging root@<ip>`.
 
 ### 3. Lock CI's key and connect GitHub
 
@@ -84,13 +87,10 @@ GitHub environment named **`staging`**, deployment branches limited to `main`:
 |---|---|---|
 | secret | `BWS_ACCESS_TOKEN` | `forge-staging-deploy`'s token |
 | secret | `SSH_KEY`, `SSH_KNOWN_HOSTS`, `SSH_HOST`, `SSH_USER` | the new key, the box's host key, its IP, `forge` |
-| variable | `PUBLIC_SITE_URL` | `https://staging.<domain>` |
-| variable | `PUBLIC_APP_URL`, `PUBLIC_API_URL` | `https://app-staging.<domain>` |
 
-The environment's variables override the repository's, which stay production's.
-Set them before `SSH_HOST`: the first deploy that finds `SSH_HOST` builds the
-commit's edge image, once, with whatever variables exist then.
-`VITE_SENTRY_DSN` can stay shared: Sentry separates the two by `ENVIRONMENT`.
+No variables: the bundles' URLs come from `deploy/staging.env`, and
+`VITE_SENTRY_DSN` stays the repository's, since Sentry separates the two by
+`ENVIRONMENT`.
 
 **Expected:** `gh secret list --env staging` lists the five secrets.
 

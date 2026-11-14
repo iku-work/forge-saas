@@ -6,7 +6,14 @@ enforces — see tests/committed/test_dependencies.py for the dependency itself.
 
 import pytest
 
-from app.modules.auth.permissions import ROLE_PERMISSIONS, MemberRole, Permission
+from app.modules.auth.permissions import (
+    DEFAULT_GRANTS,
+    GRANTABLE_PERMISSIONS,
+    ROLE_PERMISSIONS,
+    MemberRole,
+    Permission,
+    effective_permissions,
+)
 
 
 def test_owner_has_every_permission() -> None:
@@ -38,3 +45,35 @@ def test_rbac_matrix_matches_expected_table(role: MemberRole, permission: Permis
     }[role]
 
     assert (permission in ROLE_PERMISSIONS[role]) is expected
+
+
+def test_only_these_can_be_granted_to_one_member() -> None:
+    """Never members:manage, billing:manage or settings:manage: each lets the
+    holder change who can do what, or what the organization pays."""
+    assert {
+        Permission.FILES_WRITE,
+        Permission.FILES_MANAGE,
+        Permission.BILLING_READ,
+        Permission.AUDIT_READ,
+    } == GRANTABLE_PERMISSIONS
+    assert set(DEFAULT_GRANTS) <= GRANTABLE_PERMISSIONS
+
+
+def test_grants_add_to_the_role() -> None:
+    assert effective_permissions(MemberRole.MEMBER, ["files:write", "audit:read"]) == {
+        Permission.MEMBERS_READ,
+        Permission.FILES_READ,
+        Permission.FILES_WRITE,
+        Permission.AUDIT_READ,
+    }
+
+
+@pytest.mark.owasp("A01")
+def test_a_stored_grant_that_is_not_grantable_counts_for_nothing() -> None:
+    """A row written by hand, or a permission later taken off the list."""
+    assert (
+        effective_permissions(
+            MemberRole.MEMBER, ["members:manage", "settings:manage", "not-a-permission"]
+        )
+        == ROLE_PERMISSIONS[MemberRole.MEMBER]
+    )

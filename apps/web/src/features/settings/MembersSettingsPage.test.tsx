@@ -77,6 +77,7 @@ describe("MembersSettingsPage", () => {
       org: fixtureOrg,
       orgs: [fixtureOrg],
       role: "owner",
+      permissions: new Set(makeMembership(user, "owner").permissions),
       isLoading: false,
       switchOrg: vi.fn(),
       refreshOrgs: vi.fn(),
@@ -288,6 +289,109 @@ describe("MembersSettingsPage", () => {
       await waitFor(() => {
         expect(removed).not.toBeNull();
       });
+    });
+
+    it("gives and takes away a member's permissions", async () => {
+      hooks.usePermission.mockReturnValue(true);
+      let sent: unknown = null;
+      server.use(
+        http.put(
+          `${API}/api/v1/orgs/:orgId/members/:membershipId/permissions`,
+          async ({ request }) => {
+            sent = await request.json();
+            return HttpResponse.json(envelope(makeMembership(other, "member")));
+          },
+        ),
+      );
+      renderPage();
+
+      await userEvent.click(
+        await screen.findByRole("button", { name: "Actions for Sam Rivera" }),
+      );
+      await userEvent.click(
+        await screen.findByRole("menuitem", { name: "Permissions…" }),
+      );
+      const dialog = await screen.findByTestId("member-permissions-dialog");
+      expect(dialog).toHaveTextContent("Permissions for Sam Rivera");
+      const upload = within(dialog).getByRole("checkbox", {
+        name: "Upload files",
+      });
+      // The default grant.
+      expect(upload).toBeChecked();
+      await userEvent.click(upload);
+      await userEvent.click(
+        within(dialog).getByRole("checkbox", { name: "See billing" }),
+      );
+      await userEvent.click(
+        within(dialog).getByRole("button", { name: "Save" }),
+      );
+
+      await waitFor(() => {
+        expect(sent).toEqual({ granted_permissions: ["billing:read"] });
+      });
+      await waitFor(() => {
+        expect(
+          screen.queryByTestId("member-permissions-dialog"),
+        ).not.toBeInTheDocument();
+      });
+    });
+
+    it("does not let you give a permission you do not hold", async () => {
+      // A hypothetical role that manages members without seeing billing:
+      // the API refuses it, so the checkbox does not offer it.
+      hooks.usePermission.mockReturnValue(true);
+      hooks.useOrg.mockReturnValue({
+        org: fixtureOrg,
+        orgs: [fixtureOrg],
+        role: "admin",
+        permissions: new Set(["members:read", "members:manage", "files:write"]),
+        isLoading: false,
+        switchOrg: vi.fn(),
+        refreshOrgs: vi.fn(),
+      });
+      renderPage();
+
+      await userEvent.click(
+        await screen.findByRole("button", { name: "Actions for Sam Rivera" }),
+      );
+      await userEvent.click(
+        await screen.findByRole("menuitem", { name: "Permissions…" }),
+      );
+      const dialog = await screen.findByTestId("member-permissions-dialog");
+
+      expect(
+        within(dialog).getByRole("checkbox", { name: "See billing" }),
+      ).toBeDisabled();
+      expect(
+        within(dialog).getByRole("checkbox", { name: "Upload files" }),
+      ).toBeEnabled();
+    });
+
+    it("offers permissions only for members, whose role does not already cover them", async () => {
+      hooks.usePermission.mockReturnValue(true);
+      server.use(
+        http.get(`${API}/api/v1/orgs/:orgId/members`, () =>
+          HttpResponse.json(
+            envelope([
+              makeMembership(user, "owner"),
+              {
+                ...makeMembership(other, "admin"),
+                id: "44444444-4444-4444-4444-444444444444",
+              },
+            ]),
+          ),
+        ),
+      );
+      renderPage();
+
+      await userEvent.click(
+        await screen.findByRole("button", { name: "Actions for Sam Rivera" }),
+      );
+
+      const menu = await screen.findByRole("menu");
+      expect(
+        within(menu).queryByRole("menuitem", { name: "Permissions…" }),
+      ).not.toBeInTheDocument();
     });
 
     it("offers no actions on your own row, nor to a plain member", async () => {

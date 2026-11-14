@@ -19,6 +19,7 @@
   "org_header_required": "Se requiere el encabezado X-Org-ID.",
   "not_org_member": "No es miembro de esta organización.",
   "missing_permission": "Falta el permiso: {permission}.",
+  "permission_not_grantable": "{permission} no se puede dar a un solo miembro. Cambia su rol en su lugar.",
   "oauth_exchange_failed": "Falló el intercambio de OAuth con {provider}.",
   "oauth_no_email": "La cuenta de GitHub no tiene correo electrónico.",
   "oauth_unknown_provider": "Proveedor de OAuth desconocido: {provider}.",
@@ -67,6 +68,7 @@
   "file_count_quota_exceeded": "Esto superaría el límite de {max_files} archivos de tu plan.",
   "seat_limit_reached": "Se ha alcanzado el límite de miembros de tu plan, y las invitaciones pendientes cuentan. Mejora tu plan o elimina un miembro o una invitación para invitar a otra persona.",
   "seat_limit_reached_to_join": "Esta organización ha alcanzado el límite de miembros de su plan. Pide a un administrador que mejore el plan o elimine a un miembro.",
+  "free_org_limit_reached": "Ya eres propietario de {limit} organizaciones en el plan gratuito. Mejora el plan de una de ellas para crear otra.",
   "file_not_uploaded": "No se encontró ningún archivo subido en la ubicación prefirmada.",
   "file_size_mismatch": "El tamaño del archivo subido no coincide con el tamaño declarado.",
   "upload_changed": "La subida cambió mientras se confirmaba. Vuelve a confirmarla.",
@@ -133,5 +135,6 @@
   "file_scan_failed": "No se ha podido analizar este archivo en busca de malware, así que no se puede descargar.",
   "file_infected": "Se ha detectado malware en este archivo y ya no está disponible.",
   "reauth_failed": "La contraseña o el código no son correctos.",
-  "reauth_wrong_account": "Esa cuenta no es con la que has iniciado sesión."
+  "reauth_wrong_account": "Esa cuenta no es con la que has iniciado sesión.",
+  "no_subscription_to_cancel": "Esta organización no tiene ninguna suscripción que cancelar."
 }

@@ -35,8 +35,11 @@ import {
 import {
   confirmUploadApiV1FilesFileIdConfirmPost,
   deleteFileApiV1FilesFileIdDelete,
+  getAvatarUploadFormApiV1AuthMeAvatarUploadFormPost,
   presignUploadApiV1FilesPresignPost,
+  setMyAvatarApiV1AuthMeAvatarPost,
   type StoredFilePublic,
+  type UserPublic,
 } from "@forge/api-client";
 
 import { client } from "./api";
@@ -172,6 +175,94 @@ async function deletePendingFile(fileId: string): Promise<void> {
   }
 }
 
+function formUploadTask(
+  uploadUrl: string,
+  asset: PickedAsset,
+  fields: Record<string, string>,
+  onProgress?: (fraction: number) => void,
+): UploadTask {
+  return createUploadTask(
+    uploadUrl,
+    asset.uri,
+    // An S3 POST-policy upload, not a PUT. The server signs a *policy*
+    // (backend/app/modules/storage/backends/s3.py calls
+    // generate_presigned_post), so `upload_url` is the bucket root with no
+    // object key in it and every signed value, the key included, travels as
+    // a form field. PUTting the binary at that URL writes to the bucket
+    // itself, which S3 and MinIO answer 400.
+    //
+    // No `headers` here on purpose. Both platforms set
+    // `multipart/form-data` with the boundary they generated, and on
+    // Android an explicit Content-Type is added to the request builder and
+    // wins over the body's -- stripping the boundary and making the upload
+    // unparseable. The object's own content type is already a signed field.
+    //
+    // S3 also requires the file part last. expo does that on both
+    // platforms: ios/NetworkingHelpers.swift's createMultipartBody writes
+    // every parameter before the file part, and Android's
+    // FileSystemModule.createRequestBody adds the parameters in a loop
+    // before addFormDataPart for the file.
+    {
+      httpMethod: "POST",
+      uploadType: FileSystemUploadType.MULTIPART,
+      fieldName: "file",
+      mimeType: asset.mimeType,
+      parameters: fields,
+    },
+    (data) => {
+      if (data.totalBytesExpectedToSend > 0) {
+        onProgress?.(data.totalBytesSent / data.totalBytesExpectedToSend);
+      }
+    },
+  );
+}
+
+const AVATAR_TYPES = ["image/jpeg", "image/png", "image/webp"] as const;
+type AvatarType = (typeof AVATAR_TYPES)[number];
+
+function isAvatarType(type: string): type is AvatarType {
+  return (AVATAR_TYPES as readonly string[]).includes(type);
+}
+
+/**
+ * The profile photo, which is the person's and not an organization's file:
+ * a presigned form from /auth/me/avatar/upload-form, the POST-policy upload,
+ * then POST /auth/me/avatar. The server scans and re-encodes it in the
+ * background, so the user it resolves with has `avatar_processing` set.
+ * Resolves null when the picker is canceled.
+ */
+export async function pickAndUploadAvatar(): Promise<UserPublic | null> {
+  const asset = await pickAsset("library");
+  if (!asset) return null;
+  if (!isAvatarType(asset.mimeType)) {
+    throw new Error(`Not an accepted image type: ${asset.mimeType}`);
+  }
+  const { data: formEnvelope } =
+    await getAvatarUploadFormApiV1AuthMeAvatarUploadFormPost({
+      client,
+      throwOnError: true,
+      body: { content_type: asset.mimeType },
+    });
+  const form = formEnvelope.data;
+  if (!form) throw new Error("No upload form in the response.");
+
+  const uploaded = await formUploadTask(
+    form.upload_url,
+    asset,
+    form.fields,
+  ).uploadAsync();
+  if (!uploaded || uploaded.status < 200 || uploaded.status >= 300) {
+    throw new Error(`Upload failed with status ${String(uploaded?.status)}.`);
+  }
+
+  const { data: setEnvelope } = await setMyAvatarApiV1AuthMeAvatarPost({
+    client,
+    throwOnError: true,
+    body: { upload_key: form.upload_key },
+  });
+  return setEnvelope.data ?? null;
+}
+
 export function pickAndUpload(options: PickAndUploadOptions): UploadHandle {
   // TypeScript's flow analysis has no model of cancel() (a separate closure
   // invoked later, asynchronously, by the caller) mutating this in between
@@ -212,41 +303,11 @@ export function pickAndUpload(options: PickAndUploadOptions): UploadHandle {
       return null;
     }
 
-    const task = createUploadTask(
+    const task = formUploadTask(
       presigned.upload_url,
-      asset.uri,
-      // An S3 POST-policy upload, not a PUT. The server signs a *policy*
-      // (backend/app/modules/storage/backends/s3.py calls
-      // generate_presigned_post), so `upload_url` is the bucket root with no
-      // object key in it and every signed value, the key included, travels as
-      // a form field. PUTting the binary at that URL writes to the bucket
-      // itself, which S3 and MinIO answer 400.
-      //
-      // No `headers` here on purpose. Both platforms set
-      // `multipart/form-data` with the boundary they generated, and on
-      // Android an explicit Content-Type is added to the request builder and
-      // wins over the body's -- stripping the boundary and making the upload
-      // unparseable. The object's own content type is already a signed field.
-      //
-      // S3 also requires the file part last. expo does that on both
-      // platforms: ios/NetworkingHelpers.swift's createMultipartBody writes
-      // every parameter before the file part, and Android's
-      // FileSystemModule.createRequestBody adds the parameters in a loop
-      // before addFormDataPart for the file.
-      {
-        httpMethod: "POST",
-        uploadType: FileSystemUploadType.MULTIPART,
-        fieldName: "file",
-        mimeType: asset.mimeType,
-        parameters: presigned.fields,
-      },
-      (data) => {
-        if (data.totalBytesExpectedToSend > 0) {
-          options.onProgress?.(
-            data.totalBytesSent / data.totalBytesExpectedToSend,
-          );
-        }
-      },
+      asset,
+      presigned.fields,
+      options.onProgress,
     );
     state = { phase: "uploading", fileId, task };
 

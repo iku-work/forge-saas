@@ -137,7 +137,7 @@ describe("useOrg (responses that arrive out of order)", () => {
     });
 
     // The abandoned org's member list arrives now. Applying it would render
-    // owner-only controls (ROLE_PERMISSIONS gates on this) for an org where
+    // owner-only controls (the permissions gate on this) for an org where
     // the caller is only a member.
     await act(async () => {
       await delay(300);

@@ -64,7 +64,21 @@
     "count": "{count, plural, one {# member} other {# members}}",
     "no_match": "No members match “{query}”.",
     "remove_confirm_title": "Remove {name}?",
-    "remove_confirm_body": "They lose access to {org} straight away. You can invite them again later."
+    "remove_confirm_body": "They lose access to {org} straight away. You can invite them again later.",
+    "permissions": {
+      "action": "Permissions…",
+      "title": "Permissions for {name}",
+      "description": "Given on top of the Member role. You can only give or take away a permission you hold yourself.",
+      "error": "Unable to update this member's permissions.",
+      "files_write": "Upload files",
+      "files_write_hint": "Upload files, and delete the ones they uploaded.",
+      "files_manage": "Manage all files",
+      "files_manage_hint": "Delete any file in the organization, whoever uploaded it.",
+      "billing_read": "See billing",
+      "billing_read_hint": "See the plan, invoices and payment status. Changing the plan stays with owners.",
+      "audit_read": "See the audit log",
+      "audit_read_hint": "See who did what in the organization."
+    }
   },
   "invitations": {
     "title": "Pending invitations",

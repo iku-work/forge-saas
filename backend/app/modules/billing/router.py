@@ -35,6 +35,7 @@ from app.modules.billing.schemas import (
     CheckoutSessionRequest,
     CheckoutSessionResponse,
     PlanPublic,
+    PortalSessionRequest,
     PortalSessionResponse,
     SubscriptionPublic,
     UsageSummary,
@@ -96,7 +97,7 @@ async def create_checkout_session(  # noqa: PLR0913 — T-120 adds redis on top 
 # interruption here.
 @router.post("/portal-session", dependencies=[Depends(reject_during_impersonation("billing"))])
 @api_limit
-async def create_portal_session(
+async def create_portal_session(  # noqa: PLR0913 -- the optional flow body on top of the usual params
     request: Request,
     org_and_membership: Annotated[tuple[Organization, Membership], Depends(get_current_org)],
     membership: Annotated[  # noqa: ARG001 — required to gate on BILLING_MANAGE
@@ -105,10 +106,13 @@ async def create_portal_session(
     _recent_auth: Annotated[None, Depends(require_recent_auth())],
     session: Annotated[AsyncSession, Depends(get_session)],
     redis: Annotated[Redis, Depends(get_redis)],
+    body: PortalSessionRequest | None = None,
 ) -> Envelope[PortalSessionResponse]:
     org, _ = org_and_membership
     url = await BillingService(session, redis).create_portal_session(
-        org, locale=getattr(request.state, "locale", None)
+        org,
+        locale=getattr(request.state, "locale", None),
+        cancel=body is not None and body.flow == "cancel",
     )
     await session.commit()
     return Envelope(data=PortalSessionResponse(url=url), meta=Meta(request_id=_request_id(request)))

@@ -19,6 +19,7 @@
   "org_header_required": "L'en-tête X-Org-ID est requis.",
   "not_org_member": "N'est pas membre de cette organisation.",
   "missing_permission": "Permission manquante : {permission}.",
+  "permission_not_grantable": "{permission} ne peut pas être accordée à un seul membre. Changez plutôt son rôle.",
   "oauth_exchange_failed": "L'échange OAuth avec {provider} a échoué.",
   "oauth_no_email": "Le compte GitHub ne possède aucune adresse e-mail.",
   "oauth_unknown_provider": "Fournisseur OAuth inconnu : {provider}.",
@@ -67,6 +68,7 @@
   "file_count_quota_exceeded": "Cela dépasserait la limite de {max_files} fichiers de votre offre.",
   "seat_limit_reached": "La limite de membres de votre offre est atteinte, et les invitations en attente comptent. Changez d'offre, ou retirez un membre ou une invitation, pour inviter quelqu'un d'autre.",
   "seat_limit_reached_to_join": "Cette organisation a atteint la limite de membres de son offre. Demandez à l'un de ses administrateurs de changer d'offre ou de retirer un membre.",
+  "free_org_limit_reached": "Vous possédez déjà {limit} organisations avec l'offre gratuite. Passez l'une d'elles à une offre payante pour en créer une autre.",
   "file_not_uploaded": "Aucun fichier importé trouvé à l'emplacement pré-signé.",
   "file_size_mismatch": "La taille du fichier importé ne correspond pas à la taille annoncée.",
   "upload_changed": "Le téléversement a changé pendant sa confirmation. Confirmez-le à nouveau.",
@@ -133,5 +135,6 @@
   "file_scan_failed": "Ce fichier n'a pas pu être analysé pour détecter des logiciels malveillants, il ne peut donc pas être téléchargé.",
   "file_infected": "Ce fichier contient un logiciel malveillant et n'est plus disponible.",
   "reauth_failed": "Le mot de passe ou le code est incorrect.",
-  "reauth_wrong_account": "Ce compte n'est pas celui avec lequel vous êtes connecté."
+  "reauth_wrong_account": "Ce compte n'est pas celui avec lequel vous êtes connecté.",
+  "no_subscription_to_cancel": "Cette organisation n’a aucun abonnement à résilier."
 }

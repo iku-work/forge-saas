@@ -46,7 +46,21 @@
     "change_role": "Modifier le rôle",
     "joined_col": "Arrivée",
     "status_active": "Actif",
-    "status_col": "Statut"
+    "status_col": "Statut",
+    "permissions": {
+      "action": "Autorisations…",
+      "title": "Autorisations de {name}",
+      "description": "En plus du rôle Membre. Vous ne pouvez accorder ou retirer qu'une autorisation que vous avez vous-même.",
+      "error": "Impossible de modifier les autorisations de ce membre.",
+      "files_write": "Téléverser des fichiers",
+      "files_write_hint": "Téléverser des fichiers et supprimer ceux qu'il a téléversés.",
+      "files_manage": "Gérer tous les fichiers",
+      "files_manage_hint": "Supprimer n'importe quel fichier de l'organisation, quel que soit son auteur.",
+      "billing_read": "Voir la facturation",
+      "billing_read_hint": "Voir l'offre, les factures et l'état des paiements. Changer d'offre reste réservé aux propriétaires.",
+      "audit_read": "Voir le journal d'audit",
+      "audit_read_hint": "Voir qui a fait quoi dans l'organisation."
+    }
   },
   "invitations": {
     "title": "Invitations en attente",

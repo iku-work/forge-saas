@@ -11,3 +11,7 @@ _Avoid_: Workspace, team, account, tenant (in user-facing copy)
 **Member**:
 A user's place in one organization, carrying a role.
 _Avoid_: Seat (except when counting billable members on a plan)
+
+**Grant**:
+A single permission given to one member on top of their role, such as uploading files or seeing billing. Only a few permissions can be granted; managing members, billing or settings comes with a role.
+_Avoid_: Custom role

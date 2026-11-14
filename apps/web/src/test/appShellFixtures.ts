@@ -52,9 +52,37 @@ export const fixtureOrg: OrganizationPublic = {
   created_at: "2026-01-01T00:00:00Z",
 };
 
+// Each role's permissions, as backend/app/modules/auth/permissions.py has
+// them. A member's files:write comes from the default grant, not the role.
+const ROLE_PERMISSIONS: Record<MembershipPublic["role"], string[]> = {
+  owner: [
+    "audit:read",
+    "billing:manage",
+    "billing:read",
+    "files:manage",
+    "files:read",
+    "files:write",
+    "members:manage",
+    "members:read",
+    "settings:manage",
+  ],
+  admin: [
+    "audit:read",
+    "billing:read",
+    "files:manage",
+    "files:read",
+    "files:write",
+    "members:manage",
+    "members:read",
+    "settings:manage",
+  ],
+  member: ["files:read", "members:read"],
+};
+
 export function makeMembership(
   user: UserPublic,
   role: MembershipPublic["role"],
+  grantedPermissions: string[] = ["files:write"],
 ): MembershipPublic {
   return {
     id: "33333333-3333-3333-3333-333333333333",
@@ -63,6 +91,10 @@ export function makeMembership(
     role,
     invited_by: null,
     created_at: "2026-01-01T00:00:00Z",
+    granted_permissions: grantedPermissions,
+    permissions: [
+      ...new Set([...ROLE_PERMISSIONS[role], ...grantedPermissions]),
+    ].sort(),
     user: {
       full_name: user.full_name ?? null,
       email: user.email,

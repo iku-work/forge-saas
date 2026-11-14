@@ -10,7 +10,7 @@ import { logout } from "../../src/lib/auth";
 import { useSupportSettings } from "../../src/lib/config";
 import { openSupport } from "../../src/lib/support";
 import {
-  pickAndUpload,
+  pickAndUploadAvatar,
   UploadPermissionError,
 } from "../../src/lib/uploads";
 
@@ -58,8 +58,7 @@ export default function SettingsScreen() {
   const handleAvatarUpload = (): void => {
     setAvatarMessage(null);
     setIsUploadingAvatar(true);
-    const handle = pickAndUpload({ source: "library", bucket: "avatars" });
-    void handle.result
+    void pickAndUploadAvatar()
       .then((uploaded) => {
         if (uploaded) {
           setAvatarMessage({

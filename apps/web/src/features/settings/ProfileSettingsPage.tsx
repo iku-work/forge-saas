@@ -1,20 +1,26 @@
 import { zodResolver } from "@hookform/resolvers/zod";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useId } from "react";
+import { useMutation } from "@tanstack/react-query";
+import { useEffect, useId, useRef } from "react";
 import { Link } from "@tanstack/react-router";
 import { useForm } from "react-hook-form";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { z } from "zod";
 
-import { updateMeApiV1AuthMePatch } from "@forge/api-client";
+import {
+  deleteMyAvatarApiV1AuthMeAvatarDelete,
+  getAvatarUploadFormApiV1AuthMeAvatarUploadFormPost,
+  meApiV1AuthMeGet,
+  setMyAvatarApiV1AuthMeAvatarPost,
+  updateMeApiV1AuthMePatch,
+} from "@forge/api-client";
+import type { UserPublic } from "@forge/api-client";
 import { useAuth } from "@forge/hooks";
 import {
   Avatar,
   AvatarFallback,
   AvatarImage,
   Button,
-  FileUploader,
   Form,
   FormControl,
   FormField,
@@ -32,8 +38,71 @@ import {
 import { getErrorMessage } from "../auth/getErrorMessage";
 import { ThemeToggle } from "../../components/ThemeToggle";
 import { RoutedLocaleSwitcher } from "../../lib/RoutedLocaleSwitcher";
-import { AVATAR_QUERY_KEY, useAvatarSrc } from "../../lib/useAvatarSrc";
+import { useAvatarSrc } from "../../lib/useAvatarSrc";
 import { useRouteLocale } from "../../lib/useRouteLocale";
+
+// What the server accepts: AvatarUploadFormRequest and MAX_AVATAR_BYTES.
+const AVATAR_TYPES = ["image/jpeg", "image/png", "image/webp"] as const;
+type AvatarType = (typeof AVATAR_TYPES)[number];
+const AVATAR_MAX_BYTES = 5_000_000;
+// The scanner worker usually finishes in a second or two.
+const AVATAR_POLL_MS = 1_500;
+const AVATAR_POLL_LIMIT = 40;
+
+function isAvatarType(type: string): type is AvatarType {
+  return (AVATAR_TYPES as readonly string[]).includes(type);
+}
+
+class AvatarRejectedError extends Error {}
+
+/**
+ * Upload `file` as the avatar and wait until the scanner worker has dealt
+ * with it. Resolves with the user once it is published; throws
+ * AvatarRejectedError if it was not.
+ *
+ * The file goes straight to storage through a presigned POST form, like
+ * every upload (see FileUploader for the form's two ordering rules), and the
+ * server then scans and re-encodes it in the background.
+ */
+async function uploadAvatar(file: File): Promise<UserPublic> {
+  if (!isAvatarType(file.type) || file.size > AVATAR_MAX_BYTES) {
+    throw new AvatarRejectedError();
+  }
+  const { data: formEnvelope } =
+    await getAvatarUploadFormApiV1AuthMeAvatarUploadFormPost({
+      body: { content_type: file.type },
+      throwOnError: true,
+    });
+  const form = formEnvelope.data;
+  if (!form) throw new Error("no upload form");
+  const body = new FormData();
+  for (const [name, value] of Object.entries(form.fields)) {
+    body.append(name, value);
+  }
+  body.append("file", file);
+  const stored = await fetch(form.upload_url, { method: "POST", body });
+  if (!stored.ok) throw new Error(`upload failed: ${String(stored.status)}`);
+
+  const { data: setEnvelope } = await setMyAvatarApiV1AuthMeAvatarPost({
+    body: { upload_key: form.upload_key },
+    throwOnError: true,
+  });
+  let user = setEnvelope.data;
+  for (
+    let poll = 0;
+    user?.avatar_processing && poll < AVATAR_POLL_LIMIT;
+    poll++
+  ) {
+    await new Promise((resolve) => setTimeout(resolve, AVATAR_POLL_MS));
+    user = (await meApiV1AuthMeGet({ throwOnError: true })).data.data;
+  }
+  if (!user || user.avatar_processing) throw new Error("still processing");
+  // Processing cleared without a new picture: the worker refused the file.
+  if (user.avatar_url === setEnvelope.data?.avatar_url) {
+    throw new AvatarRejectedError();
+  }
+  return user;
+}
 
 function initialsFor(email: string): string {
   return email.slice(0, 2).toUpperCase();
@@ -70,20 +139,16 @@ export function ProfileSettingsPage() {
   }, [form, fullName]);
 
   const avatarSrc = useAvatarSrc();
-  const queryClient = useQueryClient();
+  const avatarInput = useRef<HTMLInputElement>(null);
 
   const setAvatar = useMutation({
-    // null clears the photo: a write to the user row and nothing else, so
-    // it works with file storage off too.
-    mutationFn: async (fileId: string | null) => {
-      const { data } = await updateMeApiV1AuthMePatch({
-        // The id, never the storage key: the server resolves it and checks
-        // the file is this user's, which is what keeps a private bucket
-        // private.
-        body: { avatar_file_id: fileId },
+    // null removes the photo.
+    mutationFn: async (file: File | null) => {
+      if (file) return uploadAvatar(file);
+      const { data } = await deleteMyAvatarApiV1AuthMeAvatarDelete({
         throwOnError: true,
       });
-      return data;
+      return data.data;
     },
   });
 
@@ -99,28 +164,24 @@ export function ProfileSettingsPage() {
     },
   });
 
-  const onAvatarChanged = async (fileId: string | null): Promise<void> => {
+  const onAvatarChanged = async (file: File | null): Promise<void> => {
     try {
-      const envelope = await setAvatar.mutateAsync(fileId);
-      const updated = envelope.data;
-      if (updated) {
-        applyUpdatedUser(updated);
-      }
-      // has_uploaded_avatar has just flipped, so the query is enabled now.
-      // Invalidate rather than refetch a local handle: the shell's user menu
-      // reads the same key through useAvatarSrc, and invalidating updates
-      // the picture in the corner at the same moment as the one on this
-      // page.
-      await queryClient.invalidateQueries({ queryKey: AVATAR_QUERY_KEY });
+      const updated = await setAvatar.mutateAsync(file);
+      // The shell's user menu reads the same store, so it changes too.
+      if (updated) applyUpdatedUser(updated);
       toast.success(
         t(
-          fileId === null
+          file === null
             ? "auth.profile.avatar_removed"
             : "auth.profile.avatar_saved",
         ),
       );
     } catch (error) {
-      toast.error(getErrorMessage(error, "auth.profile.error_avatar"));
+      toast.error(
+        error instanceof AvatarRejectedError
+          ? t("auth.profile.avatar_rejected")
+          : getErrorMessage(error, "auth.profile.error_avatar"),
+      );
     }
   };
 
@@ -180,19 +241,31 @@ export function ProfileSettingsPage() {
                 {avatarSrc ? <AvatarImage src={avatarSrc} alt="" /> : null}
                 <AvatarFallback>{initialsFor(user.email)}</AvatarFallback>
               </Avatar>
-              <FileUploader
-                variant="button"
-                buttonLabel={t("auth.profile.upload_avatar")}
-                bucket="avatars"
-                accept="image/*"
-                maxSize={5 * 1024 * 1024}
-                onUploaded={(file) => {
-                  // Storing the file was never the point -- until now
-                  // nothing recorded *which* file was the avatar, so this
-                  // handler showed a toast and the upload vanished.
-                  void onAvatarChanged(file.id);
+              <input
+                ref={avatarInput}
+                type="file"
+                accept={AVATAR_TYPES.join(",")}
+                className="sr-only"
+                tabIndex={-1}
+                aria-hidden="true"
+                data-testid="profile-avatar-input"
+                onChange={(event) => {
+                  const file = event.target.files?.[0];
+                  event.target.value = "";
+                  if (file) void onAvatarChanged(file);
                 }}
               />
+              <Button
+                type="button"
+                variant="outline"
+                disabled={setAvatar.isPending}
+                onClick={() => avatarInput.current?.click()}
+                data-testid="profile-avatar-upload"
+              >
+                {setAvatar.isPending
+                  ? t("auth.profile.avatar_processing")
+                  : t("auth.profile.upload_avatar")}
+              </Button>
               {user.has_uploaded_avatar ? (
                 <Button
                   type="button"

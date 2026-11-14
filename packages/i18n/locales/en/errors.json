@@ -19,6 +19,7 @@
   "org_header_required": "X-Org-ID header is required.",
   "not_org_member": "Not a member of this organization.",
   "missing_permission": "Missing permission: {permission}.",
+  "permission_not_grantable": "{permission} can't be given to one member. Change their role instead.",
   "oauth_exchange_failed": "{provider} OAuth exchange failed.",
   "oauth_no_email": "GitHub account has no email.",
   "oauth_unknown_provider": "Unknown OAuth provider: {provider}.",
@@ -68,6 +69,7 @@
   "file_count_quota_exceeded": "This would exceed the {max_files}-file limit on your plan.",
   "seat_limit_reached": "Your plan's member limit has been reached, and pending invitations count toward it. Upgrade, or remove a member or an invitation, to invite someone else.",
   "seat_limit_reached_to_join": "This organization has reached its plan's member limit. Ask one of its admins to upgrade or remove a member.",
+  "free_org_limit_reached": "You already own {limit} organizations on the free plan. Upgrade one of them to create another.",
   "file_not_uploaded": "No upload found at the presigned location.",
   "file_size_mismatch": "Uploaded file size does not match the claimed size.",
   "upload_changed": "The upload changed while it was being confirmed. Confirm it again.",
@@ -136,5 +138,6 @@
   "file_scan_failed": "This file could not be scanned for malware, so it cannot be downloaded.",
   "file_infected": "This file was found to contain malware and is no longer available.",
   "reauth_failed": "That password or code is not right.",
-  "reauth_wrong_account": "That account is not the one you are signed in with."
+  "reauth_wrong_account": "That account is not the one you are signed in with.",
+  "no_subscription_to_cancel": "This organization has no subscription to cancel."
 }

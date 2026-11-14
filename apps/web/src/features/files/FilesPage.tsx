@@ -14,7 +14,7 @@ import {
   listFilesApiV1FilesGetInfiniteQueryKey,
 } from "@forge/api-client";
 import type { StoredFilePublic } from "@forge/api-client";
-import { usePermission, useOrg } from "@forge/hooks";
+import { useAuth, useOrg, usePermission } from "@forge/hooks";
 import { Permission } from "@forge/types";
 import {
   Alert,
@@ -93,11 +93,14 @@ function uploaderName(file: StoredFilePublic): string {
 export function FilesPage() {
   const { t } = useTranslation();
   const { org, isLoading: orgLoading } = useOrg();
-  // A MEMBER has files:read but not files:manage, so the uploader and the
-  // delete buttons were offering them two actions the API answers with 403.
-  // The server is still the gate; this stops the page lying about what the
-  // person in front of it can do.
+  // files:write uploads and deletes your own files; files:manage deletes
+  // anyone's. The server is still the gate; this stops the page offering an
+  // action the API would answer with 403.
+  const { user } = useAuth();
+  const canWrite = usePermission(Permission.FILES_WRITE);
   const canManage = usePermission(Permission.FILES_MANAGE);
+  const canDelete = (file: StoredFilePublic): boolean =>
+    canManage || (canWrite && file.uploaded_by === user?.id);
   const queryClient = useQueryClient();
   // Download and delete both used to discard their failures -- `void` on
   // the promise, no catch -- so a 409 on an unscanned file or a 403 on a
@@ -178,7 +181,7 @@ export function FilesPage() {
         className="mb-3"
       />
 
-      {canManage ? (
+      {canWrite ? (
         <FileUploader
           onUploaded={() => {
             void queryClient.invalidateQueries({
@@ -222,7 +225,7 @@ export function FilesPage() {
           icon={FolderOpen}
           title={t("files.page.empty_title")}
           description={
-            canManage
+            canWrite
               ? t("files.page.empty_body")
               : t("files.page.empty_body_read_only")
           }
@@ -289,7 +292,7 @@ export function FilesPage() {
                           main action, and a disabled one explains itself in a
                           way a disabled menu item can't. Delete lives in the
                           menu and still asks first (F-009). */}
-                      {canManage ? (
+                      {canDelete(file) ? (
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
                             <RowActionsButton

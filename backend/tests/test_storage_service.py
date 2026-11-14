@@ -521,23 +521,6 @@ async def test_presign_upload_rejects_disallowed_content_type(
 
 
 @pytest.mark.usefixtures("fake_backend")
-async def test_presign_upload_avatars_bucket_has_stricter_allowlist(
-    session: AsyncSession, redis: Redis, org, user_id
-) -> None:
-    service = _service(session, redis, org)
-
-    with pytest.raises(UnprocessableEntityError):
-        await service.presign_upload(
-            user_id,
-            filename="doc.pdf",
-            content_type="application/pdf",
-            size_bytes=100,
-            bucket="avatars",
-            org_sub=None,
-        )
-
-
-@pytest.mark.usefixtures("fake_backend")
 async def test_presign_upload_allows_image_in_avatars_bucket(
     session: AsyncSession, redis: Redis, org, user_id
 ) -> None:
@@ -913,7 +896,7 @@ async def test_delete_file_soft_deletes_and_enqueues_deferred_hard_delete(  # no
     fake_backend.uploaded[presigned["key"]] = {"ContentLength": 1024, "ETag": '"abc"'}
     await service.confirm_upload(user_id, presigned["file_id"])
 
-    await service.delete_file(user_id, presigned["file_id"])
+    await service.delete_file(user_id, presigned["file_id"], anyones=False)
 
     repo = StoredFileRepository(session, org.id)
     with pytest.raises(NotFoundError):
@@ -937,7 +920,7 @@ async def test_delete_file_releases_the_bytes_it_was_holding(
     repo = StoredFileRepository(session, org.id)
     assert await repo.total_bytes_for_org() == 1024
 
-    await service.delete_file(user_id, presigned["file_id"])
+    await service.delete_file(user_id, presigned["file_id"], anyones=False)
 
     assert await repo.total_bytes_for_org() == 0
 

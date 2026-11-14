@@ -179,18 +179,18 @@ async def _update_member_role(ctx: TenantIsolationContext) -> httpx.Response:
     )
 
 
-async def _remove_member(ctx: TenantIsolationContext) -> httpx.Response:
-    return await ctx.client.delete(
-        f"/api/v1/orgs/{ctx.org_a.id}/members/{ctx.org_b_owner_membership.id}",
+async def _set_member_permissions(ctx: TenantIsolationContext) -> httpx.Response:
+    # As _update_member_role: user_a's own org, org_b's membership.
+    return await ctx.client.put(
+        f"/api/v1/orgs/{ctx.org_a.id}/members/{ctx.org_b_owner_membership.id}/permissions",
+        json={"granted_permissions": ["billing:read"]},
         headers=ctx.user_a_headers,
     )
 
 
-async def _member_avatar(ctx: TenantIsolationContext) -> httpx.Response:
-    # Same shape as _update_member_role: user_a's own org in the path, another
-    # org's membership as the target.
-    return await ctx.client.get(
-        f"/api/v1/orgs/{ctx.org_a.id}/members/{ctx.org_b_owner_membership.id}/avatar",
+async def _remove_member(ctx: TenantIsolationContext) -> httpx.Response:
+    return await ctx.client.delete(
+        f"/api/v1/orgs/{ctx.org_a.id}/members/{ctx.org_b_owner_membership.id}",
         headers=ctx.user_a_headers,
     )
 
@@ -287,8 +287,13 @@ _CASES: list[tuple[str, RequestFn, tuple[int, ...], str | None]] = [
     ("PATCH /orgs/{org_id}", _update_org, (403,), None),
     ("GET /orgs/{org_id}/members", _list_members, (403,), None),
     ("PATCH /orgs/{org_id}/members/{membership_id}", _update_member_role, (404,), None),
+    (
+        "PUT /orgs/{org_id}/members/{membership_id}/permissions",
+        _set_member_permissions,
+        (404,),
+        None,
+    ),
     ("DELETE /orgs/{org_id}/members/{membership_id}", _remove_member, (404,), None),
-    ("GET /orgs/{org_id}/members/{membership_id}/avatar", _member_avatar, (404,), None),
     ("POST /orgs/{org_id}/invitations/{invitation_id}/resend", _resend_invitation, (404,), None),
     ("DELETE /orgs/{org_id}/invitations/{invitation_id}", _revoke_invitation, (404,), None),
     ("POST /orgs/{org_id}/leave", _leave_org, (403,), None),

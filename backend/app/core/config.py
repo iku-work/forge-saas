@@ -344,6 +344,11 @@ class Settings(BaseSettings):
     AWS_ACCESS_KEY_ID: str = ""
     AWS_SECRET_ACCESS_KEY: str = ""
     AWS_ENDPOINT_URL: str | None = None
+    # Where public objects (avatars, under public/) are fetched from without a
+    # signature. Blank means the storage endpoint itself, path-style, which is
+    # right for MinIO. Set it for S3 behind a CDN, or for R2, whose S3
+    # endpoint never serves anonymous reads.
+    PUBLIC_STORAGE_URL: str = ""
     # The absolute per-file ceiling, enforced for every upload whether or
     # not the billing module is on. The plan's own `max_upload_mb` feature
     # is a *product* limit and only exists where there is a plan to read it

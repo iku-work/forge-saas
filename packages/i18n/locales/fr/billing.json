@@ -5,7 +5,8 @@
     "status": "Statut : {status}",
     "badge": "Offre actuelle",
     "free_label": "Gratuit",
-    "plan_label": "Formule"
+    "plan_label": "Formule",
+    "cancels_on": "Prend fin le {date}"
   },
   "available_plans": {
     "title": "Offres disponibles",
@@ -51,5 +52,6 @@
   "checkout": {
     "canceled": "Le paiement a ete annule. Aucun montant ne vous a ete facture."
   },
-  "description": "Votre formule, votre consommation et vos factures."
+  "description": "Votre formule, votre consommation et vos factures.",
+  "cancel_button": "Résilier l’abonnement"
 }

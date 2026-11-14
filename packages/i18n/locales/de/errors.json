@@ -19,6 +19,7 @@
   "org_header_required": "Der Header X-Org-ID ist erforderlich.",
   "not_org_member": "Kein Mitglied dieser Organisation.",
   "missing_permission": "Fehlende Berechtigung: {permission}.",
+  "permission_not_grantable": "{permission} kann nicht einzelnen Mitgliedern gegeben werden. Ändern Sie stattdessen die Rolle.",
   "oauth_exchange_failed": "Der OAuth-Austausch mit {provider} ist fehlgeschlagen.",
   "oauth_no_email": "Das GitHub-Konto hat keine E-Mail-Adresse.",
   "oauth_unknown_provider": "Unbekannter OAuth-Anbieter: {provider}.",
@@ -67,6 +68,7 @@
   "file_count_quota_exceeded": "Dies würde das Limit von {max_files} Dateien in Ihrem Tarif überschreiten.",
   "seat_limit_reached": "Das Mitgliederlimit Ihres Tarifs ist erreicht, und ausstehende Einladungen zählen mit. Führen Sie ein Upgrade durch oder entfernen Sie ein Mitglied oder eine Einladung, um weitere Personen einzuladen.",
   "seat_limit_reached_to_join": "Diese Organisation hat das Mitgliederlimit ihres Tarifs erreicht. Bitten Sie eine Administratorin oder einen Administrator, ein Upgrade durchzuführen oder ein Mitglied zu entfernen.",
+  "free_org_limit_reached": "Sie besitzen bereits {limit} Organisationen im kostenlosen Tarif. Führen Sie für eine davon ein Upgrade durch, um eine weitere zu erstellen.",
   "file_not_uploaded": "Am vorsignierten Speicherort wurde kein Upload gefunden.",
   "file_size_mismatch": "Die Größe der hochgeladenen Datei stimmt nicht mit der angegebenen Größe überein.",
   "upload_changed": "Der Upload wurde während der Bestätigung geändert. Bestätigen Sie ihn erneut.",
@@ -133,5 +135,6 @@
   "file_scan_failed": "Diese Datei konnte nicht auf Schadsoftware geprüft werden und kann daher nicht heruntergeladen werden.",
   "file_infected": "In dieser Datei wurde Schadsoftware gefunden; sie ist nicht mehr verfügbar.",
   "reauth_failed": "Das Passwort oder der Code ist nicht korrekt.",
-  "reauth_wrong_account": "Dieses Konto ist nicht das, mit dem Sie angemeldet sind."
+  "reauth_wrong_account": "Dieses Konto ist nicht das, mit dem Sie angemeldet sind.",
+  "no_subscription_to_cancel": "Diese Organisation hat kein Abonnement, das gekündigt werden kann."
 }

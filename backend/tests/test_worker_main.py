@@ -25,6 +25,7 @@ from redis.asyncio import Redis
 from app.core.config import get_settings
 from app.core.jobs import SCAN_QUEUE_NAME
 from app.workers import main as worker_main
+from app.workers.jobs.avatars import process_avatar
 from app.workers.jobs.billing import send_dunning_email
 from app.workers.jobs.email import send_email
 from app.workers.jobs.encryption import rotate_encryption_keys_job
@@ -95,9 +96,11 @@ def test_worker_settings_has_agreed_shape() -> None:
 
 def test_scans_run_in_their_own_worker_on_their_own_queue() -> None:
     """Review R4: the main worker no longer scans, and the scan worker does
-    nothing else -- a burst of uploads fills scan slots, never email's."""
+    nothing but scan uploads -- a burst of them fills scan slots, never
+    email's. process_avatar is a scan too, and decodes the image there."""
     assert virus_scan not in WorkerSettings.functions
-    assert ScanWorkerSettings.functions == [virus_scan]
+    assert process_avatar not in WorkerSettings.functions
+    assert ScanWorkerSettings.functions == [virus_scan, process_avatar]
     assert ScanWorkerSettings.queue_name == SCAN_QUEUE_NAME
     assert ScanWorkerSettings.queue_name != default_queue_name
     assert ScanWorkerSettings.max_jobs == get_settings().SCAN_MAX_CONCURRENCY

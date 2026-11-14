@@ -7,10 +7,10 @@ must never accept or return a model directly (§0.4's mass-assignment rule).
 from datetime import datetime
 from uuid import UUID
 
-from pydantic import ConfigDict, EmailStr, Field
+from pydantic import ConfigDict, EmailStr, Field, computed_field
 
 from app.core.schemas import AppBaseModel
-from app.modules.auth.permissions import MemberRole
+from app.modules.auth.permissions import MemberRole, Permission, effective_permissions
 
 
 class CreateOrgRequest(AppBaseModel):
@@ -43,10 +43,8 @@ class MemberUserSummary(AppBaseModel):
 
     Enough to draw a row (a name, a picture) and no more. `email` is set only
     for a caller who can manage members (an owner, an admin, or an API key with
-    `members:write`); everyone else gets null. Never the
-    uploaded avatar's object key: `has_uploaded_avatar` only says one exists
-    (the web app fetches a short-lived URL for it with a member's session).
-    `avatar_url` is an OAuth provider's picture, already an absolute URL.
+    `members:write`); everyone else gets null. `avatar_url` is the uploaded
+    avatar's public URL, else an OAuth provider's picture.
     """
 
     full_name: str | None
@@ -64,13 +62,28 @@ class MembershipPublic(AppBaseModel):
     role: MemberRole
     invited_by: UUID | None
     created_at: datetime
+    granted_permissions: list[str]
     # Null only when the user row is gone (soft-deleted) and the membership
     # is not yet: the GDPR purge removes both, but not in one statement.
     user: MemberUserSummary | None = None
 
+    @computed_field  # type: ignore[prop-decorator]  # pydantic's documented form, which mypy does not model
+    @property
+    def permissions(self) -> list[str]:
+        """What this member can do: the role's permissions and the grants.
+        The web app gates its UI on this rather than re-deriving it."""
+        return sorted(p.value for p in effective_permissions(self.role, self.granted_permissions))
+
 
 class UpdateMembershipRequest(AppBaseModel):
     role: MemberRole
+
+
+class UpdateGrantsRequest(AppBaseModel):
+    # The whole set, not a diff: what the member can do afterwards is what
+    # the form showed. Grantability is the service's check, so a request for
+    # members:manage is told which permission was refused.
+    granted_permissions: list[Permission] = Field(max_length=len(Permission))
 
 
 class InviteRequest(AppBaseModel):
