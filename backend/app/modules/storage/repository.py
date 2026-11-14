@@ -16,7 +16,7 @@ which is the guarantee a gate actually needs.
 Adds its own list_cursor-shaped method (list_cursor_filtered) instead of
 using BaseRepository.list_cursor directly, since the spec's `GET /files`
 needs an optional `bucket` filter BaseRepository's generic version has no way
-to express -- same reasoning as NotificationRepository.list_for_user's own
+to express -- same reasoning as NotificationRepository.list_page's own
 unread_only filter.
 """
 

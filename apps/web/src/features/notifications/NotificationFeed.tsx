@@ -20,17 +20,30 @@ interface NotificationFeedProps {
   isLoadingMore: boolean;
   onLoadMore: () => void;
   onMarkRead: (id: string) => void;
+  /** Org names by id, given only when the reader is in more than one org:
+   *  the inbox spans all of them, so each row says where it came from. */
+  orgNames?: ReadonlyMap<string, string> | undefined;
+  /** Called before following a notification's link, so the app can switch
+   *  to the org the notification belongs to. */
+  onOpen?: ((notification: NotificationPublic) => void) | undefined;
 }
 
 function NotificationRow({
   notification,
   onMarkRead,
+  orgNames,
+  onOpen,
 }: {
   notification: NotificationPublic;
   onMarkRead: (id: string) => void;
+  orgNames?: ReadonlyMap<string, string> | undefined;
+  onOpen?: ((notification: NotificationPublic) => void) | undefined;
 }) {
   const { t, i18n } = useTranslation();
   const isUnread = notification.read_at === null;
+  const orgName = notification.org_id
+    ? orgNames?.get(notification.org_id)
+    : undefined;
 
   return (
     <div
@@ -57,14 +70,25 @@ function NotificationRow({
       </div>
       <p className="text-muted-foreground">{notification.body}</p>
       <div className="flex items-center justify-between gap-2">
-        <span className="text-xs text-muted-foreground">
-          {formatRelativeTime(notification.created_at, i18n.language)}
+        <span className="flex min-w-0 gap-2 text-xs text-muted-foreground">
+          {orgName ? (
+            <span
+              className="truncate font-medium"
+              data-testid="notification-org"
+            >
+              {orgName}
+            </span>
+          ) : null}
+          <span className="shrink-0">
+            {formatRelativeTime(notification.created_at, i18n.language)}
+          </span>
         </span>
         {notification.action_url ? (
           <a
             href={notification.action_url}
             className="text-xs font-medium text-primary underline-offset-4 hover:underline"
             onClick={() => {
+              onOpen?.(notification);
               if (isUnread) {
                 onMarkRead(notification.id);
               }
@@ -86,6 +110,8 @@ export function NotificationFeed({
   isLoadingMore,
   onLoadMore,
   onMarkRead,
+  orgNames,
+  onOpen,
 }: NotificationFeedProps) {
   const { t } = useTranslation();
 
@@ -134,6 +160,8 @@ export function NotificationFeed({
           <NotificationRow
             notification={notification}
             onMarkRead={onMarkRead}
+            orgNames={orgNames}
+            onOpen={onOpen}
           />
         )}
       />

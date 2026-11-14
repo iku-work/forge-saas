@@ -1,8 +1,8 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Bell } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
-import { useNotifications } from "@forge/hooks";
+import { useNotifications, useOrg } from "@forge/hooks";
 import {
   Badge,
   Button,
@@ -21,6 +21,16 @@ const MAX_BADGE_COUNT = 99;
 export function NotificationBell() {
   const { t } = useTranslation();
   const [open, setOpen] = useState(false);
+  const { orgs, org, switchOrg } = useOrg();
+  // One inbox across every org the user is in. With a single org there is
+  // nothing to tell apart, so rows carry no label.
+  const orgNames = useMemo(
+    () =>
+      orgs.length > 1
+        ? new Map(orgs.map((candidate) => [candidate.id, candidate.name]))
+        : undefined,
+    [orgs],
+  );
 
   const {
     notifications,
@@ -116,6 +126,15 @@ export function NotificationBell() {
           hasMore={hasMore}
           isLoadingMore={isLoadingMore}
           onLoadMore={loadMore}
+          orgNames={orgNames}
+          onOpen={(notification) => {
+            // The link is followed with a full page load, which picks the
+            // org up from storage -- switching first opens it in the org the
+            // notification is about rather than whichever one is active.
+            if (notification.org_id && notification.org_id !== org?.id) {
+              switchOrg(notification.org_id);
+            }
+          }}
           onMarkRead={(id) => {
             // F-009: act now, offer the way back -- rather than asking first.
             // Marking read is reversible and low-stakes, so a confirmation

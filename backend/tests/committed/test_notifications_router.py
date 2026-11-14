@@ -1,6 +1,6 @@
 """
-Verifies T-103's REST surface for the notifications module: listing (org +
-user scoped, with unread_only filtering), mark-read/mark-all-read (both
+Verifies T-103's REST surface for the notifications module: listing (one
+inbox per user, with unread_only filtering), mark-read/mark-all-read (both
 scoped to the caller's own notifications -- a notification belonging to
 another user in the same org is indistinguishable from a missing one),
 unread-count (and that mark-read invalidates its Redis cache), and editing
@@ -108,15 +108,59 @@ async def test_list_notifications_requires_auth(
     assert response.status_code == 401
 
 
-async def test_list_notifications_requires_org_header(
-    client: httpx.AsyncClient, owner: User
+async def test_the_inbox_needs_no_org_and_spans_every_org(
+    client: httpx.AsyncClient, session: AsyncSession, owner: User, org: Organization
 ) -> None:
-    token = create_access_token(owner.id, None, ())
-    response = await client.get(
-        "/api/v1/notifications", headers={"Authorization": f"Bearer {token}"}
+    """One inbox per user: no X-Org-ID, items from each org the caller is in
+    plus personal ones, and the org each came from so a client can label it."""
+    second = Organization(name="Globex", slug=f"globex-{uuid4().hex[:8]}")
+    session.add(second)
+    await session.flush()
+    session.add(Membership(user_id=owner.id, org_id=second.id, role=MemberRole.MEMBER))
+    await session.commit()
+    await _make_notification(session, org, owner)
+    await _make_notification(session, second, owner)
+    personal = Notification(
+        user_id=owner.id, type="member_invited", title="t", body="b", channels=["in_app"]
     )
+    session.add(personal)
+    await session.commit()
+    token = create_access_token(owner.id, None, ())
+    auth = {"Authorization": f"Bearer {token}"}
 
-    assert response.status_code == 400
+    listed = await client.get("/api/v1/notifications", headers=auth)
+    count = await client.get("/api/v1/notifications/unread-count", headers=auth)
+
+    assert listed.status_code == 200
+    assert {item["org_id"] for item in listed.json()["data"]} == {
+        str(org.id),
+        str(second.id),
+        None,
+    }
+    assert count.json()["data"]["count"] == 3
+
+
+async def test_an_org_the_user_left_takes_its_notifications_with_it(
+    client: httpx.AsyncClient, session: AsyncSession, org: Organization
+) -> None:
+    member = await _add_member(session, org)
+    notification = await _make_notification(session, org, member)
+    notification_id = notification.id
+    membership = (
+        await session.execute(select(Membership).where(Membership.user_id == member.id))
+    ).scalar_one()
+    await session.delete(membership)
+    await session.commit()
+    token = create_access_token(member.id, None, ())
+    auth = {"Authorization": f"Bearer {token}"}
+
+    listed = await client.get("/api/v1/notifications", headers=auth)
+    count = await client.get("/api/v1/notifications/unread-count", headers=auth)
+    read = await client.patch(f"/api/v1/notifications/{notification_id}/read", headers=auth)
+
+    assert listed.json()["data"] == []
+    assert count.json()["data"]["count"] == 0
+    assert read.status_code == 404
 
 
 async def test_list_notifications_returns_only_callers_own(

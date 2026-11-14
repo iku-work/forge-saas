@@ -159,7 +159,19 @@ async def test_composite_indexes_present(migrated_session: AsyncSession) -> None
     )
     index_names = {row[0] for row in result.fetchall()}
     assert "ix_notification_user_id_read_at" in index_names
-    assert "ix_notification_org_id_user_id_created_at_id" in index_names
+    assert "ix_notification_user_id_created_at_id" in index_names
+    assert "ix_notification_user_id_idempotency_key" in index_names
+
+
+async def test_org_id_is_optional(migrated_session: AsyncSession) -> None:
+    # A notification about the person themselves has no org.
+    result = await migrated_session.execute(
+        text(
+            "SELECT is_nullable FROM information_schema.columns "
+            "WHERE table_name = 'notification' AND column_name = 'org_id'"
+        )
+    )
+    assert result.scalar_one() == "YES"
 
 
 async def test_push_token_token_unique_index_present(migrated_session: AsyncSession) -> None:

@@ -270,18 +270,16 @@ async def _list_files(ctx: TenantIsolationContext) -> httpx.Response:
     )
 
 
-async def _list_notifications(ctx: TenantIsolationContext) -> httpx.Response:
-    return await ctx.client.get(
-        "/api/v1/notifications", headers={**ctx.user_a_headers, "X-Org-ID": str(ctx.org_b.id)}
-    )
-
-
 # (test id, request builder, status codes that prove isolation held, owning
 # module). The last field is None for the always-on tenancy surface and a
 # module name for an endpoint that only exists while that module is enabled --
 # T-291 uses it to keep the seven core cases running in CI's module-matrix
 # combination that turns every optional module off, where the other seven
 # endpoints have no route to sweep.
+#
+# /notifications is not here: it is one inbox per user and reads no X-Org-ID.
+# Its boundary (another user's items, an org the user has left) is tested in
+# test_notifications_repository.py and test_notifications_router.py.
 _CASES: list[tuple[str, RequestFn, tuple[int, ...], str | None]] = [
     ("GET /orgs/{org_id}", _get_org, (403,), None),
     ("PATCH /orgs/{org_id}", _update_org, (403,), None),
@@ -305,7 +303,6 @@ _CASES: list[tuple[str, RequestFn, tuple[int, ...], str | None]] = [
     ("GET /orgs/{org_id}/feature-flags", _get_feature_flags, (403,), "feature_flags"),
     ("POST /files/presign", _presign_file_upload, (403,), "file_storage"),
     ("GET /files", _list_files, (403,), "file_storage"),
-    ("GET /notifications", _list_notifications, (403,), "notifications"),
 ]
 
 

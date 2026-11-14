@@ -6,10 +6,11 @@ preferences. Named sse.py rather than router.py because the live stream is
 the reason this file exists -- same one-extra-file-per-concern pattern as
 app.modules.auth.oauth/totp sitting next to auth's own router.py.
 
-The stream endpoint subscribes per *user*, not per org+user
-(app.modules.notifications.service.IN_APP_CHANNEL_PREFIX has no org segment)
--- one open tab gets every org's notifications for that user, mirroring how
-a single browser session can hold membership in several orgs at once.
+Everything here is per *user*, not per org: the feed, the unread count and
+the stream (app.modules.notifications.service.IN_APP_CHANNEL_PREFIX has no
+org segment). One inbox holds every org's notifications for that user,
+mirroring how a single browser session can hold membership in several orgs
+at once; NotificationRepository hides those from an org they have left.
 
 Concurrency, not request-rate, is what needs capping on a connection that
 stays open indefinitely, so neither this endpoint nor _event_stream go
@@ -49,7 +50,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import get_settings
 from app.core.db import get_session
 from app.core.dependencies import (
-    get_current_org,
     get_current_user,
     get_redis,
     invalidate_user_cache,
@@ -73,7 +73,6 @@ from app.modules.notifications.schemas import (
     UnreadCountResponse,
 )
 from app.modules.notifications.service import IN_APP_CHANNEL_PREFIX
-from app.modules.tenancy.models import Membership, Organization
 
 router = APIRouter(tags=["notifications"])
 
@@ -247,7 +246,7 @@ async def stream_notifications(
 @api_limit
 async def list_notifications(  # noqa: PLR0913 -- cursor pagination (§0.3) needs after+limit on top of the usual params
     request: Request,
-    org_and_membership: Annotated[tuple[Organization, Membership], Depends(get_current_org)],
+    user: Annotated[User, Depends(get_current_user)],
     session: Annotated[AsyncSession, Depends(get_session)],
     redis: Annotated[Redis, Depends(get_redis)],
     locale: Annotated[str, Depends(get_locale)],
@@ -255,11 +254,8 @@ async def list_notifications(  # noqa: PLR0913 -- cursor pagination (§0.3) need
     limit: Annotated[int, Query(ge=1, le=100)] = 20,
     unread_only: Annotated[bool, Query()] = False,
 ) -> Envelope[list[NotificationPublic]]:
-    org, membership = org_and_membership
-    repo = NotificationRepository(session, org.id, redis)
-    notifications, next_cursor = await repo.list_for_user(
-        membership.user_id, after, limit, unread_only=unread_only
-    )
+    repo = NotificationRepository(session, user.id, redis)
+    notifications, next_cursor = await repo.list_page(after, limit, unread_only=unread_only)
     data = [_public(n, locale) for n in notifications]
     meta = Meta(
         request_id=_request_id(request),
@@ -276,14 +272,13 @@ async def list_notifications(  # noqa: PLR0913 -- cursor pagination (§0.3) need
 async def mark_notification_read(  # noqa: PLR0913 -- the usual router param set plus the reader's locale (T-234)
     request: Request,
     notification_id: UUID,
-    org_and_membership: Annotated[tuple[Organization, Membership], Depends(get_current_org)],
+    user: Annotated[User, Depends(get_current_user)],
     session: Annotated[AsyncSession, Depends(get_session)],
     redis: Annotated[Redis, Depends(get_redis)],
     locale: Annotated[str, Depends(get_locale)],
 ) -> Envelope[NotificationPublic]:
-    org, membership = org_and_membership
-    repo = NotificationRepository(session, org.id, redis)
-    notification = await repo.mark_read(notification_id, membership.user_id)
+    repo = NotificationRepository(session, user.id, redis)
+    notification = await repo.mark_read(notification_id)
     await session.commit()
     return Envelope(
         data=_public(notification, locale),
@@ -299,7 +294,7 @@ async def mark_notification_read(  # noqa: PLR0913 -- the usual router param set
 async def mark_notification_unread(  # noqa: PLR0913 -- the usual router param set plus the reader's locale (T-234)
     request: Request,
     notification_id: UUID,
-    org_and_membership: Annotated[tuple[Organization, Membership], Depends(get_current_org)],
+    user: Annotated[User, Depends(get_current_user)],
     session: Annotated[AsyncSession, Depends(get_session)],
     redis: Annotated[Redis, Depends(get_redis)],
     locale: Annotated[str, Depends(get_locale)],
@@ -311,9 +306,8 @@ async def mark_notification_unread(  # noqa: PLR0913 -- the usual router param s
     user's own, and a superadmin acting as them must not quietly change what
     they have and have not seen -- in either direction.
     """
-    org, membership = org_and_membership
-    repo = NotificationRepository(session, org.id, redis)
-    notification = await repo.mark_unread(notification_id, membership.user_id)
+    repo = NotificationRepository(session, user.id, redis)
+    notification = await repo.mark_unread(notification_id)
     await session.commit()
     return Envelope(
         data=_public(notification, locale),
@@ -328,13 +322,12 @@ async def mark_notification_unread(  # noqa: PLR0913 -- the usual router param s
 @api_limit
 async def mark_all_notifications_read(
     request: Request,
-    org_and_membership: Annotated[tuple[Organization, Membership], Depends(get_current_org)],
+    user: Annotated[User, Depends(get_current_user)],
     session: Annotated[AsyncSession, Depends(get_session)],
     redis: Annotated[Redis, Depends(get_redis)],
 ) -> Envelope[MarkAllReadResponse]:
-    org, membership = org_and_membership
-    repo = NotificationRepository(session, org.id, redis)
-    updated = await repo.mark_all_read(membership.user_id)
+    repo = NotificationRepository(session, user.id, redis)
+    updated = await repo.mark_all_read()
     await session.commit()
     return Envelope(
         data=MarkAllReadResponse(updated=updated), meta=Meta(request_id=_request_id(request))
@@ -345,13 +338,12 @@ async def mark_all_notifications_read(
 @api_limit
 async def get_unread_count(
     request: Request,
-    org_and_membership: Annotated[tuple[Organization, Membership], Depends(get_current_org)],
+    user: Annotated[User, Depends(get_current_user)],
     session: Annotated[AsyncSession, Depends(get_session)],
     redis: Annotated[Redis, Depends(get_redis)],
 ) -> Envelope[UnreadCountResponse]:
-    org, membership = org_and_membership
-    repo = NotificationRepository(session, org.id, redis)
-    count = await repo.unread_count(membership.user_id)
+    repo = NotificationRepository(session, user.id, redis)
+    count = await repo.unread_count()
     return Envelope(
         data=UnreadCountResponse(count=count), meta=Meta(request_id=_request_id(request))
     )
