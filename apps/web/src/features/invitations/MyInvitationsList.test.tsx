@@ -81,10 +81,13 @@ describe("MyInvitationsList", () => {
     serve([ACME, GLOBEX]);
     renderList();
 
-    const rows = await screen.findAllByTestId("my-invitation-row");
-    expect(rows).toHaveLength(2);
-    expect(within(rows[0]!).getByText("Acme")).toBeInTheDocument();
-    expect(within(rows[0]!).getByText("Join as Admin")).toBeInTheDocument();
+    const [acme, globex] = await screen.findAllByTestId("my-invitation-row");
+    expect(acme).toBeDefined();
+    expect(globex).toBeDefined();
+    if (!acme || !globex) return;
+    expect(within(acme).getByText("Acme")).toBeInTheDocument();
+    expect(within(acme).getByText("Join as Admin")).toBeInTheDocument();
+    expect(within(globex).getByText("Join as Member")).toBeInTheDocument();
   });
 
   it("joins, opens the org and leaves the page on accept", async () => {
