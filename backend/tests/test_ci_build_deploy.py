@@ -6,6 +6,7 @@ import shutil
 import subprocess
 from pathlib import Path
 
+import httpx
 import pytest
 import yaml
 from dotenv import dotenv_values
@@ -130,6 +131,25 @@ def test_zap_full_scan_skips_routes_that_mail_a_chosen_address(path: str) -> Non
     plan = yaml.safe_load((REPO_ROOT / ".zap" / "full-scan.yaml").read_text())
     excluded = plan["env"]["contexts"][0]["excludePaths"]
     assert any(re.fullmatch(p.replace("${STAGING_URL}", ""), path) for p in excluded)
+
+
+# ZAP logs in again on every response its loggedOut indicator matches, and staging
+# allows five sign-ins a minute. Only the scanner's own bearer being refused may match.
+async def test_zap_full_scan_logs_in_again_only_for_a_rejected_bearer(
+    client: httpx.AsyncClient,
+) -> None:
+    plan = yaml.safe_load((REPO_ROOT / ".zap" / "full-scan.yaml").read_text())
+    java = plan["env"]["contexts"][0]["authentication"]["verification"]["loggedOutRegex"]
+    logged_out = re.compile(re.sub(r"\\Q(.*?)\\E", lambda m: re.escape(m[1]), java))
+
+    bad_bearer = await client.get(
+        "/api/v1/auth/me", headers={"Authorization": "Bearer not-a-real-jwt"}
+    )
+    other_401 = await client.post("/api/v1/auth/refresh")
+
+    assert bad_bearer.status_code == other_401.status_code == 401
+    assert logged_out.search(bad_bearer.text)
+    assert not logged_out.search(other_401.text)
 
 
 def test_zap_full_scan_ends_before_its_job_does() -> None:
