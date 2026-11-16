@@ -37,13 +37,12 @@ minimumReleaseAgeExclude:
   - '@sentry/react-native@8.17.2'
   # 2026-10-31: security fixes taken before the one-week minimum release age
   # (npm-update.yml) because each closes a high-severity advisory: joi
-  # CVE-2026-118772 (email-validation ReDoS) and node-forge CVE-2026-118779
-  # and four more (TLS and ASN.1 parsing DoS). Pinned to exact versions so
+  # CVE-2026-118772 (email-validation ReDoS). (node-forge had an entry here
+  # too until 2026-11-16, when its floor moved past the release age.) Pinned to exact versions so
   # the exemption covers these releases and nothing published after them.
   # One entry per package: pnpm keeps only the first entry for a name, so
   # several versions of one package are joined with `||` in that entry.
   - "joi@17.13.9 || 18.3.1"
-  - "node-forge@1.4.1 || 1.4.2"
   # follow-redirects GHSA-mrwp-f3q8-3g9p (high), same reasoning.
   - "follow-redirects@1.16.2"
 overrides:
@@ -165,7 +164,17 @@ overrides:
   # also listed in minimumReleaseAgeExclude above.
   "joi@17": ">=17.13.9 <18"
   "joi@18": ">=18.3.1 <19"
-  "node-forge@1": ">=1.4.1 <2"
+  # 2026-11-16: raised to 1.4.3 for four more advisories (GHSA-6889-vf6x-f3g5,
+  # -w4xr-hqv8-ch44, -6cv4-p8m7-4r25, -j8rw-jp99-435v: Ed25519, TLS and header
+  # parsing). 1.4.3 is past the minimum release age, so it needs no exemption.
+  "node-forge@1": ">=1.4.3 <2"
+  # 2026-11-16: GHSA-r4jh-29pc-gfqr and GHSA-5pm8-86m8-9m6r (DoS) cover every
+  # 5.x, and the fixes exist only on 6.x, while get-uri (Lighthouse CI's proxy
+  # support, never used for ftp here) still asks for ^5. This crosses a major
+  # on purpose, like minimatch above: 6.0's one breaking change refuses a
+  # separate transfer host by default (an FTP bounce defence), and the five
+  # Client methods get-uri calls are unchanged.
+  "basic-ftp@5": ">=6.2.4 <7"
   # Found by `pnpm audit`, which reads the GitHub advisory database and so
   # sees a different (larger) set than trivy does. Same rule as above: each
   # stays inside the major its consumers asked for.
