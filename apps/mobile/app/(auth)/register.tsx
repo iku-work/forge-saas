@@ -13,11 +13,13 @@ import { Button } from "../../src/components/Button";
 import { FormField } from "../../src/components/FormField";
 import { register } from "../../src/lib/auth";
 import { getErrorMessage } from "../../src/lib/getErrorMessage";
+import { useCaptcha } from "../../src/lib/useCaptcha";
 
 export default function RegisterScreen() {
   const { t } = useTranslation();
   const [formError, setFormError] = useState<string | null>(null);
   const [submitted, setSubmitted] = useState(false);
+  const captcha = useCaptcha();
 
   const { control, handleSubmit, formState } = useForm<RegisterInput>({
     resolver: zodResolver(registerSchema),
@@ -27,10 +29,11 @@ export default function RegisterScreen() {
   const onSubmit = async (values: RegisterInput): Promise<void> => {
     setFormError(null);
     try {
-      await register(values.email, values.password);
+      await register(values.email, values.password, captcha.token);
       setSubmitted(true);
     } catch (error) {
       setFormError(getErrorMessage(error, "auth.register.error_default"));
+      captcha.reset();
     }
   };
 
@@ -86,6 +89,7 @@ export default function RegisterScreen() {
         secureTextEntry
         autoComplete="new-password"
       />
+      {captcha.widget}
       <Button
         label={
           formState.isSubmitting
@@ -93,7 +97,7 @@ export default function RegisterScreen() {
             : t("auth.register.submit")
         }
         hint={t("auth.register.submit_hint")}
-        disabled={formState.isSubmitting}
+        disabled={formState.isSubmitting || !captcha.ready}
         onPress={() => {
           void handleSubmit(onSubmit)();
         }}

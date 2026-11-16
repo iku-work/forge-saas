@@ -103,6 +103,23 @@ def get_free_org_cap() -> int | None:
 
 
 @lru_cache(maxsize=1)
+def get_email_domain_rules() -> tuple[frozenset[str], frozenset[str]]:
+    """`(blocked, allowed)` email domains the product adds to, or exempts
+    from, the bundled disposable list. Read with defaults: a config.py from
+    before these settings existed has neither."""
+    import product.config as product_config  # noqa: PLC0415 -- see get_branding()
+
+    def _domains(name: str) -> frozenset[str]:
+        value: object = getattr(product_config, name, ())
+        if not isinstance(value, (tuple, list)) or not all(isinstance(d, str) for d in value):
+            msg = f"{name} must be a tuple of domain strings. Fix it in backend/product/config.py"
+            raise RuntimeError(msg)
+        return frozenset(d.strip().lower().lstrip("@") for d in value if d.strip())
+
+    return _domains("BLOCKED_EMAIL_DOMAINS"), _domains("ALLOWED_EMAIL_DOMAINS")
+
+
+@lru_cache(maxsize=1)
 def get_support_config() -> SupportConfig:
     """T-262: which support tool the product wired up, plus the URL every
     frontend falls back to when there's no widget to open (mobile always,

@@ -17,11 +17,13 @@ import { Button } from "../../src/components/Button";
 import { FormField } from "../../src/components/FormField";
 import { client } from "../../src/lib/api";
 import { getErrorMessage } from "../../src/lib/getErrorMessage";
+import { useCaptcha } from "../../src/lib/useCaptcha";
 
 export default function ForgotPasswordScreen() {
   const { t } = useTranslation();
   const [formError, setFormError] = useState<string | null>(null);
   const [submitted, setSubmitted] = useState(false);
+  const captcha = useCaptcha();
 
   const { control, handleSubmit, formState } = useForm<ForgotPasswordInput>({
     resolver: zodResolver(forgotPasswordSchema),
@@ -33,7 +35,9 @@ export default function ForgotPasswordScreen() {
     try {
       await forgotPasswordApiV1AuthForgotPasswordPost({
         client,
-        body: values,
+        body: captcha.token
+          ? { ...values, captcha_token: captcha.token }
+          : values,
         throwOnError: true,
       });
       setSubmitted(true);
@@ -41,6 +45,7 @@ export default function ForgotPasswordScreen() {
       setFormError(
         getErrorMessage(error, "auth.forgot_password.error_default"),
       );
+      captcha.reset();
     }
   };
 
@@ -78,6 +83,7 @@ export default function ForgotPasswordScreen() {
         autoComplete="email"
         keyboardType="email-address"
       />
+      {captcha.widget}
       <Button
         label={
           formState.isSubmitting
@@ -85,7 +91,7 @@ export default function ForgotPasswordScreen() {
             : t("auth.forgot_password.submit")
         }
         hint={t("auth.forgot_password.submit_hint")}
-        disabled={formState.isSubmitting}
+        disabled={formState.isSubmitting || !captcha.ready}
         onPress={() => {
           void handleSubmit(onSubmit)();
         }}

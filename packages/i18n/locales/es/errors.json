@@ -137,5 +137,8 @@
   "reauth_failed": "La contraseña o el código no son correctos.",
   "reauth_wrong_account": "Esa cuenta no es con la que has iniciado sesión.",
   "no_subscription_to_cancel": "Esta organización no tiene ninguna suscripción que cancelar.",
-  "invitation_needs_verified_email": "Verifica tu dirección de correo para aceptar invitaciones aquí, o usa el enlace del correo de invitación."
+  "invitation_needs_verified_email": "Verifica tu dirección de correo para aceptar invitaciones aquí, o usa el enlace del correo de invitación.",
+  "captcha_required": "Completa la comprobación de seguridad antes de continuar.",
+  "captcha_failed": "La comprobación de seguridad no se superó. Inténtalo de nuevo.",
+  "email_domain_not_allowed": "Usa una dirección de correo permanente: esta es de un servicio de correo desechable."
 }

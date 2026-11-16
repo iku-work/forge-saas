@@ -98,6 +98,7 @@ interface ConfigState {
   banner: GlobalBanner | null;
   maintenance: MaintenanceState;
   signupDisabled: boolean;
+  turnstileSiteKey: string | null;
 }
 
 // Module-scoped store (not React Context) so every useModules() call site
@@ -111,6 +112,7 @@ let state: ConfigState = {
   banner: null,
   maintenance: NO_MAINTENANCE,
   signupDisabled: false,
+  turnstileSiteKey: null,
 };
 const listeners = new Set<() => void>();
 
@@ -159,6 +161,10 @@ function getSignupDisabledSnapshot(): boolean {
   return state.signupDisabled;
 }
 
+function getTurnstileSiteKeySnapshot(): string | null {
+  return state.turnstileSiteKey;
+}
+
 // The active module set never changes at runtime -- it's redeploy-only -- so
 // one fetch per page load is cached for every useModules()/route-guard
 // caller, same as useAuth's bootstrap(). Exported (as bootstrapModules) so a
@@ -184,6 +190,7 @@ async function fetchConfig(): Promise<void> {
         banner: envelope.data.banner ?? null,
         maintenance: envelope.data.maintenance,
         signupDisabled: envelope.data.signup_disabled ?? false,
+        turnstileSiteKey: envelope.data.turnstile_site_key ?? null,
       });
     }
   } catch {
@@ -339,4 +346,18 @@ export function useSignupDisabled(): boolean {
   }, []);
 
   return useSyncExternalStore(subscribeConfig, getSignupDisabledSnapshot);
+}
+
+/**
+ * Cloudflare Turnstile's public site key, or null when the check is off.
+ * With a key, sign-up, magic link and forgot password show the widget and
+ * send its token; the server refuses them without one. Not polled, like
+ * useSignupDisabled: it only changes with a deploy.
+ */
+export function useTurnstileSiteKey(): string | null {
+  useEffect(() => {
+    void bootstrapModules();
+  }, []);
+
+  return useSyncExternalStore(subscribeConfig, getTurnstileSiteKeySnapshot);
 }

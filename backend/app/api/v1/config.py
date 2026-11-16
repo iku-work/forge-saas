@@ -112,6 +112,10 @@ class ConfigResponse(BaseModel):
     banner: GlobalBannerResponse | None = None
     maintenance: MaintenanceResponse
     signup_disabled: bool = False
+    # Cloudflare Turnstile's public site key, or null when the check is off.
+    # With a key, sign-up, magic link and forgot password show the widget and
+    # send its token (app.modules.auth.captcha).
+    turnstile_site_key: str | None = None
 
 
 def _request_id(request: Request) -> str:
@@ -184,5 +188,6 @@ async def get_config(
             message=product_settings.maintenance_message(runtime, fallback=""),
         ),
         signup_disabled=product_settings.is_signup_disabled(runtime),
+        turnstile_site_key=get_settings().TURNSTILE_SITE_KEY or None,
     )
     return Envelope(data=data, meta=Meta(request_id=_request_id(request)))

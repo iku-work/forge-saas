@@ -61,6 +61,13 @@ processors, then replace both files.
 | Stripe, live mode | Taking money | `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `stripe-usage-pricing.md`, `billing-drift.md` |
 | Google and GitHub sign-in | Those buttons | The OAuth client IDs and secrets, with `https://<your app host>/api/v1/auth/oauth/<google or github>/callback` as the redirect |
 | Sentry | Finding out about errors | One project for the backend and one for the browser |
+| Cloudflare Turnstile | Bots signing up, and sending magic-link and password-reset mail to any address | A Turnstile widget in Cloudflare, with your app host **and your API host** as allowed hostnames (the mobile app's check runs from the API's origin). `TURNSTILE_SITE_KEY` in `deploy/<environment>.env`, `TURNSTILE_SECRET_KEY` in Bitwarden. Both or neither: one alone stops the backend starting |
+
+Sign-up and email change also refuse disposable email domains, from the bundled list in
+`backend/app/modules/auth/disposable_domains.txt`. Add or exempt domains with
+`BLOCKED_EMAIL_DOMAINS` and `ALLOWED_EMAIL_DOMAINS` in `backend/product/config.py`, and
+refresh the list now and then with `python scripts/update_disposable_domains.py` (from
+`backend/`).
 
 Use the staging server (`staging.md`) to try these before live mode: its own Stripe
 sandbox, Google client and Resend key.

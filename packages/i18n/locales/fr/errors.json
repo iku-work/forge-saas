@@ -137,5 +137,8 @@
   "reauth_failed": "Le mot de passe ou le code est incorrect.",
   "reauth_wrong_account": "Ce compte n'est pas celui avec lequel vous êtes connecté.",
   "no_subscription_to_cancel": "Cette organisation n’a aucun abonnement à résilier.",
-  "invitation_needs_verified_email": "Vérifiez votre adresse e-mail pour accepter les invitations ici, ou utilisez le lien de l’e-mail d’invitation."
+  "invitation_needs_verified_email": "Vérifiez votre adresse e-mail pour accepter les invitations ici, ou utilisez le lien de l’e-mail d’invitation.",
+  "captcha_required": "Effectuez la vérification de sécurité avant de continuer.",
+  "captcha_failed": "La vérification de sécurité a échoué. Réessayez.",
+  "email_domain_not_allowed": "Utilisez une adresse e-mail permanente : celle-ci provient d’un service d’e-mail jetable."
 }

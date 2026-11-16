@@ -321,6 +321,16 @@ def test_the_app_csp_keeps_script_src_strict() -> None:
     assert "'unsafe-eval'" not in script_src
 
 
+def test_the_app_csp_lets_turnstile_load_and_nothing_wider() -> None:
+    # Sign-up, magic link and forgot password embed Cloudflare Turnstile: its
+    # script and its iframe come from one host, named, never a wildcard.
+    csp = next(line for line in _app_site_block().splitlines() if "Content-Security-Policy" in line)
+    for directive in ("script-src", "frame-src"):
+        sources = csp.split(f"{directive} ")[1].split(";")[0].split()
+        assert "https://challenges.cloudflare.com" in sources, directive
+        assert not any("*" in source for source in sources), directive
+
+
 def test_the_app_csp_only_sends_data_to_hosts_it_names() -> None:
     # M7: with `connect-src https:`, an XSS could post anything anywhere.
     csp = next(line for line in _app_site_block().splitlines() if "Content-Security-Policy" in line)

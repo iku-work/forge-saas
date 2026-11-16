@@ -56,6 +56,15 @@ SUPPORT_URL: str | None = None
 # message telling the user to upgrade one of theirs. None means no limit.
 MAX_FREE_ORGS_PER_USER: int | None = 3
 
+# ── Sign-up ─────────────────────────────────────────────────────────────────
+# Sign-up and email change refuse addresses at disposable-email domains, from
+# the bundled list in backend/app/modules/auth/disposable_domains.txt
+# (refreshed by scripts/update_disposable_domains.py). These two adjust it for
+# this product: domains to refuse as well, and domains to accept anyway. A
+# domain covers its subdomains. Lower-case, without the "@".
+BLOCKED_EMAIL_DOMAINS: tuple[str, ...] = ()
+ALLOWED_EMAIL_DOMAINS: tuple[str, ...] = ()
+
 # ── Internationalisation ────────────────────────────────────────────────────
 LOCALES = EnabledLocales(
     en=LocaleConfig(enabled=True),

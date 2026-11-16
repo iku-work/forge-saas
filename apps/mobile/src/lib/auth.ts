@@ -169,10 +169,16 @@ export async function completeTwoFactorLogin(
   return payload.user;
 }
 
-export async function register(email: string, password: string): Promise<void> {
+export async function register(
+  email: string,
+  password: string,
+  captchaToken?: string | null,
+): Promise<void> {
   await registerApiV1AuthRegisterPost({
     client,
-    body: { email, password },
+    body: captchaToken
+      ? { email, password, captcha_token: captchaToken }
+      : { email, password },
     throwOnError: true,
   });
 }

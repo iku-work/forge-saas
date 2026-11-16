@@ -137,5 +137,8 @@
   "reauth_failed": "Das Passwort oder der Code ist nicht korrekt.",
   "reauth_wrong_account": "Dieses Konto ist nicht das, mit dem Sie angemeldet sind.",
   "no_subscription_to_cancel": "Diese Organisation hat kein Abonnement, das gekündigt werden kann.",
-  "invitation_needs_verified_email": "Bestätigen Sie Ihre E-Mail-Adresse, um Einladungen hier anzunehmen, oder verwenden Sie den Link in der Einladungs-E-Mail."
+  "invitation_needs_verified_email": "Bestätigen Sie Ihre E-Mail-Adresse, um Einladungen hier anzunehmen, oder verwenden Sie den Link in der Einladungs-E-Mail.",
+  "captcha_required": "Schließen Sie die Sicherheitsprüfung ab, bevor Sie fortfahren.",
+  "captcha_failed": "Die Sicherheitsprüfung ist fehlgeschlagen. Versuchen Sie es noch einmal.",
+  "email_domain_not_allowed": "Verwenden Sie eine dauerhafte E-Mail-Adresse: Diese stammt von einem Wegwerf-E-Mail-Dienst."
 }
