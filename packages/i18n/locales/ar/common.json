@@ -313,7 +313,35 @@
       "raw_invalid_json": "هذا ليس JSON صالحًا.",
       "raw_not_an_object": "يجب أن تكون الإعدادات كائن JSON."
     },
-    "console": "لوحة الإدارة"
+    "console": "لوحة الإدارة",
+    "org_content": {
+      "load_more": "تحميل المزيد",
+      "error_load": "تعذّر التحميل. حاول مرة أخرى بعد قليل.",
+      "no_members": "لا يوجد أعضاء.",
+      "no_files": "لا توجد ملفات.",
+      "col_email": "البريد الإلكتروني",
+      "col_role": "الدور",
+      "col_joined": "تاريخ الانضمام",
+      "col_file": "الملف",
+      "col_status": "الفحص",
+      "col_uploaded": "تاريخ الرفع",
+      "col_actions": "الإجراءات",
+      "status_clean": "سليم",
+      "status_uploading": "جارٍ الرفع",
+      "status_scanning": "قيد الفحص",
+      "status_infected": "مصاب",
+      "status_failed": "فشل الفحص",
+      "preview": "فتح",
+      "error_preview": "تعذّر فتح هذا الملف. حاول مرة أخرى بعد قليل.",
+      "remove": "إزالة",
+      "remove_title": "إزالة {filename}؟",
+      "remove_description": "يُحذف الملف من المؤسسة، ويُبلَّغ مالكوها عبر البريد الإلكتروني وداخل التطبيق.",
+      "reason_label": "السبب",
+      "reason_hint": "10 أحرف على الأقل. يُحفظ في سجل التدقيق.",
+      "cancel": "إلغاء",
+      "removed": "تمت إزالة الملف. تم إبلاغ المالكين.",
+      "error_remove": "تعذّرت إزالة الملف. حاول مرة أخرى بعد قليل."
+    }
   },
   "banner": {
     "dismiss": "إغلاق الإعلان",

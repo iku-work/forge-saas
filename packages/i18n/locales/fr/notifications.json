@@ -44,7 +44,8 @@
     "channel_required": "obligatoire",
     "required_note": "Nous vous informons toujours par e-mail des problèmes de paiement ; cela ne peut pas être désactivé, sinon vous perdriez l'accès sans avertissement.",
     "type_webhook_endpoint_disabled": "Un point de terminaison webhook est désactivé après des échecs répétés",
-    "section_title": "Comment vous recevez chaque notification"
+    "section_title": "Comment vous recevez chaque notification",
+    "type_file_removed": "Un fichier est supprimé par le service"
   },
   "types": {
     "member_invited": {
@@ -74,6 +75,10 @@
     "webhook_endpoint_disabled": {
       "title": "Point de terminaison webhook désactivé",
       "body": "{url} a échoué trop de fois d'affilée et a été désactivé. Corrigez votre consommateur puis réactivez-le."
+    },
+    "file_removed": {
+      "title": "Fichier supprimé",
+      "body": "{filename} a été supprimé de {org_name} par le service."
     }
   }
 }

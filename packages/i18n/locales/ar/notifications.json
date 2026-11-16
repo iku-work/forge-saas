@@ -44,7 +44,8 @@
     "channel_required": "مطلوب",
     "required_note": "نراسلك دائمًا بالبريد الإلكتروني بشأن مشكلات الدفع، ولا يمكن إيقاف ذلك — وإلا فقدت الوصول دون سابق إنذار.",
     "type_webhook_endpoint_disabled": "تعطيل نقطة نهاية ويبهوك بعد إخفاقات متكررة",
-    "section_title": "كيف يصلك كل إشعار"
+    "section_title": "كيف يصلك كل إشعار",
+    "type_file_removed": "تزيل الخدمة ملفًا"
   },
   "types": {
     "member_invited": {
@@ -74,6 +75,10 @@
     "webhook_endpoint_disabled": {
       "title": "تم تعطيل نقطة نهاية الويبهوك",
       "body": "فشل {url} مرات كثيرة متتالية وتم تعطيله. أصلح المستهلك ثم أعد تفعيله."
+    },
+    "file_removed": {
+      "title": "تمت إزالة ملف",
+      "body": "أزالت الخدمة {filename} من {org_name}."
     }
   }
 }

@@ -35,6 +35,8 @@ _ALL_NOTIFICATION_TYPES = {
     # list is the second opinion that catches a type added to the code and
     # nowhere else (packages/types, the settings page's labels, five locales).
     "webhook_endpoint_disabled",
+    # A superadmin removed one of an org's files.
+    "file_removed",
 }
 
 

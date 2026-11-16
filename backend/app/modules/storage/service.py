@@ -54,6 +54,13 @@ from app.modules.webhooks.events import EventType, FilePayload
 
 _SIZE_TOLERANCE_BYTES = 1024
 _DOWNLOAD_EXPIRES_IN_SECONDS = 3600
+# A superadmin's look at an org's file: long enough to open, not to share.
+_PREVIEW_EXPIRES_IN_SECONDS = 60
+# Rendered in the browser instead of downloaded. Images and PDF only: SVG is
+# left out on purpose, since it can carry script.
+_INLINE_PREVIEW_TYPES = frozenset(
+    {"image/png", "image/jpeg", "image/gif", "image/webp", "application/pdf"}
+)
 # Public: app.workers.jobs.storage's reconciliation sweep has to use the
 # same window, and a sweep that disagreed with this would delete objects
 # whose grace period is still open.
@@ -378,6 +385,25 @@ class StorageService:
         expires_at = utcnow() + timedelta(seconds=_DOWNLOAD_EXPIRES_IN_SECONDS)
         return url, expires_at
 
+    async def get_preview_url(self, file_id: UUID) -> tuple[str, datetime, bool]:
+        """A short-lived link to look at one file: `(url, expires_at, inline)`.
+
+        Only the types a browser renders without running anything of the
+        file's own open inline (images and PDF); everything else downloads,
+        exactly as get_download_url would. A file that isn't scanned clean
+        can't be opened at all.
+        """
+        stored_file = await self._repo.get_or_raise(file_id)
+        require_clean_scan(stored_file)
+        inline = stored_file.content_type in _INLINE_PREVIEW_TYPES
+        url = await self._backend.presign_download(
+            stored_file.key,
+            _PREVIEW_EXPIRES_IN_SECONDS,
+            filename=stored_file.filename,
+            inline_as=stored_file.content_type if inline else None,
+        )
+        return url, utcnow() + timedelta(seconds=_PREVIEW_EXPIRES_IN_SECONDS), inline
+
     async def _expire(self, file_id: UUID) -> None:
         """Retire a presign whose reservation lapsed before it was confirmed.
 
@@ -407,7 +433,7 @@ class StorageService:
             actor_id=None,
         )
 
-    async def delete_file(self, user_id: UUID, file_id: UUID, *, anyones: bool) -> None:
+    async def delete_file(self, user_id: UUID, file_id: UUID, *, anyones: bool) -> StoredFile:
         """Soft-delete a file. Without `anyones` (FILES_MANAGE), only one the
         caller uploaded."""
         stored_file = await self._repo.get_or_raise(file_id)
@@ -432,3 +458,4 @@ class StorageService:
             org_id=self._org_id,
             actor_id=user_id,
         )
+        return stored_file

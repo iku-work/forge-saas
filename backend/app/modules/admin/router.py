@@ -29,10 +29,12 @@ from app.core.dependencies import (
     get_redis,
     oauth2_scheme,
     reject_during_impersonation,
+    require_recent_auth,
     require_superadmin,
 )
 from app.core.envelope import Envelope, Meta
 from app.core.exceptions import AuthenticationError, NotFoundError, UnprocessableEntityError
+from app.core.module_loader import is_enabled
 from app.middleware.rate_limit import api_limit
 from app.modules.admin.schemas import (
     AdminAuditFeedEntry,
@@ -42,6 +44,8 @@ from app.modules.admin.schemas import (
     AdminEndImpersonationRequest,
     AdminExtendTrialRequest,
     AdminFeatureFlagsResponse,
+    AdminFileDeleteRequest,
+    AdminFilePreview,
     AdminImpersonateRequest,
     AdminImpersonateResponse,
     AdminMobileExchangeRequest,
@@ -49,6 +53,8 @@ from app.modules.admin.schemas import (
     AdminMobileHandoffPreview,
     AdminMobileHandoffResponse,
     AdminOrgDetail,
+    AdminOrgFile,
+    AdminOrgMember,
     AdminOrgSummary,
     AdminProductSettingsPatchRequest,
     AdminProductSettingsReplaceRequest,
@@ -67,6 +73,7 @@ from app.modules.admin.service import (
     AdminFeatureFlagService,
     AdminImpersonationService,
     AdminMobileHandoffService,
+    AdminOrgContentService,
 )
 from app.modules.auth.models import User
 from app.modules.auth.repository import UserRepository
@@ -87,6 +94,11 @@ def _request_id(request: Request) -> str:
 
 def _client_ip(request: Request) -> str:
     return request.client.host if request.client else "unknown"
+
+
+def _origin(request: Request) -> dict[str, str]:
+    """Where an admin action came from, for its audit record."""
+    return {"ip": _client_ip(request), "ua": request.headers.get("user-agent", "")}
 
 
 async def _get_org_or_404(org_id: UUID, session: AsyncSession) -> Organization:
@@ -209,6 +221,109 @@ async def get_org_detail(
     org = await _get_org_or_404(org_id, session)
     detail = await AdminDirectoryService(session, redis).get_org_detail(org)
     return Envelope(data=detail, meta=Meta(request_id=_request_id(request)))
+
+
+@router.get("/orgs/{org_id}/members")
+@api_limit
+async def list_admin_org_members(  # noqa: PLR0913 -- cursor pagination (§0.3) on top of the usual params
+    request: Request,
+    org_id: UUID,
+    superadmin: Annotated[User, Depends(require_superadmin)],  # noqa: ARG001 -- gate only
+    session: Annotated[AsyncSession, Depends(get_session)],
+    redis: Annotated[Redis, Depends(get_redis)],
+    after: Annotated[UUID | None, Query()] = None,
+    limit: Annotated[int, Query(ge=1, le=100)] = 20,
+) -> Envelope[list[AdminOrgMember]]:
+    org = await _get_org_or_404(org_id, session)
+    members, next_cursor = await AdminOrgContentService(session, redis).list_members(
+        org, after, limit
+    )
+    return Envelope(
+        data=members,
+        meta=Meta(
+            request_id=_request_id(request),
+            next_cursor=str(next_cursor) if next_cursor is not None else None,
+        ),
+    )
+
+
+def _require_file_storage() -> None:
+    if not is_enabled("file_storage"):
+        raise NotFoundError("errors.not_found", fallback="Not found")
+
+
+@router.get("/orgs/{org_id}/files", dependencies=[Depends(_require_file_storage)])
+@api_limit
+async def list_admin_org_files(  # noqa: PLR0913 -- cursor pagination (§0.3) on top of the usual params
+    request: Request,
+    org_id: UUID,
+    superadmin: Annotated[User, Depends(require_superadmin)],  # noqa: ARG001 -- gate only
+    session: Annotated[AsyncSession, Depends(get_session)],
+    redis: Annotated[Redis, Depends(get_redis)],
+    after: Annotated[UUID | None, Query()] = None,
+    limit: Annotated[int, Query(ge=1, le=100)] = 20,
+) -> Envelope[list[AdminOrgFile]]:
+    org = await _get_org_or_404(org_id, session)
+    files, next_cursor = await AdminOrgContentService(session, redis).list_files(org, after, limit)
+    return Envelope(
+        data=files,
+        meta=Meta(
+            request_id=_request_id(request),
+            next_cursor=str(next_cursor) if next_cursor is not None else None,
+        ),
+    )
+
+
+@router.post(
+    "/orgs/{org_id}/files/{file_id}/preview",
+    dependencies=[
+        Depends(_require_file_storage),
+        # Opening someone's private file: only with a recent sign-in, and
+        # never from inside an impersonation session.
+        Depends(require_recent_auth()),
+        Depends(reject_during_impersonation("data_mutation")),
+    ],
+)
+@api_limit
+async def preview_admin_org_file(  # noqa: PLR0913 -- request+paths+auth+session+redis, all required
+    request: Request,
+    org_id: UUID,
+    file_id: UUID,
+    superadmin: Annotated[User, Depends(require_superadmin)],
+    session: Annotated[AsyncSession, Depends(get_session)],
+    redis: Annotated[Redis, Depends(get_redis)],
+) -> Envelope[AdminFilePreview]:
+    org = await _get_org_or_404(org_id, session)
+    preview = await AdminOrgContentService(session, redis).preview_file(
+        org=org, file_id=file_id, actor=superadmin, **_origin(request)
+    )
+    await session.commit()
+    return Envelope(data=preview, meta=Meta(request_id=_request_id(request)))
+
+
+@router.post(
+    "/orgs/{org_id}/files/{file_id}/delete",
+    dependencies=[
+        Depends(_require_file_storage),
+        Depends(reject_during_impersonation("data_mutation")),
+    ],
+)
+@api_limit
+async def delete_admin_org_file(  # noqa: PLR0913 -- request+paths+body+auth+session+redis, all required
+    request: Request,
+    org_id: UUID,
+    file_id: UUID,
+    body: AdminFileDeleteRequest,
+    superadmin: Annotated[User, Depends(require_superadmin)],
+    session: Annotated[AsyncSession, Depends(get_session)],
+    redis: Annotated[Redis, Depends(get_redis)],
+) -> Envelope[None]:
+    org = await _get_org_or_404(org_id, session)
+    await AdminOrgContentService(session, redis).delete_file(
+        org=org, file_id=file_id, actor=superadmin, reason=body.reason, **_origin(request)
+    )
+    await session.commit()
+    return Envelope(data=None, meta=Meta(request_id=_request_id(request)))
 
 
 @router.get("/users")

@@ -22,6 +22,9 @@ DEFAULT_PREFERENCES: dict[str, dict[str, bool]] = {
     # stopped is exactly the thing a product finds out about a week late.
     # Push off: it is an operations message, not something to wake anyone for.
     "webhook_endpoint_disabled": {"email": True, "in_app": True, "push": False},
+    # To an org's owners when a superadmin removes one of its files. Email
+    # on: the people who need to know may not be looking at the app.
+    "file_removed": {"email": True, "in_app": True, "push": False},
 }
 
 # T-234: (notification type -> channels that stay on no matter what the user

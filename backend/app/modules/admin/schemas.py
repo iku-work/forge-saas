@@ -59,6 +59,43 @@ class AdminOrgDetail(AppBaseModel):
     subscription: AdminSubscriptionDetail | None
 
 
+class AdminOrgMember(AppBaseModel):
+    """One member of an org, as the admin org page lists them."""
+
+    user_id: UUID
+    email: str
+    full_name: str | None
+    role: MemberRole
+    joined_at: datetime
+
+
+class AdminOrgFile(AppBaseModel):
+    """One of an org's files: everything about it except its content."""
+
+    id: UUID
+    filename: str
+    content_type: str
+    size_bytes: int
+    # "uploading" | "scanning" | "clean" | "infected" | "failed": the upload
+    # status and the scan verdict read together. Only a clean one opens.
+    status: str
+    uploaded_by_email: str | None
+    created_at: datetime
+
+
+class AdminFilePreview(AppBaseModel):
+    url: str
+    expires_at: datetime
+    # True: the browser shows it (image or PDF). False: it downloads.
+    inline: bool
+
+
+class AdminFileDeleteRequest(AppBaseModel):
+    """Why the file is being removed: goes to the audit log."""
+
+    reason: str = Field(min_length=10, max_length=1000)
+
+
 class AdminUserSummary(AppBaseModel):
     id: UUID
     email: str

@@ -56,6 +56,8 @@ export const NOTIFICATION_TYPES = [
   // backend/app/modules/notifications/preferences.py, which
   // test_notification_preferences_mirror.py pins to this list.
   "webhook_endpoint_disabled",
+  // To an org's owners when a superadmin removes one of its files.
+  "file_removed",
 ] as const;
 export type NotificationType = (typeof NOTIFICATION_TYPES)[number];
 
@@ -69,6 +71,7 @@ export const DEFAULT_NOTIFICATION_PREFERENCES: Readonly<
   file_uploaded: { email: false, in_app: true, push: false },
   file_infected: { email: true, in_app: true, push: true },
   webhook_endpoint_disabled: { email: true, in_app: true, push: false },
+  file_removed: { email: true, in_app: true, push: false },
 };
 
 /**

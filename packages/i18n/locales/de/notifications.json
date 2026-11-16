@@ -44,7 +44,8 @@
     "channel_required": "erforderlich",
     "required_note": "Über Zahlungsprobleme informieren wir Sie immer per E-Mail; das lässt sich nicht abschalten — sonst würden Sie den Zugang ohne Vorwarnung verlieren.",
     "type_webhook_endpoint_disabled": "Ein Webhook-Endpunkt wird nach wiederholten Fehlern deaktiviert",
-    "section_title": "Wie Sie jede Benachrichtigung erhalten"
+    "section_title": "Wie Sie jede Benachrichtigung erhalten",
+    "type_file_removed": "Eine Datei wird vom Dienst entfernt"
   },
   "types": {
     "member_invited": {
@@ -74,6 +75,10 @@
     "webhook_endpoint_disabled": {
       "title": "Webhook-Endpunkt deaktiviert",
       "body": "{url} ist zu oft hintereinander fehlgeschlagen und wurde deaktiviert. Beheben Sie den Fehler und aktivieren Sie ihn erneut."
+    },
+    "file_removed": {
+      "title": "Datei entfernt",
+      "body": "{filename} wurde vom Dienst aus {org_name} entfernt."
     }
   }
 }

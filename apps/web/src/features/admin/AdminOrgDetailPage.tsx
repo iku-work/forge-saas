@@ -32,6 +32,7 @@ import { formatDate } from "@forge/utils";
 import { useRouteLocale } from "../../lib/useRouteLocale";
 import { subscriptionStatusLabel } from "../../lib/statusLabels";
 import { getErrorMessage } from "../auth/getErrorMessage";
+import { AdminOrgFilesTab, AdminOrgMembersTab } from "./AdminOrgContentTabs";
 import { CompCreditModal } from "./CompCreditModal";
 import { ExtendTrialModal } from "./ExtendTrialModal";
 import { PlanOverrideModal } from "./PlanOverrideModal";
@@ -164,59 +165,6 @@ function SubscriptionTab({ orgId }: { orgId: string }) {
           setCompOpen(false);
         }}
       />
-    </div>
-  );
-}
-
-// Members/Files tabs show only the summary counts already on AdminOrgDetail
-// -- there's no admin endpoint to list an arbitrary org's members/files (the
-// ordinary /orgs/{id}/members and /files endpoints require the caller to be
-// a member of that org, which a superadmin usually isn't), and adding one is
-// out of scope for T-143's UI wiring.
-function MembersTab({
-  memberCount,
-  isLoading,
-}: {
-  memberCount: number | undefined;
-  isLoading: boolean;
-}) {
-  const { t } = useTranslation();
-  return (
-    <div className="@container/section">
-      {isLoading ? (
-        <Skeleton className="h-8 w-24" />
-      ) : (
-        <DetailRow
-          label={t("common.admin.org_detail.members_label")}
-          value={String(memberCount ?? 0)}
-        />
-      )}
-    </div>
-  );
-}
-
-function FilesTab({
-  fileCount,
-  isLoading,
-}: {
-  fileCount: number | null | undefined;
-  isLoading: boolean;
-}) {
-  const { t } = useTranslation();
-  return (
-    <div className="@container/section">
-      {isLoading ? (
-        <Skeleton className="h-8 w-24" />
-      ) : (
-        <DetailRow
-          label={t("common.admin.org_detail.files_label")}
-          value={
-            fileCount === null || fileCount === undefined
-              ? "—"
-              : String(fileCount)
-          }
-        />
-      )}
     </div>
   );
 }
@@ -502,16 +450,17 @@ export function AdminOrgDetailPage({ orgId }: { orgId: string }) {
               <SubscriptionTab orgId={orgId} />
             </TabsContent>
             <TabsContent value="members">
-              <MembersTab
-                memberCount={detail.member_count}
-                isLoading={detailQuery.isLoading}
-              />
+              <AdminOrgMembersTab orgId={orgId} />
             </TabsContent>
             <TabsContent value="files">
-              <FilesTab
-                fileCount={detail.file_count}
-                isLoading={detailQuery.isLoading}
-              />
+              {/* file_count is null when the file storage module is off. */}
+              {detail.file_count === null ? (
+                <p className="text-sm text-muted-foreground">
+                  {t("common.admin.org_detail.not_available")}
+                </p>
+              ) : (
+                <AdminOrgFilesTab orgId={orgId} />
+              )}
             </TabsContent>
             <TabsContent value="audit">
               <AuditTab orgId={orgId} />

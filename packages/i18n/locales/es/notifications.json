@@ -44,7 +44,8 @@
     "channel_required": "obligatorio",
     "required_note": "Siempre te avisamos por correo de los problemas de facturación, así que eso no se puede desactivar: perderías el acceso sin previo aviso.",
     "type_webhook_endpoint_disabled": "Un endpoint de webhook se desactiva tras fallos repetidos",
-    "section_title": "Cómo te llega cada notificación"
+    "section_title": "Cómo te llega cada notificación",
+    "type_file_removed": "El servicio elimina un archivo"
   },
   "types": {
     "member_invited": {
@@ -74,6 +75,10 @@
     "webhook_endpoint_disabled": {
       "title": "Endpoint de webhook desactivado",
       "body": "{url} falló demasiadas veces seguidas y se ha desactivado. Corrige tu consumidor y vuelve a activarlo."
+    },
+    "file_removed": {
+      "title": "Archivo eliminado",
+      "body": "El servicio eliminó {filename} de {org_name}."
     }
   }
 }

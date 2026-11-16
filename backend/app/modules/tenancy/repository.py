@@ -255,6 +255,11 @@ class MembershipRepository:
         await self.session.delete(membership)
         await self.session.flush()
 
+    async def list_owner_ids(self, org_id: UUID) -> list[UUID]:
+        m = cast("Any", Membership)
+        stmt = select(m.user_id).where(m.org_id == org_id, m.role == MemberRole.OWNER)
+        return list((await self.session.execute(stmt)).scalars().all())
+
     async def count_by_org_and_role(self, org_id: UUID, role: MemberRole) -> int:
         m = cast("Any", Membership)
         stmt = (

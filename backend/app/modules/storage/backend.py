@@ -51,8 +51,17 @@ class StorageBackend(Protocol):
     ) -> PresignedUpload: ...
 
     async def presign_download(
-        self, key: str, expires_in: int = 3600, *, filename: str | None = None
-    ) -> str: ...
+        self,
+        key: str,
+        expires_in: int = 3600,
+        *,
+        filename: str | None = None,
+        inline_as: str | None = None,
+    ) -> str:
+        """A time-limited GET URL. With `inline_as` (a content type the caller
+        has already decided is safe to render), the browser shows the object
+        instead of saving it, and is told that exact type."""
+        ...
 
     async def head(self, key: str) -> dict[str, Any] | None: ...  # None if not found
 

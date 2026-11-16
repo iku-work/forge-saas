@@ -47,6 +47,7 @@ const TYPE_LABEL_KEYS: Record<NotificationType, string> = {
   file_infected: "notifications.preferences.type_file_infected",
   webhook_endpoint_disabled:
     "notifications.preferences.type_webhook_endpoint_disabled",
+  file_removed: "notifications.preferences.type_file_removed",
 };
 
 const REQUIRED_NOTE_ID = "notification-required-note";

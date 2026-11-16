@@ -44,7 +44,8 @@
     "channel_required": "required",
     "required_note": "We always email you about billing problems, so those can't be turned off — you'd lose access without warning.",
     "type_webhook_endpoint_disabled": "A webhook endpoint is switched off after repeated failures",
-    "section_title": "How each notification reaches you"
+    "section_title": "How each notification reaches you",
+    "type_file_removed": "A file is removed by the service"
   },
   "types": {
     "member_invited": {
@@ -74,6 +75,10 @@
     "webhook_endpoint_disabled": {
       "title": "Webhook endpoint disabled",
       "body": "{url} failed too many deliveries in a row and has been switched off. Fix your consumer, then re-enable it."
+    },
+    "file_removed": {
+      "title": "File removed",
+      "body": "{filename} was removed from {org_name} by the service."
     }
   }
 }
