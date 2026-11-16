@@ -46,6 +46,17 @@ minimumReleaseAgeExclude:
   # follow-redirects GHSA-mrwp-f3q8-3g9p (high), same reasoning.
   - "follow-redirects@1.16.2"
 overrides:
+  # 2026-11-16: rolldown's wasm32 binding (an optional fallback for platforms
+  # without a native build, never installed here or on CI) asks for this beta
+  # of emnapi. Once it is anywhere in the tree, pnpm may hand it to
+  # @astrojs/check's language server as the peer of @napi-rs/wasm-runtime,
+  # and @emnapi/core 1.x with runtime 2.0 beta crashes on load
+  # ("this.bridge.setLastError is not a function"), which `astro check`
+  # reports only as "@astrojs/check and typescript are required". That is
+  # what failed Dependabot's astro 7.4.7 PR. Pinning just this beta keeps
+  # the whole tree on emnapi 1.x.
+  "@emnapi/runtime@2.0.0-beta.2": "1.11.3"
+  "@emnapi/core@2.0.0-beta.2": "1.11.3"
   # Three copies of @types/node were in this tree (22, 24, 26) with nothing
   # choosing between them, so which one the Astro language server resolved
   # depended on the shape of the install -- green locally, red on a fresh
