@@ -1,6 +1,6 @@
 import { http, HttpResponse } from "msw";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -45,9 +45,7 @@ function renderSection(detail: AdminUserDetail) {
 }
 
 function buttons(): string[] {
-  return screen
-    .getAllByRole("button")
-    .map((button) => button.textContent ?? "");
+  return screen.getAllByRole("button").map((button) => button.textContent);
 }
 
 describe("UserModerationSection", () => {
@@ -129,14 +127,12 @@ describe("UserModerationSection", () => {
 
     await userEvent.click(screen.getByRole("button", { name: "Suspend" }));
     const dialog = await screen.findByTestId("moderation-reason-dialog");
-    const submit = screen.getAllByRole("button", { name: "Suspend" }).at(-1);
+    const submit = within(dialog).getByRole("button", { name: "Suspend" });
     expect(dialog).toBeInTheDocument();
     expect(submit).toBeDisabled();
 
     await userEvent.type(screen.getByLabelText("Reason"), REASON);
-    await userEvent.click(
-      screen.getAllByRole("button", { name: "Suspend" }).at(-1) as HTMLElement,
-    );
+    await userEvent.click(submit);
 
     await waitFor(() => {
       expect(body).toEqual({ reason: REASON });
@@ -156,12 +152,10 @@ describe("UserModerationSection", () => {
     await userEvent.click(
       screen.getByRole("button", { name: "Sign out everywhere" }),
     );
-    expect(await screen.findByTestId("confirm-dialog")).toBeInTheDocument();
+    const confirm = await screen.findByTestId("confirm-dialog");
     expect(screen.queryByLabelText("Reason")).toBeNull();
     await userEvent.click(
-      screen
-        .getAllByRole("button", { name: "Sign out everywhere" })
-        .at(-1) as HTMLElement,
+      within(confirm).getByRole("button", { name: "Sign out everywhere" }),
     );
 
     await waitFor(() => {
