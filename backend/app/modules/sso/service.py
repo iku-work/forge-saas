@@ -326,6 +326,7 @@ class SsoLoginService:
                     fallback="No account here matches that identity, and this "
                     "organization does not create them automatically",
                 )
+            await AuthService(self._session).refuse_banned_email(identity.email)
             user = await self._users.create(
                 email=identity.email,
                 # No password, ever. A JIT-provisioned account whose only

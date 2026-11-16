@@ -136,5 +136,9 @@
   "file_infected": "In dieser Datei wurde Schadsoftware gefunden; sie ist nicht mehr verfügbar.",
   "reauth_failed": "Das Passwort oder der Code ist nicht korrekt.",
   "reauth_wrong_account": "Dieses Konto ist nicht das, mit dem Sie angemeldet sind.",
-  "no_subscription_to_cancel": "Diese Organisation hat kein Abonnement, das gekündigt werden kann."
+  "no_subscription_to_cancel": "Diese Organisation hat kein Abonnement, das gekündigt werden kann.",
+  "account_suspended": "Dieses Konto wurde gesperrt. Wenden Sie sich an den Support, wenn Sie das für einen Fehler halten.",
+  "email_not_allowed": "Mit dieser E-Mail-Adresse kann kein Konto erstellt werden.",
+  "cannot_moderate_superadmin": "Diese Aktion ist bei Ihnen selbst oder einem anderen Superadmin nicht möglich.",
+  "email_already_verified": "Diese E-Mail-Adresse ist bereits bestätigt."
 }
