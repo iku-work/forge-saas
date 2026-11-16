@@ -141,6 +141,10 @@
   "reauth_wrong_account": "That account is not the one you are signed in with.",
   "no_subscription_to_cancel": "This organization has no subscription to cancel.",
   "invitation_needs_verified_email": "Verify your email address to accept invitations here, or use the link in the invitation email.",
+  "account_suspended": "This account has been suspended. Contact support if you think this is a mistake.",
+  "email_not_allowed": "This email address can't be used to create an account.",
+  "cannot_moderate_superadmin": "This action can't be taken on yourself or on another superadmin.",
+  "email_already_verified": "This email address is already verified.",
   "captcha_required": "Complete the security check before continuing.",
   "captcha_failed": "The security check didn't pass. Try it again.",
   "email_domain_not_allowed": "Use a permanent email address: this one is from a disposable email service."

@@ -33,6 +33,7 @@ from app.core.dependencies import (
 )
 from app.core.envelope import Envelope, Meta
 from app.core.exceptions import AuthenticationError, NotFoundError, UnprocessableEntityError
+from app.core.module_loader import is_enabled
 from app.middleware.rate_limit import api_limit
 from app.modules.admin.schemas import (
     AdminAuditFeedEntry,
@@ -48,6 +49,7 @@ from app.modules.admin.schemas import (
     AdminMobileExchangeResponse,
     AdminMobileHandoffPreview,
     AdminMobileHandoffResponse,
+    AdminModerationRequest,
     AdminOrgDetail,
     AdminOrgSummary,
     AdminProductSettingsPatchRequest,
@@ -67,6 +69,7 @@ from app.modules.admin.service import (
     AdminFeatureFlagService,
     AdminImpersonationService,
     AdminMobileHandoffService,
+    AdminUserModerationService,
 )
 from app.modules.auth.models import User
 from app.modules.auth.repository import UserRepository
@@ -87,6 +90,11 @@ def _request_id(request: Request) -> str:
 
 def _client_ip(request: Request) -> str:
     return request.client.host if request.client else "unknown"
+
+
+def _origin(request: Request) -> dict[str, str]:
+    """Where an admin action came from, for its audit record."""
+    return {"ip": _client_ip(request), "ua": request.headers.get("user-agent", "")}
 
 
 async def _get_org_or_404(org_id: UUID, session: AsyncSession) -> Organization:
@@ -535,6 +543,159 @@ async def disable_user_totp(  # noqa: PLR0913 -- request+path+body+auth+session+
         actor_id=superadmin.id,
         ip=_client_ip(request),
         ua=request.headers.get("user-agent", ""),
+    )
+    await session.commit()
+    return Envelope(data=None, meta=Meta(request_id=_request_id(request)))
+
+
+# ---- Moderation: suspend, ban, sign out, verify, delete ----------------------
+#
+# All POST, all superadmin-only, none allowed while impersonating, all audited
+# by AdminUserModerationService. The three that take something away (suspend,
+# ban, delete) need a reason for the audit log.
+
+
+@router.post(
+    "/users/{user_id}/suspend",
+    dependencies=[Depends(reject_during_impersonation("data_mutation"))],
+)
+@api_limit
+async def suspend_user(  # noqa: PLR0913 -- request+path+body+auth+session+redis, all required
+    request: Request,
+    user_id: UUID,
+    body: AdminModerationRequest,
+    superadmin: Annotated[User, Depends(require_superadmin)],
+    session: Annotated[AsyncSession, Depends(get_session)],
+    redis: Annotated[Redis, Depends(get_redis)],
+) -> Envelope[None]:
+    target = await _get_user_or_404(user_id, session)
+    await AdminUserModerationService(session, redis).suspend(
+        target=target, actor=superadmin, reason=body.reason, **_origin(request)
+    )
+    await session.commit()
+    return Envelope(data=None, meta=Meta(request_id=_request_id(request)))
+
+
+@router.post(
+    "/users/{user_id}/unsuspend",
+    dependencies=[Depends(reject_during_impersonation("data_mutation"))],
+)
+@api_limit
+async def unsuspend_user(
+    request: Request,
+    user_id: UUID,
+    superadmin: Annotated[User, Depends(require_superadmin)],
+    session: Annotated[AsyncSession, Depends(get_session)],
+    redis: Annotated[Redis, Depends(get_redis)],
+) -> Envelope[None]:
+    target = await _get_user_or_404(user_id, session)
+    await AdminUserModerationService(session, redis).unsuspend(
+        target=target, actor=superadmin, **_origin(request)
+    )
+    await session.commit()
+    return Envelope(data=None, meta=Meta(request_id=_request_id(request)))
+
+
+@router.post(
+    "/users/{user_id}/ban",
+    dependencies=[Depends(reject_during_impersonation("data_mutation"))],
+)
+@api_limit
+async def ban_user(  # noqa: PLR0913 -- request+path+body+auth+session+redis, all required
+    request: Request,
+    user_id: UUID,
+    body: AdminModerationRequest,
+    superadmin: Annotated[User, Depends(require_superadmin)],
+    session: Annotated[AsyncSession, Depends(get_session)],
+    redis: Annotated[Redis, Depends(get_redis)],
+) -> Envelope[None]:
+    target = await _get_user_or_404(user_id, session)
+    await AdminUserModerationService(session, redis).ban(
+        target=target, actor=superadmin, reason=body.reason, **_origin(request)
+    )
+    await session.commit()
+    return Envelope(data=None, meta=Meta(request_id=_request_id(request)))
+
+
+@router.post(
+    "/users/{user_id}/unban",
+    dependencies=[Depends(reject_during_impersonation("data_mutation"))],
+)
+@api_limit
+async def unban_user(
+    request: Request,
+    user_id: UUID,
+    superadmin: Annotated[User, Depends(require_superadmin)],
+    session: Annotated[AsyncSession, Depends(get_session)],
+    redis: Annotated[Redis, Depends(get_redis)],
+) -> Envelope[None]:
+    target = await _get_user_or_404(user_id, session)
+    await AdminUserModerationService(session, redis).unban(
+        target=target, actor=superadmin, **_origin(request)
+    )
+    await session.commit()
+    return Envelope(data=None, meta=Meta(request_id=_request_id(request)))
+
+
+@router.post(
+    "/users/{user_id}/sign-out-everywhere",
+    dependencies=[Depends(reject_during_impersonation("data_mutation"))],
+)
+@api_limit
+async def sign_user_out_everywhere(
+    request: Request,
+    user_id: UUID,
+    superadmin: Annotated[User, Depends(require_superadmin)],
+    session: Annotated[AsyncSession, Depends(get_session)],
+    redis: Annotated[Redis, Depends(get_redis)],
+) -> Envelope[None]:
+    target = await _get_user_or_404(user_id, session)
+    await AdminUserModerationService(session, redis).sign_out_everywhere(
+        target=target, actor=superadmin, **_origin(request)
+    )
+    await session.commit()
+    return Envelope(data=None, meta=Meta(request_id=_request_id(request)))
+
+
+@router.post(
+    "/users/{user_id}/verify-email",
+    dependencies=[Depends(reject_during_impersonation("data_mutation"))],
+)
+@api_limit
+async def verify_user_email(
+    request: Request,
+    user_id: UUID,
+    superadmin: Annotated[User, Depends(require_superadmin)],
+    session: Annotated[AsyncSession, Depends(get_session)],
+    redis: Annotated[Redis, Depends(get_redis)],
+) -> Envelope[None]:
+    target = await _get_user_or_404(user_id, session)
+    await AdminUserModerationService(session, redis).verify_email(
+        target=target, actor=superadmin, **_origin(request)
+    )
+    await session.commit()
+    return Envelope(data=None, meta=Meta(request_id=_request_id(request)))
+
+
+@router.post(
+    "/users/{user_id}/delete",
+    dependencies=[Depends(reject_during_impersonation("data_mutation"))],
+)
+@api_limit
+async def delete_user(  # noqa: PLR0913 -- request+path+body+auth+session+redis, all required
+    request: Request,
+    user_id: UUID,
+    body: AdminModerationRequest,
+    superadmin: Annotated[User, Depends(require_superadmin)],
+    session: Annotated[AsyncSession, Depends(get_session)],
+    redis: Annotated[Redis, Depends(get_redis)],
+) -> Envelope[None]:
+    # Deletion is the GDPR module's purge; without it there is nothing to run.
+    if not is_enabled("gdpr"):
+        raise NotFoundError("errors.not_found", fallback="Not found")
+    target = await _get_user_or_404(user_id, session)
+    await AdminUserModerationService(session, redis).delete(
+        target=target, actor=superadmin, reason=body.reason, **_origin(request)
     )
     await session.commit()
     return Envelope(data=None, meta=Meta(request_id=_request_id(request)))

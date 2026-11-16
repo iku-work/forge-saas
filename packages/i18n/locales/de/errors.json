@@ -138,6 +138,10 @@
   "reauth_wrong_account": "Dieses Konto ist nicht das, mit dem Sie angemeldet sind.",
   "no_subscription_to_cancel": "Diese Organisation hat kein Abonnement, das gekündigt werden kann.",
   "invitation_needs_verified_email": "Bestätigen Sie Ihre E-Mail-Adresse, um Einladungen hier anzunehmen, oder verwenden Sie den Link in der Einladungs-E-Mail.",
+  "account_suspended": "Dieses Konto wurde gesperrt. Wenden Sie sich an den Support, wenn Sie das für einen Fehler halten.",
+  "email_not_allowed": "Mit dieser E-Mail-Adresse kann kein Konto erstellt werden.",
+  "cannot_moderate_superadmin": "Diese Aktion ist bei Ihnen selbst oder einem anderen Superadmin nicht möglich.",
+  "email_already_verified": "Diese E-Mail-Adresse ist bereits bestätigt.",
   "captcha_required": "Schließen Sie die Sicherheitsprüfung ab, bevor Sie fortfahren.",
   "captcha_failed": "Die Sicherheitsprüfung ist fehlgeschlagen. Versuchen Sie es noch einmal.",
   "email_domain_not_allowed": "Verwenden Sie eine dauerhafte E-Mail-Adresse: Diese stammt von einem Wegwerf-E-Mail-Dienst."

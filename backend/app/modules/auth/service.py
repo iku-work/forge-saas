@@ -56,6 +56,7 @@ from app.modules.auth.repository import (
     REVOKED_EXPIRED,
     REVOKED_ROTATED,
     REVOKED_THEFT,
+    BannedEmailRepository,
     EmailChangeTokenRepository,
     EmailVerificationTokenRepository,
     MagicLinkTokenRepository,
@@ -71,6 +72,7 @@ from app.modules.auth.session_rules import is_session_usable
 from app.modules.auth.utils import (
     PasswordCheck,
     backup_code_digests,
+    banned_email_hash,
     check_password,
     create_access_token,
     generate_refresh_token,
@@ -205,6 +207,7 @@ class AuthService:
         self._db = session
         self._users = UserRepository(session)
         self._sessions = SessionRepository(session)
+        self._bans = BannedEmailRepository(session)
         self._email_verification_tokens = EmailVerificationTokenRepository(session)
         self._password_reset_tokens = PasswordResetTokenRepository(session)
         self._magic_link_tokens = MagicLinkTokenRepository(session)
@@ -240,6 +243,11 @@ class AuthService:
                 # carries this password, so clicking it means this password
                 # and never the earlier registrant's.
                 await self._send_verification_email(existing, password_hash)
+            return
+        if await self.is_email_banned(req.email):
+            # Same reply as every other path ("check your inbox"), and no
+            # email: a banned address learns nothing and gets nowhere.
+            logger.warning("auth.register: banned address refused")
             return
 
         user = await self._users.create(
@@ -465,9 +473,29 @@ class AuthService:
         )
         return TwoFactorChallenge(temp_token=temp_token)
 
+    async def is_email_banned(self, email: str) -> bool:
+        return await self._bans.is_banned(banned_email_hash(email))
+
+    async def refuse_banned_email(self, email: str) -> None:
+        """For sign-up paths that answer the person directly (OAuth, SSO)."""
+        if await self.is_email_banned(email):
+            raise PermissionDeniedError(
+                "errors.email_not_allowed",
+                fallback="This email address can't be used to create an account.",
+            )
+
     async def _create_session(
         self, user: User, ip: str, user_agent: str, *, amr: Sequence[str]
     ) -> tuple[str, str, User]:
+        # Every sign-in path ends here, so this one check covers password,
+        # magic link, OAuth, SSO and the second-factor step. It runs after
+        # the credential was proven, so it tells nothing to someone who
+        # doesn't already hold it.
+        if user.suspended_at is not None:
+            raise AuthenticationError(
+                "errors.account_suspended",
+                fallback="This account has been suspended.",
+            )
         settings = get_settings()
         now = utcnow()
         refresh_plain, refresh_hash = generate_refresh_token()
@@ -771,6 +799,7 @@ class AuthService:
                         "errors.signup_disabled",
                         fallback="New account registration is currently closed.",
                     )
+                await self.refuse_banned_email(profile.email)
                 user = await self._users.create(
                     email=profile.email,
                     hashed_password=None,  # OAuth-only account -- §T-023
@@ -981,6 +1010,11 @@ class AuthService:
                 user.id,
                 existing.id,
             )
+            return
+        if await self.is_email_banned(new_email):
+            # The same silent no-op: moving an account onto a banned address
+            # is how a ban would otherwise be walked around.
+            logger.warning("auth.request_email_change: banned target refused (user_id=%s)", user.id)
             return
 
         plain_token, token_hash = generate_refresh_token()

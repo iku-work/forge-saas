@@ -19,6 +19,7 @@ from app.core.exceptions import InvalidCursorError, NotFoundError
 from app.core.repository import DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE
 from app.models._mixins import utcnow
 from app.modules.auth.models import (
+    BannedEmail,
     EmailChangeToken,
     EmailVerificationToken,
     MagicLinkToken,
@@ -177,6 +178,39 @@ class UserRepository:
 # Session.revoked_reason. Only ROTATED marks a token that a legitimate client
 # should never present again, so only ROTATED turns a presentation into a
 # theft signal (AuthService.refresh). Everything else is an ordinary end.
+class BannedEmailRepository:
+    """Bans by address hash (BannedEmail). Not user-scoped: a ban is about an
+    address, which may have no account at all."""
+
+    def __init__(self, session: AsyncSession) -> None:
+        self.session = session
+
+    async def is_banned(self, email_hash: str) -> bool:
+        m = cast("Any", BannedEmail)
+        stmt = select(m.id).where(m.email_hash == email_hash, m.deleted_at.is_(None))
+        return (await self.session.execute(stmt)).first() is not None
+
+    async def ban(self, email_hash: str) -> None:
+        m = cast("Any", BannedEmail)
+        row = (
+            await self.session.execute(select(BannedEmail).where(m.email_hash == email_hash))
+        ).scalar_one_or_none()
+        if row is None:
+            self.session.add(BannedEmail(email_hash=email_hash))
+        else:
+            row.deleted_at = None
+        await self.session.flush()
+
+    async def unban(self, email_hash: str) -> None:
+        m = cast("Any", BannedEmail)
+        await self.session.execute(
+            update(BannedEmail)
+            .where(m.email_hash == email_hash, m.deleted_at.is_(None))
+            .values(deleted_at=utcnow())
+        )
+        await self.session.flush()
+
+
 REVOKED_ROTATED = "rotated"
 REVOKED_SIGNED_OUT = "signed_out"  # logout, device revocation, password change, 2FA enrollment
 REVOKED_EXPIRED = "expired"

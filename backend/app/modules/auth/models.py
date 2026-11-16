@@ -65,6 +65,10 @@ class User(RedactedReprMixin, UUIDPKMixin, TimestampMixin, SoftDeleteMixin, SQLM
         return self.avatar_url
 
     is_active: bool = Field(default=True)
+    # Set by a superadmin; no sign-in creates a session while it is set, and
+    # every existing one was revoked when it was. Separate from is_active,
+    # which means "email not yet verified" for a new account.
+    suspended_at: datetime | None = Field(default=None, sa_type=_TZ_DATETIME)
     is_superadmin: bool = Field(default=False)
     totp_enabled: bool = Field(default=False)
     locale: str = Field(default="en")
@@ -84,6 +88,21 @@ class User(RedactedReprMixin, UUIDPKMixin, TimestampMixin, SoftDeleteMixin, SQLM
     notification_preferences: dict[str, dict[str, bool]] = Field(
         default_factory=dict, sa_column=Column(JSONB, nullable=False, default=dict)
     )
+
+
+class BannedEmail(UUIDPKMixin, TimestampMixin, SoftDeleteMixin, SQLModel, table=True):
+    """An address that may not register or sign up again.
+
+    Holds a SHA-256 of the normalised address, not the address: a ban has to
+    outlast the account (and its GDPR purge) without keeping the person's
+    email around. Platform data, not tenant data, like the audit log; not
+    tied to any user row: who banned whom, and why, is in the audit log.
+    Unbanning soft-deletes the row.
+    """
+
+    __tablename__ = "banned_email"
+
+    email_hash: str = Field(unique=True)
 
 
 class Session(UUIDPKMixin, TimestampMixin, SQLModel, table=True):

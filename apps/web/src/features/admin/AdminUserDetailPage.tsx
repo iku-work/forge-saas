@@ -29,6 +29,7 @@ import { useRouteLocale } from "../../lib/useRouteLocale";
 import { getErrorMessage } from "../auth/getErrorMessage";
 import { ImpersonateModal } from "./ImpersonateModal";
 import { MobileHandoffModal } from "./MobileHandoffModal";
+import { UserModerationSection } from "./UserModerationSection";
 
 export function AdminUserDetailPage({ userId }: { userId: string }) {
   const locale = useRouteLocale();
@@ -110,6 +111,8 @@ export function AdminUserDetailPage({ userId }: { userId: string }) {
               ) : null
             }
           />
+
+          <UserModerationSection detail={detail} />
 
           <SettingsSection
             title={t("common.admin.user_detail.memberships_title")}
