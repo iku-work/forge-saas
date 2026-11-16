@@ -314,6 +314,60 @@
       "raw_not_an_object": "Einstellungen müssen ein JSON-Objekt sein."
     },
     "console": "Admin-Konsole",
+    "moderation": {
+      "title": "Kontoaktionen",
+      "description": "Jede wird im Audit-Log festgehalten.",
+      "status_suspended": "Gesperrt",
+      "status_banned": "Verbannt",
+      "status_unverified": "E-Mail nicht bestätigt",
+      "protected_note": "Superadmins können hier nicht gesperrt, verbannt, abgemeldet oder gelöscht werden.",
+      "reason_label": "Grund",
+      "reason_hint": "Mindestens 10 Zeichen. Wird im Audit-Log gespeichert.",
+      "cancel": "Abbrechen",
+      "error": "Das hat nicht funktioniert. Versuchen Sie es gleich noch einmal.",
+      "suspend": {
+        "label": "Sperren",
+        "title": "{email} sperren?",
+        "description": "Die Person kann sich nicht anmelden, bis Sie die Sperre aufheben, und alle ihre Sitzungen enden jetzt.",
+        "done": "Konto gesperrt."
+      },
+      "unsuspend": {
+        "label": "Sperre aufheben",
+        "title": "Sperre für {email} aufheben?",
+        "description": "Die Person kann sich wieder anmelden.",
+        "done": "Sperre aufgehoben."
+      },
+      "ban": {
+        "label": "Verbannen",
+        "title": "{email} verbannen?",
+        "description": "Sperrt das Konto und verhindert, dass sich diese E-Mail-Adresse je wieder registriert, auch nachdem das Konto gelöscht wurde.",
+        "done": "Konto verbannt."
+      },
+      "unban": {
+        "label": "Verbannung aufheben",
+        "title": "Verbannung für {email} aufheben?",
+        "description": "Hebt die Verbannung und die Sperre auf. Die Person kann sich wieder anmelden, und die Adresse kann sich wieder registrieren.",
+        "done": "Verbannung aufgehoben."
+      },
+      "sign_out": {
+        "label": "Überall abmelden",
+        "title": "{email} überall abmelden?",
+        "description": "Beendet alle Sitzungen. Die Person kann sich sofort wieder anmelden.",
+        "done": "Überall abgemeldet."
+      },
+      "verify_email": {
+        "label": "E-Mail als bestätigt markieren",
+        "title": "{email} als bestätigt markieren?",
+        "description": "Als hätte die Person auf den Link in der Bestätigungs-E-Mail geklickt.",
+        "done": "E-Mail als bestätigt markiert."
+      },
+      "delete": {
+        "label": "Konto löschen",
+        "title": "{email} löschen?",
+        "description": "Das Konto funktioniert ab sofort nicht mehr und wird nach der Karenzzeit endgültig gelöscht, genau wie eine Löschung, die die Person selbst beantragt.",
+        "done": "Konto zur Löschung vorgemerkt."
+      }
+    },
     "org_content": {
       "load_more": "Mehr laden",
       "error_load": "Das konnte nicht geladen werden. Versuchen Sie es gleich noch einmal.",

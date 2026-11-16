@@ -73,9 +73,14 @@ from app.modules.admin.schemas import (
 from app.modules.audit.repository import AuditRepository
 from app.modules.audit.service import AuditService
 from app.modules.auth.models import User
-from app.modules.auth.repository import SessionRepository, TOTPSecretRepository, UserRepository
+from app.modules.auth.repository import (
+    BannedEmailRepository,
+    SessionRepository,
+    TOTPSecretRepository,
+    UserRepository,
+)
 from app.modules.auth.service import AuthService
-from app.modules.auth.utils import create_access_token, verify_access_token
+from app.modules.auth.utils import banned_email_hash, create_access_token, verify_access_token
 from app.modules.billing.models import Subscription
 from app.modules.billing.repository import PlanRepository, SubscriptionRepository
 from app.modules.feature_flags.repository import OrgFeatureFlagRepository
@@ -336,6 +341,11 @@ class AdminDirectoryService:
             is_active=user.is_active,
             is_superadmin=user.is_superadmin,
             created_at=user.created_at,
+            email_verified_at=user.email_verified_at,
+            suspended_at=user.suspended_at,
+            banned=await BannedEmailRepository(self._session).is_banned(
+                banned_email_hash(user.email)
+            ),
             memberships=membership_summaries,
             sessions=session_summaries,
             audit_summary=audit_summary,
@@ -952,6 +962,109 @@ class AdminAccountRecoveryService:
                 "new_email": None,
                 "settings_url": frontend_url("/settings/security", target.locale),
             },
+        )
+
+
+class AdminUserModerationService:
+    """Superadmin actions on one user account: suspend, ban, sign out,
+    verify, delete. Every one is audited at severity="elevated".
+
+    Suspend and ban, sign-out and delete refuse to act on yourself or on
+    another superadmin: an operator locking out the operators is not a
+    mistake worth making possible. Demote first, on purpose.
+
+    Reaches into app.modules.auth's repositories like
+    AdminAccountRecoveryService above, for the same reason.
+    """
+
+    def __init__(self, session: AsyncSession, redis: Redis) -> None:
+        self._session = session
+        self._redis = redis
+        self._users = UserRepository(session)
+        self._sessions = SessionRepository(session)
+        self._bans = BannedEmailRepository(session)
+        self._audit = AuditService(session)
+
+    async def suspend(self, *, target: User, actor: User, reason: str, ip: str, ua: str) -> None:
+        self._refuse_protected(target, actor)
+        await self._suspend(target)
+        await self._log("admin.user.suspend", target, actor, ip, ua, {"reason": reason})
+
+    async def unsuspend(self, *, target: User, actor: User, ip: str, ua: str) -> None:
+        await self._users.update(target.id, suspended_at=None)
+        await invalidate_user_cache(self._redis, target.id)
+        await self._log("admin.user.unsuspend", target, actor, ip, ua, {})
+
+    async def ban(self, *, target: User, actor: User, reason: str, ip: str, ua: str) -> None:
+        """Suspend, and keep the address from ever signing up again: the ban
+        is stored as a hash of the address, so it outlasts the account."""
+        self._refuse_protected(target, actor)
+        await self._bans.ban(banned_email_hash(target.email))
+        await self._suspend(target)
+        await self._log("admin.user.ban", target, actor, ip, ua, {"reason": reason})
+
+    async def unban(self, *, target: User, actor: User, ip: str, ua: str) -> None:
+        await self._bans.unban(banned_email_hash(target.email))
+        await self._users.update(target.id, suspended_at=None)
+        await invalidate_user_cache(self._redis, target.id)
+        await self._log("admin.user.unban", target, actor, ip, ua, {})
+
+    async def is_banned(self, target: User) -> bool:
+        return await self._bans.is_banned(banned_email_hash(target.email))
+
+    async def sign_out_everywhere(self, *, target: User, actor: User, ip: str, ua: str) -> None:
+        self._refuse_protected(target, actor)
+        await self._sessions.revoke_all_for_user(target.id)
+        await self._log("admin.user.sign_out_everywhere", target, actor, ip, ua, {})
+
+    async def verify_email(self, *, target: User, actor: User, ip: str, ua: str) -> None:
+        if target.email_verified_at is not None:
+            raise ConflictError(
+                "errors.email_already_verified", fallback="This email address is already verified."
+            )
+        await self._users.mark_email_verified(target.id)
+        await invalidate_user_cache(self._redis, target.id)
+        await self._log("admin.user.verify_email", target, actor, ip, ua, {})
+
+    async def delete(self, *, target: User, actor: User, reason: str, ip: str, ua: str) -> None:
+        """The same deletion a person asks for themselves: the account stops
+        working now and is purged after the GDPR grace period."""
+        self._refuse_protected(target, actor)
+        # gdpr is an optional module, so it is imported only when this runs.
+        from app.modules.gdpr.service import GDPRService  # noqa: PLC0415
+
+        await GDPRService(self._session).delete_me(target)
+        await self._sessions.revoke_all_for_user(target.id)
+        await invalidate_user_cache(self._redis, target.id)
+        await self._log("admin.user.delete", target, actor, ip, ua, {"reason": reason})
+
+    async def _suspend(self, target: User) -> None:
+        if target.suspended_at is None:
+            await self._users.update(target.id, suspended_at=utcnow())
+        await self._sessions.revoke_all_for_user(target.id)
+        await invalidate_user_cache(self._redis, target.id)
+
+    @staticmethod
+    def _refuse_protected(target: User, actor: User) -> None:
+        if target.id == actor.id or target.is_superadmin:
+            raise PermissionDeniedError(
+                "errors.cannot_moderate_superadmin",
+                fallback="This action can't be taken on yourself or on another superadmin.",
+            )
+
+    async def _log(  # noqa: PLR0913 -- the audit record's own fields
+        self, action: str, target: User, actor: User, ip: str, ua: str, diff: dict[str, Any]
+    ) -> None:
+        await self._audit.log(
+            action=action,
+            resource_type="user",
+            resource_id=str(target.id),
+            org_id=None,
+            actor_id=actor.id,
+            diff=diff,
+            ip=ip,
+            ua=ua,
+            severity="elevated",
         )
 
 

@@ -138,6 +138,10 @@ class AdminUserDetail(AppBaseModel):
     is_active: bool
     is_superadmin: bool
     created_at: datetime
+    email_verified_at: datetime | None
+    suspended_at: datetime | None
+    # The address is on the ban list (it may not sign up again).
+    banned: bool
     memberships: list[AdminMembershipSummary]
     sessions: list[AdminSessionSummary]
     audit_summary: AdminAuditSummary
@@ -224,6 +228,12 @@ class AdminMobileExchangeResponse(AppBaseModel):
 
 
 class AdminDisableTotpRequest(AppBaseModel):
+    reason: str = Field(min_length=10, max_length=1000)
+
+
+class AdminModerationRequest(AppBaseModel):
+    """Suspend, ban or delete: the reason goes to the audit log."""
+
     reason: str = Field(min_length=10, max_length=1000)
 
 

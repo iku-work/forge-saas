@@ -137,5 +137,9 @@
   "reauth_failed": "Le mot de passe ou le code est incorrect.",
   "reauth_wrong_account": "Ce compte n'est pas celui avec lequel vous êtes connecté.",
   "no_subscription_to_cancel": "Cette organisation n’a aucun abonnement à résilier.",
-  "invitation_needs_verified_email": "Vérifiez votre adresse e-mail pour accepter les invitations ici, ou utilisez le lien de l’e-mail d’invitation."
+  "invitation_needs_verified_email": "Vérifiez votre adresse e-mail pour accepter les invitations ici, ou utilisez le lien de l’e-mail d’invitation.",
+  "account_suspended": "Ce compte a été suspendu. Contactez le support si vous pensez qu’il s’agit d’une erreur.",
+  "email_not_allowed": "Cette adresse e-mail ne peut pas être utilisée pour créer un compte.",
+  "cannot_moderate_superadmin": "Cette action est impossible sur vous-même ou sur un autre superadmin.",
+  "email_already_verified": "Cette adresse e-mail est déjà vérifiée."
 }

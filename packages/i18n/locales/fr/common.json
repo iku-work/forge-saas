@@ -314,6 +314,60 @@
       "raw_not_an_object": "Les paramètres doivent être un objet JSON."
     },
     "console": "Console d'administration",
+    "moderation": {
+      "title": "Actions sur le compte",
+      "description": "Chacune est consignée dans le journal d’audit.",
+      "status_suspended": "Suspendu",
+      "status_banned": "Banni",
+      "status_unverified": "E-mail non vérifié",
+      "protected_note": "Les superadmins ne peuvent pas être suspendus, bannis, déconnectés ni supprimés ici.",
+      "reason_label": "Motif",
+      "reason_hint": "Au moins 10 caractères. Enregistré dans le journal d’audit.",
+      "cancel": "Annuler",
+      "error": "Cela n’a pas fonctionné. Réessayez dans un instant.",
+      "suspend": {
+        "label": "Suspendre",
+        "title": "Suspendre {email} ?",
+        "description": "La personne ne peut plus se connecter tant que vous ne levez pas la suspension, et toutes ses sessions prennent fin maintenant.",
+        "done": "Compte suspendu."
+      },
+      "unsuspend": {
+        "label": "Lever la suspension",
+        "title": "Lever la suspension de {email} ?",
+        "description": "La personne peut de nouveau se connecter.",
+        "done": "Suspension levée."
+      },
+      "ban": {
+        "label": "Bannir",
+        "title": "Bannir {email} ?",
+        "description": "Suspend le compte et empêche cette adresse e-mail de s’inscrire à nouveau, même après la suppression du compte.",
+        "done": "Compte banni."
+      },
+      "unban": {
+        "label": "Lever le bannissement",
+        "title": "Lever le bannissement de {email} ?",
+        "description": "Lève le bannissement et la suspension. La personne peut de nouveau se connecter et l’adresse peut de nouveau s’inscrire.",
+        "done": "Bannissement levé."
+      },
+      "sign_out": {
+        "label": "Déconnecter partout",
+        "title": "Déconnecter {email} partout ?",
+        "description": "Met fin à toutes ses sessions. La personne peut se reconnecter aussitôt.",
+        "done": "Déconnecté partout."
+      },
+      "verify_email": {
+        "label": "Marquer l’e-mail comme vérifié",
+        "title": "Marquer {email} comme vérifié ?",
+        "description": "Comme si la personne avait cliqué sur le lien de l’e-mail de vérification.",
+        "done": "E-mail marqué comme vérifié."
+      },
+      "delete": {
+        "label": "Supprimer le compte",
+        "title": "Supprimer {email} ?",
+        "description": "Le compte cesse de fonctionner maintenant et est supprimé définitivement après le délai de grâce, comme une suppression demandée par la personne elle-même.",
+        "done": "Suppression du compte programmée."
+      }
+    },
     "org_content": {
       "load_more": "Charger plus",
       "error_load": "Impossible de charger ceci. Réessayez dans un instant.",

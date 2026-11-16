@@ -363,6 +363,11 @@ def hash_token(plain: str) -> str:
     return hashlib.sha256(plain.encode("utf-8")).hexdigest()
 
 
+def banned_email_hash(email: str) -> str:
+    """What BannedEmail stores: the address, trimmed and case-folded, hashed."""
+    return hash_token(email.strip().casefold())
+
+
 def _url_token_keys() -> list[str]:
     """Every secret a URL token may be signed with, oldest first.
 

@@ -31,7 +31,10 @@ const superadmin = makeUser(30, {
   email: "root@example.com",
   is_superadmin: true,
 });
-const target = makeUser(31, { email: "target@example.com", is_superadmin: false });
+const target = makeUser(31, {
+  email: "target@example.com",
+  is_superadmin: false,
+});
 
 const targetDetail: AdminUserDetail = {
   id: target.id,
@@ -40,6 +43,9 @@ const targetDetail: AdminUserDetail = {
   is_active: true,
   is_superadmin: false,
   created_at: "2026-01-01T00:00:00Z",
+  email_verified_at: "2026-01-01T00:00:00Z",
+  suspended_at: null,
+  banned: false,
   memberships: [],
   sessions: [],
   audit_summary: { total_count: 0, recent_actions: [] },
@@ -71,14 +77,19 @@ describe("Admin impersonation flow (T-142/T-143)", () => {
       http.post(`${API}/api/v1/auth/refresh`, () =>
         HttpResponse.json(envelope({ access_token: superadminToken })),
       ),
-      http.get(`${API}/api/v1/auth/me`, () => HttpResponse.json(envelope(superadmin))),
+      http.get(`${API}/api/v1/auth/me`, () =>
+        HttpResponse.json(envelope(superadmin)),
+      ),
       http.get(`${API}/api/v1/admin/users/${target.id}`, () =>
         HttpResponse.json(envelope(targetDetail)),
       ),
       http.post(`${API}/api/v1/admin/users/${target.id}/impersonate`, () =>
         HttpResponse.json(
           envelope({
-            access_token: fakeJwt({ sub: target.id, impersonator_id: superadmin.id }),
+            access_token: fakeJwt({
+              sub: target.id,
+              impersonator_id: superadmin.id,
+            }),
             expires_at: "2026-01-01T01:00:00Z",
             user: target,
           }),
@@ -95,9 +106,15 @@ describe("Admin impersonation flow (T-142/T-143)", () => {
       // can eagerly warm one of them without a real hover/focus event under
       // jsdom, so this needs a handler even though the test itself never
       // navigates to /admin/users.
-      http.get(`${API}/api/v1/admin/users`, () => HttpResponse.json(envelope([]))),
-      http.get(`${API}/api/v1/admin/orgs`, () => HttpResponse.json(envelope([]))),
-      http.get(`${API}/api/v1/admin/audit`, () => HttpResponse.json(envelope([]))),
+      http.get(`${API}/api/v1/admin/users`, () =>
+        HttpResponse.json(envelope([])),
+      ),
+      http.get(`${API}/api/v1/admin/orgs`, () =>
+        HttpResponse.json(envelope([])),
+      ),
+      http.get(`${API}/api/v1/admin/audit`, () =>
+        HttpResponse.json(envelope([])),
+      ),
       http.get(`${API}/api/v1/admin/dashboard`, () =>
         HttpResponse.json(
           envelope({

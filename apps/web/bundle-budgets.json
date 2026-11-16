@@ -19,7 +19,7 @@
   "$locale.admin.orgs.tsx": 19745,
   "$locale.admin.settings.tsx": 38236,
   "$locale.admin.tsx": 73136,
-  "$locale.admin.users_.$id.tsx": 46011,
+  "$locale.admin.users_.$id.tsx": 58258,
   "$locale.admin.users.tsx": 19346,
   "$locale.cancel-email-change.tsx": 12380,
   "$locale.confirm-email-change.tsx": 12381,

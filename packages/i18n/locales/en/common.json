@@ -343,6 +343,60 @@
       "raw_invalid_json": "That isn't valid JSON.",
       "raw_not_an_object": "Settings must be a JSON object."
     },
+    "moderation": {
+      "title": "Account actions",
+      "description": "Each one is written to the audit log.",
+      "status_suspended": "Suspended",
+      "status_banned": "Banned",
+      "status_unverified": "Email not verified",
+      "protected_note": "Superadmins can't be suspended, banned, signed out or deleted here.",
+      "reason_label": "Reason",
+      "reason_hint": "At least 10 characters. Saved in the audit log.",
+      "cancel": "Cancel",
+      "error": "That didn't work. Try again in a moment.",
+      "suspend": {
+        "label": "Suspend",
+        "title": "Suspend {email}?",
+        "description": "They can't sign in until you unsuspend them, and every session they have ends now.",
+        "done": "Account suspended."
+      },
+      "unsuspend": {
+        "label": "Unsuspend",
+        "title": "Unsuspend {email}?",
+        "description": "They can sign in again.",
+        "done": "Account unsuspended."
+      },
+      "ban": {
+        "label": "Ban",
+        "title": "Ban {email}?",
+        "description": "Suspends the account and stops this email address from ever signing up again, even after the account is deleted.",
+        "done": "Account banned."
+      },
+      "unban": {
+        "label": "Unban",
+        "title": "Unban {email}?",
+        "description": "Lifts the ban and the suspension. They can sign in again, and the address can sign up again.",
+        "done": "Ban lifted."
+      },
+      "sign_out": {
+        "label": "Sign out everywhere",
+        "title": "Sign {email} out everywhere?",
+        "description": "Ends every session they have. They can sign in again straight away.",
+        "done": "Signed out everywhere."
+      },
+      "verify_email": {
+        "label": "Mark email verified",
+        "title": "Mark {email} as verified?",
+        "description": "As if they had clicked the link in the verification email.",
+        "done": "Email marked as verified."
+      },
+      "delete": {
+        "label": "Delete account",
+        "title": "Delete {email}?",
+        "description": "The account stops working now and is permanently deleted after the grace period, the same as a deletion they ask for themselves.",
+        "done": "Account scheduled for deletion."
+      }
+    },
     "org_content": {
       "load_more": "Load more",
       "error_load": "This couldn't be loaded. Try again in a moment.",
