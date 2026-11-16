@@ -313,7 +313,61 @@
       "raw_invalid_json": "Eso no es JSON válido.",
       "raw_not_an_object": "La configuración debe ser un objeto JSON."
     },
-    "console": "Consola de administración"
+    "console": "Consola de administración",
+    "moderation": {
+      "title": "Acciones de la cuenta",
+      "description": "Cada una queda registrada en el registro de auditoría.",
+      "status_suspended": "Suspendida",
+      "status_banned": "Bloqueada",
+      "status_unverified": "Correo no verificado",
+      "protected_note": "Aquí no se puede suspender, bloquear, cerrar la sesión ni eliminar a un superadministrador.",
+      "reason_label": "Motivo",
+      "reason_hint": "Al menos 10 caracteres. Se guarda en el registro de auditoría.",
+      "cancel": "Cancelar",
+      "error": "No funcionó. Inténtalo de nuevo en un momento.",
+      "suspend": {
+        "label": "Suspender",
+        "title": "¿Suspender a {email}?",
+        "description": "No podrá iniciar sesión hasta que levantes la suspensión, y todas sus sesiones terminan ahora.",
+        "done": "Cuenta suspendida."
+      },
+      "unsuspend": {
+        "label": "Levantar suspensión",
+        "title": "¿Levantar la suspensión de {email}?",
+        "description": "Podrá volver a iniciar sesión.",
+        "done": "Suspensión levantada."
+      },
+      "ban": {
+        "label": "Bloquear",
+        "title": "¿Bloquear a {email}?",
+        "description": "Suspende la cuenta e impide que esta dirección de correo vuelva a registrarse, incluso después de eliminar la cuenta.",
+        "done": "Cuenta bloqueada."
+      },
+      "unban": {
+        "label": "Desbloquear",
+        "title": "¿Desbloquear a {email}?",
+        "description": "Levanta el bloqueo y la suspensión. Podrá volver a iniciar sesión y la dirección podrá registrarse de nuevo.",
+        "done": "Bloqueo levantado."
+      },
+      "sign_out": {
+        "label": "Cerrar sesión en todas partes",
+        "title": "¿Cerrar la sesión de {email} en todas partes?",
+        "description": "Termina todas sus sesiones. Puede volver a iniciar sesión enseguida.",
+        "done": "Sesión cerrada en todas partes."
+      },
+      "verify_email": {
+        "label": "Marcar correo como verificado",
+        "title": "¿Marcar {email} como verificado?",
+        "description": "Como si hubiera hecho clic en el enlace del correo de verificación.",
+        "done": "Correo marcado como verificado."
+      },
+      "delete": {
+        "label": "Eliminar cuenta",
+        "title": "¿Eliminar a {email}?",
+        "description": "La cuenta deja de funcionar ahora y se elimina definitivamente tras el periodo de gracia, igual que una eliminación que pida la propia persona.",
+        "done": "Cuenta programada para eliminarse."
+      }
+    }
   },
   "banner": {
     "dismiss": "Cerrar el aviso",

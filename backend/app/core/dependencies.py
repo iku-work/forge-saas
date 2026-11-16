@@ -177,6 +177,13 @@ async def resolve_user_from_token(
 
     if not user.is_active or user.deleted_at is not None:
         raise AuthenticationError("errors.account_inactive", fallback="Account is inactive")
+    # Suspending revokes every session too; this also stops an access token
+    # issued just before, inside its 15 minutes. The cached row is
+    # invalidated by the suspend itself.
+    if user.suspended_at is not None:
+        raise AuthenticationError(
+            "errors.account_suspended", fallback="This account has been suspended."
+        )
     return user
 
 

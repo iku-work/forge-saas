@@ -45,7 +45,11 @@ export function getAdminOrgFeatureFlags(orgId: string) {
   });
 }
 
-export function setAdminOrgFeatureFlag(orgId: string, flag: string, enabled: boolean) {
+export function setAdminOrgFeatureFlag(
+  orgId: string,
+  flag: string,
+  enabled: boolean,
+) {
   return client.put<Envelope<null>, ErrorBody, true>({
     ...THROW,
     url: "/api/v1/admin/orgs/{org_id}/feature-flags/{flag}",
@@ -136,6 +140,10 @@ export interface AdminUserDetail {
   is_active: boolean;
   is_superadmin: boolean;
   created_at: string;
+  email_verified_at: string | null;
+  suspended_at: string | null;
+  /** The address is on the ban list and may not sign up again. */
+  banned: boolean;
   memberships: AdminMembershipSummary[];
   sessions: AdminSessionSummary[];
   audit_summary: AdminAuditSummary;
@@ -188,6 +196,35 @@ export function getAdminUserDetail(userId: string) {
   });
 }
 
+// ---- Moderation: suspend, ban, sign out, verify, delete -----------------------
+
+/** Actions on one account. The three that take something away need a
+ *  reason, which goes to the audit log. */
+export type AdminModerationAction =
+  | "suspend"
+  | "unsuspend"
+  | "ban"
+  | "unban"
+  | "sign-out-everywhere"
+  | "verify-email"
+  | "delete";
+
+export const ADMIN_ACTIONS_NEEDING_REASON: ReadonlySet<AdminModerationAction> =
+  new Set<AdminModerationAction>(["suspend", "ban", "delete"]);
+
+export function moderateAdminUser(
+  userId: string,
+  action: AdminModerationAction,
+  reason?: string,
+) {
+  return client.post<Envelope<null>, ErrorBody, true>({
+    ...THROW,
+    url: `/api/v1/admin/users/{user_id}/${action}`,
+    path: { user_id: userId },
+    ...(ADMIN_ACTIONS_NEEDING_REASON.has(action) ? { body: { reason } } : {}),
+  });
+}
+
 export interface AdminSetOrgPlanRequest {
   plan_slug: string;
   billing_interval?: "monthly" | "yearly" | null;
@@ -213,7 +250,11 @@ export function extendAdminOrgTrial(orgId: string, days: number) {
   });
 }
 
-export function issueAdminOrgCompCredit(orgId: string, amountCents: number, reason: string) {
+export function issueAdminOrgCompCredit(
+  orgId: string,
+  amountCents: number,
+  reason: string,
+) {
   return client.post<Envelope<null>, ErrorBody, true>({
     ...THROW,
     url: "/api/v1/admin/orgs/{org_id}/comp-credit",
@@ -235,7 +276,10 @@ export interface AdminImpersonateResponse {
   user: UserPublic;
 }
 
-export function impersonateAdminUser(userId: string, body: AdminImpersonateRequest) {
+export function impersonateAdminUser(
+  userId: string,
+  body: AdminImpersonateRequest,
+) {
   return client.post<Envelope<AdminImpersonateResponse>, ErrorBody, true>({
     ...THROW,
     url: "/api/v1/admin/users/{user_id}/impersonate",
