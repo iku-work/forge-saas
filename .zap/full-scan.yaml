@@ -61,10 +61,14 @@ env:
           # Envelope on failure: {"data":null,"error":{"code":"...",...},...}
           # Starlette's JSONResponse serialises with no whitespace after ':'
           # or ',' (separators=(",", ":")), so these match literally.
-          # Only a rejected token counts as logged out. Every 404 and 422 has an
-          # error envelope too, and each one would otherwise trigger a new login.
+          # Only a rejected bearer token counts as logged out, and only
+          # verify_access_token raises this key. The bare code is not enough:
+          # about forty 401s share "authentication_failed" (refresh with no
+          # cookie, a bad reset or magic-link token, a wrong TOTP code), and
+          # fuzzing those made ZAP log in again hundreds of times per run, past
+          # the 5/minute sign-in limit (runs 42677882157, 43695850269).
           loggedInRegex: '\Q"access_token"\E'
-          loggedOutRegex: '\Q"error":{"code":"authentication_failed"\E'
+          loggedOutRegex: '\Q"message_key":"errors.invalid_access_token"\E'
       sessionManagement:
         method: "script"
         parameters:
