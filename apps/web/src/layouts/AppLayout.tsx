@@ -56,6 +56,7 @@ import { useGlobalShortcuts } from "../features/shortcuts/useGlobalShortcuts";
 import { MAIN_CONTENT_ID, SkipLink } from "../components/SkipLink";
 import { MaintenanceScreen } from "../components/MaintenanceScreen";
 import { AuthLayout } from "../features/auth/AuthLayout";
+import { MyInvitationsList } from "../features/invitations/MyInvitationsList";
 import { CreateOrgForm } from "../features/settings/CreateOrgForm";
 import { NotificationBell } from "../features/notifications/NotificationBell";
 import { SupportLink } from "../features/support/SupportLink";
@@ -349,6 +350,9 @@ function CreateFirstOrgPrompt() {
         title={t("tenancy.org_create.title")}
         description={t("tenancy.org_create.description")}
       >
+        {/* Someone invited before they had any org can join from here: the
+            app shell, and with it the invitations page, needs an org first. */}
+        <MyInvitationsList quietWhenEmpty />
         <CreateOrgForm buttonSize="lg" />
       </AuthLayout>
     </div>

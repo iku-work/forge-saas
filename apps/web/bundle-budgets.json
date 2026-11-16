@@ -1,6 +1,7 @@
 {
   "$locale._app.files.tsx": 67022,
   "$locale._app.index.tsx": 20742,
+  "$locale._app.invitations.tsx": 26412,
   "$locale._app.reports.tsx": 9282,
   "$locale._app.settings.api-keys.tsx": 84443,
   "$locale._app.settings.billing.tsx": 18394,

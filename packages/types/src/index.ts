@@ -56,6 +56,10 @@ export const NOTIFICATION_TYPES = [
   // backend/app/modules/notifications/preferences.py, which
   // test_notification_preferences_mirror.py pins to this list.
   "webhook_endpoint_disabled",
+  // An existing user invited to another org, and the inviter when someone
+  // accepts. Both in-app only by default.
+  "invitation_received",
+  "invitation_accepted",
 ] as const;
 export type NotificationType = (typeof NOTIFICATION_TYPES)[number];
 
@@ -69,6 +73,8 @@ export const DEFAULT_NOTIFICATION_PREFERENCES: Readonly<
   file_uploaded: { email: false, in_app: true, push: false },
   file_infected: { email: true, in_app: true, push: true },
   webhook_endpoint_disabled: { email: true, in_app: true, push: false },
+  invitation_received: { email: false, in_app: true, push: false },
+  invitation_accepted: { email: false, in_app: true, push: false },
 };
 
 /**

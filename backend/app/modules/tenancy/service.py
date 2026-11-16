@@ -128,19 +128,33 @@ class TenancyService:
             invited_by=inviter.user_id,
             expires_at=utcnow() + _INVITATION_TTL,
         )
+        invitee = await UserRepository(self._session).get_by_email(email)
         await self._enqueue_invitation_email(
-            org.name, email, plain_token, await self._invitee_locale(email, inviter.user_id)
+            org.name, email, plain_token, await self._invitee_locale(invitee, inviter.user_id)
         )
-        # Confirms to the inviter (not the invitee, who may have no account
-        # yet to notify in-app) that the invite went out -- T-160's
+        # Confirms to the inviter that the invite went out -- T-160's
         # notifications happy path checks this lands in the inviter's bell
         # within 1s via the in-app/SSE channel.
-        await NotificationService(self._session, redis).send(
+        await self._notify(
+            redis,
             user_id=inviter.user_id,
             org_id=org_id,
-            type="member_invited",
+            notification_type="member_invited",
             params={"email": email, "org_name": org.name},
         )
+        if invitee is not None:
+            # Someone who already has an account hears about it in the app
+            # too, not only by email. No org: they are not in this one yet,
+            # so it is about them, and their inbox shows it whatever org they
+            # are in.
+            await self._notify(
+                redis,
+                user_id=invitee.id,
+                org_id=None,
+                notification_type="invitation_received",
+                params={"org_name": org.name},
+                action_url="/invitations",
+            )
         await webhooks.emit(
             self._session,
             org_id,
@@ -207,7 +221,10 @@ class TenancyService:
             org.name,
             invitation.email,
             plain_token,
-            await self._invitee_locale(invitation.email, sender.user_id),
+            await self._invitee_locale(
+                await UserRepository(self._session).get_by_email(invitation.email),
+                sender.user_id,
+            ),
         )
         return invitation
 
@@ -248,13 +265,52 @@ class TenancyService:
                 "errors.invitation_email_mismatch",
                 fallback="This invitation was sent to a different email address.",
             )
+        return await self._accept(invitation, user, redis)
+
+    async def list_my_invitations(self, user: User) -> list[tuple[Invitation, Organization]]:
+        """Open invitations to the signed-in user's address, with their orgs.
+
+        Empty until the address is verified: without the emailed link, a
+        verified address is the only proof that this person owns it.
+        """
+        if user.email_verified_at is None:
+            return []
+        return await self._invitations.list_open_for_email(user.email)
+
+    async def accept_my_invitation(
+        self, invitation_id: UUID, user: User, redis: Redis
+    ) -> Membership:
+        """Accept from inside the app, by id rather than by the emailed link."""
+        invitation = await self._my_open_invitation_or_raise(invitation_id, user)
+        return await self._accept(invitation, user, redis)
+
+    async def decline_my_invitation(self, invitation_id: UUID, user: User) -> None:
+        """Withdraw the invitation, the same as an admin revoking it. Quietly:
+        the inviter is not told, they only see it leave the pending list."""
+        invitation = await self._my_open_invitation_or_raise(invitation_id, user)
+        await self._invitations.delete(invitation)
+
+    async def _my_open_invitation_or_raise(self, invitation_id: UUID, user: User) -> Invitation:
+        if user.email_verified_at is None:
+            raise PermissionDeniedError(
+                "errors.invitation_needs_verified_email",
+                fallback="Verify your email address, or use the link in the invitation email.",
+            )
+        # 404 for someone else's invitation too, so an id reveals nothing.
+        invitation = await self._invitations.get_open_for_email(invitation_id, user.email)
+        if invitation is None:
+            raise NotFoundError("errors.invitation_not_found", fallback="Invitation not found")
+        return invitation
+
+    async def _accept(self, invitation: Invitation, user: User, redis: Redis) -> Membership:
         if await self._memberships.get_by_user_and_org(user.id, invitation.org_id) is not None:
             raise ConflictError(
                 "errors.already_member", fallback="You are already a member of this organization."
             )
+        org = await self._org_or_raise(invitation.org_id)
         # Before the invitation is spent, so the link still works once a seat
         # is free.
-        await self.require_seat_to_join(await self._org_or_raise(invitation.org_id), redis)
+        await self.require_seat_to_join(org, redis)
         if not await self._invitations.mark_accepted(invitation.id):
             # Lost the race to another request presenting the same link.
             raise AuthenticationError(
@@ -277,6 +333,21 @@ class TenancyService:
                 role=membership.role.value,
             ),
         )
+        # Tell whoever sent it, if they are still in the org to care.
+        inviter_id = invitation.invited_by
+        if (
+            inviter_id != user.id
+            and await self._memberships.get_by_user_and_org(inviter_id, invitation.org_id)
+            is not None
+        ):
+            await self._notify(
+                redis,
+                user_id=inviter_id,
+                org_id=invitation.org_id,
+                notification_type="invitation_accepted",
+                params={"email": user.email, "org_name": org.name},
+                action_url="/settings/members",
+            )
         return membership
 
     async def change_role(
@@ -566,7 +637,7 @@ class TenancyService:
             )
         return invitation, org
 
-    async def _invitee_locale(self, email: str, inviter_id: UUID) -> str | None:
+    async def _invitee_locale(self, invitee: User | None, inviter_id: UUID) -> str | None:
         """T-233: which language the invitation email -- and the locale
         segment of its accept link -- should be in.
 
@@ -576,12 +647,32 @@ class TenancyService:
         available and a much better guess than the product default: they are
         being invited into the inviter's organization.
         """
-        users = UserRepository(self._session)
-        invitee = await users.get_by_email(email)
         if invitee is not None:
             return invitee.locale
-        inviter = await users.get_by_id(inviter_id)
+        inviter = await UserRepository(self._session).get_by_id(inviter_id)
         return inviter.locale if inviter is not None else None
+
+    async def _notify(  # noqa: PLR0913 -- NotificationService.send's own parameter set
+        self,
+        redis: Redis,
+        *,
+        user_id: UUID,
+        org_id: UUID | None,
+        notification_type: str,
+        params: dict[str, Any],
+        action_url: str | None = None,
+    ) -> None:
+        # The notifications module is optional, and with it off there is no
+        # notification table to write to: inviting someone must still work.
+        if not is_enabled("notifications"):
+            return
+        await NotificationService(self._session, redis).send(
+            user_id=user_id,
+            org_id=org_id,
+            type=notification_type,
+            params=params,
+            action_url=action_url,
+        )
 
     async def _enqueue_invitation_email(
         self, org_name: str, email: str, token: str, locale: str | None

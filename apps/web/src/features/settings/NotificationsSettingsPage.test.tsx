@@ -122,6 +122,8 @@ describe("NotificationsSettingsPage", () => {
         file_infected: { email: true, in_app: true, push: true },
         // T-321's outbound-webhook auto-disable notice.
         webhook_endpoint_disabled: { email: true, in_app: true, push: false },
+        invitation_received: { email: false, in_app: true, push: false },
+        invitation_accepted: { email: false, in_app: true, push: false },
       },
     });
   });
