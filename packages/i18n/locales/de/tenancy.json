@@ -237,5 +237,22 @@
     "empty_title": "Noch keine Endpunkte",
     "empty_body": "Webhooks senden Ereignisse direkt an eine URL, die du kontrollierst, sobald sie eintreten — du musst also nicht abfragen. Füge einen Endpunkt hinzu und wähle die gewünschten Ereignisse.",
     "menu_label": "Aktionen für {url}"
+  },
+  "my_invitations": {
+    "title": "Einladungen",
+    "description": "Organisationen, die Sie zum Beitritt eingeladen haben.",
+    "list_label": "Ihre Einladungen",
+    "none": "Sie haben keine offenen Einladungen.",
+    "join_as": "Beitreten als {role}",
+    "expires": "Läuft ab am {date}",
+    "accept": "Annehmen",
+    "accept_pending": "Beitritt läuft…",
+    "decline": "Ablehnen",
+    "decline_pending": "Wird abgelehnt…",
+    "accepted": "Sie sind {org_name} beigetreten.",
+    "declined": "Einladung abgelehnt.",
+    "error_load": "Ihre Einladungen konnten nicht geladen werden. Versuchen Sie es gleich noch einmal.",
+    "error_action": "Das hat nicht funktioniert. Versuchen Sie es gleich noch einmal.",
+    "verify_note": "Bestätigen Sie Ihre E-Mail-Adresse, um Einladungen hier zu sehen. Bis dahin verwenden Sie den Link in der Einladungs-E-Mail."
   }
 }

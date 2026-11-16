@@ -2161,6 +2161,42 @@
         "title": "Envelope[list[MembershipPublic]]",
         "type": "object"
       },
+      "Envelope_list_MyInvitation__": {
+        "properties": {
+          "data": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/MyInvitation"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Data"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ErrorBody"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "meta": {
+            "$ref": "#/components/schemas/Meta"
+          }
+        },
+        "required": [
+          "meta"
+        ],
+        "title": "Envelope[list[MyInvitation]]",
+        "type": "object"
+      },
       "Envelope_list_NotificationPublic__": {
         "properties": {
           "data": {
@@ -3251,6 +3287,42 @@
           "enterprise_sso"
         ],
         "title": "ModulesResponse",
+        "type": "object"
+      },
+      "MyInvitation": {
+        "description": "An open invitation to the signed-in user, as they see it in the app.",
+        "properties": {
+          "expires_at": {
+            "format": "date-time",
+            "title": "Expires At",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "org_id": {
+            "format": "uuid",
+            "title": "Org Id",
+            "type": "string"
+          },
+          "org_name": {
+            "title": "Org Name",
+            "type": "string"
+          },
+          "role": {
+            "$ref": "#/components/schemas/MemberRole"
+          }
+        },
+        "required": [
+          "id",
+          "org_id",
+          "org_name",
+          "role",
+          "expires_at"
+        ],
+        "title": "MyInvitation",
         "type": "object"
       },
       "NotificationPreferencesUpdate": {
@@ -8679,6 +8751,128 @@
         "summary": "Get Export Job",
         "tags": [
           "gdpr"
+        ]
+      }
+    },
+    "/api/v1/me/invitations": {
+      "get": {
+        "operationId": "list_my_invitations_api_v1_me_invitations_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_list_MyInvitation__"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "List My Invitations",
+        "tags": [
+          "tenancy"
+        ]
+      }
+    },
+    "/api/v1/me/invitations/{invitation_id}/accept": {
+      "post": {
+        "operationId": "accept_my_invitation_api_v1_me_invitations__invitation_id__accept_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "invitation_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Invitation Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_MembershipPublic_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_NoneType_"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Accept My Invitation",
+        "tags": [
+          "tenancy"
+        ]
+      }
+    },
+    "/api/v1/me/invitations/{invitation_id}/decline": {
+      "post": {
+        "operationId": "decline_my_invitation_api_v1_me_invitations__invitation_id__decline_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "invitation_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Invitation Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_NoneType_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_NoneType_"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Decline My Invitation",
+        "tags": [
+          "tenancy"
         ]
       }
     },

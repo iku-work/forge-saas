@@ -237,5 +237,22 @@
     "empty_title": "Aún no hay endpoints",
     "empty_body": "Los webhooks envían los eventos a una URL que controlas en cuanto ocurren, así no tienes que consultarlos. Añade un endpoint y elige qué eventos debe recibir.",
     "menu_label": "Acciones para {url}"
+  },
+  "my_invitations": {
+    "title": "Invitaciones",
+    "description": "Organizaciones que te han invitado a unirte.",
+    "list_label": "Tus invitaciones",
+    "none": "No tienes invitaciones abiertas.",
+    "join_as": "Unirte como {role}",
+    "expires": "Caduca el {date}",
+    "accept": "Aceptar",
+    "accept_pending": "Uniéndote…",
+    "decline": "Rechazar",
+    "decline_pending": "Rechazando…",
+    "accepted": "Te uniste a {org_name}.",
+    "declined": "Invitación rechazada.",
+    "error_load": "No se pudieron cargar tus invitaciones. Inténtalo de nuevo en un momento.",
+    "error_action": "No funcionó. Inténtalo de nuevo en un momento.",
+    "verify_note": "Verifica tu dirección de correo para ver las invitaciones aquí. Mientras tanto, usa el enlace del correo de invitación."
   }
 }
