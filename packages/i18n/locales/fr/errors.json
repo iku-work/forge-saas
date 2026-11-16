@@ -136,5 +136,6 @@
   "file_infected": "Ce fichier contient un logiciel malveillant et n'est plus disponible.",
   "reauth_failed": "Le mot de passe ou le code est incorrect.",
   "reauth_wrong_account": "Ce compte n'est pas celui avec lequel vous êtes connecté.",
-  "no_subscription_to_cancel": "Cette organisation n’a aucun abonnement à résilier."
+  "no_subscription_to_cancel": "Cette organisation n’a aucun abonnement à résilier.",
+  "invitation_needs_verified_email": "Vérifiez votre adresse e-mail pour accepter les invitations ici, ou utilisez le lien de l’e-mail d’invitation."
 }

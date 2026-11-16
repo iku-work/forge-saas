@@ -24,6 +24,7 @@ import { Route as LocaleResetPasswordRouteImport } from './routes/$locale.reset-
 import { Route as LocaleVerifyEmailRouteImport } from './routes/$locale.verify-email'
 import { Route as LocaleAppIndexRouteImport } from './routes/$locale._app.index'
 import { Route as LocaleAppFilesRouteImport } from './routes/$locale._app.files'
+import { Route as LocaleAppInvitationsRouteImport } from './routes/$locale._app.invitations'
 import { Route as LocaleAppReportsRouteImport } from './routes/$locale._app.reports'
 import { Route as LocaleAcceptInvitationTokenRouteImport } from './routes/$locale.accept-invitation.$token'
 import { Route as LocaleAdminIndexRouteImport } from './routes/$locale.admin.index'
@@ -115,6 +116,11 @@ const LocaleAppIndexRoute = LocaleAppIndexRouteImport.update({
 const LocaleAppFilesRoute = LocaleAppFilesRouteImport.update({
   id: '/files',
   path: '/files',
+  getParentRoute: () => LocaleAppRoute,
+} as any)
+const LocaleAppInvitationsRoute = LocaleAppInvitationsRouteImport.update({
+  id: '/invitations',
+  path: '/invitations',
   getParentRoute: () => LocaleAppRoute,
 } as any)
 const LocaleAppReportsRoute = LocaleAppReportsRouteImport.update({
@@ -225,6 +231,7 @@ export interface FileRoutesByFullPath {
   '/$locale/reset-password': typeof LocaleResetPasswordRoute
   '/$locale/verify-email': typeof LocaleVerifyEmailRoute
   '/$locale/files': typeof LocaleAppFilesRoute
+  '/$locale/invitations': typeof LocaleAppInvitationsRoute
   '/$locale/reports': typeof LocaleAppReportsRoute
   '/$locale/accept-invitation/$token': typeof LocaleAcceptInvitationTokenRoute
   '/$locale/admin/audit': typeof LocaleAdminAuditRoute
@@ -257,6 +264,7 @@ export interface FileRoutesByTo {
   '/$locale/reset-password': typeof LocaleResetPasswordRoute
   '/$locale/verify-email': typeof LocaleVerifyEmailRoute
   '/$locale/files': typeof LocaleAppFilesRoute
+  '/$locale/invitations': typeof LocaleAppInvitationsRoute
   '/$locale/reports': typeof LocaleAppReportsRoute
   '/$locale/accept-invitation/$token': typeof LocaleAcceptInvitationTokenRoute
   '/$locale/admin/audit': typeof LocaleAdminAuditRoute
@@ -291,6 +299,7 @@ export interface FileRoutesById {
   '/$locale/reset-password': typeof LocaleResetPasswordRoute
   '/$locale/verify-email': typeof LocaleVerifyEmailRoute
   '/$locale/_app/files': typeof LocaleAppFilesRoute
+  '/$locale/_app/invitations': typeof LocaleAppInvitationsRoute
   '/$locale/_app/reports': typeof LocaleAppReportsRoute
   '/$locale/accept-invitation/$token': typeof LocaleAcceptInvitationTokenRoute
   '/$locale/admin/audit': typeof LocaleAdminAuditRoute
@@ -326,6 +335,7 @@ export interface FileRouteTypes {
     | '/$locale/reset-password'
     | '/$locale/verify-email'
     | '/$locale/files'
+    | '/$locale/invitations'
     | '/$locale/reports'
     | '/$locale/accept-invitation/$token'
     | '/$locale/admin/audit'
@@ -358,6 +368,7 @@ export interface FileRouteTypes {
     | '/$locale/reset-password'
     | '/$locale/verify-email'
     | '/$locale/files'
+    | '/$locale/invitations'
     | '/$locale/reports'
     | '/$locale/accept-invitation/$token'
     | '/$locale/admin/audit'
@@ -391,6 +402,7 @@ export interface FileRouteTypes {
     | '/$locale/reset-password'
     | '/$locale/verify-email'
     | '/$locale/_app/files'
+    | '/$locale/_app/invitations'
     | '/$locale/_app/reports'
     | '/$locale/accept-invitation/$token'
     | '/$locale/admin/audit'
@@ -524,6 +536,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof LocaleAppFilesRouteImport
       parentRoute: typeof LocaleAppRoute
     }
+    '/$locale/_app/invitations': {
+      id: '/$locale/_app/invitations'
+      path: '/invitations'
+      fullPath: '/$locale/invitations'
+      preLoaderRoute: typeof LocaleAppInvitationsRouteImport
+      parentRoute: typeof LocaleAppRoute
+    }
     '/$locale/_app/reports': {
       id: '/$locale/_app/reports'
       path: '/reports'
@@ -648,6 +667,7 @@ declare module '@tanstack/react-router' {
 
 interface LocaleAppRouteChildren {
   LocaleAppFilesRoute: typeof LocaleAppFilesRoute
+  LocaleAppInvitationsRoute: typeof LocaleAppInvitationsRoute
   LocaleAppReportsRoute: typeof LocaleAppReportsRoute
   LocaleAppIndexRoute: typeof LocaleAppIndexRoute
   LocaleAppSettingsApiKeysRoute: typeof LocaleAppSettingsApiKeysRoute
@@ -662,6 +682,7 @@ interface LocaleAppRouteChildren {
 
 const LocaleAppRouteChildren: LocaleAppRouteChildren = {
   LocaleAppFilesRoute: LocaleAppFilesRoute,
+  LocaleAppInvitationsRoute: LocaleAppInvitationsRoute,
   LocaleAppReportsRoute: LocaleAppReportsRoute,
   LocaleAppIndexRoute: LocaleAppIndexRoute,
   LocaleAppSettingsApiKeysRoute: LocaleAppSettingsApiKeysRoute,

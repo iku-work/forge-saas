@@ -45,6 +45,8 @@
     "required_note": "We always email you about billing problems, so those can't be turned off — you'd lose access without warning.",
     "type_webhook_endpoint_disabled": "A webhook endpoint is switched off after repeated failures",
     "section_title": "How each notification reaches you",
+    "type_invitation_received": "You're invited to another organization",
+    "type_invitation_accepted": "Someone accepts your invitation",
     "type_file_removed": "A file is removed by the service"
   },
   "types": {
@@ -75,6 +77,14 @@
     "webhook_endpoint_disabled": {
       "title": "Webhook endpoint disabled",
       "body": "{url} failed too many deliveries in a row and has been switched off. Fix your consumer, then re-enable it."
+    },
+    "invitation_received": {
+      "title": "You're invited",
+      "body": "You've been invited to join {org_name}."
+    },
+    "invitation_accepted": {
+      "title": "Invitation accepted",
+      "body": "{email} accepted your invitation and joined {org_name}."
     },
     "file_removed": {
       "title": "File removed",

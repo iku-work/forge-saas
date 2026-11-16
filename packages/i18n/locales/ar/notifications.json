@@ -45,6 +45,8 @@
     "required_note": "نراسلك دائمًا بالبريد الإلكتروني بشأن مشكلات الدفع، ولا يمكن إيقاف ذلك — وإلا فقدت الوصول دون سابق إنذار.",
     "type_webhook_endpoint_disabled": "تعطيل نقطة نهاية ويبهوك بعد إخفاقات متكررة",
     "section_title": "كيف يصلك كل إشعار",
+    "type_invitation_received": "تمت دعوتك إلى مؤسسة أخرى",
+    "type_invitation_accepted": "قبل شخص ما دعوتك",
     "type_file_removed": "تزيل الخدمة ملفًا"
   },
   "types": {
@@ -75,6 +77,14 @@
     "webhook_endpoint_disabled": {
       "title": "تم تعطيل نقطة نهاية الويبهوك",
       "body": "فشل {url} مرات كثيرة متتالية وتم تعطيله. أصلح المستهلك ثم أعد تفعيله."
+    },
+    "invitation_received": {
+      "title": "لديك دعوة",
+      "body": "تمت دعوتك للانضمام إلى {org_name}."
+    },
+    "invitation_accepted": {
+      "title": "تم قبول الدعوة",
+      "body": "قبل {email} دعوتك وانضم إلى {org_name}."
     },
     "file_removed": {
       "title": "تمت إزالة ملف",

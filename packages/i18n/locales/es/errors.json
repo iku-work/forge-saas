@@ -136,5 +136,6 @@
   "file_infected": "Se ha detectado malware en este archivo y ya no está disponible.",
   "reauth_failed": "La contraseña o el código no son correctos.",
   "reauth_wrong_account": "Esa cuenta no es con la que has iniciado sesión.",
-  "no_subscription_to_cancel": "Esta organización no tiene ninguna suscripción que cancelar."
+  "no_subscription_to_cancel": "Esta organización no tiene ninguna suscripción que cancelar.",
+  "invitation_needs_verified_email": "Verifica tu dirección de correo para aceptar invitaciones aquí, o usa el enlace del correo de invitación."
 }

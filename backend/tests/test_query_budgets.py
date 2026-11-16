@@ -101,6 +101,9 @@ BUDGETS: dict[str, int] = {
     "list_credentials": 3,
     "list_consents": 3,
     "list_my_orgs": 3,
+    # The page is one statement: invitations joined to their orgs, with the
+    # already-a-member check as a correlated EXISTS.
+    "list_my_invitations": 3,
     # Org-scoped: + the org row and the membership (the tenant-isolation
     # check, deliberately never cached -- see get_current_org).
     "list_invitations": 5,
@@ -336,6 +339,24 @@ async def _seed_orgs_for_owner(world: World, n: int) -> None:
     for _ in range(n):
         org = await orgs.create(name="Other", slug=f"other-{uuid4().hex[:8]}")
         await memberships.create(user_id=world.owner.id, org_id=org.id, role=MemberRole.MEMBER)
+    await world.session.commit()
+
+
+async def _seed_my_invitations(world: World, n: int) -> None:
+    # Each from its own org, so the org join is exercised per row.
+    orgs = OrganizationRepository(world.session)
+    invitations = InvitationRepository(world.session)
+    for _ in range(n):
+        org = await orgs.create(name="Inviting", slug=f"inviting-{uuid4().hex[:8]}")
+        await invitations.create(
+            invitation_id=uuid4(),
+            org_id=org.id,
+            email=world.owner.email,
+            role=MemberRole.MEMBER,
+            token_hash=uuid4().hex,
+            invited_by=world.owner.id,
+            expires_at=utcnow() + timedelta(days=7),
+        )
     await world.session.commit()
 
 
@@ -591,6 +612,10 @@ ENDPOINTS: list[ListEndpoint] = [
     ),
     ListEndpoint("list_consents", "/api/v1/me/consents", _seed_consents, page_cap=None),
     ListEndpoint("list_my_orgs", "/api/v1/orgs", _seed_orgs_for_owner, page_cap=None),
+    # Bounded at 50 rather than paginated (InvitationRepository.list_open_for_email).
+    ListEndpoint(
+        "list_my_invitations", "/api/v1/me/invitations", _seed_my_invitations, page_cap=None
+    ),
     ListEndpoint(
         "list_members",
         lambda w: f"/api/v1/orgs/{w.org.id}/members",

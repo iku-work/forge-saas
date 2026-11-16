@@ -99,6 +99,16 @@ class InvitationPreview(AppBaseModel):
     expires_at: datetime
 
 
+class MyInvitation(AppBaseModel):
+    """An open invitation to the signed-in user, as they see it in the app."""
+
+    id: UUID
+    org_id: UUID
+    org_name: str
+    role: MemberRole
+    expires_at: datetime
+
+
 class InvitationPublic(AppBaseModel):
     """One pending invitation, as the org's own admins see it.
 

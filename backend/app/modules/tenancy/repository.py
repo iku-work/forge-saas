@@ -26,6 +26,8 @@ from app.modules.auth.models import User
 from app.modules.auth.permissions import MemberRole
 from app.modules.tenancy.models import Invitation, Membership, Organization
 
+_OPEN_INVITATIONS_LIMIT = 50
+
 
 def _email_matches(email_query: str) -> ColumnElement[bool]:
     """Memberships whose user's email contains `email_query`, in any case.
@@ -369,6 +371,52 @@ class InvitationRepository:
         m = cast("Any", Invitation)
         stmt = select(Invitation).where(
             m.id == invitation_id, m.org_id == org_id, m.accepted_at.is_(None)
+        )
+        result = await self.session.execute(stmt)
+        return result.scalar_one_or_none()
+
+    async def list_open_for_email(self, email: str) -> list[tuple[Invitation, Organization]]:
+        """Unaccepted, unexpired invitations to `email`, with their org, newest
+        first. Leaves out orgs that are deleted or that the email's user is
+        already in.
+
+        Bounded rather than paginated: an address with more open invitations
+        than this is not a real person's inbox.
+        """
+        m = cast("Any", Invitation)
+        org = cast("Any", Organization)
+        mem = cast("Any", Membership)
+        u = cast("Any", User)
+        already_member = (
+            select(mem.id)
+            .join(User, u.id == mem.user_id)
+            .where(mem.org_id == m.org_id, func.lower(u.email) == func.lower(m.email))
+            .exists()
+        )
+        stmt = (
+            select(Invitation, Organization)
+            .join(Organization, org.id == m.org_id)
+            .where(
+                func.lower(m.email) == email.lower(),
+                m.accepted_at.is_(None),
+                m.expires_at > utcnow(),
+                org.deleted_at.is_(None),
+                ~already_member,
+            )
+            .order_by(m.created_at.desc(), m.id.desc())
+            .limit(_OPEN_INVITATIONS_LIMIT)
+        )
+        result = await self.session.execute(stmt)
+        return [(row[0], row[1]) for row in result.all()]
+
+    async def get_open_for_email(self, invitation_id: UUID, email: str) -> Invitation | None:
+        """An unaccepted, unexpired invitation, only if it was sent to `email`."""
+        m = cast("Any", Invitation)
+        stmt = select(Invitation).where(
+            m.id == invitation_id,
+            func.lower(m.email) == email.lower(),
+            m.accepted_at.is_(None),
+            m.expires_at > utcnow(),
         )
         result = await self.session.execute(stmt)
         return result.scalar_one_or_none()
