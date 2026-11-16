@@ -839,6 +839,18 @@ export type EnvelopeListMembershipPublic = {
 };
 
 /**
+ * Envelope[list[MyInvitation]]
+ */
+export type EnvelopeListMyInvitation = {
+    /**
+     * Data
+     */
+    data?: Array<MyInvitation> | null;
+    error?: ErrorBody | null;
+    meta: Meta;
+};
+
+/**
  * Envelope[list[NotificationPublic]]
  */
 export type EnvelopeListNotificationPublic = {
@@ -1423,6 +1435,31 @@ export type ModulesResponse = {
      * Usage Metering
      */
     usage_metering: boolean;
+};
+
+/**
+ * MyInvitation
+ *
+ * An open invitation to the signed-in user, as they see it in the app.
+ */
+export type MyInvitation = {
+    /**
+     * Expires At
+     */
+    expires_at: string;
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * Org Id
+     */
+    org_id: string;
+    /**
+     * Org Name
+     */
+    org_name: string;
+    role: MemberRole;
 };
 
 /**
@@ -4627,6 +4664,82 @@ export type GetExportJobApiV1MeExportJobIdGetResponses = {
 };
 
 export type GetExportJobApiV1MeExportJobIdGetResponse = GetExportJobApiV1MeExportJobIdGetResponses[keyof GetExportJobApiV1MeExportJobIdGetResponses];
+
+export type ListMyInvitationsApiV1MeInvitationsGetData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/v1/me/invitations';
+};
+
+export type ListMyInvitationsApiV1MeInvitationsGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: EnvelopeListMyInvitation;
+};
+
+export type ListMyInvitationsApiV1MeInvitationsGetResponse = ListMyInvitationsApiV1MeInvitationsGetResponses[keyof ListMyInvitationsApiV1MeInvitationsGetResponses];
+
+export type AcceptMyInvitationApiV1MeInvitationsInvitationIdAcceptPostData = {
+    body?: never;
+    path: {
+        /**
+         * Invitation Id
+         */
+        invitation_id: string;
+    };
+    query?: never;
+    url: '/api/v1/me/invitations/{invitation_id}/accept';
+};
+
+export type AcceptMyInvitationApiV1MeInvitationsInvitationIdAcceptPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: EnvelopeNoneType;
+};
+
+export type AcceptMyInvitationApiV1MeInvitationsInvitationIdAcceptPostError = AcceptMyInvitationApiV1MeInvitationsInvitationIdAcceptPostErrors[keyof AcceptMyInvitationApiV1MeInvitationsInvitationIdAcceptPostErrors];
+
+export type AcceptMyInvitationApiV1MeInvitationsInvitationIdAcceptPostResponses = {
+    /**
+     * Successful Response
+     */
+    200: EnvelopeMembershipPublic;
+};
+
+export type AcceptMyInvitationApiV1MeInvitationsInvitationIdAcceptPostResponse = AcceptMyInvitationApiV1MeInvitationsInvitationIdAcceptPostResponses[keyof AcceptMyInvitationApiV1MeInvitationsInvitationIdAcceptPostResponses];
+
+export type DeclineMyInvitationApiV1MeInvitationsInvitationIdDeclinePostData = {
+    body?: never;
+    path: {
+        /**
+         * Invitation Id
+         */
+        invitation_id: string;
+    };
+    query?: never;
+    url: '/api/v1/me/invitations/{invitation_id}/decline';
+};
+
+export type DeclineMyInvitationApiV1MeInvitationsInvitationIdDeclinePostErrors = {
+    /**
+     * Validation Error
+     */
+    422: EnvelopeNoneType;
+};
+
+export type DeclineMyInvitationApiV1MeInvitationsInvitationIdDeclinePostError = DeclineMyInvitationApiV1MeInvitationsInvitationIdDeclinePostErrors[keyof DeclineMyInvitationApiV1MeInvitationsInvitationIdDeclinePostErrors];
+
+export type DeclineMyInvitationApiV1MeInvitationsInvitationIdDeclinePostResponses = {
+    /**
+     * Successful Response
+     */
+    200: EnvelopeNoneType;
+};
+
+export type DeclineMyInvitationApiV1MeInvitationsInvitationIdDeclinePostResponse = DeclineMyInvitationApiV1MeInvitationsInvitationIdDeclinePostResponses[keyof DeclineMyInvitationApiV1MeInvitationsInvitationIdDeclinePostResponses];
 
 export type UpdateNotificationPreferencesApiV1MeNotificationPreferencesPatchData = {
     body: NotificationPreferencesUpdate;

@@ -50,6 +50,7 @@ from app.modules.tenancy.schemas import (
     InviteRequest,
     MembershipPublic,
     MemberUserSummary,
+    MyInvitation,
     OrganizationPublic,
     UpdateGrantsRequest,
     UpdateMembershipRequest,
@@ -482,6 +483,63 @@ async def revoke_invitation(
     session: Annotated[AsyncSession, Depends(get_session)],
 ) -> Envelope[None]:
     await TenancyService(session).revoke_invitation(org_id, invitation_id)
+    await session.commit()
+    return Envelope(data=None, meta=Meta(request_id=_request_id(request)))
+
+
+@router.get("/me/invitations")
+@api_limit
+async def list_my_invitations(
+    request: Request,
+    user: Annotated[User, Depends(get_current_user)],
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> Envelope[list[MyInvitation]]:
+    rows = await TenancyService(session).list_my_invitations(user)
+    data = [
+        MyInvitation(
+            id=invitation.id,
+            org_id=org.id,
+            org_name=org.name,
+            role=invitation.role,
+            expires_at=invitation.expires_at,
+        )
+        for invitation, org in rows
+    ]
+    return Envelope(data=data, meta=Meta(request_id=_request_id(request)))
+
+
+@router.post(
+    "/me/invitations/{invitation_id}/accept",
+    dependencies=[Depends(reject_during_impersonation("data_mutation"))],
+)
+@api_limit
+async def accept_my_invitation(
+    request: Request,
+    invitation_id: UUID,
+    user: Annotated[User, Depends(get_current_user)],
+    session: Annotated[AsyncSession, Depends(get_session)],
+    redis: Annotated[Redis, Depends(get_redis)],
+) -> Envelope[MembershipPublic]:
+    membership = await TenancyService(session).accept_my_invitation(invitation_id, user, redis)
+    await session.commit()
+    return Envelope(
+        data=MembershipPublic.model_validate(membership),
+        meta=Meta(request_id=_request_id(request)),
+    )
+
+
+@router.post(
+    "/me/invitations/{invitation_id}/decline",
+    dependencies=[Depends(reject_during_impersonation("data_mutation"))],
+)
+@api_limit
+async def decline_my_invitation(
+    request: Request,
+    invitation_id: UUID,
+    user: Annotated[User, Depends(get_current_user)],
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> Envelope[None]:
+    await TenancyService(session).decline_my_invitation(invitation_id, user)
     await session.commit()
     return Envelope(data=None, meta=Meta(request_id=_request_id(request)))
 

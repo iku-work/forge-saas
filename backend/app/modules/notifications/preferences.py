@@ -22,6 +22,12 @@ DEFAULT_PREFERENCES: dict[str, dict[str, bool]] = {
     # stopped is exactly the thing a product finds out about a week late.
     # Push off: it is an operations message, not something to wake anyone for.
     "webhook_endpoint_disabled": {"email": True, "in_app": True, "push": False},
+    # An existing user invited to another org. In-app only by default: the
+    # invitation email with its link goes out anyway, from the invite itself.
+    "invitation_received": {"email": False, "in_app": True, "push": False},
+    # To the inviter, when someone accepts. In-app only: they already had an
+    # in-app confirmation when the invitation went out.
+    "invitation_accepted": {"email": False, "in_app": True, "push": False},
 }
 
 # T-234: (notification type -> channels that stay on no matter what the user

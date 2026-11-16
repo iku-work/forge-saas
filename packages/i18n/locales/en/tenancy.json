@@ -263,5 +263,22 @@
     "empty_title": "No endpoints yet",
     "empty_body": "Webhooks push events to a URL you control as they happen, so you don't have to poll for them. Add an endpoint and choose which events it should receive.",
     "menu_label": "Actions for {url}"
+  },
+  "my_invitations": {
+    "title": "Invitations",
+    "description": "Organizations that have invited you to join.",
+    "list_label": "Your invitations",
+    "none": "You have no open invitations.",
+    "join_as": "Join as {role}",
+    "expires": "Expires {date}",
+    "accept": "Accept",
+    "accept_pending": "Joining…",
+    "decline": "Decline",
+    "decline_pending": "Declining…",
+    "accepted": "You joined {org_name}.",
+    "declined": "Invitation declined.",
+    "error_load": "Your invitations couldn't be loaded. Try again in a moment.",
+    "error_action": "That didn't work. Try again in a moment.",
+    "verify_note": "Verify your email address to see invitations here. Until then, use the link in the invitation email."
   }
 }
