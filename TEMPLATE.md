@@ -14,8 +14,12 @@ version unless you have a documented reason not to (note the reason in
 
 ## Files the product owns (template never touches)
 
-- `backend/product/config.py` — module toggles + branding + support tool (backend)
+- `backend/product/config.py` — module toggles, branding, support tool, plans, locales, and the sign-up limits: `MAX_FREE_ORGS_PER_USER`, `BLOCKED_EMAIL_DOMAINS`, `ALLOWED_EMAIL_DOMAINS` (backend)
 - `product.config.ts` — module toggles + branding (frontend)
+- `deploy/*.env` — your environments' committed settings: hosts, domains, OAuth client ids, the Bitwarden project. A template release that adds a setting says so in `CHANGELOG.md`; add it to yours. (`deploy/secret-names` stays the template's: it lists the secrets the code reads.)
+- `apps/marketing/src/content/legal/` — your terms and privacy policy. The shipped ones are placeholders, not legal advice.
+- `apps/marketing/src/content/pricing.ts` — the price list the pricing page falls back to (prices themselves live in Stripe)
+- `apps/marketing/src/config/indexing.ts` — your production origin, the one build search engines may index
 - `apps/web/src/features/support/SupportWidget.tsx` — the support vendor's widget wrapper, if you wire one (T-262; see `docs/runbooks/support-tool-integration.md`)
 - `.env.product.example` — product-specific env vars
 - `apps/web/src/routes/_product/` — product-specific routes
@@ -155,14 +159,15 @@ Products: assign yourself a prefix block and document it here when you fork:
 ## Pulling template updates
 
 ```sh
-git fetch upstream
-git merge upstream/vX.Y.Z     # always merge a tag, never upstream/main directly
+make check-template-drift      # what the newest template release has that you don't
+make update-from-template      # merge that release (a tag, never upstream/main)
 # Resolve conflicts; take the template version unless product.config.py says otherwise
 make dev && make test          # verify before pushing
 ```
 
-`make update-from-template` and `make check-template-drift` (see `Makefile`)
-automate the fetch/merge and the "are we behind" check respectively.
+Both use the newest `vX.Y.Z` tag on `upstream`; pass `TEMPLATE_VERSION=v1.2.0`
+to pick another. Read that release's `CHANGELOG.md` entry first: it lists new
+settings for `deploy/*.env` and anything else that touches files you own.
 
 ## Setting up the upstream remote
 
