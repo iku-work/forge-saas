@@ -196,3 +196,37 @@ def test_free_org_cap_rejects_anything_but_a_positive_int(
 
     with pytest.raises(RuntimeError, match="MAX_FREE_ORGS_PER_USER"):
         module_loader.get_free_org_cap()
+
+
+@pytest.fixture
+def _clear_free_plan_cache() -> Generator[None]:
+    module_loader.get_free_plan_features.cache_clear()
+    yield
+    module_loader.get_free_plan_features.cache_clear()
+
+
+@pytest.mark.usefixtures("_clear_free_plan_cache")
+def test_free_plan_features_read_the_product_config(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(product_config, "FREE_PLAN_FEATURES", {"seats": 1, "max_upload_mb": 2})
+
+    assert module_loader.get_free_plan_features() == {"seats": 1, "max_upload_mb": 2}
+
+
+@pytest.mark.usefixtures("_clear_free_plan_cache")
+def test_free_plan_features_default_when_the_config_predates_them(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delattr(product_config, "FREE_PLAN_FEATURES")
+
+    assert module_loader.get_free_plan_features() == module_loader.DEFAULT_FREE_PLAN_FEATURES
+
+
+@pytest.mark.usefixtures("_clear_free_plan_cache")
+@pytest.mark.parametrize("features", [None, ["seats"], {"seats": "3"}, {"storage_gb": 1.5}])
+def test_free_plan_features_must_map_names_to_numbers(
+    monkeypatch: pytest.MonkeyPatch, features: object
+) -> None:
+    monkeypatch.setattr(product_config, "FREE_PLAN_FEATURES", features)
+
+    with pytest.raises(RuntimeError, match="FREE_PLAN_FEATURES"):
+        module_loader.get_free_plan_features()

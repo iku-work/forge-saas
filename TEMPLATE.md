@@ -14,7 +14,7 @@ version unless you have a documented reason not to (note the reason in
 
 ## Files the product owns (template never touches)
 
-- `backend/product/config.py` — module toggles, branding, support tool, plans, locales, and the sign-up limits: `MAX_FREE_ORGS_PER_USER`, `BLOCKED_EMAIL_DOMAINS`, `ALLOWED_EMAIL_DOMAINS` (backend)
+- `backend/product/config.py` — module toggles, branding, support tool, paid plans and the free plan's limits (`FREE_PLAN_FEATURES`), locales, and the sign-up limits: `MAX_FREE_ORGS_PER_USER`, `BLOCKED_EMAIL_DOMAINS`, `ALLOWED_EMAIL_DOMAINS` (backend)
 - `product.config.ts` — module toggles + branding (frontend)
 - `deploy/*.env` — your environments' committed settings: hosts, domains, OAuth client ids, the Bitwarden project. A template release that adds a setting says so in `CHANGELOG.md`; add it to yours. (`deploy/secret-names` stays the template's: it lists the secrets the code reads.)
 - `apps/marketing/src/content/legal/` — your terms and privacy policy. The shipped ones are placeholders, not legal advice.

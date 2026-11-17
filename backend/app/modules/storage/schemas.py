@@ -64,3 +64,9 @@ class StoredFilePublic(AppBaseModel):
 class DownloadUrlResponse(AppBaseModel):
     url: str
     expires_at: datetime
+
+
+class UploadLimitsResponse(AppBaseModel):
+    """What the uploader shows before a file is picked. Presign enforces it."""
+
+    max_upload_bytes: int

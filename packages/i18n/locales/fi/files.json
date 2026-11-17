@@ -19,6 +19,7 @@
     "retry": "Yritä uudelleen",
     "error_type": "Tiedostotyyppiä ei tueta.",
     "error_size": "Tiedosto ylittää {max}-rajan.",
+    "max_size": "Enintään {max} tiedostoa kohden",
     "error_upload": "Lataus epäonnistui.",
     "queued": "Jonossa",
     "uploading": "Ladataan…",

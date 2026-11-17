@@ -43,7 +43,7 @@ from app.modules.storage import service as service_module
 from app.modules.storage.backend import ObjectChangedError, PresignedUpload
 from app.modules.storage.keys import INCOMING_PREFIX, upload_key
 from app.modules.storage.models import StoredFile
-from app.modules.storage.quota import UPLOAD_RESERVATION_WINDOW
+from app.modules.storage.quota import MIB, UPLOAD_RESERVATION_WINDOW, max_upload_bytes
 from app.modules.storage.repository import StoredFileRepository
 from app.modules.storage.service import StorageService
 from app.modules.tenancy.repository import OrganizationRepository
@@ -1019,3 +1019,23 @@ async def test_the_scan_gate_does_not_replace_the_tenancy_check(
 
     with pytest.raises(NotFoundError):
         await other_org_service.get_download_url(stored_file.id)
+
+
+# --- max_upload_bytes: what GET /files/limits reports -----------------------------------
+
+
+@pytest.mark.parametrize(
+    ("features", "expected"),
+    [
+        (None, 100 * MIB),  # no plan (billing off): the ceiling alone
+        ({"storage_gb": 1}, 100 * MIB),  # a plan without a per-file cap
+        ({"max_upload_mb": 10}, 10 * MIB),  # the plan's cap is smaller
+        ({"max_upload_mb": 500}, 100 * MIB),  # the ceiling still wins
+    ],
+)
+def test_max_upload_bytes_is_the_smaller_of_plan_and_ceiling(
+    monkeypatch: pytest.MonkeyPatch, features: dict[str, Any] | None, expected: int
+) -> None:
+    _set_max_upload_bytes(monkeypatch, 100 * MIB)
+
+    assert max_upload_bytes(features) == expected

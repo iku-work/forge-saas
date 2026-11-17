@@ -102,6 +102,32 @@ def get_free_org_cap() -> int | None:
     raise RuntimeError(msg)
 
 
+# Used when a product config predates FREE_PLAN_FEATURES.
+DEFAULT_FREE_PLAN_FEATURES: dict[str, int | bool] = {
+    "seats": 3,
+    "storage_gb": 1,
+    "max_upload_mb": 10,
+}
+
+
+@lru_cache(maxsize=1)
+def get_free_plan_features() -> dict[str, int | bool]:
+    """The free plan's caps, from `FREE_PLAN_FEATURES` in product/config.py.
+    Read with a default: a config.py from before the setting has none."""
+    import product.config as product_config  # noqa: PLC0415 -- see get_branding()
+
+    features: object = getattr(product_config, "FREE_PLAN_FEATURES", DEFAULT_FREE_PLAN_FEATURES)
+    if not isinstance(features, dict) or not all(
+        isinstance(k, str) and isinstance(v, int) for k, v in features.items()
+    ):
+        msg = (
+            f"FREE_PLAN_FEATURES must map names to integers or booleans, got {features!r}. "
+            "Fix it in backend/product/config.py"
+        )
+        raise RuntimeError(msg)
+    return dict(features)
+
+
 @lru_cache(maxsize=1)
 def get_email_domain_rules() -> tuple[frozenset[str], frozenset[str]]:
     """`(blocked, allowed)` email domains the product adds to, or exempts

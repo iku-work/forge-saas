@@ -77,3 +77,16 @@ def check_absolute_ceiling(size_bytes: int) -> None:
             fallback=f"File exceeds the {ceiling // (1024 * 1024)}MB maximum upload size",
             params={"max_upload_mb": str(ceiling // (1024 * 1024))},
         )
+
+
+MIB = 1024 * 1024
+
+
+def max_upload_bytes(plan_features: dict[str, Any] | None) -> int:
+    """The largest file this org may upload: `MAX_UPLOAD_BYTES`, or the plan's
+    `max_upload_mb` if that is smaller. `None` features means no plan (billing
+    off), where only the ceiling applies. What `GET /files/limits` reports,
+    so the uploader can say it before anyone picks a file."""
+    ceiling = get_settings().MAX_UPLOAD_BYTES
+    plan_mb = (plan_features or {}).get("max_upload_mb")
+    return ceiling if plan_mb is None else min(ceiling, int(plan_mb) * MIB)

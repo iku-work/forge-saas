@@ -22,7 +22,8 @@ import { Button } from "./button";
 export interface FileUploaderProps {
   bucket?: string;
   accept?: string;
-  maxSize?: number;
+  /** Bytes. `undefined` while the limit is still loading: no hint, no check. */
+  maxSize?: number | undefined;
   onUploaded: (file: StoredFilePublic) => void;
   /**
    * "dropzone" (default): the large dashed target. "button": one secondary
@@ -335,6 +336,14 @@ export function FileUploader({
     e.target.value = "";
   }
 
+  // Said up front, so nobody waits for an upload that was never going to fit.
+  // Drop zone only: a button-variant caller (logo) states its cap in its own hint.
+  const maxSizeHint = maxSize ? (
+    <p className="text-xs text-muted-foreground" data-testid="upload-max-size">
+      {t("files.uploader.max_size", { max: formatBytes(maxSize) })}
+    </p>
+  ) : null;
+
   return (
     <div className="space-y-3">
       {variant === "button" ? (
@@ -389,6 +398,7 @@ export function FileUploader({
             </span>{" "}
             {t("files.uploader.hint")}
           </p>
+          {maxSizeHint}
         </div>
       )}
       {/* A sibling, not a child, of the role="button" dropzone above --

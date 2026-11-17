@@ -20,6 +20,7 @@
     "retry": "Reintentar",
     "error_type": "Tipo de archivo no permitido.",
     "error_size": "El archivo supera el límite de {max}.",
+    "max_size": "Hasta {max} por archivo",
     "error_upload": "Error al subir el archivo.",
     "queued": "En cola",
     "uploading": "Subiendo…",

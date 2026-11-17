@@ -1736,6 +1736,38 @@
         "title": "Envelope[UnreadCountResponse]",
         "type": "object"
       },
+      "Envelope_UploadLimitsResponse_": {
+        "properties": {
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/UploadLimitsResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "error": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ErrorBody"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "meta": {
+            "$ref": "#/components/schemas/Meta"
+          }
+        },
+        "required": [
+          "meta"
+        ],
+        "title": "Envelope[UploadLimitsResponse]",
+        "type": "object"
+      },
       "Envelope_UserPublic_": {
         "properties": {
           "data": {
@@ -4754,6 +4786,20 @@
           }
         },
         "title": "UpdateOrgRequest",
+        "type": "object"
+      },
+      "UploadLimitsResponse": {
+        "description": "What the uploader shows before a file is picked. Presign enforces it.",
+        "properties": {
+          "max_upload_bytes": {
+            "title": "Max Upload Bytes",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "max_upload_bytes"
+        ],
+        "title": "UploadLimitsResponse",
         "type": "object"
       },
       "UsageSummary": {
@@ -8405,6 +8451,62 @@
           }
         ],
         "summary": "List Files",
+        "tags": [
+          "files"
+        ]
+      }
+    },
+    "/api/v1/files/limits": {
+      "get": {
+        "description": "The org's per-file maximum, for the uploader to show up front.",
+        "operationId": "get_upload_limits_api_v1_files_limits_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-Org-ID",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Org-Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_UploadLimitsResponse_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_NoneType_"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Get Upload Limits",
         "tags": [
           "files"
         ]

@@ -58,6 +58,7 @@ from app.modules.storage.schemas import (
     PresignUploadRequest,
     PresignUploadResponse,
     StoredFilePublic,
+    UploadLimitsResponse,
 )
 from app.modules.storage.service import StorageService
 from app.modules.tenancy.models import Membership, Organization
@@ -94,6 +95,22 @@ async def presign_upload(  # noqa: PLR0913 — org_sub on top of the usual permi
     await session.commit()
     return Envelope(
         data=PresignUploadResponse(**result), meta=Meta(request_id=_request_id(request))
+    )
+
+
+@router.get("/limits")
+@api_limit
+async def get_upload_limits(
+    request: Request,
+    membership: Annotated[  # noqa: ARG001 — required to gate on FILES_READ
+        Membership, Depends(require_permission(Permission.FILES_READ))
+    ],
+    org_sub: Annotated[OrgSubscription | None, Depends(get_optional_org_subscription)],
+) -> Envelope[UploadLimitsResponse]:
+    """The org's per-file maximum, for the uploader to show up front."""
+    return Envelope(
+        data=UploadLimitsResponse(max_upload_bytes=StorageService.upload_limit(org_sub)),
+        meta=Meta(request_id=_request_id(request)),
     )
 
 

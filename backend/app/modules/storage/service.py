@@ -46,7 +46,12 @@ from app.modules.notifications.service import NotificationService
 from app.modules.storage.backend import ObjectChangedError, get_storage_backend
 from app.modules.storage.keys import delete_every_copy, upload_key
 from app.modules.storage.models import StoredFile
-from app.modules.storage.quota import check_absolute_ceiling, reservation_cutoff
+from app.modules.storage.quota import (
+    MIB,
+    check_absolute_ceiling,
+    max_upload_bytes,
+    reservation_cutoff,
+)
 from app.modules.storage.repository import StoredFileRepository
 from app.modules.storage.scan_gate import require_clean_scan
 from app.modules.webhooks import service as webhooks
@@ -184,9 +189,15 @@ class StorageService:
             "expires_at": presigned.expires_at,
         }
 
+    @staticmethod
+    def upload_limit(org_sub: OrgSubscription | None) -> int:
+        """The largest file this org may upload, for GET /files/limits.
+        Presign enforces the same two numbers, plan cap and ceiling."""
+        return max_upload_bytes(org_sub.plan.features if org_sub is not None else None)
+
     async def _check_quota(self, size_bytes: int, org_sub: OrgSubscription) -> None:
         max_upload_mb = org_sub.plan.features.get("max_upload_mb")
-        if max_upload_mb is not None and size_bytes > max_upload_mb * 1_000_000:
+        if max_upload_mb is not None and size_bytes > max_upload_mb * MIB:
             raise PlanLimitError(
                 "errors.file_too_large",
                 fallback=f"File exceeds the {max_upload_mb}MB per-file limit on your plan",

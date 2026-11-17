@@ -6,6 +6,28 @@ template keep their own changes in `CHANGELOG.product.md` (see
 
 ## [Unreleased]
 
+### Added
+- **The uploader says the limit up front.** "Up to 10 MB per file" under the
+  Files page drop zone (the profile photo and org logo already state theirs), from the new
+  `GET /api/v1/files/limits` (the smaller of the plan's `max_upload_mb` and
+  `MAX_UPLOAD_BYTES`). Before, people found out from the error after picking a
+  file.
+
+### Changed
+- **The free plan's limits are the product's.** `FREE_PLAN_FEATURES` in
+  `backend/product/config.py` (seats, storage, per-file size) replaces the
+  hard-coded `_FREE_PLAN` features in `app/modules/billing/dependencies.py`, so
+  changing them no longer means editing a template file. A config without it
+  keeps today's numbers. The dev seed's Free row reads the same setting.
+- **`max_upload_mb` counts 1024 × 1024 bytes,** like `MAX_UPLOAD_BYTES` and
+  like the sizes the app shows. A "10 MB" cap now accepts a file shown as
+  10 MB; before, it stopped at 9.5 MB as shown.
+- Sizes drop a trailing ".0": "10 MB", not "10.0 MB".
+
+### Conflict risk for products
+- Low. Add `FREE_PLAN_FEATURES` to your `backend/product/config.py` when you
+  want limits other than the defaults.
+
 ## [1.0.0] — 2026-11-17
 
 The first tagged release: phases 1 to 4 complete, the November review's
