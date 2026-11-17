@@ -231,6 +231,8 @@ async def test_uploads_are_refused_when_file_storage_is_off(
         await AuthService(session).avatar_upload_form(owner.id, "image/png")
 
 
+# The upload routes need file_storage; with it off they 422 before the check under test.
+@pytest.mark.module_dependent
 async def test_the_form_can_only_write_under_the_users_own_prefix(
     client: httpx.AsyncClient, owner: User, fake_backend: _FakeBackend
 ) -> None:
@@ -246,6 +248,8 @@ async def test_the_form_can_only_write_under_the_users_own_prefix(
     assert fake_backend.presigned == [(form["upload_key"], "image/png", MAX_AVATAR_BYTES)]
 
 
+# The upload routes need file_storage; with it off they 422 before the check under test.
+@pytest.mark.module_dependent
 async def test_a_gif_gets_no_form(client: httpx.AsyncClient, owner: User) -> None:
     response = await client.post(
         "/api/v1/auth/me/avatar/upload-form",
@@ -256,6 +260,8 @@ async def test_a_gif_gets_no_form(client: httpx.AsyncClient, owner: User) -> Non
     assert response.status_code == 422
 
 
+# The upload routes need file_storage; with it off they 422 before the check under test.
+@pytest.mark.module_dependent
 async def test_setting_the_upload_queues_it_for_the_scanner(
     client: httpx.AsyncClient,
     owner: User,
@@ -275,6 +281,8 @@ async def test_setting_the_upload_queues_it_for_the_scanner(
     assert enqueued_jobs == [("process_avatar", {"user_id": owner.id, "upload_key": key})]
 
 
+# The upload routes need file_storage; with it off they 422 before the check under test.
+@pytest.mark.module_dependent
 @pytest.mark.parametrize("whose", ["someone-else", "not-uploaded", "published", "traversal"])
 async def test_only_the_users_own_arrived_upload_can_be_set(
     client: httpx.AsyncClient,
