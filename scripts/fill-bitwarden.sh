@@ -136,6 +136,7 @@ ask STRIPE_WEBHOOK_SECRET '^whsec_[A-Za-z0-9]+$' "starts with whsec_"
 ask RESEND_API_KEY '^re_[A-Za-z0-9_]+$' "starts with re_"
 ask GOOGLE_CLIENT_SECRET '^GOCSPX-[A-Za-z0-9_-]+$' "starts with GOCSPX-"
 ask GITHUB_CLIENT_SECRET '^[0-9a-f]{40}$' "40 hex characters"
+ask TURNSTILE_SECRET_KEY '^0x[A-Za-z0-9_-]{20,}$' "starts with 0x, only with TURNSTILE_SITE_KEY set"
 ask SENTRY_DSN '^https://[0-9a-f]+@[A-Za-z0-9.-]+/[0-9]+$' "https://<key>@<host>/<project>"
 ask VIRUSTOTAL_API_KEY '^[0-9a-f]{64}$' "64 hex characters, only with VIRUS_SCANNER=virustotal"
 

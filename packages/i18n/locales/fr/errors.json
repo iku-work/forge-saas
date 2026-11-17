@@ -141,5 +141,8 @@
   "account_suspended": "Ce compte a été suspendu. Contactez le support si vous pensez qu’il s’agit d’une erreur.",
   "email_not_allowed": "Cette adresse e-mail ne peut pas être utilisée pour créer un compte.",
   "cannot_moderate_superadmin": "Cette action est impossible sur vous-même ou sur un autre superadmin.",
-  "email_already_verified": "Cette adresse e-mail est déjà vérifiée."
+  "email_already_verified": "Cette adresse e-mail est déjà vérifiée.",
+  "captcha_required": "Effectuez la vérification de sécurité avant de continuer.",
+  "captcha_failed": "La vérification de sécurité a échoué. Réessayez.",
+  "email_domain_not_allowed": "Utilisez une adresse e-mail permanente : celle-ci provient d’un service d’e-mail jetable."
 }

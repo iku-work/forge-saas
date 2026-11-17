@@ -127,7 +127,12 @@ export interface UseAuthResult {
   isImpersonating: boolean;
   login: (email: string, password: string) => Promise<UserPublic>;
   logout: () => Promise<void>;
-  register: (email: string, password: string) => Promise<void>;
+  /** `captchaToken`: Turnstile's token, when the check is on. */
+  register: (
+    email: string,
+    password: string,
+    captchaToken?: string | null,
+  ) => Promise<void>;
   endImpersonation: () => Promise<void>;
   loadImpersonatedSession: (accessToken: string, user: UserPublic) => void;
   completeTwoFactorLogin: (accessToken: string, user: UserPublic) => void;
@@ -176,9 +181,15 @@ export function useAuth(): UseAuthResult {
   );
 
   const register = useCallback(
-    async (email: string, password: string): Promise<void> => {
+    async (
+      email: string,
+      password: string,
+      captchaToken?: string | null,
+    ): Promise<void> => {
       await registerApiV1AuthRegisterPost({
-        body: { email, password },
+        body: captchaToken
+          ? { email, password, captcha_token: captchaToken }
+          : { email, password },
         throwOnError: true,
       });
     },

@@ -49,6 +49,7 @@ from app.models._mixins import utcnow
 from app.modules.audit.service import AuditService
 from app.modules.auth import amr as amr_methods
 from app.modules.auth.device_label import describe_device
+from app.modules.auth.email_domains import refuse_blocked_email
 from app.modules.auth.models import OAuthAccount, TOTPSecret, User, WebAuthnCredential
 from app.modules.auth.models import Session as SessionModel
 from app.modules.auth.repository import (
@@ -224,6 +225,8 @@ class AuthService:
         return {user.id: user for user in users}
 
     async def register(self, req: RegisterRequest) -> None:
+        # First, and openly: it says nothing about whether an account exists.
+        refuse_blocked_email(req.email)
         # Before the lookup, so a known address costs the same as a new one.
         password_hash = await _hash_password_off_loop(req.password)
         existing = await self._users.get_by_email(req.email)
@@ -982,6 +985,7 @@ class AuthService:
             raise ConflictError(
                 "errors.email_unchanged", fallback="This is already your current email address"
             )
+        refuse_blocked_email(new_email)
 
         # ASVS V2.5.5-adjacent: require_recent_auth (the router's dependency)
         # only proves the session itself was established/refreshed recently

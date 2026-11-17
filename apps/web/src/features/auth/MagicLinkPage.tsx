@@ -28,6 +28,7 @@ import { useRouteLocale } from "../../lib/useRouteLocale";
 
 import { AuthLayout } from "./AuthLayout";
 import { getErrorMessage } from "./getErrorMessage";
+import { useCaptcha } from "./useCaptcha";
 import { TwoFactorChallenge } from "./TwoFactorChallenge";
 
 interface MagicLinkPageProps {
@@ -149,6 +150,7 @@ function MagicLinkRequestForm() {
   const locale = useRouteLocale();
   const [formError, setFormError] = useState<string | null>(null);
   const [submitted, setSubmitted] = useState(false);
+  const captcha = useCaptcha();
 
   const form = useForm<MagicLinkInput>({
     resolver: zodResolver(magicLinkSchema),
@@ -159,12 +161,15 @@ function MagicLinkRequestForm() {
     setFormError(null);
     try {
       await requestMagicLinkApiV1AuthMagicLinkPost({
-        body: values,
+        body: captcha.token
+          ? { ...values, captcha_token: captcha.token }
+          : values,
         throwOnError: true,
       });
       setSubmitted(true);
     } catch (error) {
       setFormError(getErrorMessage(error, "auth.magic_link.error_default"));
+      captcha.reset();
     }
   };
 
@@ -232,11 +237,12 @@ function MagicLinkRequestForm() {
               </FormItem>
             )}
           />
+          {captcha.widget}
           <Button
             type="submit"
             size="lg"
             className="w-full"
-            disabled={form.formState.isSubmitting}
+            disabled={form.formState.isSubmitting || !captcha.ready}
           >
             {form.formState.isSubmitting
               ? t("auth.magic_link.submit_pending")

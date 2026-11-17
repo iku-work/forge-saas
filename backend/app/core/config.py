@@ -337,6 +337,13 @@ class Settings(BaseSettings):
     GITHUB_CLIENT_ID: str = ""
     GITHUB_CLIENT_SECRET: str = ""
 
+    # Cloudflare Turnstile on sign-up, magic link and forgot password. Both
+    # blank (the default) turns the check off; one without the other is a
+    # startup error. The site key is public and goes to the browser through
+    # /api/v1/config; the secret key verifies tokens and lives in Bitwarden.
+    TURNSTILE_SITE_KEY: str = ""
+    TURNSTILE_SECRET_KEY: str = ""
+
     # Storage
     STORAGE_BACKEND: Literal["s3", "r2", "minio"] = "minio"
     AWS_BUCKET_NAME: str = ""
@@ -592,6 +599,12 @@ class Settings(BaseSettings):
             self._validate_transport_tls()
         self._validate_encryption_key()
         self._validate_jwt_keys()
+        if bool(self.TURNSTILE_SITE_KEY) != bool(self.TURNSTILE_SECRET_KEY):
+            raise RuntimeError(
+                "Set both TURNSTILE_SITE_KEY and TURNSTILE_SECRET_KEY, or neither: with "
+                "one alone the browser and the server disagree about whether sign-up "
+                "needs a check"
+            )
         return self
 
     def _validate_transport_tls(self) -> None:

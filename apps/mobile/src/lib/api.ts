@@ -61,7 +61,7 @@ function isSessionIndependentRequest(url: string): boolean {
   return SESSION_INDEPENDENT_PATHS.some((path) => url.includes(path));
 }
 
-function getApiBaseUrl(): string {
+export function getApiBaseUrl(): string {
   return process.env.EXPO_PUBLIC_API_URL ?? "http://localhost:8000";
 }
 

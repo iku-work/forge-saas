@@ -1049,6 +1049,8 @@ class RegisterRequest(AppBaseModel):
     # expensive per character batch, so an unbounded password is a cheap
     # DoS lever (ASVS V2.1.2).
     password: str = Field(min_length=12, max_length=_PASSWORD_MAX_LENGTH)
+    # See PasswordResetRequest.captcha_token.
+    captcha_token: str | None = Field(default=None, max_length=4096)
 
     _check_password_strength = field_validator("password")(_validate_password_strength)
 
@@ -1239,6 +1241,9 @@ class SessionPublic(AppBaseModel):
 
 class PasswordResetRequest(AppBaseModel):
     email: EmailStr
+    # Cloudflare Turnstile's token, required only when Turnstile is on
+    # (app.modules.auth.captcha).
+    captcha_token: str | None = Field(default=None, max_length=4096)
 
 
 class PasswordResetConfirmRequest(AppBaseModel):
@@ -1260,6 +1265,8 @@ class ChangePasswordRequest(AppBaseModel):
 
 class MagicLinkRequest(AppBaseModel):
     email: EmailStr
+    # See PasswordResetRequest.captcha_token.
+    captcha_token: str | None = Field(default=None, max_length=4096)
 
 
 class MagicLinkConsumeRequest(AppBaseModel):

@@ -29,6 +29,7 @@ import { useRouteLocale } from "../../lib/useRouteLocale";
 import { AuthLayout } from "./AuthLayout";
 import { getErrorMessage } from "./getErrorMessage";
 import { OAuthOptions } from "./OAuthOptions";
+import { useCaptcha } from "./useCaptcha";
 
 export function RegisterPage() {
   const { t } = useTranslation();
@@ -38,6 +39,7 @@ export function RegisterPage() {
   const signupDisabled = useSignupDisabled();
   const [formError, setFormError] = useState<string | null>(null);
   const [submitted, setSubmitted] = useState(false);
+  const captcha = useCaptcha();
 
   const form = useForm<RegisterInput>({
     resolver: zodResolver(registerSchema),
@@ -47,10 +49,11 @@ export function RegisterPage() {
   const onSubmit = async (values: RegisterInput): Promise<void> => {
     setFormError(null);
     try {
-      await register(values.email, values.password);
+      await register(values.email, values.password, captcha.token);
       setSubmitted(true);
     } catch (error) {
       setFormError(getErrorMessage(error, "auth.register.error_default"));
+      captcha.reset();
     }
   };
 
@@ -215,11 +218,12 @@ export function RegisterPage() {
               </FormItem>
             )}
           />
+          {captcha.widget}
           <Button
             type="submit"
             size="lg"
             className="w-full"
-            disabled={form.formState.isSubmitting}
+            disabled={form.formState.isSubmitting || !captcha.ready}
             data-testid="register-submit"
           >
             {form.formState.isSubmitting

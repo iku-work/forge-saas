@@ -141,5 +141,8 @@
   "account_suspended": "Esta cuenta ha sido suspendida. Contacta con soporte si crees que es un error.",
   "email_not_allowed": "No se puede crear una cuenta con esta dirección de correo.",
   "cannot_moderate_superadmin": "Esta acción no se puede realizar sobre ti mismo ni sobre otro superadministrador.",
-  "email_already_verified": "Esta dirección de correo ya está verificada."
+  "email_already_verified": "Esta dirección de correo ya está verificada.",
+  "captcha_required": "Completa la comprobación de seguridad antes de continuar.",
+  "captcha_failed": "La comprobación de seguridad no se superó. Inténtalo de nuevo.",
+  "email_domain_not_allowed": "Usa una dirección de correo permanente: esta es de un servicio de correo desechable."
 }

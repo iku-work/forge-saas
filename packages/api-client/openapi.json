@@ -408,6 +408,17 @@
             },
             "title": "Supported Locales",
             "type": "array"
+          },
+          "turnstile_site_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Turnstile Site Key"
           }
         },
         "required": [
@@ -2992,6 +3003,18 @@
       },
       "MagicLinkRequest": {
         "properties": {
+          "captcha_token": {
+            "anyOf": [
+              {
+                "maxLength": 4096,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Captcha Token"
+          },
           "email": {
             "format": "email",
             "title": "Email",
@@ -3513,6 +3536,18 @@
       },
       "PasswordResetRequest": {
         "properties": {
+          "captcha_token": {
+            "anyOf": [
+              {
+                "maxLength": 4096,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Captcha Token"
+          },
           "email": {
             "format": "email",
             "title": "Email",
@@ -3868,6 +3903,18 @@
       },
       "RegisterRequest": {
         "properties": {
+          "captcha_token": {
+            "anyOf": [
+              {
+                "maxLength": 4096,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Captcha Token"
+          },
           "email": {
             "format": "email",
             "title": "Email",

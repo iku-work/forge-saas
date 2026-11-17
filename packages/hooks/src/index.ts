@@ -15,6 +15,7 @@ export {
   useGlobalBanner,
   useMaintenance,
   useSignupDisabled,
+  useTurnstileSiteKey,
   getModulesSnapshot,
   bootstrapModules,
   refreshConfig,

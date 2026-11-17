@@ -34,6 +34,7 @@ from app.core.exceptions import AuthenticationError
 from app.core.urls import frontend_url
 from app.middleware.locale import get_locale
 from app.middleware.rate_limit import api_limit, auth_limit, sensitive_limit
+from app.modules.auth.captcha import require_captcha
 from app.modules.auth.models import User
 from app.modules.auth.schemas import (
     AvatarUploadForm,
@@ -159,6 +160,7 @@ async def register(
 ) -> Envelope[None]:
     # impersonation-ok: public sign-up. Creates a *new* account from the
     # posted email; it is not an action taken on the impersonated user.
+    await require_captcha(body.captcha_token, _client_ip(request))
     await AuthService(session).register(body)
     await session.commit()
     return Envelope(data=None, meta=Meta(request_id=_request_id(request)))
@@ -285,6 +287,7 @@ async def forgot_password(
     body: PasswordResetRequest,
     session: Annotated[AsyncSession, Depends(get_session)],
 ) -> Envelope[None]:
+    await require_captcha(body.captcha_token, _client_ip(request))
     await AuthService(session).request_password_reset(body.email)
     await session.commit()
     return Envelope(data=None, meta=Meta(request_id=_request_id(request)))
@@ -313,6 +316,7 @@ async def request_magic_link(
     body: MagicLinkRequest,
     session: Annotated[AsyncSession, Depends(get_session)],
 ) -> Envelope[None]:
+    await require_captcha(body.captcha_token, _client_ip(request))
     await AuthService(session).request_magic_link(body.email)
     await session.commit()
     return Envelope(data=None, meta=Meta(request_id=_request_id(request)))

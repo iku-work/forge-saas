@@ -262,6 +262,10 @@ export type ConfigResponse = {
      * Supported Locales
      */
     supported_locales: Array<string>;
+    /**
+     * Turnstile Site Key
+     */
+    turnstile_site_key?: string | null;
 };
 
 /**
@@ -1246,6 +1250,10 @@ export type MagicLinkConsumeRequest = {
  */
 export type MagicLinkRequest = {
     /**
+     * Captcha Token
+     */
+    captcha_token?: string | null;
+    /**
      * Email
      */
     email: string;
@@ -1581,6 +1589,10 @@ export type PasswordResetConfirmRequest = {
  */
 export type PasswordResetRequest = {
     /**
+     * Captcha Token
+     */
+    captcha_token?: string | null;
+    /**
      * Email
      */
     email: string;
@@ -1806,6 +1818,10 @@ export type RefreshResponse = {
  * RegisterRequest
  */
 export type RegisterRequest = {
+    /**
+     * Captcha Token
+     */
+    captcha_token?: string | null;
     /**
      * Email
      */

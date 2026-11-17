@@ -82,6 +82,7 @@ _FEATURE_NAMES: dict[str, str] = {
     "s3": "File storage",
     "virus_scanner": "File scanning",
     "expo_push": "Push notifications",
+    "turnstile": "Sign-up checks",
 }
 
 _STATE_VALUES = {

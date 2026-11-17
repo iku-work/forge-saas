@@ -14,6 +14,7 @@ import { Button } from "../../src/components/Button";
 import { FormField } from "../../src/components/FormField";
 import { client } from "../../src/lib/api";
 import { getErrorMessage } from "../../src/lib/getErrorMessage";
+import { useCaptcha } from "../../src/lib/useCaptcha";
 
 // Request-only: there is no `forge://magic-link/[token]` deep link in
 // T-047's scope, so unlike web's MagicLinkPage this screen never consumes a
@@ -23,6 +24,7 @@ export default function MagicLinkScreen() {
   const { t } = useTranslation();
   const [formError, setFormError] = useState<string | null>(null);
   const [submitted, setSubmitted] = useState(false);
+  const captcha = useCaptcha();
 
   const { control, handleSubmit, formState } = useForm<MagicLinkInput>({
     resolver: zodResolver(magicLinkSchema),
@@ -34,12 +36,15 @@ export default function MagicLinkScreen() {
     try {
       await requestMagicLinkApiV1AuthMagicLinkPost({
         client,
-        body: values,
+        body: captcha.token
+          ? { ...values, captcha_token: captcha.token }
+          : values,
         throwOnError: true,
       });
       setSubmitted(true);
     } catch (error) {
       setFormError(getErrorMessage(error, "auth.magic_link.error_default"));
+      captcha.reset();
     }
   };
 
@@ -77,6 +82,7 @@ export default function MagicLinkScreen() {
         autoComplete="email"
         keyboardType="email-address"
       />
+      {captcha.widget}
       <Button
         label={
           formState.isSubmitting
@@ -84,7 +90,7 @@ export default function MagicLinkScreen() {
             : t("auth.magic_link.submit")
         }
         hint={t("auth.magic_link.submit_hint")}
-        disabled={formState.isSubmitting}
+        disabled={formState.isSubmitting || !captcha.ready}
         onPress={() => {
           void handleSubmit(onSubmit)();
         }}

@@ -26,12 +26,14 @@ import { useRouteLocale } from "../../lib/useRouteLocale";
 
 import { AuthLayout } from "./AuthLayout";
 import { getErrorMessage } from "./getErrorMessage";
+import { useCaptcha } from "./useCaptcha";
 
 export function ForgotPasswordPage() {
   const { t } = useTranslation();
   const locale = useRouteLocale();
   const [formError, setFormError] = useState<string | null>(null);
   const [submitted, setSubmitted] = useState(false);
+  const captcha = useCaptcha();
 
   const form = useForm<ForgotPasswordInput>({
     resolver: zodResolver(forgotPasswordSchema),
@@ -42,7 +44,9 @@ export function ForgotPasswordPage() {
     setFormError(null);
     try {
       await forgotPasswordApiV1AuthForgotPasswordPost({
-        body: values,
+        body: captcha.token
+          ? { ...values, captcha_token: captcha.token }
+          : values,
         throwOnError: true,
       });
       setSubmitted(true);
@@ -50,6 +54,7 @@ export function ForgotPasswordPage() {
       setFormError(
         getErrorMessage(error, "auth.forgot_password.error_default"),
       );
+      captcha.reset();
     }
   };
 
@@ -117,11 +122,12 @@ export function ForgotPasswordPage() {
               </FormItem>
             )}
           />
+          {captcha.widget}
           <Button
             type="submit"
             size="lg"
             className="w-full"
-            disabled={form.formState.isSubmitting}
+            disabled={form.formState.isSubmitting || !captcha.ready}
           >
             {form.formState.isSubmitting
               ? t("auth.forgot_password.submit_pending")

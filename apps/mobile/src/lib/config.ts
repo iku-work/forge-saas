@@ -89,6 +89,7 @@ interface ConfigState {
   support: SupportSettings;
   banner: GlobalBanner | null;
   maintenance: MaintenanceState;
+  turnstileSiteKey: string | null;
 }
 
 let state: ConfigState = {
@@ -96,6 +97,7 @@ let state: ConfigState = {
   support: UNRESOLVED_SUPPORT,
   banner: null,
   maintenance: NO_MAINTENANCE,
+  turnstileSiteKey: null,
 };
 const listeners = new Set<() => void>();
 
@@ -132,6 +134,10 @@ export function getMaintenanceSnapshot(): MaintenanceState {
   return state.maintenance;
 }
 
+function getTurnstileSiteKeySnapshot(): string | null {
+  return state.turnstileSiteKey;
+}
+
 let bootstrapPromise: Promise<void> | null = null;
 
 async function fetchConfig(): Promise<void> {
@@ -149,6 +155,7 @@ async function fetchConfig(): Promise<void> {
         },
         banner: envelope.data.banner ?? null,
         maintenance: envelope.data.maintenance,
+        turnstileSiteKey: envelope.data.turnstile_site_key ?? null,
       });
     }
   } catch {
@@ -184,6 +191,16 @@ export function useSupportSettings(): SupportSettings {
   }, []);
 
   return useSyncExternalStore(subscribeConfig, getSupportSettingsSnapshot);
+}
+
+// Cloudflare Turnstile's site key, or null when the check is off: sign-up,
+// magic link and forgot password show the check and send its token when set.
+export function useTurnstileSiteKey(): string | null {
+  useEffect(() => {
+    void bootstrapModules();
+  }, []);
+
+  return useSyncExternalStore(subscribeConfig, getTurnstileSiteKeySnapshot);
 }
 
 // Same 60s as the backend's settings cache TTL and as the web hook's poll --
