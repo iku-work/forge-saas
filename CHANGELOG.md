@@ -65,6 +65,8 @@ see [TEMPLATE.md](TEMPLATE.md)).
   filled in (#84); the 2 November review's Minor list (#91).
 - Dependencies: the eight open Dependabot alerts (astro, node-forge,
   basic-ftp) closed (#110), lockfile refreshed within ranges (#94, #113).
+  picomatch's ReDoS advisory (GHSA-fc5q-39xc-vjpf) is accepted with a dated
+  reason: it has no published fix and reaches only build tooling.
 
 Everything below landed before 2026-11-05 and was never tagged on its own.
 
