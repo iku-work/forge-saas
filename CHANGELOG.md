@@ -5,6 +5,49 @@ template keep their own changes in `CHANGELOG.product.md` (see
 [TEMPLATE.md](TEMPLATE.md)).
 
 ## [Unreleased]
+
+## [1.0.0] — 2026-11-17
+
+The first tagged release: phases 1 to 4 complete, the November review's
+findings fixed. Products merge tags from here on (`make update-from-template`,
+see [TEMPLATE.md](TEMPLATE.md)).
+
+### Conflict risk for products
+- None yet: no product has forked. From the next release on, this section says
+  which product-owned files a release touches and which `deploy/*.env` settings
+  it adds.
+
+### Added since 2026-11-05
+- **Admin:** suspend, ban, sign out, verify and delete an account (#112); an
+  org's members and files on its admin page, with open and remove (#114); a
+  Feedback inbox fed by a "Send feedback" form in the app sidebar (#116).
+- **Invitations in the app:** an existing user gets a notification and answers
+  on an Invitations page; the inviter hears when it is accepted (#111).
+- **One notification inbox per person** across every org they belong to (#108).
+- **Sign-up abuse:** Cloudflare Turnstile on sign-up, magic link and password
+  reset (off until keys are set), disposable email domains refused, and
+  `MAX_FREE_ORGS_PER_USER` caps free orgs per owner (#105, #115).
+- **Permissions per member:** owners and admins grant single permissions on top
+  of a role (#103). Plan seat limits are enforced (#83).
+- **Step-up in place, with a passkey or security key** (#89, #90).
+- **Avatars belong to the person:** own upload prefix, virus-scanned,
+  re-encoded, served from a public URL (#101).
+- **Account and organization settings are separate areas** (#102).
+- **Staging before production:** the deploy goes to staging first through a
+  locked key; deploy settings are committed in `deploy/*.env` and only secrets
+  stay in Bitwarden (#92, #93, #97, #98, #99).
+
+### Fixed since 2026-11-05
+- Google, GitHub and SSO sign-in finish inside the app (#86); startup refuses
+  JWT keys that cannot sign (#87); an archived Stripe product is caught at plan
+  sync, and duplicate Stripe customers are stopped (#88); billing shows a
+  cancellation and its return date (#100); error messages show their values
+  filled in (#84); the 2 November review's Minor list (#91).
+- Dependencies: the eight open Dependabot alerts (astro, node-forge,
+  basic-ftp) closed (#110), lockfile refreshed within ranges (#94, #113).
+
+Everything below landed before 2026-11-05 and was never tagged on its own.
+
 ### Fixed
 - **Google, GitHub and SSO sign-in on the web now end in the app.** Their callbacks
   returned a raw JSON page, with the access token on it, because they were written
@@ -1382,9 +1425,3 @@ template keep their own changes in `CHANGELOG.product.md` (see
   `/$locale` prefix and a `params={{ locale }}`. Products with their own routes
   or links need the same treatment; `apps/web/src/lib/useRouteLocale.ts` and
   `lib/locale-url.ts` are the helpers to use.
-
-## [1.0.0] — Phase 1 complete
-### Added
-- Auth, tenancy, billing, GDPR, audit, background jobs, web + mobile shells, CI/CD
-### Conflict risk for products
-- Low — first release, no products exist yet

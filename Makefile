@@ -1,6 +1,9 @@
 .PHONY: dev test lint migrate migrate-plan gen-client seed sync-plans pentest-accounts seed-load load-test prod-compose-check prod-compose-tls-check internal-certs rotate-internal-certs check-certs new-module check-docs install-hooks down update-from-template check-template-drift observe
 
-TEMPLATE_VERSION ?= main
+# The template release a product merges: the newest vX.Y.Z tag on `upstream`
+# unless you name one (`make update-from-template TEMPLATE_VERSION=v1.0.0`).
+# Never upstream/main -- see TEMPLATE.md, "Pulling template updates".
+TEMPLATE_VERSION ?= $(shell git ls-remote --tags --refs --sort=-v:refname upstream 'v*' 2>/dev/null | head -1 | sed 's|.*refs/tags/||')
 
 dev:
 	# worker's send_email job shells out to this compiled CLI (T-106) --
@@ -203,11 +206,25 @@ observe:
 	docker compose --profile observability up -d
 	@echo "Grafana: http://localhost:3001 (anonymous admin access, dev only)"
 
+# Both fetch the tag into FETCH_HEAD only (--no-tags), so the template's tags
+# never land among the product's own.
 update-from-template:
-	git fetch upstream
-	git merge upstream/$(TEMPLATE_VERSION)
+	@test -n "$(TEMPLATE_VERSION)" || { echo "upstream has no release tag to merge"; exit 1; }
+	git fetch --no-tags --quiet upstream refs/tags/$(TEMPLATE_VERSION)
+	git merge -m "Merge template $(TEMPLATE_VERSION)" FETCH_HEAD
 
+# One shell: an `exit 0` on its own recipe line ends only that line.
 check-template-drift:
-	@git remote get-url upstream >/dev/null 2>&1 || { echo "no 'upstream' remote configured -- nothing to check"; exit 0; }
-	@git fetch upstream --quiet
-	@git log upstream/main ^HEAD --oneline
+	@if ! git remote get-url upstream >/dev/null 2>&1; then \
+		echo "no 'upstream' remote configured -- nothing to check"; \
+	elif [ -z "$(TEMPLATE_VERSION)" ]; then \
+		echo "upstream has no release tag yet -- nothing to check"; \
+	else \
+		git fetch --no-tags --quiet upstream refs/tags/$(TEMPLATE_VERSION) && \
+		if git merge-base --is-ancestor FETCH_HEAD HEAD; then \
+			echo "up to date with template $(TEMPLATE_VERSION)"; \
+		else \
+			echo "template $(TEMPLATE_VERSION) has commits you have not merged (make update-from-template):"; \
+			git log --oneline FETCH_HEAD ^HEAD; \
+		fi; \
+	fi
