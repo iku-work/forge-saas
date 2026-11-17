@@ -101,7 +101,8 @@ MODULE_SURFACE: dict[ModuleName, ModuleSurface] = {
         routes=("/api/v1/me", "/api/v1/me/consents", "/api/v1/me/export/*"),
         tables=("consent_record", "data_export_job"),
     ),
-    "admin": ModuleSurface(routes=("/api/v1/admin/*",)),
+    # Feedback is read in the admin area, so its form goes with it.
+    "admin": ModuleSurface(routes=("/api/v1/admin/*", "/api/v1/feedback")),
     "oauth": ModuleSurface(
         note=(
             "app/api/v1/__init__.py registers the OAuth router in the always-on "

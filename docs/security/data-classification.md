@@ -86,6 +86,12 @@ and no impersonation, the cost of the wrong one is a breach report.
 | `Notification.title`, `body` | internal/sensitive (may reference another user's name or email, e.g. a `member_invited` notification) | Plaintext. | **New in T-219**: `prune_old_notifications` (daily at 02:00 UTC, `backend/app/workers/scheduler.py`) hard-deletes rows older than `NOTIFICATION_RETENTION_DAYS` (default 90) via `NotificationRepository.prune_older_than`. This is the retention job the model's own docstring already promised ("notifications are pruned by a hard-delete retention job") but that didn't exist until this pass — the highest-value gap found once `email`/`full_name` and the security-event logging gaps (§7 below) were addressed. |
 | `PushToken.token` | sensitive (device push credential) | Plaintext. Deactivated (`deleted_at` set) on unregister, but not purged. | **Gap, not covered by this pass**: no age-based hard-delete for deactivated tokens. Lower priority than `Notification` — one row per device, not one per event, so the accumulation rate is far smaller. |
 
+### `app.modules.feedback`
+
+| Column | Classification | Current protection | Retention |
+|---|---|---|---|
+| `Feedback.message`, `page` | internal/sensitive (free text a user wrote; may contain anything) | Plaintext. `page` is a path only: the schema refuses a query string or fragment, which could carry a token. Read only by superadmins. | Kept until the sender's GDPR purge deletes it (`USER_REFERENCES`), and included in their data export. No age-based deletion. |
+
 ## 6. `app.modules.storage`
 
 | Column | Classification | Current protection | Retention |

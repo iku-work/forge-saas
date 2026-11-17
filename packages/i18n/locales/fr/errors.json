@@ -144,5 +144,6 @@
   "email_already_verified": "Cette adresse e-mail est déjà vérifiée.",
   "captcha_required": "Effectuez la vérification de sécurité avant de continuer.",
   "captcha_failed": "La vérification de sécurité a échoué. Réessayez.",
-  "email_domain_not_allowed": "Utilisez une adresse e-mail permanente : celle-ci provient d’un service d’e-mail jetable."
+  "email_domain_not_allowed": "Utilisez une adresse e-mail permanente : celle-ci provient d’un service d’e-mail jetable.",
+  "feedback_not_found": "Cet avis n’existe plus."
 }

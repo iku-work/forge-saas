@@ -47,7 +47,8 @@
     "section_title": "Comment vous recevez chaque notification",
     "type_invitation_received": "Vous êtes invité dans une autre organisation",
     "type_invitation_accepted": "Quelqu’un accepte votre invitation",
-    "type_file_removed": "Un fichier est supprimé par le service"
+    "type_file_removed": "Un fichier est supprimé par le service",
+    "type_feedback_received": "Quelqu’un envoie un avis"
   },
   "types": {
     "member_invited": {
@@ -89,6 +90,10 @@
     "file_removed": {
       "title": "Fichier supprimé",
       "body": "{filename} a été supprimé de {org_name} par le service."
+    },
+    "feedback_received": {
+      "title": "Nouvel avis",
+      "body": "{sender} a envoyé un avis."
     }
   }
 }

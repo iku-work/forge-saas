@@ -47,7 +47,8 @@
     "section_title": "How each notification reaches you",
     "type_invitation_received": "You're invited to another organization",
     "type_invitation_accepted": "Someone accepts your invitation",
-    "type_file_removed": "A file is removed by the service"
+    "type_file_removed": "A file is removed by the service",
+    "type_feedback_received": "Someone sends feedback"
   },
   "types": {
     "member_invited": {
@@ -89,6 +90,10 @@
     "file_removed": {
       "title": "File removed",
       "body": "{filename} was removed from {org_name} by the service."
+    },
+    "feedback_received": {
+      "title": "New feedback",
+      "body": "{sender} sent feedback."
     }
   }
 }

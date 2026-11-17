@@ -31,6 +31,8 @@ DEFAULT_PREFERENCES: dict[str, dict[str, bool]] = {
     # To an org's owners when a superadmin removes one of its files. Email
     # on: the people who need to know may not be looking at the app.
     "file_removed": {"email": True, "in_app": True, "push": False},
+    # To every superadmin when a user sends feedback (app.modules.feedback).
+    "feedback_received": {"email": True, "in_app": True, "push": False},
 }
 
 # T-234: (notification type -> channels that stay on no matter what the user

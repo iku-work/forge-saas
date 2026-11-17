@@ -224,6 +224,11 @@ class AuthService:
         users = await self._users.list_by_ids(user_ids)
         return {user.id: user for user in users}
 
+    async def superadmin_ids(self) -> list[UUID]:
+        """Everyone who can read the admin area: who to tell about something
+        only an operator acts on (new feedback)."""
+        return await self._users.list_superadmin_ids()
+
     async def register(self, req: RegisterRequest) -> None:
         # First, and openly: it says nothing about whether an account exists.
         refuse_blocked_email(req.email)

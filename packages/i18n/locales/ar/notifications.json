@@ -47,7 +47,8 @@
     "section_title": "كيف يصلك كل إشعار",
     "type_invitation_received": "تمت دعوتك إلى مؤسسة أخرى",
     "type_invitation_accepted": "قبل شخص ما دعوتك",
-    "type_file_removed": "تزيل الخدمة ملفًا"
+    "type_file_removed": "تزيل الخدمة ملفًا",
+    "type_feedback_received": "يرسل أحدهم ملاحظات"
   },
   "types": {
     "member_invited": {
@@ -89,6 +90,10 @@
     "file_removed": {
       "title": "تمت إزالة ملف",
       "body": "أزالت الخدمة {filename} من {org_name}."
+    },
+    "feedback_received": {
+      "title": "ملاحظات جديدة",
+      "body": "أرسل {sender} ملاحظات."
     }
   }
 }

@@ -50,6 +50,7 @@ from app.modules.auth.repository import UserRepository
 from app.modules.auth.utils import create_access_token, hash_password
 from app.modules.billing import invoices as invoices_module
 from app.modules.billing.models import Plan, Subscription
+from app.modules.feedback.repository import FeedbackRepository
 from app.modules.gdpr.models import ConsentRecord
 from app.modules.notifications.models import Notification
 from app.modules.storage.models import StoredFile
@@ -147,6 +148,8 @@ BUDGETS: dict[str, int] = {
     "list_admin_org_members": 5,
     "list_admin_org_files": 5,
     "list_admin_audit_feed": 5,
+    # Like the audit feed: the page, then its senders and their orgs batched.
+    "list_feedback": 5,
 }
 
 # T-310. `public_api` ships off, so at the committed configuration
@@ -554,6 +557,19 @@ async def _seed_directory_users(world: World, n: int) -> None:
     await world.session.commit()
 
 
+async def _seed_feedback(world: World, n: int) -> None:
+    # A distinct sender and org per message, so a per-row lookup would show.
+    for _ in range(n):
+        sender = await _make_user(world.session)
+        org = await OrganizationRepository(world.session).create(
+            name="Sender org", slug=f"fb-{uuid4().hex[:8]}"
+        )
+        await FeedbackRepository(world.session).create(
+            user_id=sender.id, org_id=org.id, category="bug", message="Broken", page="/files"
+        )
+    await world.session.commit()
+
+
 async def _seed_audit_events(world: World, n: int) -> None:
     # A *distinct* actor and org per event on purpose: the pre-T-243 feed
     # resolved actor_email/org_name with one get_by_id per distinct id, which
@@ -654,6 +670,7 @@ ENDPOINTS: list[ListEndpoint] = [
     ListEndpoint(
         "list_admin_audit_feed", "/api/v1/admin/audit", _seed_audit_events, as_superadmin=True
     ),
+    ListEndpoint("list_feedback", "/api/v1/admin/feedback", _seed_feedback, as_superadmin=True),
 ]
 
 if is_enabled("public_api"):

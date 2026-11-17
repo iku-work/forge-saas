@@ -41,6 +41,8 @@ _ALL_NOTIFICATION_TYPES = {
     "invitation_accepted",
     # A superadmin removed one of an org's files.
     "file_removed",
+    # A user sent feedback; to every superadmin.
+    "feedback_received",
 }
 
 

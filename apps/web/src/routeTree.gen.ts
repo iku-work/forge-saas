@@ -29,6 +29,7 @@ import { Route as LocaleAppReportsRouteImport } from './routes/$locale._app.repo
 import { Route as LocaleAcceptInvitationTokenRouteImport } from './routes/$locale.accept-invitation.$token'
 import { Route as LocaleAdminIndexRouteImport } from './routes/$locale.admin.index'
 import { Route as LocaleAdminAuditRouteImport } from './routes/$locale.admin.audit'
+import { Route as LocaleAdminFeedbackRouteImport } from './routes/$locale.admin.feedback'
 import { Route as LocaleAdminOrgsRouteImport } from './routes/$locale.admin.orgs'
 import { Route as LocaleAdminSettingsRouteImport } from './routes/$locale.admin.settings'
 import { Route as LocaleAdminUsersRouteImport } from './routes/$locale.admin.users'
@@ -144,6 +145,11 @@ const LocaleAdminAuditRoute = LocaleAdminAuditRouteImport.update({
   path: '/audit',
   getParentRoute: () => LocaleAdminRoute,
 } as any)
+const LocaleAdminFeedbackRoute = LocaleAdminFeedbackRouteImport.update({
+  id: '/feedback',
+  path: '/feedback',
+  getParentRoute: () => LocaleAdminRoute,
+} as any)
 const LocaleAdminOrgsRoute = LocaleAdminOrgsRouteImport.update({
   id: '/orgs',
   path: '/orgs',
@@ -235,6 +241,7 @@ export interface FileRoutesByFullPath {
   '/$locale/reports': typeof LocaleAppReportsRoute
   '/$locale/accept-invitation/$token': typeof LocaleAcceptInvitationTokenRoute
   '/$locale/admin/audit': typeof LocaleAdminAuditRoute
+  '/$locale/admin/feedback': typeof LocaleAdminFeedbackRoute
   '/$locale/admin/orgs': typeof LocaleAdminOrgsRoute
   '/$locale/admin/settings': typeof LocaleAdminSettingsRoute
   '/$locale/admin/users': typeof LocaleAdminUsersRoute
@@ -268,6 +275,7 @@ export interface FileRoutesByTo {
   '/$locale/reports': typeof LocaleAppReportsRoute
   '/$locale/accept-invitation/$token': typeof LocaleAcceptInvitationTokenRoute
   '/$locale/admin/audit': typeof LocaleAdminAuditRoute
+  '/$locale/admin/feedback': typeof LocaleAdminFeedbackRoute
   '/$locale/admin/orgs': typeof LocaleAdminOrgsRoute
   '/$locale/admin/settings': typeof LocaleAdminSettingsRoute
   '/$locale/admin/users': typeof LocaleAdminUsersRoute
@@ -303,6 +311,7 @@ export interface FileRoutesById {
   '/$locale/_app/reports': typeof LocaleAppReportsRoute
   '/$locale/accept-invitation/$token': typeof LocaleAcceptInvitationTokenRoute
   '/$locale/admin/audit': typeof LocaleAdminAuditRoute
+  '/$locale/admin/feedback': typeof LocaleAdminFeedbackRoute
   '/$locale/admin/orgs': typeof LocaleAdminOrgsRoute
   '/$locale/admin/settings': typeof LocaleAdminSettingsRoute
   '/$locale/admin/users': typeof LocaleAdminUsersRoute
@@ -339,6 +348,7 @@ export interface FileRouteTypes {
     | '/$locale/reports'
     | '/$locale/accept-invitation/$token'
     | '/$locale/admin/audit'
+    | '/$locale/admin/feedback'
     | '/$locale/admin/orgs'
     | '/$locale/admin/settings'
     | '/$locale/admin/users'
@@ -372,6 +382,7 @@ export interface FileRouteTypes {
     | '/$locale/reports'
     | '/$locale/accept-invitation/$token'
     | '/$locale/admin/audit'
+    | '/$locale/admin/feedback'
     | '/$locale/admin/orgs'
     | '/$locale/admin/settings'
     | '/$locale/admin/users'
@@ -406,6 +417,7 @@ export interface FileRouteTypes {
     | '/$locale/_app/reports'
     | '/$locale/accept-invitation/$token'
     | '/$locale/admin/audit'
+    | '/$locale/admin/feedback'
     | '/$locale/admin/orgs'
     | '/$locale/admin/settings'
     | '/$locale/admin/users'
@@ -571,6 +583,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof LocaleAdminAuditRouteImport
       parentRoute: typeof LocaleAdminRoute
     }
+    '/$locale/admin/feedback': {
+      id: '/$locale/admin/feedback'
+      path: '/feedback'
+      fullPath: '/$locale/admin/feedback'
+      preLoaderRoute: typeof LocaleAdminFeedbackRouteImport
+      parentRoute: typeof LocaleAdminRoute
+    }
     '/$locale/admin/orgs': {
       id: '/$locale/admin/orgs'
       path: '/orgs'
@@ -701,6 +720,7 @@ const LocaleAppRouteWithChildren = LocaleAppRoute._addFileChildren(
 
 interface LocaleAdminRouteChildren {
   LocaleAdminAuditRoute: typeof LocaleAdminAuditRoute
+  LocaleAdminFeedbackRoute: typeof LocaleAdminFeedbackRoute
   LocaleAdminOrgsRoute: typeof LocaleAdminOrgsRoute
   LocaleAdminSettingsRoute: typeof LocaleAdminSettingsRoute
   LocaleAdminUsersRoute: typeof LocaleAdminUsersRoute
@@ -711,6 +731,7 @@ interface LocaleAdminRouteChildren {
 
 const LocaleAdminRouteChildren: LocaleAdminRouteChildren = {
   LocaleAdminAuditRoute: LocaleAdminAuditRoute,
+  LocaleAdminFeedbackRoute: LocaleAdminFeedbackRoute,
   LocaleAdminOrgsRoute: LocaleAdminOrgsRoute,
   LocaleAdminSettingsRoute: LocaleAdminSettingsRoute,
   LocaleAdminUsersRoute: LocaleAdminUsersRoute,

@@ -59,6 +59,7 @@ import { AuthLayout } from "../features/auth/AuthLayout";
 import { MyInvitationsList } from "../features/invitations/MyInvitationsList";
 import { CreateOrgForm } from "../features/settings/CreateOrgForm";
 import { NotificationBell } from "../features/notifications/NotificationBell";
+import { FeedbackButton } from "../features/feedback/FeedbackButton";
 import { SupportLink } from "../features/support/SupportLink";
 import { stripLocale } from "../lib/locale-url";
 import {
@@ -487,6 +488,7 @@ function SidebarNav({
   const footer = (
     <>
       <SupportLink />
+      <FeedbackButton />
       {/* Side by side when expanded; stacked in the rail. */}
       <div className="flex items-center gap-1 group-data-[collapsed]/shell:flex-col">
         <UserMenu />

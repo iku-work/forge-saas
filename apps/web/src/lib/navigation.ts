@@ -7,6 +7,7 @@ import {
   KeyRound,
   LayoutDashboard,
   ListChecks,
+  MessageSquare,
   ScrollText,
   Shield,
   SlidersHorizontal,
@@ -40,6 +41,7 @@ export type NavTo =
   | "/$locale/admin/orgs"
   | "/$locale/admin/users"
   | "/$locale/admin/audit"
+  | "/$locale/admin/feedback"
   | "/$locale/admin/settings";
 
 export interface NavItem {
@@ -256,6 +258,12 @@ export const ADMIN_NAV_ITEMS: NavItem[] = [
     path: "/admin/audit",
     labelKey: "common.admin.nav.audit",
     icon: ScrollText,
+  },
+  {
+    to: "/$locale/admin/feedback",
+    path: "/admin/feedback",
+    labelKey: "common.admin.nav.feedback",
+    icon: MessageSquare,
   },
   // T-263: last on purpose -- the only page here that *changes* the running
   // product rather than reporting on it.

@@ -144,5 +144,6 @@
   "email_already_verified": "Diese E-Mail-Adresse ist bereits bestätigt.",
   "captcha_required": "Schließen Sie die Sicherheitsprüfung ab, bevor Sie fortfahren.",
   "captcha_failed": "Die Sicherheitsprüfung ist fehlgeschlagen. Versuchen Sie es noch einmal.",
-  "email_domain_not_allowed": "Verwenden Sie eine dauerhafte E-Mail-Adresse: Diese stammt von einem Wegwerf-E-Mail-Dienst."
+  "email_domain_not_allowed": "Verwenden Sie eine dauerhafte E-Mail-Adresse: Diese stammt von einem Wegwerf-E-Mail-Dienst.",
+  "feedback_not_found": "Dieses Feedback existiert nicht mehr."
 }

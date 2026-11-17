@@ -62,6 +62,8 @@ export const NOTIFICATION_TYPES = [
   "invitation_accepted",
   // To an org's owners when a superadmin removes one of its files.
   "file_removed",
+  // To every superadmin when a user sends feedback. Only shown to them.
+  "feedback_received",
 ] as const;
 export type NotificationType = (typeof NOTIFICATION_TYPES)[number];
 
@@ -78,6 +80,7 @@ export const DEFAULT_NOTIFICATION_PREFERENCES: Readonly<
   invitation_received: { email: false, in_app: true, push: false },
   invitation_accepted: { email: false, in_app: true, push: false },
   file_removed: { email: true, in_app: true, push: false },
+  feedback_received: { email: true, in_app: true, push: false },
 };
 
 /**

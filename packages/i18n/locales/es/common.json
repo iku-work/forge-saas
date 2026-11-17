@@ -108,7 +108,8 @@
       "orgs": "Organizaciones",
       "users": "Usuarios",
       "audit": "Registro de auditoría",
-      "settings": "Configuración"
+      "settings": "Configuración",
+      "feedback": "Comentarios"
     },
     "user_menu_link": "Admin",
     "dashboard": {
@@ -395,6 +396,21 @@
       "cancel": "Cancelar",
       "removed": "Archivo eliminado. Se ha avisado a los propietarios.",
       "error_remove": "No se pudo eliminar el archivo. Inténtalo de nuevo en un momento."
+    },
+    "feedback": {
+      "title": "Comentarios",
+      "tab_open": "Abiertos",
+      "tab_resolved": "Atendidos",
+      "empty_open": "No hay comentarios abiertos.",
+      "empty_resolved": "Aún no hay nada atendido.",
+      "resolve": "Marcar como atendido",
+      "reopen": "Reabrir",
+      "resolved": "Marcado como atendido.",
+      "reopened": "Reabierto.",
+      "deleted_user": "Cuenta eliminada",
+      "load_more": "Cargar más",
+      "error_load": "No se pudieron cargar los comentarios.",
+      "error_update": "No se pudo actualizar este comentario."
     }
   },
   "banner": {
@@ -463,5 +479,22 @@
     "step_profile_title": "Completa tu perfil",
     "welcome_body": "Unos pocos pasos antes de que tu organización esté lista.",
     "welcome_title": "Te damos la bienvenida a {org}"
+  },
+  "feedback": {
+    "open": "Enviar comentarios",
+    "title": "Enviar comentarios",
+    "description": "Cuéntanos un problema o una idea. Llega directamente al equipo detrás del producto.",
+    "category_label": "¿De qué se trata?",
+    "category": {
+      "bug": "Algo no funciona",
+      "idea": "Una idea",
+      "other": "Otra cosa"
+    },
+    "message_label": "Tu mensaje",
+    "context_hint": "Adjuntamos la página en la que estás y tu organización actual.",
+    "send": "Enviar",
+    "cancel": "Cancelar",
+    "sent": "Gracias, tus comentarios se enviaron.",
+    "error": "No se pudieron enviar tus comentarios. Inténtalo de nuevo."
   }
 }

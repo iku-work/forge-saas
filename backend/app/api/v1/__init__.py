@@ -64,8 +64,11 @@ def build_router() -> APIRouter:
 
     if modules.admin.enabled:
         from app.modules.admin.router import router as admin_router  # noqa: PLC0415
+        from app.modules.feedback.router import router as feedback_router  # noqa: PLC0415
 
         router.include_router(admin_router)
+        # Feedback is read in the admin area: no admin area, nowhere to send it.
+        router.include_router(feedback_router)
 
     if modules.public_api.enabled:
         from app.api.v1.public_openapi import router as public_openapi_router  # noqa: PLC0415

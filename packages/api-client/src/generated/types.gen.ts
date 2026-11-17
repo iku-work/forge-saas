@@ -501,6 +501,15 @@ export type EnvelopeFeatureFlagsResponse = {
 };
 
 /**
+ * Envelope[FeedbackPublic]
+ */
+export type EnvelopeFeedbackPublic = {
+    data?: FeedbackPublic | null;
+    error?: ErrorBody | null;
+    meta: Meta;
+};
+
+/**
  * Envelope[InvitationPreview]
  */
 export type EnvelopeInvitationPreview = {
@@ -1036,6 +1045,42 @@ export type FeatureFlagsResponse = {
     flags: {
         [key: string]: boolean;
     };
+};
+
+/**
+ * FeedbackCreateRequest
+ */
+export type FeedbackCreateRequest = {
+    /**
+     * Category
+     */
+    category: 'bug' | 'idea' | 'other';
+    /**
+     * Message
+     */
+    message: string;
+    /**
+     * Org Id
+     */
+    org_id?: string | null;
+    /**
+     * Page
+     */
+    page?: string | null;
+};
+
+/**
+ * FeedbackPublic
+ */
+export type FeedbackPublic = {
+    /**
+     * Created At
+     */
+    created_at: string;
+    /**
+     * Id
+     */
+    id: string;
 };
 
 /**
@@ -4325,6 +4370,31 @@ export type GetConfigApiV1ConfigGetResponses = {
 };
 
 export type GetConfigApiV1ConfigGetResponse = GetConfigApiV1ConfigGetResponses[keyof GetConfigApiV1ConfigGetResponses];
+
+export type SendFeedbackApiV1FeedbackPostData = {
+    body: FeedbackCreateRequest;
+    path?: never;
+    query?: never;
+    url: '/api/v1/feedback';
+};
+
+export type SendFeedbackApiV1FeedbackPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: EnvelopeNoneType;
+};
+
+export type SendFeedbackApiV1FeedbackPostError = SendFeedbackApiV1FeedbackPostErrors[keyof SendFeedbackApiV1FeedbackPostErrors];
+
+export type SendFeedbackApiV1FeedbackPostResponses = {
+    /**
+     * Successful Response
+     */
+    200: EnvelopeFeedbackPublic;
+};
+
+export type SendFeedbackApiV1FeedbackPostResponse = SendFeedbackApiV1FeedbackPostResponses[keyof SendFeedbackApiV1FeedbackPostResponses];
 
 export type ListFilesApiV1FilesGetData = {
     body?: never;

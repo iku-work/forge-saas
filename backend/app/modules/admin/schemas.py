@@ -237,6 +237,25 @@ class AdminModerationRequest(AppBaseModel):
     reason: str = Field(min_length=10, max_length=1000)
 
 
+# ---- Feedback inbox -----------------------------------------------------------
+
+
+class AdminFeedbackItem(AppBaseModel):
+    """One message from the Feedback inbox, with who sent it and from where.
+    The email and org name are None once that account or org is gone."""
+
+    id: UUID
+    category: str
+    message: str
+    page: str | None
+    created_at: datetime
+    resolved_at: datetime | None
+    user_id: UUID
+    user_email: str | None
+    org_id: UUID | None
+    org_name: str | None
+
+
 # ---- T-143: dashboard + global audit feed -----------------------------------
 
 
