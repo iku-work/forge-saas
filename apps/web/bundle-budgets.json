@@ -14,6 +14,7 @@
   "$locale._app.tsx": 131832,
   "$locale.accept-invitation.$token.tsx": 15176,
   "$locale.admin.audit.tsx": 18373,
+  "$locale.admin.feedback.tsx": 37710,
   "$locale.admin.index.tsx": 15548,
   "$locale.admin.orgs_.$id.tsx": 62356,
   "$locale.admin.orgs.tsx": 19745,
@@ -32,6 +33,6 @@
   "$locale.verify-email.tsx": 12450,
   "CSS": 12456,
   "initial JS": 180113,
-  "largest locale catalog": 6032,
+  "largest locale catalog": 7014,
   "src/features/auth/ReauthDialog.tsx": 37790
 }

@@ -294,6 +294,48 @@ export function moderateAdminUser(
   });
 }
 
+// ---- Feedback inbox -----------------------------------------------------------
+
+/** One message a user sent from the app. The email and org name are null
+ *  once that account or org is gone. */
+export interface AdminFeedbackItem {
+  id: string;
+  category: "bug" | "idea" | "other";
+  message: string;
+  page: string | null;
+  created_at: string;
+  resolved_at: string | null;
+  user_id: string;
+  user_email: string | null;
+  org_id: string | null;
+  org_name: string | null;
+}
+
+export interface ListAdminFeedbackQuery {
+  status?: "open" | "resolved";
+  after?: string | null;
+  limit?: number | undefined;
+}
+
+export function listAdminFeedback(query: ListAdminFeedbackQuery = {}) {
+  return client.get<Envelope<AdminFeedbackItem[]>, ErrorBody, true>({
+    ...THROW,
+    url: "/api/v1/admin/feedback",
+    query: query as Record<string, unknown>,
+  });
+}
+
+export function setAdminFeedbackResolved(
+  feedbackId: string,
+  resolved: boolean,
+) {
+  return client.post<Envelope<AdminFeedbackItem>, ErrorBody, true>({
+    ...THROW,
+    url: `/api/v1/admin/feedback/{feedback_id}/${resolved ? "resolve" : "reopen"}`,
+    path: { feedback_id: feedbackId },
+  });
+}
+
 export interface AdminSetOrgPlanRequest {
   plan_slug: string;
   billing_interval?: "monthly" | "yearly" | null;

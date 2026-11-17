@@ -144,5 +144,6 @@
   "email_already_verified": "Esta dirección de correo ya está verificada.",
   "captcha_required": "Completa la comprobación de seguridad antes de continuar.",
   "captcha_failed": "La comprobación de seguridad no se superó. Inténtalo de nuevo.",
-  "email_domain_not_allowed": "Usa una dirección de correo permanente: esta es de un servicio de correo desechable."
+  "email_domain_not_allowed": "Usa una dirección de correo permanente: esta es de un servicio de correo desechable.",
+  "feedback_not_found": "Estos comentarios ya no existen."
 }

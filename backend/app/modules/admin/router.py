@@ -16,7 +16,7 @@ impersonation.
 from collections.abc import Iterator
 from contextlib import contextmanager
 from datetime import datetime
-from typing import Annotated
+from typing import Annotated, Literal
 from uuid import UUID, uuid4
 
 from fastapi import APIRouter, Depends, Query, Request
@@ -44,6 +44,7 @@ from app.modules.admin.schemas import (
     AdminEndImpersonationRequest,
     AdminExtendTrialRequest,
     AdminFeatureFlagsResponse,
+    AdminFeedbackItem,
     AdminFileDeleteRequest,
     AdminFilePreview,
     AdminImpersonateRequest,
@@ -72,6 +73,7 @@ from app.modules.admin.service import (
     AdminDashboardService,
     AdminDirectoryService,
     AdminFeatureFlagService,
+    AdminFeedbackService,
     AdminImpersonationService,
     AdminMobileHandoffService,
     AdminOrgContentService,
@@ -968,3 +970,47 @@ async def replace_product_settings(
     await service.invalidate_cache()  # see patch_product_settings above
     data = _settings_response(await ProductSettingsRepository(session).get())
     return Envelope(data=data, meta=Meta(request_id=_request_id(request)))
+
+
+# ---- Feedback inbox -----------------------------------------------------------
+
+
+@router.get("/feedback")
+@api_limit
+async def list_feedback(  # noqa: PLR0913 -- cursor pagination (§0.3) plus the open/handled filter
+    request: Request,
+    superadmin: Annotated[User, Depends(require_superadmin)],  # noqa: ARG001 -- gate only
+    session: Annotated[AsyncSession, Depends(get_session)],
+    redis: Annotated[Redis, Depends(get_redis)],
+    status: Annotated[Literal["open", "resolved"], Query()] = "open",
+    after: Annotated[UUID | None, Query()] = None,
+    limit: Annotated[int, Query(ge=1, le=100)] = 20,
+) -> Envelope[list[AdminFeedbackItem]]:
+    items, next_cursor = await AdminFeedbackService(session, redis).list_inbox(
+        resolved=status == "resolved", after=after, limit=limit
+    )
+    meta = Meta(
+        request_id=_request_id(request),
+        next_cursor=str(next_cursor) if next_cursor is not None else None,
+    )
+    return Envelope(data=items, meta=meta)
+
+
+@router.post(
+    "/feedback/{feedback_id}/{action}",
+    dependencies=[Depends(reject_during_impersonation("data_mutation"))],
+)
+@api_limit
+async def resolve_feedback(  # noqa: PLR0913 -- request+path+auth+session+redis, all required
+    request: Request,
+    feedback_id: UUID,
+    action: Literal["resolve", "reopen"],
+    superadmin: Annotated[User, Depends(require_superadmin)],
+    session: Annotated[AsyncSession, Depends(get_session)],
+    redis: Annotated[Redis, Depends(get_redis)],
+) -> Envelope[AdminFeedbackItem]:
+    item = await AdminFeedbackService(session, redis).set_resolved(
+        feedback_id, actor=superadmin, resolved=action == "resolve"
+    )
+    await session.commit()
+    return Envelope(data=item, meta=Meta(request_id=_request_id(request)))

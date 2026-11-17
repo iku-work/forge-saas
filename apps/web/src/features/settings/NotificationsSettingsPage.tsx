@@ -50,7 +50,13 @@ const TYPE_LABEL_KEYS: Record<NotificationType, string> = {
   invitation_received: "notifications.preferences.type_invitation_received",
   invitation_accepted: "notifications.preferences.type_invitation_accepted",
   file_removed: "notifications.preferences.type_file_removed",
+  feedback_received: "notifications.preferences.type_feedback_received",
 };
+
+// Types only a superadmin ever receives: nobody else needs a row for them.
+const ADMIN_ONLY_TYPES: ReadonlySet<NotificationType> = new Set([
+  "feedback_received",
+]);
 
 const REQUIRED_NOTE_ID = "notification-required-note";
 
@@ -178,7 +184,10 @@ export function NotificationsSettingsPage() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {NOTIFICATION_TYPES.map((type) => (
+              {NOTIFICATION_TYPES.filter(
+                (type) =>
+                  (user?.is_superadmin ?? false) || !ADMIN_ONLY_TYPES.has(type),
+              ).map((type) => (
                 <TableRow key={type}>
                   <TableCell>{t(TYPE_LABEL_KEYS[type])}</TableCell>
                   {NOTIFICATION_CHANNELS.map((channel) => {

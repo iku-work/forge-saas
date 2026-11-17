@@ -69,6 +69,11 @@ class UserRepository:
         result = await self.session.execute(stmt)
         return list(result.scalars().all())
 
+    async def list_superadmin_ids(self) -> list[UUID]:
+        m = cast("Any", User)
+        stmt = select(m.id).where(m.is_superadmin.is_(True), m.deleted_at.is_(None))
+        return list((await self.session.execute(stmt)).scalars().all())
+
     async def get_by_email(self, email: str) -> User | None:
         m = cast("Any", User)
         stmt = select(User).where(m.email == email, m.deleted_at.is_(None))

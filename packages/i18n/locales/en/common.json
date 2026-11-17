@@ -136,7 +136,8 @@
       "orgs": "Organizations",
       "users": "Users",
       "audit": "Audit log",
-      "settings": "Settings"
+      "settings": "Settings",
+      "feedback": "Feedback"
     },
     "user_menu_link": "Admin",
     "dashboard": {
@@ -424,6 +425,21 @@
       "cancel": "Cancel",
       "removed": "File removed. The owners have been told.",
       "error_remove": "The file couldn't be removed. Try again in a moment."
+    },
+    "feedback": {
+      "title": "Feedback",
+      "tab_open": "Open",
+      "tab_resolved": "Handled",
+      "empty_open": "No open feedback.",
+      "empty_resolved": "Nothing handled yet.",
+      "resolve": "Mark handled",
+      "reopen": "Reopen",
+      "resolved": "Marked as handled.",
+      "reopened": "Reopened.",
+      "deleted_user": "Deleted account",
+      "load_more": "Load more",
+      "error_load": "Couldn't load feedback.",
+      "error_update": "Couldn't update this feedback."
     }
   },
   "subscription_status": {
@@ -480,5 +496,22 @@
     "goto_files": "Go to files",
     "goto_settings": "Go to settings",
     "toggle_sidebar": "Collapse or expand the sidebar"
+  },
+  "feedback": {
+    "open": "Send feedback",
+    "title": "Send feedback",
+    "description": "Tell us about a problem or an idea. It goes straight to the team behind the product.",
+    "category_label": "What is it about?",
+    "category": {
+      "bug": "Something is broken",
+      "idea": "An idea",
+      "other": "Something else"
+    },
+    "message_label": "Your message",
+    "context_hint": "We attach the page you are on and your current organization.",
+    "send": "Send",
+    "cancel": "Cancel",
+    "sent": "Thanks, your feedback was sent.",
+    "error": "Couldn't send your feedback. Please try again."
   }
 }

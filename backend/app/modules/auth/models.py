@@ -69,7 +69,7 @@ class User(RedactedReprMixin, UUIDPKMixin, TimestampMixin, SoftDeleteMixin, SQLM
     # every existing one was revoked when it was. Separate from is_active,
     # which means "email not yet verified" for a new account.
     suspended_at: datetime | None = Field(default=None, sa_type=_TZ_DATETIME)
-    is_superadmin: bool = Field(default=False)
+    is_superadmin: bool = Field(default=False, index=True)
     totp_enabled: bool = Field(default=False)
     locale: str = Field(default="en")
     # F-004. "system" means "follow prefers-color-scheme", and is the default

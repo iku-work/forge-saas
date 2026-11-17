@@ -47,7 +47,8 @@
     "section_title": "Wie Sie jede Benachrichtigung erhalten",
     "type_invitation_received": "Sie werden in eine andere Organisation eingeladen",
     "type_invitation_accepted": "Jemand nimmt Ihre Einladung an",
-    "type_file_removed": "Eine Datei wird vom Dienst entfernt"
+    "type_file_removed": "Eine Datei wird vom Dienst entfernt",
+    "type_feedback_received": "Jemand sendet Feedback"
   },
   "types": {
     "member_invited": {
@@ -89,6 +90,10 @@
     "file_removed": {
       "title": "Datei entfernt",
       "body": "{filename} wurde vom Dienst aus {org_name} entfernt."
+    },
+    "feedback_received": {
+      "title": "Neues Feedback",
+      "body": "{sender} hat Feedback gesendet."
     }
   }
 }

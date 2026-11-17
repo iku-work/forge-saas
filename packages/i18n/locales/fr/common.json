@@ -108,7 +108,8 @@
       "orgs": "Organisations",
       "users": "Utilisateurs",
       "audit": "Journal d'audit",
-      "settings": "Paramètres"
+      "settings": "Paramètres",
+      "feedback": "Avis"
     },
     "user_menu_link": "Admin",
     "dashboard": {
@@ -395,6 +396,21 @@
       "cancel": "Annuler",
       "removed": "Fichier supprimé. Les propriétaires ont été prévenus.",
       "error_remove": "Impossible de supprimer le fichier. Réessayez dans un instant."
+    },
+    "feedback": {
+      "title": "Avis",
+      "tab_open": "Ouverts",
+      "tab_resolved": "Traités",
+      "empty_open": "Aucun avis ouvert.",
+      "empty_resolved": "Rien de traité pour l’instant.",
+      "resolve": "Marquer comme traité",
+      "reopen": "Rouvrir",
+      "resolved": "Marqué comme traité.",
+      "reopened": "Rouvert.",
+      "deleted_user": "Compte supprimé",
+      "load_more": "Charger plus",
+      "error_load": "Impossible de charger les avis.",
+      "error_update": "Impossible de mettre à jour cet avis."
     }
   },
   "banner": {
@@ -463,5 +479,22 @@
     "step_profile_title": "Complétez votre profil",
     "welcome_body": "Encore quelques étapes avant que votre organisation soit prête.",
     "welcome_title": "Bienvenue dans {org}"
+  },
+  "feedback": {
+    "open": "Envoyer un avis",
+    "title": "Envoyer un avis",
+    "description": "Signalez-nous un problème ou une idée. Votre message arrive directement à l’équipe du produit.",
+    "category_label": "De quoi s’agit-il ?",
+    "category": {
+      "bug": "Quelque chose ne marche pas",
+      "idea": "Une idée",
+      "other": "Autre chose"
+    },
+    "message_label": "Votre message",
+    "context_hint": "Nous joignons la page où vous êtes et votre organisation actuelle.",
+    "send": "Envoyer",
+    "cancel": "Annuler",
+    "sent": "Merci, votre avis a été envoyé.",
+    "error": "Impossible d’envoyer votre avis. Veuillez réessayer."
   }
 }

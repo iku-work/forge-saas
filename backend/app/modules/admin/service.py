@@ -57,6 +57,7 @@ from app.modules.admin.schemas import (
     AdminAuditSummary,
     AdminDashboardStats,
     AdminFeatureFlagState,
+    AdminFeedbackItem,
     AdminFilePreview,
     AdminMembershipSummary,
     AdminOrgDetail,
@@ -85,6 +86,8 @@ from app.modules.billing.models import Subscription
 from app.modules.billing.repository import PlanRepository, SubscriptionRepository
 from app.modules.feature_flags.repository import OrgFeatureFlagRepository
 from app.modules.feature_flags.service import FeatureFlagService
+from app.modules.feedback.models import Feedback
+from app.modules.feedback.service import FeedbackService
 from app.modules.storage.repository import StoredFileRepository
 from app.modules.tenancy.models import Organization
 from app.modules.tenancy.repository import MembershipRepository, OrganizationRepository
@@ -1182,3 +1185,48 @@ class AdminOrgContentService:
         from app.modules.storage.service import StorageService  # noqa: PLC0415
 
         return StorageService(self._session, org.id, self._redis)
+
+
+class AdminFeedbackService:
+    """The Feedback inbox: messages users sent, open or handled, with who
+    sent each and from which org."""
+
+    def __init__(self, session: AsyncSession, redis: Redis) -> None:
+        self._feedback = FeedbackService(session, redis)
+        self._users = UserRepository(session)
+        self._orgs = OrganizationRepository(session)
+
+    async def list_inbox(
+        self, *, resolved: bool, after: UUID | None, limit: int
+    ) -> tuple[list[AdminFeedbackItem], UUID | None]:
+        rows, next_cursor = await self._feedback.list_inbox(
+            resolved=resolved, after=after, limit=limit
+        )
+        return await self._items(rows), next_cursor
+
+    async def set_resolved(
+        self, feedback_id: UUID, *, actor: User, resolved: bool
+    ) -> AdminFeedbackItem:
+        row = await self._feedback.set_resolved(feedback_id, actor=actor, resolved=resolved)
+        return (await self._items([row]))[0]
+
+    async def _items(self, rows: list[Feedback]) -> list[AdminFeedbackItem]:
+        # One query each for the page's senders and orgs (T-243).
+        emails = {u.id: u.email for u in await self._users.list_by_ids({r.user_id for r in rows})}
+        org_ids = {r.org_id for r in rows if r.org_id is not None}
+        names = {o.id: o.name for o in await self._orgs.list_by_ids(org_ids)}
+        return [
+            AdminFeedbackItem(
+                id=r.id,
+                category=r.category,
+                message=r.message,
+                page=r.page,
+                created_at=r.created_at,
+                resolved_at=r.resolved_at,
+                user_id=r.user_id,
+                user_email=emails.get(r.user_id),
+                org_id=r.org_id,
+                org_name=names.get(r.org_id) if r.org_id is not None else None,
+            )
+            for r in rows
+        ]

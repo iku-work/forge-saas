@@ -108,7 +108,8 @@
       "orgs": "Organisationen",
       "users": "Benutzer",
       "audit": "Audit-Protokoll",
-      "settings": "Einstellungen"
+      "settings": "Einstellungen",
+      "feedback": "Feedback"
     },
     "user_menu_link": "Admin",
     "dashboard": {
@@ -395,6 +396,21 @@
       "cancel": "Abbrechen",
       "removed": "Datei entfernt. Die Inhaber wurden informiert.",
       "error_remove": "Die Datei konnte nicht entfernt werden. Versuchen Sie es gleich noch einmal."
+    },
+    "feedback": {
+      "title": "Feedback",
+      "tab_open": "Offen",
+      "tab_resolved": "Erledigt",
+      "empty_open": "Kein offenes Feedback.",
+      "empty_resolved": "Noch nichts erledigt.",
+      "resolve": "Als erledigt markieren",
+      "reopen": "Wieder öffnen",
+      "resolved": "Als erledigt markiert.",
+      "reopened": "Wieder geöffnet.",
+      "deleted_user": "Gelöschtes Konto",
+      "load_more": "Mehr laden",
+      "error_load": "Feedback konnte nicht geladen werden.",
+      "error_update": "Dieses Feedback konnte nicht aktualisiert werden."
     }
   },
   "banner": {
@@ -463,5 +479,22 @@
     "step_profile_title": "Profil vervollständigen",
     "welcome_body": "Noch ein paar Schritte, bis Ihre Organisation bereit ist.",
     "welcome_title": "Willkommen bei {org}"
+  },
+  "feedback": {
+    "open": "Feedback senden",
+    "title": "Feedback senden",
+    "description": "Erzählen Sie uns von einem Problem oder einer Idee. Es geht direkt an das Team hinter dem Produkt.",
+    "category_label": "Worum geht es?",
+    "category": {
+      "bug": "Etwas funktioniert nicht",
+      "idea": "Eine Idee",
+      "other": "Etwas anderes"
+    },
+    "message_label": "Ihre Nachricht",
+    "context_hint": "Wir fügen die aktuelle Seite und Ihre aktuelle Organisation hinzu.",
+    "send": "Senden",
+    "cancel": "Abbrechen",
+    "sent": "Danke, Ihr Feedback wurde gesendet.",
+    "error": "Ihr Feedback konnte nicht gesendet werden. Bitte versuchen Sie es erneut."
   }
 }

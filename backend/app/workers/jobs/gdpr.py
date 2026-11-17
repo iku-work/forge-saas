@@ -63,6 +63,7 @@ from app.modules.auth.models import (
 )
 from app.modules.auth.models import Session as SessionModel
 from app.modules.auth.schemas import UserPublic
+from app.modules.feedback.models import Feedback
 from app.modules.gdpr.models import ConsentRecord, DataExportJob
 from app.modules.gdpr.repository import DataExportJobRepository
 from app.modules.notifications.models import Notification, PushToken
@@ -106,6 +107,7 @@ USER_REFERENCES: tuple[UserReference, ...] = (
     # user's activity trail, so it goes too.
     UserReference(AuditEvent, "actor_id"),
     UserReference(Notification, "user_id"),
+    UserReference(Feedback, "user_id"),
     UserReference(PushToken, "user_id"),
     # T-036: the object in storage goes as well; see _delete_stored_objects.
     UserReference(StoredFile, "uploaded_by"),
@@ -321,6 +323,7 @@ async def _collect_export_payload(session: AsyncSession, user: User) -> dict[str
         "consent_records": _dump(await _rows(session, ConsentRecord, "user_id", user.id)),
         "audit_events": _dump(await _rows(session, AuditEvent, "actor_id", user.id)),
         "memberships": _dump(await _rows(session, Membership, "user_id", user.id)),
+        "feedback": _dump(await _rows(session, Feedback, "user_id", user.id)),
     }
     # Present either way, so the file has one shape; empty where there is no table.
     tables = await _existing_tables(session)

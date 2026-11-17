@@ -47,7 +47,8 @@
     "section_title": "Cómo te llega cada notificación",
     "type_invitation_received": "Te invitan a otra organización",
     "type_invitation_accepted": "Alguien acepta tu invitación",
-    "type_file_removed": "El servicio elimina un archivo"
+    "type_file_removed": "El servicio elimina un archivo",
+    "type_feedback_received": "Alguien envía comentarios"
   },
   "types": {
     "member_invited": {
@@ -89,6 +90,10 @@
     "file_removed": {
       "title": "Archivo eliminado",
       "body": "El servicio eliminó {filename} de {org_name}."
+    },
+    "feedback_received": {
+      "title": "Nuevos comentarios",
+      "body": "{sender} envió comentarios."
     }
   }
 }

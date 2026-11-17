@@ -125,6 +125,7 @@ describe("NotificationsSettingsPage", () => {
         invitation_received: { email: false, in_app: true, push: false },
         invitation_accepted: { email: false, in_app: true, push: false },
         file_removed: { email: true, in_app: true, push: false },
+        feedback_received: { email: true, in_app: true, push: false },
       },
     });
   });
