@@ -319,6 +319,8 @@ async def test_set_member_permissions_member_cannot_manage(
     assert response.status_code == 403
 
 
+# The door it opens is billing's, which is off in the minimal config.
+@pytest.mark.module_dependent
 async def test_a_granted_permission_opens_its_door(
     client: httpx.AsyncClient, user_a: User, session: AsyncSession, org_a: Organization
 ) -> None:
