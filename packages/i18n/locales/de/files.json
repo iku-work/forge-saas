@@ -20,6 +20,7 @@
     "retry": "Erneut versuchen",
     "error_type": "Dieser Dateityp ist nicht zulässig.",
     "error_size": "Die Datei überschreitet das Limit von {max}.",
+    "max_size": "Bis zu {max} pro Datei",
     "error_upload": "Upload fehlgeschlagen.",
     "queued": "In Warteschlange",
     "uploading": "Wird hochgeladen…",

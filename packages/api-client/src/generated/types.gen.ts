@@ -711,6 +711,15 @@ export type EnvelopeUnreadCountResponse = {
 };
 
 /**
+ * Envelope[UploadLimitsResponse]
+ */
+export type EnvelopeUploadLimitsResponse = {
+    data?: UploadLimitsResponse | null;
+    error?: ErrorBody | null;
+    meta: Meta;
+};
+
+/**
  * Envelope[UserPublic]
  */
 export type EnvelopeUserPublic = {
@@ -2325,6 +2334,18 @@ export type UpdateOrgRequest = {
      * Name
      */
     name?: string | null;
+};
+
+/**
+ * UploadLimitsResponse
+ *
+ * What the uploader shows before a file is picked. Presign enforces it.
+ */
+export type UploadLimitsResponse = {
+    /**
+     * Max Upload Bytes
+     */
+    max_upload_bytes: number;
 };
 
 /**
@@ -4439,6 +4460,37 @@ export type ListFilesApiV1FilesGetResponses = {
 };
 
 export type ListFilesApiV1FilesGetResponse = ListFilesApiV1FilesGetResponses[keyof ListFilesApiV1FilesGetResponses];
+
+export type GetUploadLimitsApiV1FilesLimitsGetData = {
+    body?: never;
+    headers?: {
+        /**
+         * X-Org-Id
+         */
+        'X-Org-ID'?: string | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/v1/files/limits';
+};
+
+export type GetUploadLimitsApiV1FilesLimitsGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: EnvelopeNoneType;
+};
+
+export type GetUploadLimitsApiV1FilesLimitsGetError = GetUploadLimitsApiV1FilesLimitsGetErrors[keyof GetUploadLimitsApiV1FilesLimitsGetErrors];
+
+export type GetUploadLimitsApiV1FilesLimitsGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: EnvelopeUploadLimitsResponse;
+};
+
+export type GetUploadLimitsApiV1FilesLimitsGetResponse = GetUploadLimitsApiV1FilesLimitsGetResponses[keyof GetUploadLimitsApiV1FilesLimitsGetResponses];
 
 export type PresignUploadApiV1FilesPresignPostData = {
     body: PresignUploadRequest;

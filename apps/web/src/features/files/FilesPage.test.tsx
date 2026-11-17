@@ -247,6 +247,12 @@ describe("FilesPage", () => {
     ).toBeInTheDocument();
   });
 
+  it("says the org's per-file limit before anyone picks a file", async () => {
+    renderPage();
+
+    expect(await screen.findByText("Up to 10 MB per file")).toBeInTheDocument();
+  });
+
   // --- what the page tells the truth about -------------------------------
   //
   // Repo finding 12: a MEMBER saw an uploader and a delete button that the

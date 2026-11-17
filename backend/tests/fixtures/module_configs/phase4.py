@@ -89,9 +89,8 @@ DEFAULT_LOCALE = "en"
 # plan table. See app/core/plans.py for why the split falls here.
 #
 # Only paid plans belong here. "Free" is not a Stripe product and never needs
-# one -- an org with no subscription resolves to the in-memory _FREE_PLAN in
-# app/modules/billing/dependencies.py, which is where the free tier's own
-# limits are set.
+# one: an org with no subscription is on the free plan, whose limits are
+# FREE_PLAN_FEATURES below.
 PLANS = [
     PlanDefinition(
         slug="pro",
@@ -106,3 +105,13 @@ PLANS = [
         },
     ),
 ]
+
+# What an org with no paid subscription gets. These are caps: a key left out
+# is a limit nobody checks, i.e. unlimited, so keep storage_gb and
+# max_upload_mb unless you mean it. MB here is 1024 * 1024 bytes, the unit the
+# app shows. Keep the Free row in apps/marketing/src/content/pricing.ts in step.
+FREE_PLAN_FEATURES: dict[str, int | bool] = {
+    "seats": 3,
+    "storage_gb": 1,
+    "max_upload_mb": 10,
+}

@@ -2,6 +2,7 @@ import { useState } from "react";
 import {
   useInfiniteQuery,
   useMutation,
+  useQuery,
   useQueryClient,
 } from "@tanstack/react-query";
 import { FolderOpen } from "lucide-react";
@@ -10,6 +11,7 @@ import { useTranslation } from "react-i18next";
 import {
   deleteFileApiV1FilesFileIdDelete,
   downloadFileApiV1FilesFileIdDownloadGet,
+  getUploadLimitsApiV1FilesLimitsGet,
   listFilesApiV1FilesGet,
   listFilesApiV1FilesGetInfiniteQueryKey,
 } from "@forge/api-client";
@@ -115,6 +117,20 @@ export function FilesPage() {
     null,
   );
 
+  // The org's per-file maximum, shown in the uploader before a file is
+  // picked. Keyed by org: each org's plan sets its own. Presign still
+  // enforces it; until this loads the uploader just shows no limit.
+  const limitsQuery = useQuery({
+    queryKey: ["files", "limits", org?.id],
+    queryFn: async () => {
+      const { data } = await getUploadLimitsApiV1FilesLimitsGet({
+        throwOnError: true,
+      });
+      return data.data;
+    },
+    enabled: Boolean(org) && canWrite,
+  });
+
   const filesQuery = useInfiniteQuery({
     queryKey: listFilesApiV1FilesGetInfiniteQueryKey(),
     queryFn: async ({ pageParam }) => {
@@ -183,6 +199,7 @@ export function FilesPage() {
 
       {canWrite ? (
         <FileUploader
+          maxSize={limitsQuery.data?.max_upload_bytes}
           onUploaded={() => {
             void queryClient.invalidateQueries({
               queryKey: listFilesApiV1FilesGetInfiniteQueryKey(),

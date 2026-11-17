@@ -280,6 +280,10 @@ export const handlers = [
   http.get(`${API}/api/v1/files`, () =>
     HttpResponse.json(envelope([fixtureStoredFile])),
   ),
+  // The free plan's cap: 10 MB, counted as 1024 * 1024 bytes.
+  http.get(`${API}/api/v1/files/limits`, () =>
+    HttpResponse.json(envelope({ max_upload_bytes: 10 * 1024 * 1024 })),
+  ),
   http.post(`${API}/api/v1/files/presign`, () =>
     HttpResponse.json(
       envelope({

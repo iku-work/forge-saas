@@ -121,6 +121,16 @@ describe("FileUploader", () => {
     ).toBeInTheDocument();
   });
 
+  it("states its limit up front when it has one", () => {
+    const { rerender } = render(
+      <FileUploader maxSize={5 * 1024 * 1024} onUploaded={vi.fn()} />,
+    );
+    expect(screen.getByText("Up to 5 MB per file")).toBeInTheDocument();
+
+    rerender(<FileUploader onUploaded={vi.fn()} />);
+    expect(screen.queryByTestId("upload-max-size")).not.toBeInTheDocument();
+  });
+
   it("shows a size-error when the file exceeds maxSize", async () => {
     render(<FileUploader maxSize={100} onUploaded={vi.fn()} />);
     const input = getFileInput();

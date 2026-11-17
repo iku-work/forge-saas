@@ -43,7 +43,7 @@ from app.core import cache, cache_keys
 from app.core.db import get_session
 from app.core.dependencies import get_current_org, get_redis
 from app.core.exceptions import PlanLimitError
-from app.core.module_loader import is_enabled
+from app.core.module_loader import get_free_plan_features, is_enabled
 from app.models._mixins import utcnow
 from app.modules.billing.models import Plan, Subscription
 from app.modules.billing.repository import PlanRepository, SubscriptionRepository
@@ -54,14 +54,11 @@ from app.modules.tenancy.models import Membership, Organization
 _GRACE_PERIOD = timedelta(days=7)
 _ENTITLED_STATUSES = frozenset({"active", "trialing"})
 
-# These numbers are CAPS, not entitlements, and the difference matters since
-# the storage routes stopped gating on feature *presence*: a key that is
-# absent from `features` is a limit nobody checks, i.e. unlimited. Leaving
-# this `{}` is what used to make a free org unable to set an avatar; leaving
-# it `{}` now would make a free org able to fill the disk. Keep it in step
-# with the "Free" row in app.core.seed and COMMITTED_PLANS in
-# apps/marketing/src/content/pricing.ts -- three separate places, nothing
-# cross-checks them, and this is the only one a real free org ever reads.
+# The free plan's numbers are CAPS, not entitlements, and the difference
+# matters since the storage routes stopped gating on feature *presence*: a key
+# absent from `features` is a limit nobody checks, i.e. unlimited. They come
+# from FREE_PLAN_FEATURES in backend/product/config.py, which the product owns;
+# this is the only copy a real free org ever reads.
 _FREE_PLAN = Plan(
     name="Free",
     slug="free",
@@ -69,7 +66,7 @@ _FREE_PLAN = Plan(
     stripe_price_id_yearly="",
     price_monthly=0,
     price_yearly=0,
-    features={"seats": 3, "storage_gb": 1, "max_upload_mb": 10},
+    features=get_free_plan_features(),
 )
 
 

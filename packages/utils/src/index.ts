@@ -70,7 +70,9 @@ export function formatBytes(bytes: number): string {
   const exponent = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), BYTE_UNITS.length - 1);
   const value = bytes / 1024 ** exponent;
   const unit = BYTE_UNITS[exponent] ?? "B";
-  return `${exponent === 0 ? value.toFixed(0) : value.toFixed(1)} ${unit}`;
+  // "10 MB", not "10.0 MB": a whole number reads as one.
+  const shown = exponent === 0 ? value.toFixed(0) : value.toFixed(1).replace(/\.0$/, "");
+  return `${shown} ${unit}`;
 }
 
 // Unicode combining diacritical marks span code points 0x300-0x36f. Stripping

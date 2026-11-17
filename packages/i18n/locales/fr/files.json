@@ -20,6 +20,7 @@
     "retry": "Réessayer",
     "error_type": "Type de fichier non autorisé.",
     "error_size": "Le fichier dépasse la limite de {max}.",
+    "max_size": "Jusqu'à {max} par fichier",
     "error_upload": "Échec de l'import.",
     "queued": "En attente",
     "uploading": "Import en cours…",

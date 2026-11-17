@@ -264,6 +264,39 @@ async def test_presign_free_plan_still_enforces_its_per_file_cap(
     assert response.status_code == 402
 
 
+# --- GET /files/limits ------------------------------------------------------------------
+
+
+async def test_limits_report_the_free_plan_cap_and_presign_agrees(
+    client: httpx.AsyncClient, owner: User, free_org: Organization
+) -> None:
+    """What the uploader shows is exactly what presign enforces."""
+    response = await client.get("/api/v1/files/limits", headers=_headers(owner, free_org))
+
+    limit = response.json()["data"]["max_upload_bytes"]
+    assert limit == 10 * 1024 * 1024
+    assert (await _presign(client, owner, free_org, size_bytes=limit)).status_code == 200
+    assert (await _presign(client, owner, free_org, size_bytes=limit + 1)).status_code == 402
+
+
+async def test_limits_report_a_paid_plans_cap(
+    client: httpx.AsyncClient, owner: User, org: Organization
+) -> None:
+    response = await client.get("/api/v1/files/limits", headers=_headers(owner, org))
+
+    assert response.json()["data"]["max_upload_bytes"] == 5 * 1024 * 1024
+
+
+async def test_limits_are_readable_by_a_member_who_cannot_upload(
+    client: httpx.AsyncClient, session: AsyncSession, org: Organization
+) -> None:
+    member = await _add_member(session, org, grants=[])
+
+    response = await client.get("/api/v1/files/limits", headers=_headers(member, org))
+
+    assert response.status_code == 200
+
+
 async def test_presign_disallowed_content_type_returns_422(
     client: httpx.AsyncClient, owner: User, org: Organization
 ) -> None:
