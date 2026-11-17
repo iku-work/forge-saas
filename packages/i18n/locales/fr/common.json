@@ -367,6 +367,34 @@
         "description": "Le compte cesse de fonctionner maintenant et est supprimé définitivement après le délai de grâce, comme une suppression demandée par la personne elle-même.",
         "done": "Suppression du compte programmée."
       }
+    },
+    "org_content": {
+      "load_more": "Charger plus",
+      "error_load": "Impossible de charger ceci. Réessayez dans un instant.",
+      "no_members": "Aucun membre.",
+      "no_files": "Aucun fichier.",
+      "col_email": "E-mail",
+      "col_role": "Rôle",
+      "col_joined": "Membre depuis",
+      "col_file": "Fichier",
+      "col_status": "Analyse",
+      "col_uploaded": "Ajouté",
+      "col_actions": "Actions",
+      "status_clean": "Sain",
+      "status_uploading": "Envoi en cours",
+      "status_scanning": "Analyse en cours",
+      "status_infected": "Infecté",
+      "status_failed": "Analyse échouée",
+      "preview": "Ouvrir",
+      "error_preview": "Impossible d’ouvrir ce fichier. Réessayez dans un instant.",
+      "remove": "Supprimer",
+      "remove_title": "Supprimer {filename} ?",
+      "remove_description": "Le fichier est supprimé de l’organisation, et ses propriétaires sont prévenus par e-mail et dans l’application.",
+      "reason_label": "Motif",
+      "reason_hint": "Au moins 10 caractères. Enregistré dans le journal d’audit.",
+      "cancel": "Annuler",
+      "removed": "Fichier supprimé. Les propriétaires ont été prévenus.",
+      "error_remove": "Impossible de supprimer le fichier. Réessayez dans un instant."
     }
   },
   "banner": {

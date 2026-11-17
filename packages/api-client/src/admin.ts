@@ -173,6 +173,75 @@ export function getAdminOrgDetail(orgId: string) {
   });
 }
 
+// ---- What is inside one org: members, files, preview, delete -----------------
+
+export interface AdminPageQuery {
+  after?: string | null;
+  limit?: number | undefined;
+}
+
+export interface AdminOrgMember {
+  user_id: string;
+  email: string;
+  full_name: string | null;
+  role: MemberRole;
+  joined_at: string;
+}
+
+export interface AdminOrgFile {
+  id: string;
+  filename: string;
+  content_type: string;
+  size_bytes: number;
+  /** "uploading" | "scanning" | "clean" | "infected" | "failed". Only a
+   *  clean one opens. */
+  status: string;
+  uploaded_by_email: string | null;
+  created_at: string;
+}
+
+export interface AdminFilePreview {
+  url: string;
+  expires_at: string;
+  /** True: the browser shows it (image or PDF). False: it downloads. */
+  inline: boolean;
+}
+
+export function listAdminOrgMembers(orgId: string, query: AdminPageQuery = {}) {
+  return client.get<Envelope<AdminOrgMember[]>, ErrorBody, true>({
+    ...THROW,
+    url: "/api/v1/admin/orgs/{org_id}/members",
+    path: { org_id: orgId },
+    query: query as Record<string, unknown>,
+  });
+}
+
+export function listAdminOrgFiles(orgId: string, query: AdminPageQuery = {}) {
+  return client.get<Envelope<AdminOrgFile[]>, ErrorBody, true>({
+    ...THROW,
+    url: "/api/v1/admin/orgs/{org_id}/files",
+    path: { org_id: orgId },
+    query: query as Record<string, unknown>,
+  });
+}
+
+export function previewAdminOrgFile(orgId: string, fileId: string) {
+  return client.post<Envelope<AdminFilePreview>, ErrorBody, true>({
+    ...THROW,
+    url: "/api/v1/admin/orgs/{org_id}/files/{file_id}/preview",
+    path: { org_id: orgId, file_id: fileId },
+  });
+}
+
+export function deleteAdminOrgFile(orgId: string, fileId: string, reason: string) {
+  return client.post<Envelope<null>, ErrorBody, true>({
+    ...THROW,
+    url: "/api/v1/admin/orgs/{org_id}/files/{file_id}/delete",
+    path: { org_id: orgId, file_id: fileId },
+    body: { reason },
+  });
+}
+
 export interface ListAdminUsersQuery {
   after?: string | null;
   limit?: number | undefined;

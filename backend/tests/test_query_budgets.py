@@ -142,6 +142,10 @@ BUDGETS: dict[str, int] = {
     # and org.
     "list_orgs": 3,
     "list_users": 3,
+    # One org's insides for the admin org page: + the org row, the page, and
+    # the page's users (members) or uploaders (files) in one batched `IN`.
+    "list_admin_org_members": 5,
+    "list_admin_org_files": 5,
     "list_admin_audit_feed": 5,
 }
 
@@ -635,6 +639,18 @@ ENDPOINTS: list[ListEndpoint] = [
     ListEndpoint("list_invoices", "/api/v1/billing/invoices", _seed_stripe_invoices),
     ListEndpoint("list_orgs", "/api/v1/admin/orgs", _seed_directory_orgs, as_superadmin=True),
     ListEndpoint("list_users", "/api/v1/admin/users", _seed_directory_users, as_superadmin=True),
+    ListEndpoint(
+        "list_admin_org_members",
+        lambda w: f"/api/v1/admin/orgs/{w.org.id}/members",
+        _seed_members,
+        as_superadmin=True,
+    ),
+    ListEndpoint(
+        "list_admin_org_files",
+        lambda w: f"/api/v1/admin/orgs/{w.org.id}/files",
+        _seed_files,
+        as_superadmin=True,
+    ),
     ListEndpoint(
         "list_admin_audit_feed", "/api/v1/admin/audit", _seed_audit_events, as_superadmin=True
     ),

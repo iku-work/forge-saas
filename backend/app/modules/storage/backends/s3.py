@@ -42,14 +42,15 @@ _PRECONDITION_FAILED_CODES = {"412", "PreconditionFailed"}
 _DISPOSITION_UNSAFE_CHARS = re.compile(r'[\r\n"/\\]')
 
 
-def _content_disposition(filename: str) -> str:
+def _content_disposition(filename: str, *, inline: bool = False) -> str:
     safe_filename = _DISPOSITION_UNSAFE_CHARS.sub("_", filename)
+    disposition = "inline" if inline else "attachment"
     # Plain `filename=` for clients that don't parse RFC 5987, plus
     # `filename*=` (UTF-8, percent-encoded) as the authoritative value for
     # everything else -- avoids ever interpolating a raw, attacker-influenced
     # string into the quoted-string form of the header.
     return (
-        f'attachment; filename="{safe_filename}"; '
+        f'{disposition}; filename="{safe_filename}"; '
         f"filename*=UTF-8''{quote(safe_filename, safe='')}"
     )
 
@@ -118,12 +119,23 @@ class S3Backend:
 
     @resilient("s3")
     async def presign_download(
-        self, key: str, expires_in: int = 3600, *, filename: str | None = None
+        self,
+        key: str,
+        expires_in: int = 3600,
+        *,
+        filename: str | None = None,
+        inline_as: str | None = None,
     ) -> str:
         def _presign() -> str:
             params: dict[str, str] = {"Bucket": self._bucket, "Key": key}
             if filename:
-                params["ResponseContentDisposition"] = _content_disposition(filename)
+                params["ResponseContentDisposition"] = _content_disposition(
+                    filename, inline=inline_as is not None
+                )
+            if inline_as is not None:
+                # The type the caller vetted, not whatever the object was
+                # stored with: an inline response must never be read as HTML.
+                params["ResponseContentType"] = inline_as
             url: str = self._client.generate_presigned_url(
                 "get_object", Params=params, ExpiresIn=expires_in
             )

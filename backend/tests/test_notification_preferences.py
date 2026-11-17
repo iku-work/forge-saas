@@ -39,6 +39,8 @@ _ALL_NOTIFICATION_TYPES = {
     # accepts.
     "invitation_received",
     "invitation_accepted",
+    # A superadmin removed one of an org's files.
+    "file_removed",
 }
 
 

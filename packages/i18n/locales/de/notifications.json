@@ -46,7 +46,8 @@
     "type_webhook_endpoint_disabled": "Ein Webhook-Endpunkt wird nach wiederholten Fehlern deaktiviert",
     "section_title": "Wie Sie jede Benachrichtigung erhalten",
     "type_invitation_received": "Sie werden in eine andere Organisation eingeladen",
-    "type_invitation_accepted": "Jemand nimmt Ihre Einladung an"
+    "type_invitation_accepted": "Jemand nimmt Ihre Einladung an",
+    "type_file_removed": "Eine Datei wird vom Dienst entfernt"
   },
   "types": {
     "member_invited": {
@@ -84,6 +85,10 @@
     "invitation_accepted": {
       "title": "Einladung angenommen",
       "body": "{email} hat Ihre Einladung angenommen und ist {org_name} beigetreten."
+    },
+    "file_removed": {
+      "title": "Datei entfernt",
+      "body": "{filename} wurde vom Dienst aus {org_name} entfernt."
     }
   }
 }

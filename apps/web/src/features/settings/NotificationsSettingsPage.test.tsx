@@ -124,6 +124,7 @@ describe("NotificationsSettingsPage", () => {
         webhook_endpoint_disabled: { email: true, in_app: true, push: false },
         invitation_received: { email: false, in_app: true, push: false },
         invitation_accepted: { email: false, in_app: true, push: false },
+        file_removed: { email: true, in_app: true, push: false },
       },
     });
   });

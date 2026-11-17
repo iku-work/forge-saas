@@ -49,6 +49,7 @@ const TYPE_LABEL_KEYS: Record<NotificationType, string> = {
     "notifications.preferences.type_webhook_endpoint_disabled",
   invitation_received: "notifications.preferences.type_invitation_received",
   invitation_accepted: "notifications.preferences.type_invitation_accepted",
+  file_removed: "notifications.preferences.type_file_removed",
 };
 
 const REQUIRED_NOTE_ID = "notification-required-note";

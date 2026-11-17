@@ -16,7 +16,7 @@ aggregate view no single module's service was designed to provide.
 """
 
 from datetime import datetime, timedelta
-from typing import Any
+from typing import TYPE_CHECKING, Any
 from urllib.parse import urlencode
 from uuid import UUID, uuid4
 
@@ -57,8 +57,11 @@ from app.modules.admin.schemas import (
     AdminAuditSummary,
     AdminDashboardStats,
     AdminFeatureFlagState,
+    AdminFilePreview,
     AdminMembershipSummary,
     AdminOrgDetail,
+    AdminOrgFile,
+    AdminOrgMember,
     AdminOrgSummary,
     AdminPaymentFailureEntry,
     AdminSessionSummary,
@@ -76,6 +79,7 @@ from app.modules.auth.repository import (
     TOTPSecretRepository,
     UserRepository,
 )
+from app.modules.auth.service import AuthService
 from app.modules.auth.utils import banned_email_hash, create_access_token, verify_access_token
 from app.modules.billing.models import Subscription
 from app.modules.billing.repository import PlanRepository, SubscriptionRepository
@@ -84,6 +88,9 @@ from app.modules.feature_flags.service import FeatureFlagService
 from app.modules.storage.repository import StoredFileRepository
 from app.modules.tenancy.models import Organization
 from app.modules.tenancy.repository import MembershipRepository, OrganizationRepository
+
+if TYPE_CHECKING:
+    from app.modules.storage.service import StorageService
 
 # T-142: hard cap on impersonation-token lifetime, enforced twice --
 # AdminImpersonateRequest.duration_minutes (schema, le=60) rejects an
@@ -1059,3 +1066,119 @@ class AdminUserModerationService:
             ua=ua,
             severity="elevated",
         )
+
+
+def _scan_state(status: str, verdict: str | None) -> str:
+    """One word for where a file stands, from its upload status and its
+    scan verdict (see app.modules.storage.scan_gate)."""
+    if status == "pending":
+        return "uploading"
+    if status == "ready":
+        return "clean" if verdict == "clean" else "scanning"
+    return status  # "infected" | "failed"
+
+
+class AdminOrgContentService:
+    """What is inside one org, for the admin org page: its members, its
+    files, a look at a file, and removing one.
+
+    Looking and removing are audited at severity="elevated"; removing also
+    tells the org's owners, in the app and by email, which file the service
+    took down (an org should never find a file gone without a word).
+    """
+
+    def __init__(self, session: AsyncSession, redis: Redis) -> None:
+        self._session = session
+        self._redis = redis
+        self._memberships = MembershipRepository(session)
+        self._users = UserRepository(session)
+        self._audit = AuditService(session)
+
+    async def list_members(
+        self, org: Organization, after: UUID | None, limit: int
+    ) -> tuple[list[AdminOrgMember], UUID | None]:
+        memberships, next_cursor = await self._memberships.list_for_org(org.id, after, limit)
+        users = await AuthService(self._session).users_by_ids({m.user_id for m in memberships})
+        members = [
+            AdminOrgMember(
+                user_id=m.user_id,
+                email=users[m.user_id].email,
+                full_name=users[m.user_id].full_name,
+                role=m.role,
+                joined_at=m.created_at,
+            )
+            for m in memberships
+            if m.user_id in users
+        ]
+        return members, next_cursor
+
+    async def list_files(
+        self, org: Organization, after: UUID | None, limit: int
+    ) -> tuple[list[AdminOrgFile], UUID | None]:
+        storage = self._storage(org)
+        files, next_cursor = await storage.list_files(after, limit)
+        uploaders = await storage.uploaders_for(files)
+        rows = [
+            AdminOrgFile(
+                id=f.id,
+                filename=f.filename,
+                content_type=f.content_type,
+                size_bytes=f.size_bytes,
+                status=_scan_state(f.status, f.virus_scan_result),
+                uploaded_by_email=(
+                    uploaders[f.uploaded_by].email if f.uploaded_by in uploaders else None
+                ),
+                created_at=f.created_at,
+            )
+            for f in files
+        ]
+        return rows, next_cursor
+
+    async def preview_file(
+        self, *, org: Organization, file_id: UUID, actor: User, ip: str, ua: str
+    ) -> AdminFilePreview:
+        url, expires_at, inline = await self._storage(org).get_preview_url(file_id)
+        await self._audit.log(
+            action="admin.file.preview",
+            resource_type="file",
+            resource_id=str(file_id),
+            org_id=org.id,
+            actor_id=actor.id,
+            ip=ip,
+            ua=ua,
+            severity="elevated",
+        )
+        return AdminFilePreview(url=url, expires_at=expires_at, inline=inline)
+
+    async def delete_file(  # noqa: PLR0913 -- the org, the file, the reason and the audit record's fields
+        self, *, org: Organization, file_id: UUID, actor: User, reason: str, ip: str, ua: str
+    ) -> None:
+        stored_file = await self._storage(org).delete_file(actor.id, file_id, anyones=True)
+        await self._audit.log(
+            action="admin.file.delete",
+            resource_type="file",
+            resource_id=str(file_id),
+            org_id=org.id,
+            actor_id=actor.id,
+            diff={"reason": reason, "filename": stored_file.filename},
+            ip=ip,
+            ua=ua,
+            severity="elevated",
+        )
+        if is_enabled("notifications"):
+            from app.modules.notifications.service import NotificationService  # noqa: PLC0415
+
+            await NotificationService(self._session, self._redis).send_many(
+                user_ids=await self._memberships.list_owner_ids(org.id),
+                org_id=org.id,
+                type="file_removed",
+                params={"filename": stored_file.filename, "org_name": org.name},
+                action_url="/files",
+            )
+
+    def _storage(self, org: Organization) -> "StorageService":
+        # file_storage is optional; the router answers 404 before this runs
+        # when it is off, so the module is only imported when it is on.
+        from app.modules.storage.service import StorageService  # noqa: PLC0415
+
+        return StorageService(self._session, org.id, self._redis)

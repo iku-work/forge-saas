@@ -46,7 +46,8 @@
     "type_webhook_endpoint_disabled": "Un endpoint de webhook se desactiva tras fallos repetidos",
     "section_title": "Cómo te llega cada notificación",
     "type_invitation_received": "Te invitan a otra organización",
-    "type_invitation_accepted": "Alguien acepta tu invitación"
+    "type_invitation_accepted": "Alguien acepta tu invitación",
+    "type_file_removed": "El servicio elimina un archivo"
   },
   "types": {
     "member_invited": {
@@ -84,6 +85,10 @@
     "invitation_accepted": {
       "title": "Invitación aceptada",
       "body": "{email} aceptó tu invitación y se unió a {org_name}."
+    },
+    "file_removed": {
+      "title": "Archivo eliminado",
+      "body": "El servicio eliminó {filename} de {org_name}."
     }
   }
 }

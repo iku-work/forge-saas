@@ -396,6 +396,34 @@
         "description": "The account stops working now and is permanently deleted after the grace period, the same as a deletion they ask for themselves.",
         "done": "Account scheduled for deletion."
       }
+    },
+    "org_content": {
+      "load_more": "Load more",
+      "error_load": "This couldn't be loaded. Try again in a moment.",
+      "no_members": "No members.",
+      "no_files": "No files.",
+      "col_email": "Email",
+      "col_role": "Role",
+      "col_joined": "Joined",
+      "col_file": "File",
+      "col_status": "Scan",
+      "col_uploaded": "Uploaded",
+      "col_actions": "Actions",
+      "status_clean": "Clean",
+      "status_uploading": "Uploading",
+      "status_scanning": "Being scanned",
+      "status_infected": "Infected",
+      "status_failed": "Scan failed",
+      "preview": "Open",
+      "error_preview": "This file couldn't be opened. Try again in a moment.",
+      "remove": "Remove",
+      "remove_title": "Remove {filename}?",
+      "remove_description": "The file is deleted from the organization, and its owners are told by email and in the app.",
+      "reason_label": "Reason",
+      "reason_hint": "At least 10 characters. Saved in the audit log.",
+      "cancel": "Cancel",
+      "removed": "File removed. The owners have been told.",
+      "error_remove": "The file couldn't be removed. Try again in a moment."
     }
   },
   "subscription_status": {

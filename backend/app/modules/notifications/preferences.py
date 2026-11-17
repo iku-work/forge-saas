@@ -28,6 +28,9 @@ DEFAULT_PREFERENCES: dict[str, dict[str, bool]] = {
     # To the inviter, when someone accepts. In-app only: they already had an
     # in-app confirmation when the invitation went out.
     "invitation_accepted": {"email": False, "in_app": True, "push": False},
+    # To an org's owners when a superadmin removes one of its files. Email
+    # on: the people who need to know may not be looking at the app.
+    "file_removed": {"email": True, "in_app": True, "push": False},
 }
 
 # T-234: (notification type -> channels that stay on no matter what the user

@@ -367,6 +367,34 @@
         "description": "La cuenta deja de funcionar ahora y se elimina definitivamente tras el periodo de gracia, igual que una eliminación que pida la propia persona.",
         "done": "Cuenta programada para eliminarse."
       }
+    },
+    "org_content": {
+      "load_more": "Cargar más",
+      "error_load": "No se pudo cargar. Inténtalo de nuevo en un momento.",
+      "no_members": "Sin miembros.",
+      "no_files": "Sin archivos.",
+      "col_email": "Correo",
+      "col_role": "Rol",
+      "col_joined": "Se unió",
+      "col_file": "Archivo",
+      "col_status": "Análisis",
+      "col_uploaded": "Subido",
+      "col_actions": "Acciones",
+      "status_clean": "Limpio",
+      "status_uploading": "Subiendo",
+      "status_scanning": "Analizándose",
+      "status_infected": "Infectado",
+      "status_failed": "Análisis fallido",
+      "preview": "Abrir",
+      "error_preview": "No se pudo abrir este archivo. Inténtalo de nuevo en un momento.",
+      "remove": "Eliminar",
+      "remove_title": "¿Eliminar {filename}?",
+      "remove_description": "El archivo se elimina de la organización y se avisa a sus propietarios por correo y en la aplicación.",
+      "reason_label": "Motivo",
+      "reason_hint": "Al menos 10 caracteres. Se guarda en el registro de auditoría.",
+      "cancel": "Cancelar",
+      "removed": "Archivo eliminado. Se ha avisado a los propietarios.",
+      "error_remove": "No se pudo eliminar el archivo. Inténtalo de nuevo en un momento."
     }
   },
   "banner": {

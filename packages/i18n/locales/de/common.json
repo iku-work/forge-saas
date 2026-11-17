@@ -367,6 +367,34 @@
         "description": "Das Konto funktioniert ab sofort nicht mehr und wird nach der Karenzzeit endgültig gelöscht, genau wie eine Löschung, die die Person selbst beantragt.",
         "done": "Konto zur Löschung vorgemerkt."
       }
+    },
+    "org_content": {
+      "load_more": "Mehr laden",
+      "error_load": "Das konnte nicht geladen werden. Versuchen Sie es gleich noch einmal.",
+      "no_members": "Keine Mitglieder.",
+      "no_files": "Keine Dateien.",
+      "col_email": "E-Mail",
+      "col_role": "Rolle",
+      "col_joined": "Beigetreten",
+      "col_file": "Datei",
+      "col_status": "Prüfung",
+      "col_uploaded": "Hochgeladen",
+      "col_actions": "Aktionen",
+      "status_clean": "Sauber",
+      "status_uploading": "Wird hochgeladen",
+      "status_scanning": "Wird geprüft",
+      "status_infected": "Infiziert",
+      "status_failed": "Prüfung fehlgeschlagen",
+      "preview": "Öffnen",
+      "error_preview": "Diese Datei konnte nicht geöffnet werden. Versuchen Sie es gleich noch einmal.",
+      "remove": "Entfernen",
+      "remove_title": "{filename} entfernen?",
+      "remove_description": "Die Datei wird aus der Organisation gelöscht, und ihre Inhaber werden per E-Mail und in der App informiert.",
+      "reason_label": "Grund",
+      "reason_hint": "Mindestens 10 Zeichen. Wird im Audit-Log gespeichert.",
+      "cancel": "Abbrechen",
+      "removed": "Datei entfernt. Die Inhaber wurden informiert.",
+      "error_remove": "Die Datei konnte nicht entfernt werden. Versuchen Sie es gleich noch einmal."
     }
   },
   "banner": {
