@@ -88,4 +88,5 @@ as the change" rule in step 4 is for.
 | [0007](0007-tenancy-model.md) | Tenancy model — row-level, with RLS as the named next step | Accepted | 2026-08-31 |
 | [0008](0008-design-language-v2.md) | Design language v2 — one webfont, one accent token | Accepted | 2026-10-02 |
 | [0009](0009-data-sensitivity.md) | A declared data-sensitivity level that the deploy enforces | Accepted | 2026-11-01 |
+| [0010](0010-building-blocks.md) | Building blocks live outside the template and are copied into a product | Accepted | 2026-11-17 |
 <!-- adr-index:end -->

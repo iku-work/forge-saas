@@ -27,6 +27,37 @@ version unless you have a documented reason not to (note the reason in
 - `CHANGELOG.product.md` — product-level changelog
 - `README.md` — overwrite freely
 
+## Building blocks: reusable capabilities stay out of the template
+
+The template is the platform every SaaS needs: sign-in, organisations,
+billing, admin, files, notifications. A capability that only some products
+need, such as document scanning or PDF export, does not go into the template,
+even as an optional module. It becomes a *building block* in a separate
+`forge-blocks` repository, and a product that wants it copies it in. See
+[ADR-0010](docs/adr/0010-building-blocks.md).
+
+When a product builds something another product could reuse, build it in the
+block shape from the first commit, so it can be extracted later:
+
+- **Two layers.** The work goes in a plain Python `core/`, with no FastAPI,
+  database or template imports. A thin module in `backend/app/modules/<name>/`
+  wires it in through the template's storage, jobs, virus scan and org
+  scoping.
+- **Its own folders and names:** `backend/app/modules/<name>/`,
+  `apps/web/src/features/<name>/`, its own alembic branch and its own i18n
+  namespace.
+- **Other modules only through their services.** import-linter enforces this
+  already.
+- **Settings in `product/config.py`, read with defaults.** Product wording,
+  prices and hosts are never hard-coded.
+- **Write down what it needs:** pip, npm and apt packages, settings, secret
+  names. This list becomes the block's `block.toml`.
+- **Commit it separately** from product work, so its history can be lifted
+  out cleanly.
+
+The repository and `make add-block` get built with the first real block, not
+before.
+
 ## Module toggles
 
 Every optional module is one boolean in `product.config.py`, mirrored in
