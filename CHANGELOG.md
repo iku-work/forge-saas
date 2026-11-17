@@ -6,28 +6,6 @@ template keep their own changes in `CHANGELOG.product.md` (see
 
 ## [Unreleased]
 
-### Added
-- **The uploader says the limit up front.** "Up to 10 MB per file" under the
-  Files page drop zone (the profile photo and org logo already state theirs), from the new
-  `GET /api/v1/files/limits` (the smaller of the plan's `max_upload_mb` and
-  `MAX_UPLOAD_BYTES`). Before, people found out from the error after picking a
-  file.
-
-### Changed
-- **The free plan's limits are the product's.** `FREE_PLAN_FEATURES` in
-  `backend/product/config.py` (seats, storage, per-file size) replaces the
-  hard-coded `_FREE_PLAN` features in `app/modules/billing/dependencies.py`, so
-  changing them no longer means editing a template file. A config without it
-  keeps today's numbers. The dev seed's Free row reads the same setting.
-- **`max_upload_mb` counts 1024 × 1024 bytes,** like `MAX_UPLOAD_BYTES` and
-  like the sizes the app shows. A "10 MB" cap now accepts a file shown as
-  10 MB; before, it stopped at 9.5 MB as shown.
-- Sizes drop a trailing ".0": "10 MB", not "10.0 MB".
-
-### Conflict risk for products
-- Low. Add `FREE_PLAN_FEATURES` to your `backend/product/config.py` when you
-  want limits other than the defaults.
-
 ## [1.0.0] — 2026-11-17
 
 The first tagged release: phases 1 to 4 complete, the November review's
@@ -58,6 +36,26 @@ see [TEMPLATE.md](TEMPLATE.md)).
 - **Staging before production:** the deploy goes to staging first through a
   locked key; deploy settings are committed in `deploy/*.env` and only secrets
   stay in Bitwarden (#92, #93, #97, #98, #99).
+- **The uploader says the limit up front (#119).** "Up to 10 MB per file" under the
+  Files page drop zone (the profile photo and org logo already state theirs), from the new
+  `GET /api/v1/files/limits` (the smaller of the plan's `max_upload_mb` and
+  `MAX_UPLOAD_BYTES`). Before, people found out from the error after picking a
+  file.
+- **Building blocks (ADR-0010):** capabilities only some products need, such as
+  document scanning or PDF export, go to a separate `forge-blocks` repository
+  and are copied into a product, not added to the template. TEMPLATE.md has
+  the rules for building a feature in that shape (#120).
+
+### Changed since 2026-11-05
+- **The free plan's limits are the product's (#119).** `FREE_PLAN_FEATURES` in
+  `backend/product/config.py` (seats, storage, per-file size) replaces the
+  hard-coded `_FREE_PLAN` features in `app/modules/billing/dependencies.py`, so
+  changing them no longer means editing a template file. A config without it
+  keeps today's numbers. The dev seed's Free row reads the same setting.
+- **`max_upload_mb` counts 1024 × 1024 bytes,** like `MAX_UPLOAD_BYTES` and
+  like the sizes the app shows. A "10 MB" cap now accepts a file shown as
+  10 MB; before, it stopped at 9.5 MB as shown.
+- Sizes drop a trailing ".0": "10 MB", not "10.0 MB".
 
 ### Fixed since 2026-11-05
 - Google, GitHub and SSO sign-in finish inside the app (#86); startup refuses
