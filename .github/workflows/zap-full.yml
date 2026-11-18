@@ -78,12 +78,26 @@ jobs:
           path: zap-reports/testssl-report.json
           retention-days: 90
 
-      # ZAP sends a path parameter as its own name, /orgs/org_id, which fails the
-      # UUID check before any handler runs. Org routes are the ones worth reaching.
-      - name: Point the API spec at the scanner's org
+      # ZAP sends a path parameter as its own name, /orgs/org_id, which fails
+      # validation before any handler runs: until 2026-11-18 only 25 of the
+      # routes were reached. Org routes get the scanner's own org. Every other
+      # ID gets a well-formed UUID that matches nothing, so the handler runs
+      # its lookup and answers 404, and the rest get a value of the right shape.
+      - name: Fill the API spec's path parameters
         env:
           ZAP_SCANNER_ORG_ID: ${{ vars.ZAP_SCANNER_ORG_ID }}
-        run: sed -i "s/{org_id}/$ZAP_SCANNER_ORG_ID/g" packages/api-client/openapi.json
+        run: |
+          sed -i -E \
+            -e "s/\{org_id\}/$ZAP_SCANNER_ORG_ID/g" \
+            -e 's/\{[a-z_]+_id\}/00000000-0000-4000-8000-000000000000/g' \
+            -e 's/\{provider\}/google/g' \
+            -e 's/\{org_slug\}/pentest-engagement/g' \
+            -e 's/\{token\}/pentest-placeholder-token/g' \
+            packages/api-client/openapi.json
+          if grep -o '"/api/v1/[^"]*{[^"]*' packages/api-client/openapi.json; then
+            echo "::error::a path parameter above has no value; add it to this step"
+            exit 1
+          fi
 
       # zaproxy/action-af wraps `docker run ... zap.sh -cmd -autorun <plan>`,
       # mounting $GITHUB_WORKSPACE as the container's /zap/wrk. Paths in the plan

@@ -93,3 +93,7 @@ tests/load/results/
 # A private key: never committed, and never in a build context either -- see
 # .dockerignore. Regenerate per environment rather than sharing one.
 certs/
+
+# Pentest credentials and raw results (scripts/pentest_matrix.py). Never commit:
+# the accounts file holds live staging passwords.
+.scratch/pentest/
