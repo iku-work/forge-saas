@@ -6,6 +6,18 @@ template keep their own changes in `CHANGELOG.product.md` (see
 
 ## [Unreleased]
 
+### Security
+From the staging pentest, [docs/pentest-2026-11-18.md](docs/pentest-2026-11-18.md):
+- **Only an owner hands out the owner role or touches an owner (F1, High).**
+  Until now `members:manage` was enough, so an admin could make themselves
+  owner, or invite an account as owner, and then demote and remove the real
+  owner. Anyone else now gets 403 `errors.owner_role_owner_only`, and the
+  members page no longer offers the owner role to a non-owner.
+- **Outbound URLs must be globally routable (L1).** Webhook and SSO discovery
+  fetches could reach 100.64.0.0/10.
+- **The storage host sends `Referrer-Policy: no-referrer` and nosniff (L2)**,
+  so a presigned URL cannot leak through `Referer`.
+
 ### Added
 - **Access-control matrix for pentests:** `backend/scripts/pentest_matrix.py`
   calls every API route, the hidden admin routes included, as each kind of
@@ -13,8 +25,9 @@ template keep their own changes in `CHANGELOG.product.md` (see
   impersonating admin) against real IDs, and lists the answers that look
   wrong. See `docs/runbooks/pentest-prep.md`.
 - **`seed_pentest`:** a second org with its own owner for cross-tenant tests,
-  an authenticator for the superadmin (admin routes need one), and
-  `--reset-passwords` for when nobody kept the last set.
+  an authenticator for the superadmin (admin routes need one, and a plain run
+  adds one when it is missing), and `--reset-passwords` for when nobody kept
+  the last set. A run also puts back memberships and roles a test changed.
 
 ### Changed
 - **The weekly ZAP scan reaches routes with IDs in the path.** It used to send
