@@ -55,6 +55,7 @@
   "invitation_email_mismatch": "أُرسلت هذه الدعوة إلى عنوان بريد إلكتروني آخر. سجّل الدخول بهذا العنوان لقبولها.",
   "already_member": "أنت عضو بالفعل في هذه المؤسسة.",
   "cannot_demote_last_owner": "لا يمكن خفض رتبة المالك الأخير للمؤسسة.",
+  "owner_role_owner_only": "يمكن للمالك فقط منح دور المالك أو تغيير عضوية مالك.",
   "cannot_remove_last_owner": "لا يمكن إزالة المالك الأخير للمؤسسة.",
   "notification_not_found": "الإشعار غير موجود.",
   "unprocessable_entity": "تعذّرت معالجة الطلب.",

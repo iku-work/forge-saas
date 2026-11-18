@@ -55,6 +55,20 @@ async def test_literal_link_local_metadata_ip_is_rejected() -> None:
         await validate_outbound_url("http://169.254.169.254/latest/meta-data")
 
 
+@pytest.mark.parametrize(
+    "url",
+    [
+        "http://100.64.0.1/",  # shared address space (CGNAT, Tailscale)
+        "http://100.127.255.254/",
+        "http://192.0.0.8/",
+        "http://198.18.0.1/",
+    ],
+)
+async def test_addresses_that_are_neither_private_nor_public_are_rejected(url: str) -> None:
+    with pytest.raises(UnsafeOutboundURLError):
+        await validate_outbound_url(url)
+
+
 async def test_file_scheme_is_rejected() -> None:
     with pytest.raises(UnsafeOutboundURLError):
         await validate_outbound_url("file:///etc/passwd")

@@ -58,8 +58,13 @@ class SafeDestination:
 
 
 def _is_private_or_reserved(ip: IPAddress) -> bool:
+    # `not is_global` catches what the named checks miss, chiefly the shared
+    # address space 100.64.0.0/10 (carrier-grade NAT, also Tailscale's and
+    # some clouds' internal range): neither private nor public to `ipaddress`,
+    # and let through until the 2026-11-18 pentest (finding L1).
     return (
-        ip.is_private
+        not ip.is_global
+        or ip.is_private
         or ip.is_loopback
         or ip.is_link_local
         or ip.is_reserved

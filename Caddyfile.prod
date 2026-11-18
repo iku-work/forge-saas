@@ -194,6 +194,12 @@ http://{$DOMAIN} {
 	encode gzip zstd
 	header {
 		Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+		# Not left to MinIO, which sets it on objects but not on every answer.
+		X-Content-Type-Options "nosniff"
+		# A presigned URL carries its signature in the query string. A PDF
+		# opened inline would otherwise hand it, in Referer, to every site it
+		# links to (pentest 2026-11-18, L2).
+		Referrer-Policy "no-referrer"
 		-Server
 	}
 }

@@ -55,6 +55,7 @@
   "invitation_email_mismatch": "Diese Einladung wurde an eine andere E-Mail-Adresse gesendet. Melden Sie sich mit dieser Adresse an, um sie anzunehmen.",
   "already_member": "Sie sind bereits Mitglied dieser Organisation.",
   "cannot_demote_last_owner": "Der letzte Owner einer Organisation kann nicht herabgestuft werden.",
+  "owner_role_owner_only": "Nur ein Owner kann die Owner-Rolle vergeben oder die Mitgliedschaft eines Owners ändern.",
   "cannot_remove_last_owner": "Der letzte Owner einer Organisation kann nicht entfernt werden.",
   "notification_not_found": "Benachrichtigung nicht gefunden.",
   "unprocessable_entity": "Die Anfrage konnte nicht verarbeitet werden.",

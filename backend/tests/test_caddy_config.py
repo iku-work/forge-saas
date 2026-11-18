@@ -215,6 +215,18 @@ def test_storage_host_hides_minio_own_endpoints() -> None:
     assert hidden < block.index("reverse_proxy minio:9000")
 
 
+def test_storage_host_keeps_signed_urls_out_of_referer() -> None:
+    """A presigned URL's signature is in its query string; no-referrer keeps a
+    PDF opened inline from sending it to the sites it links to (pentest
+    2026-11-18, L2). nosniff on every answer, not only on MinIO's objects."""
+    content = (REPO_ROOT / "Caddyfile.prod").read_text()
+    block = content[content.index("{$STORAGE_DOMAIN:storage.localhost} {") :]
+    block = block[: block.index("\n}\n")]
+
+    assert 'Referrer-Policy "no-referrer"' in block
+    assert 'X-Content-Type-Options "nosniff"' in block
+
+
 def test_prod_compose_keeps_minio_off_the_public_interface() -> None:
     """Caddy is the only way in. A stray `ports:` here would publish the
     object store, and its console, straight onto the internet."""
