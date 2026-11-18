@@ -55,6 +55,7 @@
   "invitation_email_mismatch": "Esta invitación se envió a otra dirección de correo electrónico. Inicia sesión con esa dirección para aceptarla.",
   "already_member": "Ya eres miembro de esta organización.",
   "cannot_demote_last_owner": "No se puede degradar al último propietario de una organización.",
+  "owner_role_owner_only": "Solo un propietario puede asignar el rol de propietario o cambiar la membresía de un propietario.",
   "cannot_remove_last_owner": "No se puede eliminar al último propietario de una organización.",
   "notification_not_found": "Notificación no encontrada.",
   "unprocessable_entity": "La solicitud no se pudo procesar.",

@@ -54,6 +54,7 @@
   "invitation_email_mismatch": "Tämä kutsu lähetettiin toiseen sähköpostiosoitteeseen. Hyväksy se kirjautumalla sisään kyseisellä osoitteella.",
   "already_member": "Olet jo tämän organisaation jäsen.",
   "cannot_demote_last_owner": "Organisaation viimeistä omistajaa ei voi alentaa.",
+  "owner_role_owner_only": "Vain omistaja voi antaa omistajan roolin tai muuttaa omistajan jäsenyyttä.",
   "cannot_remove_last_owner": "Organisaation viimeistä omistajaa ei voi poistaa.",
   "notification_not_found": "Ilmoitusta ei löytynyt.",
   "unprocessable_entity": "Pyyntöä ei voitu käsitellä.",

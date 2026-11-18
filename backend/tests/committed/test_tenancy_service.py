@@ -907,3 +907,98 @@ async def test_a_removal_is_announced_before_the_row_goes(
     [(event, payload)] = emitted
     assert event == EventType.MEMBER_REMOVED
     assert (payload.membership_id, payload.email) == (target.id, user.email)
+
+
+# --- the owner role belongs to owners (pentest 2026-11-18, F1) -----------------
+
+
+async def _second_owner(
+    session: AsyncSession, membership_repo: MembershipRepository, org: Organization
+) -> None:
+    """Two owners, so the last-owner rule cannot be what refuses the change."""
+    other = User(email=f"other-owner-{uuid4()}@example.com")
+    session.add(other)
+    await session.flush()
+    await membership_repo.create(user_id=other.id, org_id=org.id, role=MemberRole.OWNER)
+
+
+async def test_admin_cannot_make_anyone_owner(
+    service: TenancyService, membership_repo: MembershipRepository, org: Organization, user: User
+) -> None:
+    target = await membership_repo.create(user_id=user.id, org_id=org.id, role=MemberRole.MEMBER)
+    admin = Membership(user_id=uuid4(), org_id=org.id, role=MemberRole.ADMIN)
+
+    with pytest.raises(PermissionDeniedError) as exc:
+        await service.change_role(admin, target.id, MemberRole.OWNER)
+
+    assert exc.value.message_key == "errors.owner_role_owner_only"
+    refreshed = await membership_repo.get_by_id(target.id)
+    assert refreshed is not None
+    assert refreshed.role == MemberRole.MEMBER
+
+
+async def test_admin_cannot_demote_an_owner(
+    service: TenancyService,
+    membership_repo: MembershipRepository,
+    org: Organization,
+    user: User,
+    session: AsyncSession,
+) -> None:
+    target = await membership_repo.create(user_id=user.id, org_id=org.id, role=MemberRole.OWNER)
+    await _second_owner(session, membership_repo, org)
+    admin = Membership(user_id=uuid4(), org_id=org.id, role=MemberRole.ADMIN)
+
+    with pytest.raises(PermissionDeniedError):
+        await service.change_role(admin, target.id, MemberRole.MEMBER)
+
+
+async def test_admin_cannot_remove_an_owner(
+    service: TenancyService,
+    membership_repo: MembershipRepository,
+    org: Organization,
+    user: User,
+    session: AsyncSession,
+) -> None:
+    target = await membership_repo.create(user_id=user.id, org_id=org.id, role=MemberRole.OWNER)
+    await _second_owner(session, membership_repo, org)
+    admin = Membership(user_id=uuid4(), org_id=org.id, role=MemberRole.ADMIN)
+
+    with pytest.raises(PermissionDeniedError):
+        await service.remove_member(admin, target.id)
+
+    assert await membership_repo.get_by_id(target.id) is not None
+
+
+async def test_admin_cannot_invite_an_owner(
+    service: TenancyService, org: Organization, session: AsyncSession, redis: Redis
+) -> None:
+    admin = Membership(user_id=uuid4(), org_id=org.id, role=MemberRole.ADMIN)
+
+    with pytest.raises(PermissionDeniedError):
+        await service.invite(org.id, admin, "would-be-owner@example.com", MemberRole.OWNER, redis)
+
+    rows = await session.execute(select(Invitation).where(Invitation.org_id == org.id))
+    assert rows.scalars().all() == []
+
+
+async def test_admin_still_manages_everyone_below_owner(
+    service: TenancyService, membership_repo: MembershipRepository, org: Organization, user: User
+) -> None:
+    target = await membership_repo.create(user_id=user.id, org_id=org.id, role=MemberRole.MEMBER)
+    admin = Membership(user_id=uuid4(), org_id=org.id, role=MemberRole.ADMIN)
+
+    promoted = await service.change_role(admin, target.id, MemberRole.ADMIN)
+    assert promoted.role == MemberRole.ADMIN
+    await service.remove_member(admin, target.id)
+    assert await membership_repo.get_by_id(target.id) is None
+
+
+async def test_owner_can_make_another_owner(
+    service: TenancyService, membership_repo: MembershipRepository, org: Organization, user: User
+) -> None:
+    target = await membership_repo.create(user_id=user.id, org_id=org.id, role=MemberRole.MEMBER)
+    owner = Membership(user_id=uuid4(), org_id=org.id, role=MemberRole.OWNER)
+
+    updated = await service.change_role(owner, target.id, MemberRole.OWNER)
+
+    assert updated.role == MemberRole.OWNER

@@ -115,6 +115,7 @@ class TenancyService:
         # the invitee may not have an account yet. (T-233's _invitee_locale
         # does look one up, but only to pick a language, and treats "no such
         # user" as an ordinary case rather than an error.)
+        _require_owner_for_owner_role(inviter, role)
         org = await self._org_or_raise(org_id)
         await self._require_seat_to_invite(org, redis)
         invitation_id = uuid4()
@@ -370,6 +371,7 @@ class TenancyService:
         # another org is indistinguishable from a missing one here.
         if target is None or target.org_id != actor_membership.org_id:
             raise NotFoundError("errors.membership_not_found", fallback="Membership not found")
+        _require_owner_for_owner_role(actor_membership, target.role, new_role)
 
         if target.role == MemberRole.OWNER and new_role != MemberRole.OWNER:
             owner_count = await self._memberships.count_by_org_and_role(
@@ -478,6 +480,7 @@ class TenancyService:
         target = await self._memberships.get_by_id(target_membership_id)
         if target is None or target.org_id != actor_membership.org_id:  # see change_role
             raise NotFoundError("errors.membership_not_found", fallback="Membership not found")
+        _require_owner_for_owner_role(actor_membership, target.role)
 
         if target.role == MemberRole.OWNER:
             owner_count = await self._memberships.count_by_org_and_role(
@@ -697,4 +700,19 @@ class TenancyService:
                 # email is written in.
                 "accept_url": frontend_url(f"/accept-invitation/{token}", locale),
             },
+        )
+
+
+def _require_owner_for_owner_role(actor: Membership, *roles: MemberRole) -> None:
+    """Only an owner hands out the owner role or touches an owner's membership.
+
+    members:manage alone used to be enough, so an admin could invite a second
+    account as owner, or promote themselves, and then demote and remove the
+    original owner: the whole organization, its billing included, taken by
+    someone the owner trusted with less (pentest 2026-11-18, F1).
+    """
+    if MemberRole.OWNER in roles and actor.role != MemberRole.OWNER:
+        raise PermissionDeniedError(
+            "errors.owner_role_owner_only",
+            fallback="Only an owner can give the owner role or change an owner's membership",
         )

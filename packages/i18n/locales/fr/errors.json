@@ -55,6 +55,7 @@
   "invitation_email_mismatch": "Cette invitation a été envoyée à une autre adresse e-mail. Connectez-vous avec cette adresse pour l'accepter.",
   "already_member": "Vous êtes déjà membre de cette organisation.",
   "cannot_demote_last_owner": "Impossible de rétrograder le dernier propriétaire d'une organisation.",
+  "owner_role_owner_only": "Seul un propriétaire peut attribuer le rôle de propriétaire ou modifier l'adhésion d'un propriétaire.",
   "cannot_remove_last_owner": "Impossible de supprimer le dernier propriétaire d'une organisation.",
   "notification_not_found": "Notification introuvable.",
   "unprocessable_entity": "La requête n'a pas pu être traitée.",

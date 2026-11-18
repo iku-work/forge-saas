@@ -148,9 +148,11 @@ function MemberAvatar({
 
 function InviteForm({
   orgId,
+  roleOptions,
   onInvited,
 }: {
   orgId: string;
+  roleOptions: ApiMemberRole[];
   onInvited: () => void;
 }) {
   const { t } = useTranslation();
@@ -227,7 +229,7 @@ function InviteForm({
                   data-testid="invite-role-select"
                   {...field}
                 >
-                  {ROLE_OPTIONS.map((role) => (
+                  {roleOptions.map((role) => (
                     <option key={role} value={role}>
                       {t(roleLabelKey(role))}
                     </option>
@@ -267,7 +269,13 @@ export function MembersSettingsPage({
   initialInvitationsScrollOffset,
 }: MembersSettingsPageProps = {}) {
   const { t, i18n } = useTranslation();
-  const { org, isLoading: orgLoading } = useOrg();
+  const { org, role: myRole, isLoading: orgLoading } = useOrg();
+  // Only an owner hands out the owner role or touches an owner's
+  // membership; the server refuses anyone else (pentest 2026-11-18, F1).
+  const isOwner = myRole === "owner";
+  const roleOptions = isOwner
+    ? ROLE_OPTIONS
+    : ROLE_OPTIONS.filter((role) => role !== "owner");
   const avatarSrc = useAvatarSrc();
   const { user } = useAuth();
   const canManage = usePermission(Permission.MEMBERS_MANAGE);
@@ -553,7 +561,9 @@ export function MembersSettingsPage({
                   <span className="text-end">
                     {/* No actions on your own row: demoting or removing
                         yourself from this list is a footgun. */}
-                    {canManage && !isSelf ? (
+                    {canManage &&
+                    !isSelf &&
+                    (isOwner || member.role !== "owner") ? (
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
                           <RowActionsButton
@@ -577,7 +587,7 @@ export function MembersSettingsPage({
                                   );
                                 }}
                               >
-                                {ROLE_OPTIONS.map((role) => (
+                                {roleOptions.map((role) => (
                                   <DropdownMenuRadioItem
                                     key={role}
                                     value={role}
@@ -697,6 +707,7 @@ export function MembersSettingsPage({
           </DialogHeader>
           <InviteForm
             orgId={org.id}
+            roleOptions={roleOptions}
             onInvited={() => {
               setInviteOpen(false);
               void invalidateInvitations();

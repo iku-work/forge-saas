@@ -394,6 +394,69 @@ describe("MembersSettingsPage", () => {
       ).not.toBeInTheDocument();
     });
 
+    // Pentest 2026-11-18, F1: the server refuses anyone but an owner the
+    // owner role and an owner's row, so an admin is not offered either.
+    it("gives an admin no owner role to hand out and no actions on an owner", async () => {
+      const lee = makeUser(6, {
+        full_name: "Lee Park",
+        email: "lee@example.com",
+      });
+      hooks.usePermission.mockReturnValue(true);
+      hooks.useOrg.mockReturnValue({
+        org: fixtureOrg,
+        orgs: [fixtureOrg],
+        role: "admin",
+        permissions: new Set(makeMembership(user, "admin").permissions),
+        isLoading: false,
+        switchOrg: vi.fn(),
+        refreshOrgs: vi.fn(),
+      });
+      server.use(
+        http.get(`${API}/api/v1/orgs/:orgId/members`, () =>
+          HttpResponse.json(
+            envelope([
+              makeMembership(user, "admin"),
+              {
+                ...makeMembership(other, "owner"),
+                id: "44444444-4444-4444-4444-444444444444",
+              },
+              {
+                ...makeMembership(lee, "member"),
+                id: "66666666-6666-6666-6666-666666666666",
+              },
+            ]),
+          ),
+        ),
+      );
+      renderPage();
+
+      await userEvent.click(
+        await screen.findByRole("button", { name: "Actions for Lee Park" }),
+      );
+      expect(
+        screen.queryByRole("button", { name: "Actions for Sam Rivera" }),
+      ).not.toBeInTheDocument();
+      await userEvent.click(
+        await screen.findByRole("menuitem", { name: "Change role" }),
+      );
+      expect(
+        await screen.findByRole("menuitemradio", { name: "Admin" }),
+      ).toBeInTheDocument();
+      expect(
+        screen.queryByRole("menuitemradio", { name: "Owner" }),
+      ).not.toBeInTheDocument();
+      await userEvent.keyboard("{Escape}{Escape}");
+
+      await userEvent.click(screen.getByRole("button", { name: "Invite" }));
+      const select = await screen.findByTestId("invite-role-select");
+      expect(
+        within(select).queryByRole("option", { name: "Owner" }),
+      ).not.toBeInTheDocument();
+      expect(
+        within(select).getByRole("option", { name: "Admin" }),
+      ).toBeInTheDocument();
+    });
+
     it("offers no actions on your own row, nor to a plain member", async () => {
       hooks.usePermission.mockReturnValue(true);
       const { unmount } = renderPage();
