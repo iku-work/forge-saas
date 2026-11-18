@@ -318,6 +318,14 @@ auditConfig:
     #   an abort to bound a walk over untrusted input.
     - GHSA-g3hv-75wg-m249
     - GHSA-3g3m-2fjr-6pw4
+    # 2026-11-17, high, picomatch <= 4.0.7 (GHSA-fc5q-39xc-vjpf): ReDoS on a
+    # crafted extglob *pattern* such as +(*). The advisory names >=4.0.8;
+    # npm's latest is 4.0.7, so there is no fix to take. Every copy (2, 3, 4)
+    # belongs to build tooling: vite, astro, tailwind, metro, jest and the
+    # Expo toolchain. They match glob patterns written in this repo and never
+    # one taken from a request, and no source file here imports a glob
+    # matcher. Take 4.0.8 with a `"picomatch@4"` override once it is published.
+    - GHSA-fc5q-39xc-vjpf
 
 patchedDependencies:
   decode-uri-component@0.2.2: patches/decode-uri-component@0.2.2.patch
