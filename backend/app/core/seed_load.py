@@ -23,6 +23,7 @@ hash, never logged in) -- they only need to exist so GET .../members has
 
 import asyncio
 import secrets
+import sys
 from collections.abc import Sequence
 from datetime import UTC, datetime
 from uuid import UUID, uuid4
@@ -40,6 +41,7 @@ from app.modules.auth.models import User
 from app.modules.auth.permissions import MemberRole
 from app.modules.auth.repository import UserRepository
 from app.modules.auth.utils import hash_password
+from app.modules.billing.repository import PlanRepository
 from app.modules.notifications.models import Notification
 from app.modules.storage.models import StoredFile
 from app.modules.tenancy.models import Membership, Organization
@@ -58,6 +60,9 @@ LOAD_ORG_SLUG = "load-test-org"
 # keep this in sync with the LOAD_USER_COUNT constant each script reads via
 # __ENV.LOAD_USER_COUNT (default matches this).
 LOAD_USER_COUNT = 50
+# Dev and CI only: this repository is public, so outside dev the password
+# comes from the operator on stdin (`--password-stdin`), and k6 reads the same
+# one from LOAD_USER_PASSWORD.
 LOAD_USER_PASSWORD = "LoadTestPass123!"  # noqa: S105 — documented load-test-only login, not a real secret
 
 _FILLER_MEMBER_COUNT = 1000 - LOAD_USER_COUNT
@@ -73,8 +78,10 @@ def _load_user_email(i: int) -> str:
     return f"load-user-{i}@example.com"
 
 
-async def _ensure_pool_users(users: UserRepository) -> list[User]:
-    hashed = hash_password(LOAD_USER_PASSWORD)
+async def _ensure_pool_users(users: UserRepository, password: str) -> list[User]:
+    """The login accounts, with `password` set on every run: a re-run with a
+    new password rotates it, even though the org's data is never re-seeded."""
+    hashed = hash_password(password)
     pool: list[User] = []
     for i in range(LOAD_USER_COUNT):
         email = _load_user_email(i)
@@ -85,6 +92,8 @@ async def _ensure_pool_users(users: UserRepository) -> list[User]:
                 hashed_password=hashed,
                 email_verified_at=datetime.now(UTC),
             )
+        elif user.hashed_password != hashed:
+            user = await users.update(user.id, hashed_password=hashed)
         pool.append(user)
     return pool
 
@@ -162,6 +171,11 @@ async def _grant_storage_entitlement(
     # its own synthetic org, not a workaround specific to this script.
     if not is_enabled("billing"):
         return
+    if await PlanRepository(session).get_by_slug("pro") is None:
+        # A deployment whose Stripe is a placeholder has no synced plans
+        # (staging): the org stays on the free plan, whose 1 GiB holds the
+        # 300 one-KiB seeded files and the load test's small uploads.
+        return
     await AdminBillingOverrideService(session, redis).set_plan(
         org=org,
         plan_slug="pro",
@@ -174,13 +188,13 @@ async def _grant_storage_entitlement(
     )
 
 
-async def seed_load(session: AsyncSession, redis: Redis) -> None:
+async def seed_load(
+    session: AsyncSession, redis: Redis, *, password: str = LOAD_USER_PASSWORD
+) -> None:
+    pool = await _ensure_pool_users(UserRepository(session), password)
     orgs = OrganizationRepository(session)
     if await orgs.get_by_slug(LOAD_ORG_SLUG) is not None:
         return
-
-    users = UserRepository(session)
-    pool = await _ensure_pool_users(users)
 
     tenancy = TenancyService(session)
     org = await tenancy.create_org(pool[0], LOAD_ORG_NAME)
@@ -195,21 +209,47 @@ async def seed_load(session: AsyncSession, redis: Redis) -> None:
     await _seed_files(session, org.id, pool)
 
 
+_MIN_PASSWORD_LENGTH = 16
+
+
+def load_password(argv: list[str], environment: str, stdin_line: str | None) -> str:
+    """The load users' password: from stdin with --password-stdin, else the
+    built-in one, which only dev may use -- it is in a public repository."""
+    if "--password-stdin" in argv:
+        password = (stdin_line or "").strip()
+        if len(password) < _MIN_PASSWORD_LENGTH:
+            msg = f"--password-stdin needs a password of {_MIN_PASSWORD_LENGTH}+ characters"
+            raise SystemExit(msg)
+        return password
+    if environment != "dev":
+        msg = (
+            "Outside dev the load users need a password of their own: pipe one in "
+            "with --password-stdin. The built-in one is published in this repository."
+        )
+        raise SystemExit(msg)
+    return LOAD_USER_PASSWORD
+
+
 async def _main() -> None:
     refuse_in_production()
     settings = get_settings()
+    argv = sys.argv[1:]
+    password = load_password(
+        argv, settings.ENVIRONMENT, sys.stdin.readline() if "--password-stdin" in argv else None
+    )
     redis = Redis.from_url(str(settings.REDIS_URL))
     try:
         async with async_session_factory() as session:
-            await seed_load(session, redis)
+            await seed_load(session, redis, password=password)
             await session.commit()
     finally:
         await redis.aclose()
     await dispose_engine()
+    shown = repr(password) if password == LOAD_USER_PASSWORD else "the one given on stdin"
     print(  # noqa: T201
         f"Load-test org ready: {LOAD_ORG_SLUG} "
         f"({LOAD_USER_COUNT} login accounts load-user-0..{LOAD_USER_COUNT - 1}@example.com, "
-        f"password {LOAD_USER_PASSWORD!r})"
+        f"password {shown})"
     )
 
 

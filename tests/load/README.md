@@ -112,3 +112,30 @@ password `LoadTestPass123!`, all members of "Load Test Org". Everything else
 `seed-load` creates (950 filler members, 10k notifications, 300 files) exists
 purely to give the list endpoints something to paginate through and is never
 logged in as.
+
+That password is for dev and CI only: it is published here. Outside dev,
+`seed_load` refuses it and takes one on stdin (`--password-stdin`), and k6
+gets the same one as `LOAD_USER_PASSWORD`.
+
+## Capacity: `stress.js`
+
+The scripts above assert a budget at a fixed load. `stress.js` finds where a
+deployment stops keeping it: it steps the arrival rate up (`RATES`
+iterations a second, `STEP_SECONDS` each) and k6 prints p95 latency,
+failures and request count for each step. One iteration is 1 to 3 requests,
+so a step's requests per second is its `http_reqs` count divided by
+`STEP_SECONDS`.
+
+Run it against a deployment, never CI's dev stack, which has no pgbouncer,
+TLS or edge. For staging, after `seed_load --password-stdin` there:
+
+```
+docker compose run --rm -e BASE_URL=https://app-staging.example \
+  -e LOAD_USER_PASSWORD=<the seed's> -e RATES=20,40,60,80,100,120 \
+  k6 run /scripts/stress.js
+```
+
+It signs in a few load users once, in `setup()`, because a deployment keeps
+the 5/minute sign-in limit, and it needs the target's raised per-user API
+limit (`deploy/staging.env`). Through Cloudflare, add a WAF skip rule for the
+tester's address for the run.
