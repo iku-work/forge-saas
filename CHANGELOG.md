@@ -6,6 +6,21 @@ template keep their own changes in `CHANGELOG.product.md` (see
 
 ## [Unreleased]
 
+### Added
+- **Access-control matrix for pentests:** `backend/scripts/pentest_matrix.py`
+  calls every API route, the hidden admin routes included, as each kind of
+  caller (no token, another org's owner, member, admin, owner, superadmin, an
+  impersonating admin) against real IDs, and lists the answers that look
+  wrong. See `docs/runbooks/pentest-prep.md`.
+- **`seed_pentest`:** a second org with its own owner for cross-tenant tests,
+  an authenticator for the superadmin (admin routes need one), and
+  `--reset-passwords` for when nobody kept the last set.
+
+### Changed
+- **The weekly ZAP scan reaches routes with IDs in the path.** It used to send
+  `{file_id}` and the like literally, so those routes stopped at validation.
+  Each now gets a value of the right shape.
+
 ## [1.0.0] — 2026-11-17
 
 The first tagged release: phases 1 to 4 complete, the November review's
