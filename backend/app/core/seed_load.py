@@ -188,9 +188,7 @@ async def _grant_storage_entitlement(
     )
 
 
-async def seed_load(
-    session: AsyncSession, redis: Redis, *, password: str = LOAD_USER_PASSWORD
-) -> None:
+async def seed_load(session: AsyncSession, redis: Redis, *, password: str) -> None:
     pool = await _ensure_pool_users(UserRepository(session), password)
     orgs = OrganizationRepository(session)
     if await orgs.get_by_slug(LOAD_ORG_SLUG) is not None:
