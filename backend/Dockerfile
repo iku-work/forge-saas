@@ -9,7 +9,7 @@
 # backend/'s own directory (T-068). Every COPY below is therefore prefixed
 # with backend/ except the one that reaches across to packages/i18n.
 
-FROM python:3.12-slim AS builder
+FROM python:3.15-slim AS builder
 
 WORKDIR /app
 
@@ -62,7 +62,7 @@ COPY . .
 RUN pnpm install --frozen-lockfile \
     && pnpm exec turbo run build --filter=@forge/email-templates
 
-FROM python:3.12-slim AS runtime
+FROM python:3.15-slim AS runtime
 
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
