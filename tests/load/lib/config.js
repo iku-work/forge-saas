@@ -10,7 +10,10 @@ export const BASE_URL = `${__ENV.BASE_URL || "http://localhost:8000"}/api/v1`;
 // login-capable members of the seeded "Load Test Org". Overridable via
 // __ENV in case a future run seeds a different pool size.
 export const LOAD_USER_COUNT = parseInt(__ENV.LOAD_USER_COUNT || "50", 10);
-export const LOAD_USER_PASSWORD = "LoadTestPass123!";
+// Dev and CI only (seed_load.py): anywhere else, the password the operator
+// gave seed_load --password-stdin, passed in as LOAD_USER_PASSWORD.
+export const LOAD_USER_PASSWORD =
+  __ENV.LOAD_USER_PASSWORD || "LoadTestPass123!";
 
 export function userEmail(i) {
   return `load-user-${i}@example.com`;
