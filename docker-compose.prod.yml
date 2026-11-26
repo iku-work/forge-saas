@@ -140,7 +140,7 @@ services:
 
   redis:
     <<: *hardening
-    image: redis:7-alpine@sha256:8da19c7399dca900c6822a1cf30f9d2285585e2c4b457ff4095b0f4500054d3f
+    image: redis:7-alpine@sha256:7f7d30b7fdd09467bac58198a1f166dd69789d348d4fe859cccb20e0cf287fbe
     restart: unless-stopped
     cap_add: [CHOWN, DAC_OVERRIDE, FOWNER, SETGID, SETUID]
     read_only: true
@@ -296,7 +296,7 @@ services:
   postgres-exporter:
     <<: *hardening
     read_only: true
-    image: prometheuscommunity/postgres-exporter:v0.20.1
+    image: prometheuscommunity/postgres-exporter:v0.21.1
     restart: unless-stopped
     # Its own env file (copied from .env.postgres-exporter.example), not
     # ./backend/.env -- Settings' extra="forbid" would refuse to boot the
@@ -334,7 +334,7 @@ services:
   node-exporter:
     <<: *hardening
     read_only: true
-    image: prom/node-exporter:v1.12.1
+    image: prom/node-exporter:v1.13.1
     restart: unless-stopped
     command:
       - "--path.rootfs=/host"
